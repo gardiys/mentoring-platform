@@ -1,0 +1,48 @@
+[tool.poetry]
+name = "mentoring-platform-backend"
+version = "0.1.0"
+description = "Backend for the mentoring platform MVP"
+authors = ["Mentoring Platform"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.116.1"
+uvicorn = {version = "^0.35.0", extras = ["standard"]}
+sqlalchemy = "^2.0.41"
+greenlet = "^3.2.4"
+asyncpg = "^0.30.0"
+alembic = "^1.16.4"
+pydantic-settings = "^2.10.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+pytest-asyncio = "^1.1.0"
+httpx = "^0.28.1"
+ruff = "^0.12.5"
+mypy = "^1.17.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["migrations"]
+
+[[tool.mypy.overrides]]
+module = "asyncpg.*"
+ignore_missing_imports = true

@@ -1,0 +1,687 @@
+:root {
+  --brand-blue: #2e90ff;
+  --brand-navy: #19355f;
+  --brand-warm: #faf7f1;
+  --brand-sand: #f1ece3;
+  --brand-yellow: #ffd23f;
+  --brand-cyan: #0aadcb;
+  --brand-text: #19355f;
+  --brand-muted: #63738a;
+  --brand-border: #e2dacd;
+}
+
+[data-mantine-color-scheme="dark"] {
+  --brand-warm: #101d2d;
+  --brand-sand: #17283d;
+  --brand-text: #f8f5ee;
+  --brand-muted: #aab8ca;
+  --brand-border: #28405d;
+}
+
+html {
+  min-width: 320px;
+  background: var(--brand-warm);
+}
+
+body {
+  margin: 0;
+  color: var(--brand-text);
+  background:
+    radial-gradient(circle at 92% 8%, rgb(46 144 255 / 10%), transparent 28rem),
+    var(--brand-warm);
+}
+
+::selection {
+  color: var(--brand-navy);
+  background: var(--brand-yellow);
+}
+
+a {
+  color: inherit;
+}
+
+.brand-header {
+  border-bottom: 1px solid var(--brand-border);
+  background: color-mix(in srgb, var(--brand-warm) 90%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.brand-navbar {
+  border-right: 1px solid var(--brand-border);
+  background: color-mix(in srgb, var(--brand-sand) 72%, var(--brand-warm));
+}
+
+.brand-logo {
+  color: var(--brand-text);
+  text-decoration: none;
+}
+
+.brand-logo .mantine-Avatar-root {
+  flex: 0 0 auto;
+  border: 2px solid rgb(255 255 255 / 85%);
+  box-shadow: 0 7px 20px rgb(25 53 95 / 16%);
+}
+
+.brand-wordmark {
+  font-family: Unbounded, sans-serif;
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.brand-tagline,
+.technical-label,
+.brand-eyebrow {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.brand-tagline,
+.technical-label {
+  color: var(--brand-muted);
+}
+
+.brand-eyebrow {
+  color: var(--brand-blue);
+}
+
+.brand-eyebrow::before {
+  display: inline-block;
+  width: 1.5rem;
+  height: 2px;
+  margin-right: 0.65rem;
+  vertical-align: middle;
+  content: "";
+  background: var(--brand-blue);
+}
+
+.theme-toggle {
+  color: var(--brand-navy);
+  background: color-mix(in srgb, var(--brand-blue) 15%, transparent);
+}
+
+[data-mantine-color-scheme="dark"] .theme-toggle {
+  color: var(--brand-yellow);
+}
+
+.brand-nav-link {
+  margin-bottom: 0.35rem;
+  border-radius: 1rem;
+}
+
+.brand-nav-link:hover {
+  background: color-mix(in srgb, var(--brand-blue) 10%, transparent);
+}
+
+.brand-nav-link[data-active] {
+  color: white;
+  background: var(--brand-navy);
+}
+
+.brand-nav-link[data-active] .mantine-NavLink-description {
+  color: rgb(255 255 255 / 64%);
+}
+
+.nav-index {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  color: var(--brand-blue);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
+  border-radius: 0.65rem;
+}
+
+.brand-nav-link[data-active] .nav-index {
+  color: var(--brand-navy);
+  background: var(--brand-yellow);
+}
+
+.change-user-link {
+  margin-top: 1rem;
+}
+
+.mentor-note {
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--brand-warm) 65%, transparent);
+  border: 1px solid var(--brand-border);
+  border-radius: 1rem;
+}
+
+.mentor-note-avatar {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.page-container {
+  width: min(100%, 1180px);
+  min-height: calc(100vh - 76px);
+  padding: clamp(1.25rem, 4vw, 3rem);
+  margin: 0 auto;
+}
+
+.page-container > * {
+  animation: page-enter 240ms ease-out;
+}
+
+.interview-deck-card {
+  min-height: 310px;
+  border-top: 4px solid var(--brand-blue);
+}
+
+.interview-topic-selector {
+  border-top: 4px solid var(--brand-yellow);
+}
+
+.interview-topic-checkbox {
+  min-height: 66px;
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--brand-sand) 55%, var(--brand-warm));
+  border: 1px solid var(--brand-border);
+  border-radius: 0.85rem;
+}
+
+.interview-study-card {
+  min-height: min(520px, 62vh);
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+  background:
+    radial-gradient(
+      circle at 90% 10%,
+      rgb(46 144 255 / 10%),
+      transparent 16rem
+    ),
+    color-mix(in srgb, var(--brand-sand) 50%, var(--brand-warm));
+  border-radius: 1.75rem;
+}
+
+.interview-question {
+  font-size: clamp(1.25rem, 3vw, 2rem);
+}
+
+.interview-question h1,
+.interview-question h2,
+.interview-question h3 {
+  margin-top: 0;
+}
+
+.interview-answer {
+  padding: clamp(1rem, 3vw, 1.75rem);
+  background: color-mix(in srgb, var(--brand-blue) 9%, var(--brand-warm));
+  border-left: 4px solid var(--brand-blue);
+  border-radius: 1rem;
+  animation: page-enter 180ms ease-out;
+}
+
+.reveal-answer-button {
+  align-self: center;
+  min-width: min(100%, 260px);
+}
+
+.interview-complete-card {
+  min-height: 360px;
+  padding: clamp(2rem, 6vw, 4rem);
+  border: 2px dashed var(--brand-border);
+}
+
+@media (max-width: 48em) {
+  .interview-rating-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.page-heading {
+  margin-bottom: clamp(0.5rem, 2vw, 1.25rem);
+}
+
+.page-heading h1,
+.mantine-Title-root {
+  color: var(--brand-text);
+  letter-spacing: -0.045em;
+}
+
+.mantine-Card-root,
+.mantine-Paper-root[data-with-border] {
+  border-color: var(--brand-border);
+}
+
+.mantine-Card-root {
+  background: color-mix(in srgb, var(--brand-sand) 65%, var(--brand-warm));
+  box-shadow: 0 12px 36px rgb(25 53 95 / 6%);
+}
+
+.mantine-Input-input {
+  background: color-mix(in srgb, var(--brand-warm) 88%, transparent);
+  border-color: var(--brand-border);
+}
+
+.mantine-Input-input:focus,
+.mantine-Input-input:focus-within {
+  border-color: var(--brand-blue);
+}
+
+.brand-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(1.5rem, 4vw, 4rem);
+  align-items: center;
+  min-height: 210px;
+  padding: clamp(1.5rem, 5vw, 3.25rem);
+  overflow: hidden;
+  color: white;
+  background:
+    radial-gradient(
+      circle at 82% 35%,
+      rgb(255 255 255 / 16%),
+      transparent 16rem
+    ),
+    linear-gradient(135deg, #2e90ff, #217fdc);
+  border: 0;
+  border-radius: 1.75rem;
+  box-shadow: 0 24px 60px rgb(46 144 255 / 22%);
+}
+
+.brand-hero h1,
+.brand-hero .mantine-Text-root {
+  color: white;
+}
+
+.brand-hero .brand-eyebrow {
+  color: var(--brand-yellow);
+}
+
+.brand-hero .brand-eyebrow::before {
+  background: var(--brand-yellow);
+}
+
+.brand-hero-mascot {
+  position: relative;
+  display: block;
+  width: clamp(190px, 18vw, 270px);
+  aspect-ratio: 1;
+  object-fit: cover;
+  justify-self: end;
+  filter: drop-shadow(0 18px 28px rgb(25 53 95 / 25%));
+  border: 5px solid rgb(255 255 255 / 90%);
+  border-radius: 50%;
+}
+
+.brand-hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 760px;
+}
+
+.roadmap-card {
+  position: relative;
+  min-height: 255px;
+  overflow: hidden;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.roadmap-card::after {
+  position: absolute;
+  right: -2rem;
+  bottom: -2rem;
+  width: 7rem;
+  height: 7rem;
+  content: "";
+  background: color-mix(in srgb, var(--brand-blue) 10%, transparent);
+  border-radius: 50%;
+}
+
+.roadmap-card:hover {
+  z-index: 1;
+  border-color: var(--brand-blue);
+  box-shadow: 0 20px 48px rgb(25 53 95 / 14%);
+  transform: translateY(-4px);
+}
+
+.roadmap-slug {
+  color: var(--brand-blue);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.brand-progress .mantine-Progress-root {
+  overflow: visible;
+  background: color-mix(in srgb, var(--brand-navy) 10%, transparent);
+}
+
+.brand-progress .mantine-Progress-section {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-blue) 14%, transparent);
+}
+
+.progress-percent {
+  color: var(--brand-blue);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.roadmap-summary {
+  padding: 1.2rem 1.4rem;
+  background: color-mix(in srgb, var(--brand-sand) 70%, var(--brand-warm));
+  border: 1px solid var(--brand-border);
+  border-radius: 1.1rem;
+}
+
+.brand-accordion .mantine-Accordion-item {
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--brand-sand) 68%, var(--brand-warm));
+  border: 1px solid var(--brand-border);
+  border-radius: 1.1rem;
+}
+
+.brand-accordion .mantine-Accordion-control {
+  padding: 1.1rem 1.25rem;
+  font-family: Unbounded, sans-serif;
+  font-weight: 600;
+}
+
+.topic-row {
+  padding: 0.8rem;
+  background: color-mix(in srgb, var(--brand-warm) 78%, transparent);
+  border: 1px solid transparent;
+  border-radius: 0.9rem;
+}
+
+.topic-row:hover {
+  border-color: color-mix(in srgb, var(--brand-blue) 35%, transparent);
+}
+
+.student-card,
+.student-roadmap,
+.builder-section-card {
+  position: relative;
+}
+
+.student-card {
+  border-top: 4px solid var(--brand-blue);
+}
+
+.student-roadmap {
+  padding: clamp(1rem, 3vw, 1.5rem);
+  background: color-mix(in srgb, var(--brand-sand) 55%, var(--brand-warm));
+  border: 1px solid var(--brand-border);
+  border-radius: 1.25rem;
+}
+
+.admin-roadmap-card {
+  min-height: 300px;
+}
+
+.knowledge-search-panel {
+  background: color-mix(
+    in srgb,
+    var(--brand-blue) 7%,
+    var(--mantine-color-body)
+  );
+}
+
+.knowledge-result-card,
+.knowledge-entry-card,
+.knowledge-topic-card {
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.knowledge-result-card:hover,
+.knowledge-entry-card:hover,
+.knowledge-topic-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--brand-blue);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--brand-navy) 12%, transparent);
+}
+
+.builder-section-card {
+  border-left: 4px solid var(--brand-blue);
+}
+
+.builder-topic-card {
+  background: color-mix(in srgb, var(--brand-warm) 80%, transparent);
+}
+
+.brand-alert {
+  color: var(--brand-navy);
+  border: 1px solid
+    color-mix(in srgb, var(--brand-yellow) 65%, var(--brand-border));
+}
+
+.markdown-content {
+  max-width: 820px;
+  padding: clamp(1.25rem, 4vw, 2.75rem) !important;
+  overflow-wrap: anywhere;
+  line-height: 1.78;
+  background: color-mix(in srgb, var(--brand-sand) 54%, var(--brand-warm));
+  box-shadow: 0 18px 50px rgb(25 53 95 / 7%);
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  margin-top: 1.6em;
+  font-family: Unbounded, sans-serif;
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+}
+
+.markdown-content code {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--brand-navy);
+  background: color-mix(in srgb, var(--brand-yellow) 35%, transparent);
+  border-radius: 0.35rem;
+}
+
+.markdown-content pre {
+  padding: 1.25rem;
+  overflow-x: auto;
+  color: #f7f4ed;
+  background: #19355f;
+  border: 1px solid #28507f;
+  border-radius: 1rem;
+}
+
+.markdown-content pre code {
+  color: inherit;
+  background: transparent;
+}
+
+.markdown-content img {
+  max-width: 100%;
+  border-radius: 1rem;
+}
+
+.login-shell {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100vh;
+  padding: 1rem;
+  overflow-x: hidden;
+  background:
+    radial-gradient(
+      circle at 15% 15%,
+      rgb(255 210 63 / 28%),
+      transparent 18rem
+    ),
+    linear-gradient(135deg, #2e90ff, #1e7fdd);
+}
+
+.login-card {
+  width: calc(100vw - 2rem);
+  max-width: 980px;
+  overflow: hidden;
+  background: var(--brand-warm);
+  border: 1px solid rgb(255 255 255 / 35%);
+  box-shadow: 0 30px 90px rgb(25 53 95 / 30%);
+}
+
+.login-brand-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 520px;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  overflow: hidden;
+  color: white;
+  background: #19355f;
+}
+
+.login-brand-panel h1,
+.login-brand-panel p {
+  color: white;
+}
+
+.login-brand-panel .brand-eyebrow {
+  color: var(--brand-yellow);
+}
+
+.login-brand-panel .brand-eyebrow::before {
+  background: var(--brand-yellow);
+}
+
+.login-brand-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.login-mascot {
+  position: absolute;
+  right: -0.75rem;
+  bottom: -4rem;
+  width: min(42%, 200px);
+  border: 6px solid white;
+  border-radius: 50%;
+}
+
+.login-form-panel {
+  min-width: 0;
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+}
+
+.not-found-page {
+  padding: 1.5rem;
+  background:
+    radial-gradient(
+      circle at 50% 35%,
+      rgb(46 144 255 / 14%),
+      transparent 20rem
+    ),
+    var(--brand-warm);
+}
+
+.not-found-mascot {
+  width: 132px;
+  border: 5px solid white;
+  border-radius: 50%;
+  box-shadow: 0 18px 50px rgb(25 53 95 / 18%);
+}
+
+.onboarding-page {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: max(1rem, var(--tg-content-safe-area-inset-top, 0px)) 1rem
+    max(1rem, var(--tg-content-safe-area-inset-bottom, 0px));
+  background:
+    radial-gradient(
+      circle at 12% 10%,
+      rgb(255 210 63 / 24%),
+      transparent 20rem
+    ),
+    radial-gradient(
+      circle at 90% 90%,
+      rgb(10 173 203 / 18%),
+      transparent 22rem
+    ),
+    var(--brand-warm);
+}
+
+.onboarding-card {
+  width: min(100%, 820px);
+  min-height: 520px;
+  padding: clamp(1.25rem, 5vw, 3rem);
+  background: color-mix(in srgb, var(--brand-sand) 55%, var(--brand-warm));
+  border: 1px solid var(--brand-border);
+  box-shadow: 0 28px 80px rgb(25 53 95 / 15%);
+}
+
+.onboarding-content {
+  display: grid;
+  align-content: center;
+  min-height: 245px;
+}
+
+@media (max-width: 47.99em) {
+  .page-container {
+    padding: 1.15rem 1.15rem
+      max(1.15rem, var(--tg-content-safe-area-inset-bottom, 0px));
+  }
+
+  .brand-logo-copy {
+    display: none;
+  }
+
+  .brand-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+    min-height: auto;
+    padding: 1.5rem;
+  }
+
+  .brand-hero-content {
+    max-width: 100%;
+  }
+
+  .brand-hero-mascot {
+    width: 132px;
+    justify-self: end;
+    opacity: 1;
+  }
+
+  .login-brand-panel {
+    min-height: 270px;
+  }
+
+  .login-mascot {
+    right: -0.75rem;
+    bottom: -3.5rem;
+    width: 135px;
+  }
+
+  .page-heading + .mantine-Button-root {
+    width: 100%;
+  }
+
+  .onboarding-card {
+    min-height: calc(100vh - 2rem);
+  }
+
+  .onboarding-card .brand-logo-copy {
+    display: flex;
+  }
+}

@@ -1,0 +1,91 @@
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import Depends, Header
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.telegram import (
+    TelegramInitDataError,
+    TelegramInitDataExpiredError,
+    validate_telegram_init_data,
+)
+from app.core.config import get_settings
+from app.core.errors import api_error, forbidden, unauthorized
+from app.db.session import get_db_session
+from app.users.models import User, UserRole
+
+settings = get_settings()
+
+
+async def _telegram_user(session: AsyncSession, init_data: str) -> User:
+    if settings.telegram_bot_token is None:
+        api_error(503, "telegram_auth_unavailable", "Telegram authentication is not configured")
+    try:
+        validated = validate_telegram_init_data(
+            init_data,
+            bot_token=settings.telegram_bot_token.get_secret_value(),
+            max_age_seconds=settings.telegram_init_data_ttl_seconds,
+        )
+    except TelegramInitDataExpiredError:
+        unauthorized("Telegram authentication data has expired")
+    except TelegramInitDataError:
+        unauthorized("Telegram authentication data is invalid")
+
+    telegram_user = validated.user
+    user = await session.scalar(select(User).where(User.telegram_id == telegram_user.id))
+    if user is None:
+        api_error(
+            403,
+            "platform_access_not_granted",
+            "Platform access has not been granted",
+        )
+
+    if (user.first_name, user.last_name) != (
+        telegram_user.first_name,
+        telegram_user.last_name,
+    ):
+        user.first_name = telegram_user.first_name
+        user.last_name = telegram_user.last_name
+        await session.commit()
+        await session.refresh(user)
+    return user
+
+
+async def get_current_user(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    authorization: Annotated[str | None, Header()] = None,
+    x_dev_user_id: Annotated[UUID | None, Header()] = None,
+) -> User:
+    if authorization and authorization.lower().startswith("tma "):
+        return await _telegram_user(session, authorization[4:])
+
+    if settings.app_env != "development":
+        unauthorized()
+    if x_dev_user_id is None:
+        unauthorized()
+    user = await session.get(User, x_dev_user_id)
+    if user is None:
+        api_error(401, "user_not_found", "User was not found")
+    return user
+
+
+async def require_mentor(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if user.role not in {UserRole.MENTOR, UserRole.ADMIN}:
+        forbidden("Mentor access is required")
+    return user
+
+
+async def require_admin(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if user.role is not UserRole.ADMIN:
+        forbidden("Admin access is required")
+    return user
+
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+MentorUser = Annotated[User, Depends(require_mentor)]
+AdminUser = Annotated[User, Depends(require_admin)]
