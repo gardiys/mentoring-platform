@@ -6,8 +6,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models import User, UserRole
 from app.db.session import async_session_factory
-from app.users.models import User, UserRole
 
 
 async def bootstrap_admin_user(
