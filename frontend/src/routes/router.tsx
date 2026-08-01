@@ -39,10 +39,11 @@ export const router = createBrowserRouter([
     element: import.meta.env.DEV ? (
       <DevLoginPage />
     ) : (
-      <Navigate to="/telegram-required" replace />
+      <Navigate to="/login" replace />
     ),
   },
-  { path: "/telegram-required", element: <TelegramRequiredPage /> },
+  { path: "/login", element: <TelegramRequiredPage /> },
+  { path: "/telegram-required", element: <Navigate to="/login" replace /> },
   {
     element: <ProtectedLayout />,
     children: [

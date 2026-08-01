@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, Header
+from fastapi import Cookie, Depends, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,7 @@ from app.auth.telegram import (
     TelegramInitDataExpiredError,
     validate_telegram_init_data,
 )
+from app.auth.web_session import BROWSER_SESSION_COOKIE, SignedPayloadError, read_browser_session
 from app.core.config import get_settings
 from app.core.errors import api_error, forbidden, unauthorized
 from app.db.session import get_db_session
@@ -56,9 +57,23 @@ async def get_current_user(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     authorization: Annotated[str | None, Header()] = None,
     x_dev_user_id: Annotated[UUID | None, Header()] = None,
+    browser_session: Annotated[str | None, Cookie(alias=BROWSER_SESSION_COOKIE)] = None,
 ) -> User:
     if authorization and authorization.lower().startswith("tma "):
         return await _telegram_user(session, authorization[4:])
+
+    if browser_session is not None and settings.web_session_secret is not None:
+        try:
+            user_id = read_browser_session(
+                browser_session,
+                settings.web_session_secret.get_secret_value(),
+            )
+        except SignedPayloadError:
+            unauthorized("Browser session is invalid or has expired")
+        user = await session.get(User, user_id)
+        if user is None:
+            api_error(401, "user_not_found", "User was not found")
+        return user
 
     if settings.app_env != "development":
         unauthorized()

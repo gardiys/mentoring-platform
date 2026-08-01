@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
+from app.auth.web_router import router as web_auth_router
 from app.core.config import get_settings
 from app.core.middleware import RequestContextMiddleware
 from app.integrations.router import router as integrations_router
@@ -25,11 +26,12 @@ app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.include_router(health_router)
+app.include_router(web_auth_router, prefix="/api/v1")
 app.include_router(integrations_router, prefix="/api/v1")
 app.include_router(interviews_router, prefix="/api/v1")
 app.include_router(admin_interviews_router, prefix="/api/v1")

@@ -43,9 +43,10 @@ Production-конфигурация рассчитана на Linux-сервер
 cp .env.production.example .env.production
 openssl rand -hex 32  # пароль PostgreSQL
 openssl rand -hex 32  # BOT_INTEGRATION_TOKEN
+openssl rand -hex 32  # WEB_SESSION_SECRET
 ```
 
-Заполните `.env.production`: укажите домен, email для сертификата, два сгенерированных секрета, token из `@BotFather` и ссылку вида `https://t.me/your_bot`. Значение `POSTGRES_PASSWORD` в примере должно совпадать с паролем внутри `DATABASE_URL`. Файл `.env.production` исключён из Git и не должен отправляться в репозиторий или Telegram.
+Заполните `.env.production`: укажите домен, email для сертификата, сгенерированные секреты, token из `@BotFather`, параметры Web Login и ссылку вида `https://t.me/your_bot`. Значение `POSTGRES_PASSWORD` в примере должно совпадать с паролем внутри `DATABASE_URL`. Файл `.env.production` исключён из Git и не должен отправляться в репозиторий или Telegram.
 
 Проверить конфигурацию и запустить сервис:
 
@@ -65,7 +66,7 @@ curl https://platform.example.com/ready
 make prod-admin telegram_id=123456789 first_name=Антон
 ```
 
-Команда идемпотентна: она создаёт пользователя или повышает существующего до роли `admin`. Затем в `@BotFather` укажите `https://platform.example.com` как URL Mini App и откройте платформу из меню своего бота. В production обычный браузер показывает приглашение открыть Telegram; страница UUID-входа недоступна.
+Команда идемпотентна: она создаёт пользователя или повышает существующего до роли `admin`. Затем в `@BotFather` укажите `https://platform.example.com` как URL Mini App и настройте Web Login по инструкции ниже. В production UUID-вход недоступен, а обычный браузер авторизуется через Telegram.
 
 Обновление и обслуживание:
 
@@ -98,6 +99,26 @@ make migrate
 ```
 
 Mini App передаёт `Telegram.WebApp.initData` как `Authorization: tma <initData>`. Backend сверяет HMAC-SHA-256 с bot token и проверяет `auth_date`. Непроверенный `initDataUnsafe` не используется. Войти может только Telegram-пользователь, которому бот заранее выдал доступ после оплаты.
+
+## Вход через обычный браузер
+
+Браузерная авторизация использует Telegram OpenID Connect Authorization Code Flow с PKCE. В `@BotFather` откройте Bot Settings → Web Login и добавьте оба Allowed URL:
+
+```text
+https://platform.example.com
+https://platform.example.com/api/v1/auth/web/telegram/callback
+```
+
+Скопируйте показанные BotFather Client ID и Client Secret в `.env.production`:
+
+```dotenv
+TELEGRAM_WEB_CLIENT_ID=replace-with-client-id
+TELEGRAM_WEB_CLIENT_SECRET=replace-with-client-secret
+WEB_SESSION_SECRET=replace-with-openssl-rand-hex-32
+WEB_SESSION_TTL_SECONDS=2592000
+```
+
+После `make prod-up` откройте `https://platform.example.com/login` и нажмите «Войти через Telegram». Backend проверяет `state`, PKCE и подпись ID token по JWKS Telegram, затем ищет существующего пользователя по `telegram_id`. Если платёжный бот ещё не выдал доступ, аккаунт не создаётся. Успешный вход устанавливает host-only HttpOnly cookie с `Secure` и `SameSite=Lax`; Telegram ID token во frontend не сохраняется. Кнопка выхода удаляет эту cookie.
 
 ## Выдача доступа после оплаты
 
@@ -186,6 +207,8 @@ Seed всегда выводит UUID и создаёт:
 
 - `GET /health`, `GET /ready`;
 - `GET /api/v1/me`;
+- `GET /api/v1/auth/web/telegram/start` и `GET /api/v1/auth/web/telegram/callback` — браузерный Telegram OIDC;
+- `POST /api/v1/auth/web/logout` — завершить браузерную сессию;
 - `POST /api/v1/me/onboarding` — завершить интерфейсный онбординг без изменения доступов;
 - `POST /api/v1/integrations/telegram/students` — создать ученика и выдать выбранный трек после оплаты;
 - `GET /api/v1/roadmaps`;
@@ -252,4 +275,4 @@ Frontend tests покрывают loading/data/error, структуру roadmap
 
 ## Известные ограничения MVP
 
-Нет browser OAuth/email-входа, встроенного приёма платежей, чатов и уведомлений вне интерфейса. Факт оплаты подтверждает внешний Telegram-бот. Admin создаёт треки и роадмапы, включает материалы в Python/Go, управляет доступами и базой знаний. Сохранённые разделы роадмапов пока нельзя удалить: для этого потребуется отдельный подтверждаемый сценарий с политикой хранения TopicProgress. Назначение менторов новым ученикам пока не вынесено в админку.
+Нет email-входа, встроенного приёма платежей, чатов и уведомлений вне интерфейса. Факт оплаты подтверждает внешний Telegram-бот. Admin создаёт треки и роадмапы, включает материалы в Python/Go, управляет доступами и базой знаний. Сохранённые разделы роадмапов пока нельзя удалить: для этого потребуется отдельный подтверждаемый сценарий с политикой хранения TopicProgress. Назначение менторов новым ученикам пока не вынесено в админку.

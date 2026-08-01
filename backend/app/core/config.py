@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr | None = None
     bot_integration_token: SecretStr | None = None
     telegram_init_data_ttl_seconds: int = Field(default=86_400, gt=0, le=604_800)
+    telegram_web_client_id: str | None = None
+    telegram_web_client_secret: SecretStr | None = None
+    telegram_web_redirect_uri: str | None = None
+    web_frontend_url: str = "http://localhost:5173"
+    web_session_secret: SecretStr | None = None
+    web_session_ttl_seconds: int = Field(default=2_592_000, ge=3_600, le=31_536_000)
+    web_oauth_state_ttl_seconds: int = Field(default=600, ge=300, le=1_800)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -27,19 +34,35 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
-    @field_validator("telegram_bot_token", "bot_integration_token", mode="before")
+    @field_validator(
+        "telegram_bot_token",
+        "bot_integration_token",
+        "telegram_web_client_secret",
+        "web_session_secret",
+        mode="before",
+    )
     @classmethod
     def empty_secret_is_none(cls, value: object) -> object:
         return None if value == "" else value
 
     @field_validator("bot_integration_token")
     @classmethod
-    def validate_bot_integration_token(
-        cls, value: SecretStr | None
-    ) -> SecretStr | None:
+    def validate_bot_integration_token(cls, value: SecretStr | None) -> SecretStr | None:
         if value is not None and len(value.get_secret_value()) < 32:
             raise ValueError("BOT_INTEGRATION_TOKEN must contain at least 32 characters")
         return value
+
+    @field_validator("web_session_secret")
+    @classmethod
+    def validate_web_session_secret(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value()) < 32:
+            raise ValueError("WEB_SESSION_SECRET must contain at least 32 characters")
+        return value
+
+    @field_validator("telegram_web_client_id", "telegram_web_redirect_uri", mode="before")
+    @classmethod
+    def empty_string_is_none(cls, value: object) -> object:
+        return None if value == "" else value
 
 
 @lru_cache

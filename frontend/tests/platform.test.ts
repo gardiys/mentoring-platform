@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { BrowserPlatformAdapter } from "../src/platform/BrowserPlatformAdapter";
 import { TelegramPlatformAdapter } from "../src/platform/TelegramPlatformAdapter";
+import { telegramMiniAppLink } from "../src/platform/telegramLinks";
 
 afterEach(() => {
   delete window.Telegram;
@@ -49,4 +50,13 @@ it("TelegramPlatformAdapter инициализирует SDK и подписыв
   expect(expand).toHaveBeenCalledOnce();
   expect(onClick).toHaveBeenCalledWith(backCallback);
   expect(offClick).toHaveBeenCalledWith(backCallback);
+});
+
+it("ссылка с сайта сразу запускает Main Mini App", () => {
+  expect(telegramMiniAppLink("https://t.me/codewaste_bot")).toBe(
+    "https://t.me/codewaste_bot?startapp",
+  );
+  expect(telegramMiniAppLink("https://t.me/codewaste_bot?startapp")).toBe(
+    "https://t.me/codewaste_bot?startapp",
+  );
 });

@@ -20,3 +20,11 @@ export function useCompleteOnboarding() {
     onSuccess: (user) => queryClient.setQueryData(meQueryKey, user),
   });
 }
+
+export function useLogout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.logout,
+    onSettled: () => queryClient.removeQueries({ queryKey: meQueryKey }),
+  });
+}

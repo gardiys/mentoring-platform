@@ -1,6 +1,6 @@
 import { getDevUserId } from "../features/auth/devAuth";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 interface ErrorDetail {
   code: string;
@@ -47,7 +47,11 @@ export async function apiRequest<T>(
     if (userId) headers.set("X-Dev-User-Id", userId);
   }
 
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers,
+    credentials: "include",
+  });
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     if (isErrorDetail(payload)) {

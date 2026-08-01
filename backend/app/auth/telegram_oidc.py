@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+from urllib.parse import urlencode
+
+import httpx
+import jwt
+
+AUTHORIZATION_ENDPOINT = "https://oauth.telegram.org/auth"
+TOKEN_ENDPOINT = "https://oauth.telegram.org/token"
+JWKS_ENDPOINT = "https://oauth.telegram.org/.well-known/jwks.json"
+ISSUER = "https://oauth.telegram.org"
+SUPPORTED_ALGORITHMS = {"RS256", "ES256"}
+
+
+class TelegramOidcError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class TelegramIdentity:
+    telegram_id: int
+    first_name: str
+    last_name: str | None
+
+
+def authorization_url(*, client_id: str, redirect_uri: str, state: str, challenge: str) -> str:
+    query = urlencode(
+        {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": "openid profile",
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        }
+    )
+    return f"{AUTHORIZATION_ENDPOINT}?{query}"
+
+
+async def exchange_code_for_identity(
+    *,
+    code: str,
+    verifier: str,
+    client_id: str,
+    client_secret: str,
+    redirect_uri: str,
+) -> TelegramIdentity:
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            token_response = await client.post(
+                TOKEN_ENDPOINT,
+                auth=(client_id, client_secret),
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                    "client_id": client_id,
+                    "code_verifier": verifier,
+                },
+            )
+            token_response.raise_for_status()
+            token_payload = token_response.json()
+            id_token = token_payload.get("id_token")
+            if not isinstance(id_token, str):
+                raise TelegramOidcError("Telegram did not return an ID token")
+
+            jwks_response = await client.get(JWKS_ENDPOINT)
+            jwks_response.raise_for_status()
+            jwks = jwks_response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise TelegramOidcError("Telegram OIDC request failed") from exc
+
+    claims = _decode_id_token(id_token, jwks, client_id)
+    return _identity_from_claims(claims)
+
+
+def _decode_id_token(id_token: str, jwks: dict[str, Any], client_id: str) -> dict[str, Any]:
+    try:
+        header = jwt.get_unverified_header(id_token)
+        algorithm = header.get("alg")
+        key_id = header.get("kid")
+        if algorithm not in SUPPORTED_ALGORITHMS or not isinstance(key_id, str):
+            raise TelegramOidcError("Telegram ID token uses an unsupported signing key")
+        key_set = jwt.PyJWKSet.from_dict(jwks)
+        signing_key = next((key for key in key_set.keys if key.key_id == key_id), None)
+        if signing_key is None or signing_key.algorithm_name != algorithm:
+            raise TelegramOidcError("Telegram ID token signing key was not found")
+        claims = jwt.decode(
+            id_token,
+            key=signing_key.key,
+            algorithms=[algorithm],
+            audience=client_id,
+            issuer=ISSUER,
+            options={"require": ["sub", "iat", "exp"]},
+        )
+    except jwt.PyJWTError as exc:
+        raise TelegramOidcError("Telegram ID token is invalid") from exc
+    return claims
+
+
+def _identity_from_claims(claims: dict[str, Any]) -> TelegramIdentity:
+    telegram_id = claims.get("id")
+    if not isinstance(telegram_id, int) or isinstance(telegram_id, bool) or telegram_id <= 0:
+        raise TelegramOidcError("Telegram profile does not contain a valid user id")
+
+    given_name = claims.get("given_name")
+    family_name = claims.get("family_name")
+    display_name = claims.get("name")
+    if not isinstance(given_name, str) or not given_name.strip():
+        if not isinstance(display_name, str) or not display_name.strip():
+            raise TelegramOidcError("Telegram profile does not contain a name")
+        given_name = display_name.strip()
+    last_name = (
+        family_name.strip() if isinstance(family_name, str) and family_name.strip() else None
+    )
+    return TelegramIdentity(
+        telegram_id=telegram_id,
+        first_name=given_name.strip(),
+        last_name=last_name,
+    )

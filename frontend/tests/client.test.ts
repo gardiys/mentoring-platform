@@ -39,6 +39,7 @@ it("передаёт Telegram initData в Authorization без localStorage", as
   await apiRequest("/api/v1/me");
 
   const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+  expect(fetchMock.mock.calls[0]?.[1]?.credentials).toBe("include");
   expect(headers.get("Authorization")).toBe("tma query_id=test&hash=signed");
   expect(headers.has("X-Dev-User-Id")).toBe(false);
 });

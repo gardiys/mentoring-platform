@@ -20,18 +20,11 @@ export function ProtectedLayout() {
   const location = useLocation();
   const hasTelegramAuth = Boolean(platform.getTelegramInitData());
   const hasDevAuth = import.meta.env.DEV && Boolean(getDevUserId());
-  const hasCredentials = hasTelegramAuth || hasDevAuth;
-  const query = useMe(hasCredentials);
+  const shouldCheckSession =
+    !platform.isTelegram || hasTelegramAuth || hasDevAuth;
+  const query = useMe(shouldCheckSession);
 
-  if (!hasCredentials) {
-    if (!platform.isTelegram) {
-      return (
-        <Navigate
-          to={import.meta.env.DEV ? "/dev-login" : "/telegram-required"}
-          replace
-        />
-      );
-    }
+  if (platform.isTelegram && !hasTelegramAuth && !hasDevAuth) {
     return (
       <Center mih="100vh" p="md">
         <Paper withBorder p="xl" maw={520}>
@@ -56,6 +49,15 @@ export function ProtectedLayout() {
     const apiError = query.error instanceof ApiError ? query.error : null;
     const expired = apiError?.status === 401;
     const accessNotGranted = apiError?.code === "platform_access_not_granted";
+    if (!platform.isTelegram && expired) {
+      const next = encodeURIComponent(`${location.pathname}${location.search}`);
+      return (
+        <Navigate
+          to={import.meta.env.DEV ? "/dev-login" : `/login?next=${next}`}
+          replace
+        />
+      );
+    }
     return (
       <Center mih="100vh" p="md">
         <Alert

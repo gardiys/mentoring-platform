@@ -14,7 +14,8 @@ import { useDisclosure } from "@mantine/hooks";
 import { useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 
-import { useMe } from "../features/auth/queries";
+import { clearDevUserId } from "../features/auth/devAuth";
+import { useLogout, useMe } from "../features/auth/queries";
 import { usePlatform } from "../platform/usePlatform";
 import { BrandLogo } from "./BrandLogo";
 
@@ -32,8 +33,15 @@ export function AppLayout() {
   const navigate = useNavigate();
   const platform = usePlatform();
   const me = useMe();
+  const logout = useLogout();
   const mentor = me.data?.role === "mentor" || me.data?.role === "admin";
   const admin = me.data?.role === "admin";
+
+  const handleLogout = async () => {
+    await logout.mutateAsync();
+    clearDevUserId();
+    navigate("/login", { replace: true });
+  };
 
   useEffect(() => {
     if (!platform.isTelegram) return;
@@ -90,6 +98,18 @@ export function AppLayout() {
             >
               {colorScheme === "dark" ? "☀" : "◐"}
             </ActionIcon>
+            {!platform.isTelegram && (
+              <ActionIcon
+                variant="light"
+                size="lg"
+                onClick={() => void handleLogout()}
+                loading={logout.isPending}
+                aria-label="Выйти"
+                title="Выйти"
+              >
+                ↪
+              </ActionIcon>
+            )}
           </Group>
         </Group>
       </AppShell.Header>

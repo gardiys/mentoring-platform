@@ -48,6 +48,7 @@ import { apiRequest } from "./client";
 
 export const api = {
   me: () => apiRequest<User>("/api/v1/me"),
+  logout: () => apiRequest<null>("/api/v1/auth/web/logout", { method: "POST" }),
   completeOnboarding: () =>
     apiRequest<User>("/api/v1/me/onboarding", { method: "POST" }),
   roadmaps: () => apiRequest<RoadmapListItem[]>("/api/v1/roadmaps"),
