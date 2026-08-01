@@ -156,6 +156,30 @@ async def test_tampered_browser_session_is_rejected(
     assert response.json()["detail"]["code"] == "unauthorized"
 
 
+async def test_telegram_http_client_retries_over_ipv4_or_configured_proxy(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    captured: list[dict[str, object]] = []
+    original_transport = telegram_oidc.httpx.AsyncHTTPTransport
+
+    def transport_factory(**kwargs: object) -> telegram_oidc.httpx.AsyncHTTPTransport:
+        captured.append(kwargs)
+        return original_transport(**kwargs)
+
+    monkeypatch.setattr(telegram_oidc.httpx, "AsyncHTTPTransport", transport_factory)
+
+    direct_client = telegram_oidc._telegram_http_client()
+    await direct_client.aclose()
+    proxy_client = telegram_oidc._telegram_http_client("http://proxy.test:8080")
+    await proxy_client.aclose()
+
+    assert captured[0]["retries"] == telegram_oidc.CONNECT_RETRIES
+    assert captured[0]["local_address"] == "0.0.0.0"
+    assert captured[0]["proxy"] is None
+    assert captured[1]["local_address"] is None
+    assert captured[1]["proxy"] == "http://proxy.test:8080"
+
+
 def test_telegram_id_token_signature_and_claims_are_verified() -> None:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     public_jwk = jwt.algorithms.RSAAlgorithm.to_jwk(private_key.public_key(), as_dict=True)

@@ -114,6 +114,11 @@ async def telegram_callback(
             client_id=client_id,
             client_secret=client_secret,
             redirect_uri=redirect_uri,
+            proxy_url=(
+                settings.telegram_oidc_proxy_url.get_secret_value()
+                if settings.telegram_oidc_proxy_url is not None
+                else None
+            ),
         )
     except telegram_oidc.TelegramOidcError:
         logger.exception("Telegram web authentication failed")

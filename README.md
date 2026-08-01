@@ -114,11 +114,14 @@ https://platform.example.com/api/v1/auth/web/telegram/callback
 ```dotenv
 TELEGRAM_WEB_CLIENT_ID=replace-with-client-id
 TELEGRAM_WEB_CLIENT_SECRET=replace-with-client-secret
+TELEGRAM_OIDC_PROXY_URL=
 WEB_SESSION_SECRET=replace-with-openssl-rand-hex-32
 WEB_SESSION_TTL_SECONDS=2592000
 ```
 
 После `make prod-up` откройте `https://platform.example.com/login` и нажмите «Войти через Telegram». Backend проверяет `state`, PKCE и подпись ID token по JWKS Telegram, затем ищет существующего пользователя по `telegram_id`. Если платёжный бот ещё не выдал доступ, аккаунт не создаётся. Успешный вход устанавливает host-only HttpOnly cookie с `Secure` и `SameSite=Lax`; Telegram ID token во frontend не сохраняется. Кнопка выхода удаляет эту cookie.
+
+Исходящие OIDC-запросы используют IPv4 и повторяются при ошибке подключения. Если VPS полностью блокирует `oauth.telegram.org:443`, задайте доверенный HTTPS/HTTP proxy в `TELEGRAM_OIDC_PROXY_URL`; при прямом доступе оставьте переменную пустой.
 
 ## Выдача доступа после оплаты
 

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     telegram_web_client_id: str | None = None
     telegram_web_client_secret: SecretStr | None = None
     telegram_web_redirect_uri: str | None = None
+    telegram_oidc_proxy_url: SecretStr | None = None
     web_frontend_url: str = "http://localhost:5173"
     web_session_secret: SecretStr | None = None
     web_session_ttl_seconds: int = Field(default=2_592_000, ge=3_600, le=31_536_000)
@@ -38,6 +39,7 @@ class Settings(BaseSettings):
         "telegram_bot_token",
         "bot_integration_token",
         "telegram_web_client_secret",
+        "telegram_oidc_proxy_url",
         "web_session_secret",
         mode="before",
     )

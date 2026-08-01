@@ -12,6 +12,9 @@ TOKEN_ENDPOINT = "https://oauth.telegram.org/token"
 JWKS_ENDPOINT = "https://oauth.telegram.org/.well-known/jwks.json"
 ISSUER = "https://oauth.telegram.org"
 SUPPORTED_ALGORITHMS = {"RS256", "ES256"}
+CONNECT_RETRIES = 2
+CONNECT_TIMEOUT_SECONDS = 5.0
+REQUEST_TIMEOUT_SECONDS = 15.0
 
 
 class TelegramOidcError(RuntimeError):
@@ -23,6 +26,18 @@ class TelegramIdentity:
     telegram_id: int
     first_name: str
     last_name: str | None
+
+
+def _telegram_http_client(proxy_url: str | None = None) -> httpx.AsyncClient:
+    # Telegram publishes both A and AAAA records. Binding the direct transport to
+    # the IPv4 wildcard avoids waiting on a broken IPv6 route inside Docker/VPS.
+    transport = httpx.AsyncHTTPTransport(
+        retries=CONNECT_RETRIES,
+        local_address=None if proxy_url else "0.0.0.0",
+        proxy=proxy_url,
+    )
+    timeout = httpx.Timeout(REQUEST_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS)
+    return httpx.AsyncClient(transport=transport, timeout=timeout)
 
 
 def authorization_url(*, client_id: str, redirect_uri: str, state: str, challenge: str) -> str:
@@ -47,9 +62,10 @@ async def exchange_code_for_identity(
     client_id: str,
     client_secret: str,
     redirect_uri: str,
+    proxy_url: str | None = None,
 ) -> TelegramIdentity:
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with _telegram_http_client(proxy_url) as client:
             token_response = await client.post(
                 TOKEN_ENDPOINT,
                 auth=(client_id, client_secret),

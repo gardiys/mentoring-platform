@@ -12,6 +12,7 @@ x-backend-environment: &backend-environment
   TELEGRAM_WEB_CLIENT_ID: ${TELEGRAM_WEB_CLIENT_ID:?Set TELEGRAM_WEB_CLIENT_ID in .env.production}
   TELEGRAM_WEB_CLIENT_SECRET: ${TELEGRAM_WEB_CLIENT_SECRET:?Set TELEGRAM_WEB_CLIENT_SECRET in .env.production}
   TELEGRAM_WEB_REDIRECT_URI: https://${DOMAIN:?Set DOMAIN in .env.production}/api/v1/auth/web/telegram/callback
+  TELEGRAM_OIDC_PROXY_URL: ${TELEGRAM_OIDC_PROXY_URL:-}
   WEB_FRONTEND_URL: https://${DOMAIN:?Set DOMAIN in .env.production}
   WEB_SESSION_SECRET: ${WEB_SESSION_SECRET:?Set WEB_SESSION_SECRET in .env.production}
   WEB_SESSION_TTL_SECONDS: ${WEB_SESSION_TTL_SECONDS:-2592000}
