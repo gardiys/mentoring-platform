@@ -13,6 +13,7 @@ import { AdminTracksPage } from "../pages/AdminTracksPage";
 import { AdminStudentCreatePage } from "../pages/AdminStudentCreatePage";
 import { AdminStudentEditPage } from "../pages/AdminStudentEditPage";
 import { AdminStudentsPage } from "../pages/AdminStudentsPage";
+import { AdminMentorsPage } from "../pages/AdminMentorsPage";
 import { AdminKnowledgeTopicCreatePage } from "../pages/AdminKnowledgeTopicCreatePage";
 import { AdminKnowledgeTopicEditPage } from "../pages/AdminKnowledgeTopicEditPage";
 import { AdminKnowledgeEntryEditPage } from "../pages/AdminKnowledgeEntryEditPage";
@@ -128,6 +129,7 @@ export const router = createBrowserRouter([
             element: <AdminTrackEditPage />,
           },
           { path: "/admin/students", element: <AdminStudentsPage /> },
+          { path: "/admin/mentors", element: <AdminMentorsPage /> },
           {
             path: "/admin/students/new",
             element: <AdminStudentCreatePage />,

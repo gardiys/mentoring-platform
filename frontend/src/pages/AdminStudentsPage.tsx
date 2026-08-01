@@ -36,10 +36,16 @@ export function AdminStudentsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search.trim(), 250);
   const [access, setAccess] = useState<StudentAccessFilter>("all");
+  const [mentorFilter, setMentorFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const query = useAdminStudents({ query: debouncedSearch, access, page });
+  const query = useAdminStudents({
+    query: debouncedSearch,
+    access,
+    mentorFilter,
+    page,
+  });
 
-  useEffect(() => setPage(1), [debouncedSearch, access]);
+  useEffect(() => setPage(1), [debouncedSearch, access, mentorFilter]);
 
   return (
     <Stack gap="xl">
@@ -75,6 +81,20 @@ export function AdminStudentsPage() {
                 setAccess((value as StudentAccessFilter | null) ?? "all")
               }
             />
+            <Select
+              label="Ментор"
+              value={mentorFilter}
+              onChange={(value) => setMentorFilter(value ?? "all")}
+              searchable
+              data={[
+                { value: "all", label: "Все менторы" },
+                { value: "unassigned", label: "Без ментора" },
+                ...(query.data?.mentors ?? []).map((mentor) => ({
+                  value: mentor.id,
+                  label: studentName(mentor.first_name, mentor.last_name),
+                })),
+              ]}
+            />
           </Group>
 
           {query.isPending ? (
@@ -90,6 +110,7 @@ export function AdminStudentsPage() {
                       <Table.Th>Ученик</Table.Th>
                       <Table.Th>Контакты</Table.Th>
                       <Table.Th>Треки</Table.Th>
+                      <Table.Th>Ментор</Table.Th>
                       <Table.Th>Последний прогресс</Table.Th>
                       <Table.Th>Доступ</Table.Th>
                       <Table.Th />
@@ -130,6 +151,20 @@ export function AdminStudentsPage() {
                               </Text>
                             )}
                           </Group>
+                        </Table.Td>
+                        <Table.Td>
+                          {student.mentor ? (
+                            <Text size="sm" fw={500}>
+                              {studentName(
+                                student.mentor.first_name,
+                                student.mentor.last_name,
+                              )}
+                            </Text>
+                          ) : (
+                            <Text size="sm" c="dimmed">
+                              Не назначен
+                            </Text>
+                          )}
                         </Table.Td>
                         <Table.Td>
                           <Text size="sm">

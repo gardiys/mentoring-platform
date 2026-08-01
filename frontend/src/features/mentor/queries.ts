@@ -10,6 +10,8 @@ import type {
 export const mentorKeys = {
   all: ["mentor"] as const,
   students: ["mentor", "students"] as const,
+  studentList: (options: MentorStudentListOptions) =>
+    ["mentor", "students", "list", options] as const,
   student: (id: string) => ["mentor", "students", id] as const,
   interview: (studentId: string, processId: string) =>
     ["mentor", "students", studentId, "interviews", processId] as const,
@@ -17,10 +19,34 @@ export const mentorKeys = {
   myDocuments: ["mentor", "me", "documents"] as const,
 };
 
-export function useMentorStudents() {
+export interface MentorStudentListOptions {
+  query: string;
+  trackId: string | null;
+  mentorFilter: string;
+  learningStatuses: StudentLearningStatus[];
+  page: number;
+}
+
+const STUDENTS_PAGE_SIZE = 12;
+
+export function useMentorStudents(options: MentorStudentListOptions) {
   return useQuery({
-    queryKey: mentorKeys.students,
-    queryFn: api.mentorStudents,
+    queryKey: mentorKeys.studentList(options),
+    queryFn: () =>
+      api.mentorStudents({
+        query: options.query,
+        trackId: options.trackId,
+        mentorId:
+          options.mentorFilter !== "all" &&
+          options.mentorFilter !== "unassigned"
+            ? options.mentorFilter
+            : null,
+        withoutMentor: options.mentorFilter === "unassigned",
+        learningStatuses: options.learningStatuses,
+        limit: STUDENTS_PAGE_SIZE,
+        offset: (options.page - 1) * STUDENTS_PAGE_SIZE,
+      }),
+    placeholderData: (previousData) => previousData,
   });
 }
 

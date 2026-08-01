@@ -22,7 +22,7 @@ export function useRoadmap(slug: string) {
 export function useStartRoadmap(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => api.startRoadmap(slug),
+    mutationFn: (startedOn: string) => api.startRoadmap(slug, startedOn),
     onSuccess: async (roadmap) => {
       queryClient.setQueryData(roadmapKeys.detail(slug), roadmap);
       await queryClient.invalidateQueries({

@@ -484,20 +484,60 @@ export function MentorStudentPage() {
             ) : (
               student.interviews.map((interview) => (
                 <Card key={interview.id} withBorder>
-                  <Group justify="space-between">
+                  <Group justify="space-between" align="flex-start">
                     <div>
-                      <Title order={3}>{interview.company_name}</Title>
+                      <Group gap="xs" mb={4}>
+                        <Title order={3}>{interview.company_name}</Title>
+                        <Badge
+                          color={
+                            interview.status === "offer"
+                              ? "green"
+                              : interview.status === "closed"
+                                ? "gray"
+                                : "blue"
+                          }
+                        >
+                          {interview.status === "offer"
+                            ? "Получен оффер"
+                            : interview.status === "closed"
+                              ? "Завершён"
+                              : "Активный"}
+                        </Badge>
+                        {interview.has_offer_file && (
+                          <Badge color="green" variant="outline">
+                            Файл оффера
+                          </Badge>
+                        )}
+                      </Group>
                       <Text c="dimmed" size="sm">
                         {interview.track_title} · {interview.stage_count} этапов
                         · обновлено {formatDate(interview.updated_at)}
                       </Text>
+                      {interview.next_stage_at && (
+                        <Text c="dimmed" size="sm">
+                          Следующий этап: {formatDate(interview.next_stage_at)}
+                        </Text>
+                      )}
+                      {interview.recruiter_telegram_usernames.length > 0 && (
+                        <Text c="dimmed" size="sm">
+                          Рекрутеры:{" "}
+                          {interview.recruiter_telegram_usernames
+                            .map((username) => `@${username}`)
+                            .join(", ")}
+                        </Text>
+                      )}
+                      {interview.close_reason && (
+                        <Text c="dimmed" size="sm">
+                          Причина завершения: {interview.close_reason}
+                        </Text>
+                      )}
                     </div>
                     <Button
                       component={Link}
                       to={`/mentor/students/${studentId}/interviews/${interview.id}`}
                       variant="light"
                     >
-                      Открыть и дать фидбек
+                      Все этапы и материалы
                     </Button>
                   </Group>
                 </Card>

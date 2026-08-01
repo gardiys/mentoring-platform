@@ -105,6 +105,20 @@ const student = {
   is_active: true,
 };
 
+const admin = {
+  ...student,
+  id: "90000000-0000-4000-8000-000000000001",
+  first_name: "Администратор",
+  role: "admin" as const,
+};
+
+const mentor = {
+  ...student,
+  id: "80000000-0000-4000-8000-000000000001",
+  first_name: "Ментор",
+  role: "mentor" as const,
+};
+
 it("показывает изученные и оставшиеся карточки", async () => {
   vi.spyOn(api, "me").mockResolvedValue(student);
   vi.spyOn(api, "interviewDecks").mockResolvedValue([deck]);
@@ -115,6 +129,43 @@ it("показывает изученные и оставшиеся карточ
   expect(screen.getByText("Изучено 4 из 10")).toBeInTheDocument();
   expect(screen.getByText("Осталось: 6")).toBeInTheDocument();
   expect(screen.getByText("К повторению: 2")).toBeInTheDocument();
+});
+
+it("показывает админу личный дневник без общего списка треков учеников", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(admin);
+  vi.spyOn(api, "interviewDecks").mockResolvedValue([deck]);
+  vi.spyOn(api, "interviewProcesses").mockResolvedValue([]);
+  const adminProcesses = vi.spyOn(api, "adminInterviewProcesses");
+
+  renderPage(<InterviewsPage />, "/interviews", "/interviews");
+
+  expect(await screen.findByText(deck.title)).toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "Все треки собеседований" }),
+  ).not.toBeInTheDocument();
+  expect(adminProcesses).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("link", { name: "Каталог собеседований" }),
+  ).toHaveAttribute("href", "/interviews/catalog");
+});
+
+it("показывает ментору его личный дневник и создание трека", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(mentor);
+  vi.spyOn(api, "interviewDecks").mockResolvedValue([deck]);
+  const processes = vi.spyOn(api, "interviewProcesses").mockResolvedValue([]);
+
+  renderPage(<InterviewsPage />, "/interviews", "/interviews");
+
+  expect(
+    await screen.findByRole("heading", { name: "Треки по компаниям" }),
+  ).toBeInTheDocument();
+  expect(processes).toHaveBeenCalledWith("all");
+  expect(
+    screen.getByRole("link", { name: "+ Добавить компанию" }),
+  ).toHaveAttribute("href", "/interviews/journal/new");
+  expect(
+    screen.getByRole("link", { name: "Каталог собеседований" }),
+  ).toHaveAttribute("href", "/interviews/catalog");
 });
 
 it("скрывает ответ до переворота карточки", async () => {

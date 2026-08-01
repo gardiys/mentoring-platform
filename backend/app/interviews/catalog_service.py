@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, distinct, exists, func, or_, select
+from sqlalchemy import ColumnElement, case, distinct, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -24,14 +24,16 @@ from app.interviews.schemas import (
     InterviewCatalogCommentRead,
     InterviewCatalogCompanyDetail,
     InterviewCatalogCompanyListItem,
+    InterviewCatalogCompanyPage,
     InterviewCatalogMediaKind,
     InterviewCatalogStageRead,
     InterviewCatalogTrackRead,
     InterviewDirectionOption,
     InterviewStageAttachmentRead,
 )
+from app.mentors.models import MentorTrackAssignment
 from app.tracks.models import LearningTrack, LearningTrackEnrollment
-from app.users.models import User
+from app.users.models import User, UserRole
 
 
 def _catalog_process_filters(
@@ -81,6 +83,23 @@ def _student_direction_filter(user_id: UUID) -> ColumnElement[bool]:
             LearningTrackEnrollment.track_id == InterviewProcess.track_id,
         )
     )
+
+
+def _direction_filters(current_user: User) -> list[ColumnElement[bool]]:
+    if current_user.role is UserRole.ADMIN:
+        return []
+    if current_user.role is UserRole.MENTOR:
+        return [
+            exists(
+                select(1)
+                .select_from(MentorTrackAssignment)
+                .where(
+                    MentorTrackAssignment.mentor_id == current_user.id,
+                    MentorTrackAssignment.track_id == InterviewProcess.track_id,
+                )
+            )
+        ]
+    return [_student_direction_filter(current_user.id)]
 
 
 def _author(user: User) -> InterviewCatalogAuthorRead:
@@ -137,13 +156,15 @@ async def list_catalog_companies(
     stage_type: InterviewStageType | None = None,
     has_offer: bool = False,
     media_kind: InterviewCatalogMediaKind | None = None,
-) -> list[InterviewCatalogCompanyListItem]:
+    limit: int = 24,
+    offset: int = 0,
+) -> InterviewCatalogCompanyPage:
     candidate_ids: list[UUID] | None = None
     if query and query.strip():
         candidates = await suggest_companies(session, query, 100)
         candidate_ids = [company.id for company in candidates]
         if not candidate_ids:
-            return []
+            return InterviewCatalogCompanyPage(items=[], total=0, limit=limit, offset=offset)
 
     statement = (
         select(
@@ -159,7 +180,7 @@ async def list_catalog_companies(
         )
         .group_by(Company.id)
         .where(
-            _student_direction_filter(current_user.id),
+            *_direction_filters(current_user),
             *_catalog_process_filters(
                 author_id=author_id,
                 track_id=track_id,
@@ -170,15 +191,29 @@ async def list_catalog_companies(
         )
     )
     if candidate_ids is not None:
-        statement = statement.where(Company.id.in_(candidate_ids))
+        statement = statement.where(Company.id.in_(candidate_ids)).order_by(
+            case(
+                *[
+                    (Company.id == company_id, position)
+                    for position, company_id in enumerate(candidate_ids)
+                ],
+                else_=len(candidate_ids),
+            )
+        )
     else:
         statement = statement.order_by(
             func.max(InterviewProcessStage.scheduled_at).desc().nullslast(),
             Company.name,
         )
-    rows = (await session.execute(statement)).all()
-    items = {
-        company.id: InterviewCatalogCompanyListItem(
+    total = int(
+        await session.scalar(
+            select(func.count()).select_from(statement.order_by(None).subquery())
+        )
+        or 0
+    )
+    rows = (await session.execute(statement.limit(limit).offset(offset))).all()
+    items = [
+        InterviewCatalogCompanyListItem(
             id=company.id,
             name=company.name,
             track_count=track_count,
@@ -186,28 +221,31 @@ async def list_catalog_companies(
             last_interview_at=last_interview_at,
         )
         for company, track_count, interview_count, last_interview_at in rows
-    }
-    if candidate_ids is not None:
-        return [items[company_id] for company_id in candidate_ids if company_id in items]
-    return list(items.values())
+    ]
+    return InterviewCatalogCompanyPage(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 async def list_catalog_directions(
     session: AsyncSession, current_user: User
 ) -> list[InterviewDirectionOption]:
+    statement = select(LearningTrack).where(LearningTrack.is_published.is_(True))
+    if current_user.role is UserRole.MENTOR:
+        statement = statement.join(
+            MentorTrackAssignment,
+            MentorTrackAssignment.track_id == LearningTrack.id,
+        ).where(MentorTrackAssignment.mentor_id == current_user.id)
+    elif current_user.role is not UserRole.ADMIN:
+        statement = statement.join(
+            LearningTrackEnrollment,
+            LearningTrackEnrollment.track_id == LearningTrack.id,
+        ).where(LearningTrackEnrollment.user_id == current_user.id)
     tracks = list(
-        await session.scalars(
-            select(LearningTrack)
-            .join(
-                LearningTrackEnrollment,
-                LearningTrackEnrollment.track_id == LearningTrack.id,
-            )
-            .where(
-                LearningTrackEnrollment.user_id == current_user.id,
-                LearningTrack.is_published.is_(True),
-            )
-            .order_by(LearningTrack.position, LearningTrack.title)
-        )
+        await session.scalars(statement.order_by(LearningTrack.position, LearningTrack.title))
     )
     return [
         InterviewDirectionOption(id=track.id, slug=track.slug, title=track.title)
@@ -218,13 +256,11 @@ async def list_catalog_directions(
 async def list_catalog_authors(
     session: AsyncSession, current_user: User
 ) -> list[InterviewCatalogAuthorRead]:
+    statement = select(User).join(InterviewProcess, InterviewProcess.user_id == User.id)
+    statement = statement.where(*_direction_filters(current_user))
     authors = list(
         await session.scalars(
-            select(User)
-            .join(InterviewProcess, InterviewProcess.user_id == User.id)
-            .where(_student_direction_filter(current_user.id))
-            .distinct()
-            .order_by(User.first_name, User.telegram_username, User.id)
+            statement.distinct().order_by(User.first_name, User.telegram_username, User.id)
         )
     )
     return [_author(author) for author in authors]
@@ -252,7 +288,7 @@ async def catalog_company_detail(
                 .select_from(InterviewProcess)
                 .where(
                     InterviewProcess.company_id == company.id,
-                    _student_direction_filter(current_user.id),
+                    *_direction_filters(current_user),
                 )
             )
         )
@@ -271,7 +307,7 @@ async def catalog_company_detail(
             .join(LearningTrack, LearningTrack.id == InterviewProcess.track_id)
             .where(
                 InterviewProcess.company_id == company.id,
-                _student_direction_filter(current_user.id),
+                *_direction_filters(current_user),
                 *_catalog_process_filters(
                     author_id=author_id,
                     track_id=track_id,
@@ -387,7 +423,7 @@ async def get_catalog_stage(
         )
         .where(
             InterviewProcessStage.id == stage_id,
-            _student_direction_filter(current_user.id),
+            *_direction_filters(current_user),
         )
     )
     if stage is None:

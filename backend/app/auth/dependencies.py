@@ -123,7 +123,25 @@ async def require_student(
     return user
 
 
+async def require_catalog_user(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if user.role not in {UserRole.STUDENT, UserRole.MENTOR, UserRole.ADMIN}:
+        forbidden("Platform content access is required")
+    return user
+
+
+async def require_journal_user(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if user.role not in {UserRole.STUDENT, UserRole.MENTOR, UserRole.ADMIN}:
+        forbidden("Student, mentor, or admin access is required")
+    return user
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
 MentorUser = Annotated[User, Depends(require_mentor)]
 AdminUser = Annotated[User, Depends(require_admin)]
 StudentUser = Annotated[User, Depends(require_student)]
+CatalogUser = Annotated[User, Depends(require_catalog_user)]
+JournalUser = Annotated[User, Depends(require_journal_user)]

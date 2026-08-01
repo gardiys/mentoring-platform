@@ -53,11 +53,18 @@ export type AdminStudentDetail = Schemas["AdminStudentDetail"] & {
 };
 export type AdminStudentPage = Omit<Schemas["AdminStudentPage"], "items"> & {
   items: AdminStudentListItem[];
+  mentors: AdminStudentMentorRead[];
 };
 export type AdminStudentTrackOption = Schemas["AdminStudentTrackOption"];
 export type AdminStudentOptions = Schemas["AdminStudentOptions"] & {
   mentors: AdminStudentMentorRead[];
 };
+export type AdminMentorMutation = Schemas["AdminMentorMutation"];
+export type AdminMentorListItem = Schemas["AdminMentorListItem"];
+export type AdminMentorCandidate = Schemas["AdminMentorCandidate"];
+export type AdminMentorDirectionsMutation =
+  Schemas["AdminMentorDirectionsMutation"];
+export type AdminStudentMentorMutation = Schemas["AdminStudentMentorMutation"];
 export type KnowledgeEntryKind = Schemas["KnowledgeEntryKind"];
 export type KnowledgeTopicListItem = Schemas["KnowledgeTopicListItem"];
 export type KnowledgeTopicDetail = Schemas["KnowledgeTopicDetail"];
@@ -101,6 +108,9 @@ export type InterviewProcessStageMutation =
   Schemas["InterviewProcessStageMutation"];
 export type InterviewProcessStageRead = Schemas["InterviewProcessStageRead"];
 export type InterviewProcessSummary = Schemas["InterviewProcessSummary"];
+export type AdminInterviewProcessSummary =
+  Schemas["AdminInterviewProcessSummary"];
+export type AdminInterviewProcessPage = Schemas["AdminInterviewProcessPage"];
 export type InterviewProcessDetail = Schemas["InterviewProcessDetail"];
 export type CompanyOption = Schemas["CompanyOption"];
 export type InterviewDirectionOption = Schemas["InterviewDirectionOption"];
@@ -108,6 +118,8 @@ export type InterviewUploadIntent = Schemas["InterviewUploadIntent"];
 export type InterviewDownloadUrl = Schemas["InterviewDownloadUrl"];
 export type InterviewCatalogCompanyListItem =
   Schemas["InterviewCatalogCompanyListItem"];
+export type InterviewCatalogCompanyPage =
+  Schemas["InterviewCatalogCompanyPage"];
 export type InterviewCatalogCompanyDetail = Omit<
   Schemas["InterviewCatalogCompanyDetail"],
   "tracks"
@@ -181,6 +193,29 @@ export interface MentorStudentListItem {
   completed_topics_this_week: number;
   is_overdue: boolean;
   mock_interview_count: number;
+}
+
+export interface MentorStudentDirectionOption {
+  id: string;
+  slug: string;
+  title: string;
+}
+
+export interface MentorStudentMentorOption {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+  telegram_username: string | null;
+}
+
+export interface MentorStudentPage {
+  items: MentorStudentListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  directions: MentorStudentDirectionOption[];
+  mentors: MentorStudentMentorOption[];
+  can_filter_by_mentor: boolean;
 }
 
 export interface MentorNoteRead {

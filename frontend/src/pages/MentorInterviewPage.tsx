@@ -6,7 +6,6 @@ import {
   Stack,
   Text,
   Textarea,
-  Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
@@ -48,6 +47,7 @@ function MentorStage({
 }) {
   const [feedback, setFeedback] = useState("");
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [isMediaLoading, setIsMediaLoading] = useState(false);
   const mutation = useCreateMentorInterviewFeedback(studentId, processId);
 
   const openMedia = async () => {
@@ -55,17 +55,27 @@ function MentorStage({
       setMediaUrl(null);
       return;
     }
+    setIsMediaLoading(true);
     try {
-      setMediaUrl(
-        await api.openMentorInterviewMedia(studentId, processId, stage.id),
-      );
+      setMediaUrl(await api.interviewCatalogStageMedia(stage.id));
     } catch (error) {
       notifications.show({
         color: "red",
         message:
           error instanceof Error ? error.message : "Не удалось открыть запись",
       });
+    } finally {
+      setIsMediaLoading(false);
     }
+  };
+
+  const handleMediaError = () => {
+    setMediaUrl(null);
+    notifications.show({
+      color: "yellow",
+      message:
+        "Не удалось воспроизвести запись. Попробуйте открыть её ещё раз.",
+    });
   };
 
   return (
@@ -82,7 +92,11 @@ function MentorStage({
         )}
         {stage.media && (
           <Stack gap="xs">
-            <Button variant="light" onClick={() => void openMedia()}>
+            <Button
+              variant="light"
+              loading={isMediaLoading}
+              onClick={() => void openMedia()}
+            >
               {mediaUrl
                 ? "Скрыть запись"
                 : stage.media.content_type.startsWith("video/")
@@ -94,7 +108,9 @@ function MentorStage({
                 controls
                 controlsList="nodownload noremoteplayback"
                 disablePictureInPicture
+                preload="metadata"
                 src={mediaUrl}
+                onError={handleMediaError}
                 onContextMenu={(event) => event.preventDefault()}
                 style={{ width: "100%", maxHeight: 600, borderRadius: 12 }}
               />
@@ -103,7 +119,9 @@ function MentorStage({
               <audio
                 controls
                 controlsList="nodownload noremoteplayback"
+                preload="metadata"
                 src={mediaUrl}
+                onError={handleMediaError}
                 style={{ width: "100%" }}
               />
             )}
@@ -205,6 +223,67 @@ export function MentorInterviewPage() {
         title={process.company_name}
         description={`Этапов: ${process.stage_count}. Здесь можно посмотреть материалы и оставить менторский фидбек.`}
       />
+      <Card withBorder>
+        <Stack gap="xs">
+          <Group>
+            <Badge
+              color={
+                process.status === "offer"
+                  ? "green"
+                  : process.status === "closed"
+                    ? "gray"
+                    : "blue"
+              }
+            >
+              {process.status === "offer"
+                ? "Получен оффер"
+                : process.status === "closed"
+                  ? "Трек завершён"
+                  : "Активный трек"}
+            </Badge>
+            <Text size="sm" c="dimmed">
+              Создан {new Date(process.created_at).toLocaleDateString("ru-RU")}
+            </Text>
+          </Group>
+          {process.recruiter_telegram_usernames.length > 0 && (
+            <Text>
+              Рекрутеры:{" "}
+              {process.recruiter_telegram_usernames
+                .map((username) => `@${username}`)
+                .join(", ")}
+            </Text>
+          )}
+          {process.close_reason && (
+            <Text style={{ whiteSpace: "pre-wrap" }}>
+              Причина завершения: {process.close_reason}
+            </Text>
+          )}
+          {process.offer && (
+            <Button
+              variant="light"
+              w="fit-content"
+              onClick={() =>
+                void api
+                  .openMentorInterviewOffer(studentId, processId)
+                  .then((url) =>
+                    window.open(url, "_blank", "noopener,noreferrer"),
+                  )
+                  .catch((error: unknown) =>
+                    notifications.show({
+                      color: "red",
+                      message:
+                        error instanceof Error
+                          ? error.message
+                          : "Не удалось открыть файл оффера",
+                    }),
+                  )
+              }
+            >
+              Открыть файл оффера · {process.offer.filename}
+            </Button>
+          )}
+        </Stack>
+      </Card>
       {process.stages.length === 0 ? (
         <Text c="dimmed">В этом треке пока нет этапов.</Text>
       ) : (

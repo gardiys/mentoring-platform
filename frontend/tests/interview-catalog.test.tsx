@@ -86,7 +86,7 @@ afterEach(() => vi.restoreAllMocks());
 it("ищет компании в каталоге", async () => {
   const list = vi
     .spyOn(api, "interviewCatalogCompanies")
-    .mockResolvedValue([company]);
+    .mockResolvedValue({ items: [company], total: 1, limit: 24, offset: 0 });
   vi.spyOn(api, "interviewCatalogDirections").mockResolvedValue([
     { id: pythonTrackId, slug: "python", title: "Python" },
   ]);
@@ -123,14 +123,17 @@ it("ищет компании в каталоге", async () => {
   );
 
   await waitFor(() =>
-    expect(list).toHaveBeenCalledWith({
-      query: "Yandex",
-      authorId,
-      trackId: pythonTrackId,
-      stageType: "technical_interview",
-      hasOffer: true,
-      mediaKind: "any",
-    }),
+    expect(list).toHaveBeenCalledWith(
+      {
+        query: "Yandex",
+        authorId,
+        trackId: pythonTrackId,
+        stageType: "technical_interview",
+        hasOffer: true,
+        mediaKind: "any",
+      },
+      { limit: 24, offset: 0 },
+    ),
   );
   expect(
     await screen.findByRole("link", { name: "Смотреть собеседования" }),

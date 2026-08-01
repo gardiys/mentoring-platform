@@ -49,6 +49,25 @@ class KnowledgeTopic(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         order_by="KnowledgeEntry.position",
     )
 
+    track_links = relationship(
+        "KnowledgeTopicTrack", cascade="all, delete-orphan"
+    )
+
+
+class KnowledgeTopicTrack(Base):
+    __tablename__ = "knowledge_topic_tracks"
+
+    topic_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("knowledge_topics.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    track_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("learning_tracks.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
 
 class KnowledgeEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "knowledge_entries"

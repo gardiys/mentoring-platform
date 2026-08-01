@@ -8,12 +8,14 @@ from app.auth.web_router import router as web_auth_router
 from app.core.config import get_settings
 from app.core.middleware import RequestContextMiddleware
 from app.integrations.router import router as integrations_router
+from app.interviews.admin_process_router import router as admin_interview_processes_router
 from app.interviews.admin_router import router as admin_interviews_router
 from app.interviews.catalog_router import router as interview_catalog_router
 from app.interviews.journal_router import router as interview_journal_router
 from app.interviews.router import router as interviews_router
 from app.knowledge.admin_router import router as admin_knowledge_router
 from app.knowledge.router import router as knowledge_router
+from app.mentors.admin_router import router as admin_mentors_router
 from app.mentors.router import router as mentors_router
 from app.roadmaps.admin_router import router as admin_roadmaps_router
 from app.roadmaps.router import router as roadmaps_router
@@ -40,11 +42,13 @@ app.include_router(interviews_router, prefix="/api/v1")
 app.include_router(interview_catalog_router, prefix="/api/v1")
 app.include_router(interview_journal_router, prefix="/api/v1")
 app.include_router(admin_interviews_router, prefix="/api/v1")
+app.include_router(admin_interview_processes_router, prefix="/api/v1")
 app.include_router(knowledge_router, prefix="/api/v1")
 app.include_router(admin_knowledge_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(roadmaps_router, prefix="/api/v1")
 app.include_router(mentors_router, prefix="/api/v1")
+app.include_router(admin_mentors_router, prefix="/api/v1")
 app.include_router(admin_roadmaps_router, prefix="/api/v1")
 app.include_router(admin_tracks_router, prefix="/api/v1")
 app.include_router(admin_students_router, prefix="/api/v1")

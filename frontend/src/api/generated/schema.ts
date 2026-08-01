@@ -729,6 +729,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/interviews/processes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Interview Processes */
+        get: operations["admin_interview_processes_api_v1_admin_interviews_processes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/topics": {
         parameters: {
             query?: never;
@@ -1329,6 +1346,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/mentor/students/{student_id}/interviews/{process_id}/offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Interview Offer */
+        get: operations["mentor_interview_offer_api_v1_mentor_students__student_id__interviews__process_id__offer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/mentor/me/mock-interviews": {
         parameters: {
             query?: never;
@@ -1395,6 +1429,109 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mentors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Mentors */
+        get: operations["admin_mentors_api_v1_admin_mentors_get"];
+        put?: never;
+        /** Admin Create Mentor */
+        post: operations["admin_create_mentor_api_v1_admin_mentors_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mentors/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Mentor Candidates */
+        get: operations["admin_mentor_candidates_api_v1_admin_mentors_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mentors/{student_id}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Promote Student */
+        post: operations["admin_promote_student_api_v1_admin_mentors__student_id__promote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mentors/{mentor_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Admin Remove Mentor */
+        delete: operations["admin_remove_mentor_api_v1_admin_mentors__mentor_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/mentors/{mentor_id}/directions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Update Mentor Directions */
+        patch: operations["admin_update_mentor_directions_api_v1_admin_mentors__mentor_id__directions_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/mentors/students/{student_id}/mentor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Reassign Mentor Student */
+        patch: operations["admin_reassign_mentor_student_api_v1_admin_mentors_students__student_id__mentor_patch"];
         trace?: never;
     };
     "/api/v1/admin/roadmaps": {
@@ -1891,6 +2028,71 @@ export interface components {
             /** Frequent Count */
             frequent_count: number;
         };
+        /** AdminInterviewProcessPage */
+        AdminInterviewProcessPage: {
+            /** Items */
+            items: components["schemas"]["AdminInterviewProcessSummary"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** AdminInterviewProcessSummary */
+        AdminInterviewProcessSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Company Name */
+            company_name: string;
+            /** Recruiter Telegram Usernames */
+            recruiter_telegram_usernames: string[];
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            /** Track Slug */
+            track_slug: string;
+            /** Track Title */
+            track_title: string;
+            status: components["schemas"]["InterviewProcessStatus"];
+            /**
+             * Close Reason
+             * @description Latest closure reason, retained after reopening
+             */
+            close_reason: string | null;
+            /**
+             * Closed At
+             * @description Time of the latest closure, retained after reopening
+             */
+            closed_at: string | null;
+            /** Stage Count */
+            stage_count: number;
+            /** Next Stage At */
+            next_stage_at: string | null;
+            /** Has Offer File */
+            has_offer_file: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            author: components["schemas"]["InterviewCatalogAuthorRead"];
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+        };
         /** AdminKnowledgeEntryMutation */
         AdminKnowledgeEntryMutation: {
             /** Id */
@@ -1984,6 +2186,8 @@ export interface components {
              * @default false
              */
             is_published: boolean;
+            /** Track Ids */
+            track_ids: string[];
             /** Entries */
             entries?: components["schemas"]["AdminKnowledgeEntryMutation"][];
         };
@@ -2005,6 +2209,8 @@ export interface components {
              * @default false
              */
             is_published: boolean;
+            /** Track Ids */
+            track_ids: string[];
             /**
              * Id
              * Format: uuid
@@ -2030,6 +2236,8 @@ export interface components {
             position: number;
             /** Is Published */
             is_published: boolean;
+            /** Track Ids */
+            track_ids: string[];
             /** Entries */
             entries: components["schemas"]["AdminKnowledgeEntryRead"][];
         };
@@ -2051,6 +2259,8 @@ export interface components {
              * @default false
              */
             is_published: boolean;
+            /** Track Ids */
+            track_ids: string[];
         };
         /** AdminKnowledgeTopicSummary */
         AdminKnowledgeTopicSummary: {
@@ -2070,6 +2280,8 @@ export interface components {
              * @default false
              */
             is_published: boolean;
+            /** Track Ids */
+            track_ids: string[];
             /**
              * Id
              * Format: uuid
@@ -2079,6 +2291,101 @@ export interface components {
             article_count: number;
             /** Question Count */
             question_count: number;
+        };
+        /** AdminMentorCandidate */
+        AdminMentorCandidate: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Telegram Id */
+            telegram_id: number | null;
+            /** Telegram Username */
+            telegram_username: string | null;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string | null;
+            /** Email */
+            email: string | null;
+        };
+        /** AdminMentorDirectionsMutation */
+        AdminMentorDirectionsMutation: {
+            /** Track Ids */
+            track_ids: string[];
+        };
+        /** AdminMentorListItem */
+        AdminMentorListItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Telegram Id */
+            telegram_id: number | null;
+            /** Telegram Username */
+            telegram_username: string | null;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string | null;
+            /** Email */
+            email: string | null;
+            /** Is Active */
+            is_active: boolean;
+            /** Student Count */
+            student_count: number;
+            /** Tracks */
+            tracks: components["schemas"]["AdminMentorTrackRead"][];
+            /** Students */
+            students: components["schemas"]["AdminMentorStudentRead"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** AdminMentorMutation */
+        AdminMentorMutation: {
+            /** Telegram Id */
+            telegram_id: number;
+            /** Telegram Username */
+            telegram_username?: string | null;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Track Ids */
+            track_ids: string[];
+        };
+        /** AdminMentorStudentRead */
+        AdminMentorStudentRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string | null;
+            /** Telegram Username */
+            telegram_username: string | null;
+        };
+        /** AdminMentorTrackRead */
+        AdminMentorTrackRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
         };
         /** AdminRoadmapCreate */
         AdminRoadmapCreate: {
@@ -2374,6 +2681,14 @@ export interface components {
             /** Last Progress At */
             last_progress_at: string | null;
         };
+        /** AdminStudentMentorMutation */
+        AdminStudentMentorMutation: {
+            /**
+             * Mentor Id
+             * Format: uuid
+             */
+            mentor_id: string;
+        };
         /** AdminStudentMentorRead */
         AdminStudentMentorRead: {
             /**
@@ -2422,6 +2737,8 @@ export interface components {
             limit: number;
             /** Offset */
             offset: number;
+            /** Mentors */
+            mentors?: components["schemas"]["AdminStudentMentorRead"][];
         };
         /** AdminStudentTrackOption */
         AdminStudentTrackOption: {
@@ -2774,6 +3091,17 @@ export interface components {
             interview_count: number;
             /** Last Interview At */
             last_interview_at: string | null;
+        };
+        /** InterviewCatalogCompanyPage */
+        InterviewCatalogCompanyPage: {
+            /** Items */
+            items: components["schemas"]["InterviewCatalogCompanyListItem"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
         };
         /**
          * InterviewCatalogMediaKind
@@ -3435,6 +3763,18 @@ export interface components {
             /** Notes */
             notes: components["schemas"]["MentorNoteRead"][];
         };
+        /** MentorStudentDirectionOption */
+        MentorStudentDirectionOption: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+        };
         /** MentorStudentListItem */
         MentorStudentListItem: {
             /**
@@ -3464,6 +3804,40 @@ export interface components {
             is_overdue: boolean;
             /** Mock Interview Count */
             mock_interview_count: number;
+        };
+        /** MentorStudentMentorOption */
+        MentorStudentMentorOption: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string | null;
+            /** Telegram Username */
+            telegram_username: string | null;
+        };
+        /** MentorStudentPage */
+        MentorStudentPage: {
+            /** Items */
+            items: components["schemas"]["MentorStudentListItem"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Directions */
+            directions: components["schemas"]["MentorStudentDirectionOption"][];
+            /** Mentors */
+            mentors?: components["schemas"]["MentorStudentMentorOption"][];
+            /**
+             * Can Filter By Mentor
+             * @default false
+             */
+            can_filter_by_mentor: boolean;
         };
         /** MentorStudentStateMutation */
         MentorStudentStateMutation: {
@@ -3639,6 +4013,11 @@ export interface components {
             total_duration_days: number;
             /** Planned Completion At */
             planned_completion_at: string | null;
+        };
+        /** RoadmapStartRequest */
+        RoadmapStartRequest: {
+            /** Started On */
+            started_on?: string | null;
         };
         /** SectionRead */
         SectionRead: {
@@ -4253,6 +4632,8 @@ export interface operations {
                 stage_type?: components["schemas"]["InterviewStageType"] | null;
                 has_offer?: boolean;
                 media_kind?: components["schemas"]["InterviewCatalogMediaKind"] | null;
+                limit?: number;
+                offset?: number;
             };
             header?: {
                 authorization?: string | null;
@@ -4271,7 +4652,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InterviewCatalogCompanyListItem"][];
+                    "application/json": components["schemas"]["InterviewCatalogCompanyPage"];
                 };
             };
             /** @description Validation Error */
@@ -5769,6 +6150,44 @@ export interface operations {
             };
         };
     };
+    admin_interview_processes_api_v1_admin_interviews_processes_get: {
+        parameters: {
+            query?: {
+                status?: "all" | "active" | "closed" | "offer";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminInterviewProcessPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     knowledge_topics_api_v1_knowledge_topics_get: {
         parameters: {
             query?: never;
@@ -6440,7 +6859,11 @@ export interface operations {
                 mentoring_session?: string | null;
             };
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RoadmapStartRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -6540,7 +6963,15 @@ export interface operations {
     };
     mentor_students_api_v1_mentor_students_get: {
         parameters: {
-            query?: never;
+            query?: {
+                query?: string | null;
+                track_id?: string | null;
+                mentor_id?: string | null;
+                without_mentor?: boolean;
+                learning_status?: components["schemas"]["StudentLearningStatus"][] | null;
+                limit?: number;
+                offset?: number;
+            };
             header?: {
                 authorization?: string | null;
                 "x-dev-user-id"?: string | null;
@@ -6558,7 +6989,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MentorStudentListItem"][];
+                    "application/json": components["schemas"]["MentorStudentPage"];
                 };
             };
             /** @description Validation Error */
@@ -7281,6 +7712,43 @@ export interface operations {
             };
         };
     };
+    mentor_interview_offer_api_v1_mentor_students__student_id__interviews__process_id__offer_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     my_mock_interviews_api_v1_mentor_me_mock_interviews_get: {
         parameters: {
             query?: never;
@@ -7409,6 +7877,263 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InterviewDownloadUrl"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_mentors_api_v1_admin_mentors_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorListItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_mentor_api_v1_admin_mentors_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminMentorMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorListItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_mentor_candidates_api_v1_admin_mentors_candidates_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorCandidate"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_promote_student_api_v1_admin_mentors__student_id__promote_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorListItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_remove_mentor_api_v1_admin_mentors__mentor_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                mentor_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_mentor_directions_api_v1_admin_mentors__mentor_id__directions_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                mentor_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminMentorDirectionsMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorListItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_reassign_mentor_student_api_v1_admin_mentors_students__student_id__mentor_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStudentMentorMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -8177,6 +8902,8 @@ export interface operations {
             query?: {
                 q?: string | null;
                 access?: "all" | "active" | "blocked";
+                mentor_id?: string | null;
+                without_mentor?: boolean;
                 limit?: number;
                 offset?: number;
             };

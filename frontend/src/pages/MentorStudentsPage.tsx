@@ -3,13 +3,16 @@ import {
   Badge,
   Card,
   Group,
+  MultiSelect,
+  Pagination,
   Select,
   SimpleGrid,
   Stack,
   Text,
   TextInput,
 } from "@mantine/core";
-import { useMemo, useState } from "react";
+import { useDebouncedValue } from "@mantine/hooks";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
@@ -38,23 +41,29 @@ function formatActivity(value: string | null): string {
     : "активности пока не было";
 }
 
+function personName(firstName: string, lastName: string | null): string {
+  return [firstName, lastName].filter(Boolean).join(" ");
+}
+
 export function MentorStudentsPage() {
-  const query = useMentorStudents();
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
-  const students = useMemo(() => {
-    const normalized = search.trim().toLocaleLowerCase("ru-RU");
-    return (query.data ?? []).filter((student) => {
-      const name = [student.first_name, student.last_name, student.email]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("ru-RU");
-      return (
-        (!normalized || name.includes(normalized)) &&
-        (!status || student.learning_status === status)
-      );
-    });
-  }, [query.data, search, status]);
+  const [debouncedSearch] = useDebouncedValue(search.trim(), 250);
+  const [trackId, setTrackId] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<StudentLearningStatus[]>([]);
+  const [mentorFilter, setMentorFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const query = useMentorStudents({
+    query: debouncedSearch,
+    trackId,
+    mentorFilter,
+    learningStatuses: statuses,
+    page,
+  });
+
+  useEffect(
+    () => setPage(1),
+    [debouncedSearch, trackId, statuses, mentorFilter],
+  );
 
   if (query.isPending) return <LoadingState label="Загружаем учеников…" />;
   if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
@@ -66,32 +75,61 @@ export function MentorStudentsPage() {
         title="Мои ученики"
         description="Текущие темы, сроки, активность, собеседования и состояние каждого ученика."
       />
-      <Group align="flex-end">
+      <Group align="flex-end" grow>
         <TextInput
           label="Поиск"
           placeholder="Имя или email"
           value={search}
           onChange={(event) => setSearch(event.currentTarget.value)}
-          style={{ flex: 1 }}
         />
         <Select
-          label="Статус"
+          label="Направление"
+          placeholder="Python и Go"
+          clearable
+          searchable
+          value={trackId}
+          onChange={setTrackId}
+          data={query.data.directions.map((direction) => ({
+            value: direction.id,
+            label: direction.title,
+          }))}
+          w={{ base: "100%", sm: 240 }}
+        />
+        <MultiSelect
+          label="Текущий статус"
           placeholder="Все статусы"
           clearable
-          value={status}
-          onChange={setStatus}
+          value={statuses}
+          onChange={(values) => setStatuses(values as StudentLearningStatus[])}
           data={Object.entries(statusLabels).map(([value, label]) => ({
             value,
             label,
           }))}
-          w={{ base: "100%", sm: 260 }}
+          w={{ base: "100%", sm: 340 }}
         />
+        {query.data.can_filter_by_mentor && (
+          <Select
+            label="Ментор"
+            value={mentorFilter}
+            onChange={(value) => setMentorFilter(value ?? "all")}
+            searchable
+            data={[
+              { value: "all", label: "Все менторы" },
+              { value: "unassigned", label: "Без ментора" },
+              ...query.data.mentors.map((mentor) => ({
+                value: mentor.id,
+                label: personName(mentor.first_name, mentor.last_name),
+              })),
+            ]}
+            w={{ base: "100%", sm: 260 }}
+          />
+        )}
       </Group>
-      {students.length === 0 ? (
+      {query.data.items.length === 0 ? (
         <Text c="dimmed">Подходящих учеников нет.</Text>
       ) : (
         <SimpleGrid cols={{ base: 1, xl: 2 }}>
-          {students.map((student) => (
+          {query.data.items.map((student) => (
             <Card
               key={student.id}
               withBorder
@@ -203,6 +241,14 @@ export function MentorStudentsPage() {
             </Card>
           ))}
         </SimpleGrid>
+      )}
+      {query.data.total > query.data.limit && (
+        <Pagination
+          value={page}
+          onChange={setPage}
+          total={Math.ceil(query.data.total / query.data.limit)}
+          mx="auto"
+        />
       )}
     </Stack>
   );

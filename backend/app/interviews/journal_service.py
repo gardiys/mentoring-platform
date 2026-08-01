@@ -13,7 +13,10 @@ from app.interviews.models import (
     InterviewProcessStatus,
 )
 from app.interviews.schemas import (
+    AdminInterviewProcessPage,
+    AdminInterviewProcessSummary,
     InterviewAttachmentRead,
+    InterviewCatalogAuthorRead,
     InterviewDirectionOption,
     InterviewProcessDetail,
     InterviewProcessMutation,
@@ -25,6 +28,7 @@ from app.interviews.schemas import (
     InterviewStageAttachmentRead,
 )
 from app.interviews.uploads import StoredUpload
+from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack
 from app.users.models import User
 
@@ -102,11 +106,16 @@ def _summary(
 
 async def list_interview_directions(
     session: AsyncSession,
+    user: User,
 ) -> list[InterviewDirectionOption]:
+    track_ids = await accessible_track_ids(session, user)
     tracks = list(
         await session.scalars(
             select(LearningTrack)
-            .where(LearningTrack.is_published.is_(True))
+            .where(
+                LearningTrack.is_published.is_(True),
+                LearningTrack.id.in_(track_ids),
+            )
             .order_by(LearningTrack.position, LearningTrack.title)
         )
     )
@@ -116,11 +125,15 @@ async def list_interview_directions(
     ]
 
 
-async def _get_interview_direction(session: AsyncSession, track_id: UUID) -> LearningTrack:
+async def _get_interview_direction(
+    session: AsyncSession, user: User, track_id: UUID
+) -> LearningTrack:
+    track_ids = await accessible_track_ids(session, user)
     track = await session.scalar(
         select(LearningTrack).where(
             LearningTrack.id == track_id,
             LearningTrack.is_published.is_(True),
+            LearningTrack.id.in_(track_ids),
         )
     )
     if track is None:
@@ -232,6 +245,7 @@ async def list_processes(
     session: AsyncSession,
     user: User,
     status: InterviewProcessStatus | None,
+    track_ids: set[UUID] | None = None,
 ) -> list[InterviewProcessSummary]:
     now = datetime.now(UTC)
     statement = (
@@ -260,8 +274,70 @@ async def list_processes(
     )
     if status is not None:
         statement = statement.where(InterviewProcess.status == status)
+    if track_ids is not None:
+        statement = statement.where(InterviewProcess.track_id.in_(track_ids))
     rows = (await session.execute(statement)).all()
     return [_summary(process, track, count, next_at) for process, track, count, next_at in rows]
+
+
+async def list_admin_processes(
+    session: AsyncSession,
+    status: InterviewProcessStatus | None,
+    *,
+    limit: int,
+    offset: int,
+) -> AdminInterviewProcessPage:
+    now = datetime.now(UTC)
+    statement = (
+        select(
+            InterviewProcess,
+            User,
+            LearningTrack,
+            func.count(InterviewProcessStage.id),
+            func.min(
+                case(
+                    (InterviewProcessStage.scheduled_at >= now, InterviewProcessStage.scheduled_at),
+                    else_=None,
+                )
+            ),
+        )
+        .join(User, User.id == InterviewProcess.user_id)
+        .join(LearningTrack, LearningTrack.id == InterviewProcess.track_id)
+        .outerjoin(
+            InterviewProcessStage,
+            InterviewProcessStage.process_id == InterviewProcess.id,
+        )
+        .group_by(InterviewProcess.id, User.id, LearningTrack.id)
+        .order_by(
+            case((InterviewProcess.status == InterviewProcessStatus.ACTIVE, 0), else_=1),
+            InterviewProcess.updated_at.desc(),
+        )
+    )
+    if status is not None:
+        statement = statement.where(InterviewProcess.status == status)
+    total = int(
+        await session.scalar(select(func.count()).select_from(statement.order_by(None).subquery()))
+        or 0
+    )
+    rows = (await session.execute(statement.limit(limit).offset(offset))).all()
+    items = [
+        AdminInterviewProcessSummary(
+            **_summary(process, track, count, next_at).model_dump(),
+            company_id=process.company_id,
+            author=InterviewCatalogAuthorRead(
+                id=author.id,
+                name=author.first_name,
+                telegram_username=author.telegram_username,
+            ),
+        )
+        for process, author, track, count, next_at in rows
+    ]
+    return AdminInterviewProcessPage(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 async def process_detail(
@@ -311,7 +387,7 @@ async def process_detail(
 async def create_process(
     session: AsyncSession, user: User, payload: InterviewProcessMutation
 ) -> InterviewProcessDetail:
-    track = await _get_interview_direction(session, payload.track_id)
+    track = await _get_interview_direction(session, user, payload.track_id)
     company = await resolve_company(
         session,
         payload.company_name,
@@ -337,7 +413,7 @@ async def update_process(
     payload: InterviewProcessMutation,
 ) -> InterviewProcessDetail:
     process = await get_process_model(session, user, process_id, lock=True)
-    track = await _get_interview_direction(session, payload.track_id)
+    track = await _get_interview_direction(session, user, payload.track_id)
     company = await resolve_company(
         session,
         payload.company_name,

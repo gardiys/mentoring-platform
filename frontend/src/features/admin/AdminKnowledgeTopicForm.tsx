@@ -5,6 +5,7 @@ import {
   Card,
   Divider,
   Group,
+  MultiSelect,
   NumberInput,
   Select,
   Stack,
@@ -29,6 +30,7 @@ import {
   useCreateAdminKnowledgeTopic,
   useUpdateAdminKnowledgeTopic,
 } from "./knowledgeQueries";
+import { useAdminStudentOptions } from "./studentQueries";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -38,6 +40,7 @@ const emptyTopic: AdminKnowledgeTopicMutation = {
   description: null,
   position: 0,
   is_published: false,
+  track_ids: [],
   entries: [],
 };
 
@@ -68,6 +71,7 @@ function toMutation(
     description: topic.description,
     position: topic.position,
     is_published: topic.is_published,
+    track_ids: topic.track_ids,
     entries: topic.entries.map((entry) => ({
       id: entry.id,
       kind: entry.kind,
@@ -92,6 +96,7 @@ export function AdminKnowledgeTopicForm({ topic }: Props) {
   const createMutation = useCreateAdminKnowledgeTopic();
   const updateMutation = useUpdateAdminKnowledgeTopic();
   const navigate = useNavigate();
+  const options = useAdminStudentOptions();
   const editing = topic !== undefined;
   const entries = form.entries ?? [];
   const pending = createMutation.isPending || updateMutation.isPending;
@@ -99,6 +104,7 @@ export function AdminKnowledgeTopicForm({ topic }: Props) {
   const valid =
     form.title.trim().length > 0 &&
     SLUG_PATTERN.test(form.slug) &&
+    form.track_ids.length > 0 &&
     entries.every(
       (entry) =>
         entry.title.trim().length > 0 &&
@@ -219,6 +225,20 @@ export function AdminKnowledgeTopicForm({ topic }: Props) {
                   description: value || null,
                 }));
               }}
+            />
+            <MultiSelect
+              required
+              searchable
+              label="Направления"
+              description="Тема будет доступна ученикам и менторам этих направлений"
+              data={(options.data?.tracks ?? []).map((track) => ({
+                value: track.id,
+                label: track.title,
+              }))}
+              value={form.track_ids}
+              onChange={(track_ids) =>
+                setForm((current) => ({ ...current, track_ids }))
+              }
             />
             <NumberInput
               label="Позиция"

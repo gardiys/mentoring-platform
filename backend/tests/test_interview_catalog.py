@@ -126,7 +126,7 @@ async def test_students_browse_company_tracks_files_and_comments(
         "/api/v1/interviews/catalog/authors",
         headers=auth(second_student_id),
     )
-    company_id = listing.json()[0]["id"]
+    company_id = listing.json()["items"][0]["id"]
     author_listing = await client.get(
         f"/api/v1/interviews/catalog/companies?author_id={seeded.student_id}",
         headers=auth(second_student_id),
@@ -198,7 +198,7 @@ async def test_students_browse_company_tracks_files_and_comments(
         f"/api/v1/interviews/catalog/stages/{stage_id}/attachments/{attachment_id}?inline=true",
         headers=auth(second_student_id),
     )
-    forbidden = await client.get(
+    mentor_listing = await client.get(
         "/api/v1/interviews/catalog/companies",
         headers=auth(seeded.mentor_id),
     )
@@ -212,9 +212,9 @@ async def test_students_browse_company_tracks_files_and_comments(
     )
 
     assert listing.status_code == 200
-    assert listing.json()[0]["name"] == "Яндекс"
-    assert listing.json()[0]["track_count"] == 1
-    assert listing.json()[0]["interview_count"] == 1
+    assert listing.json()["items"][0]["name"] == "Яндекс"
+    assert listing.json()["items"][0]["track_count"] == 1
+    assert listing.json()["items"][0]["interview_count"] == 1
     assert authors.json() == [
         {
             "id": str(seeded.student_id),
@@ -223,15 +223,15 @@ async def test_students_browse_company_tracks_files_and_comments(
         }
     ]
     assert "СкрытаяФамилия" not in authors.text
-    assert author_listing.json()[0]["id"] == company_id
-    assert other_author_listing.json() == []
+    assert author_listing.json()["items"][0]["id"] == company_id
+    assert other_author_listing.json()["items"] == []
     assert len(author_detail.json()["tracks"]) == 1
     assert other_author_detail.json()["tracks"] == []
     assert filtered_listing.status_code == 200
-    assert filtered_listing.json()[0]["id"] == company_id
-    assert wrong_media_listing.json() == []
-    assert any_recording_listing.json()[0]["id"] == company_id
-    assert wrong_stage_listing.json() == []
+    assert filtered_listing.json()["items"][0]["id"] == company_id
+    assert wrong_media_listing.json()["items"] == []
+    assert any_recording_listing.json()["items"][0]["id"] == company_id
+    assert wrong_stage_listing.json()["items"] == []
     assert detail.status_code == 200
     catalog_stage = detail.json()["tracks"][0]["stages"][0]
     author = detail.json()["tracks"][0]["author"]
@@ -260,7 +260,8 @@ async def test_students_browse_company_tracks_files_and_comments(
     assert stream.headers["cache-control"] == "private, no-store, max-age=0"
     assert copied_to_another_browser.status_code == 401
     assert attachment.json()["url"].endswith("?mode=inline")
-    assert forbidden.status_code == 403
+    assert mentor_listing.status_code == 200
+    assert mentor_listing.json()["items"][0]["id"] == company_id
     assert cannot_delete_other_comment.status_code == 404
     assert deleted.status_code == 204
 
@@ -310,7 +311,7 @@ async def test_catalog_is_scoped_and_filtered_by_student_directions(
     )
     go_process = await client.post(
         "/api/v1/interviews/journal/tracks",
-        headers=auth(seeded.student_id),
+        headers=auth(seeded.admin_id),
         json={"company_name": "Авито", "track_id": str(seeded.go_track_id)},
     )
     python_stage = await client.post(
@@ -324,7 +325,7 @@ async def test_catalog_is_scoped_and_filtered_by_student_directions(
     )
     await client.post(
         f"/api/v1/interviews/journal/tracks/{go_process.json()['id']}/stages",
-        headers=auth(seeded.student_id),
+        headers=auth(seeded.admin_id),
         json={
             "stage_type": "technical_interview",
             "scheduled_at": datetime.now(UTC).isoformat(),
@@ -363,12 +364,12 @@ async def test_catalog_is_scoped_and_filtered_by_student_directions(
     assert [item["slug"] for item in python_directions.json()] == ["python"]
     assert [item["slug"] for item in go_directions.json()] == ["go"]
     assert [item["slug"] for item in dual_directions.json()] == ["python", "go"]
-    assert python_listing.json()[0]["track_count"] == 1
-    assert go_listing.json()[0]["track_count"] == 1
-    assert dual_listing.json()[0]["track_count"] == 2
-    assert no_direction_listing.json() == []
+    assert python_listing.json()["items"][0]["track_count"] == 1
+    assert go_listing.json()["items"][0]["track_count"] == 1
+    assert dual_listing.json()["items"][0]["track_count"] == 2
+    assert no_direction_listing.json()["items"] == []
 
-    company_id = dual_listing.json()[0]["id"]
+    company_id = dual_listing.json()["items"][0]["id"]
     python_detail = await client.get(
         f"/api/v1/interviews/catalog/companies/{company_id}",
         headers=auth(seeded.student_id),
@@ -396,3 +397,39 @@ async def test_catalog_is_scoped_and_filtered_by_student_directions(
     assert {track["track_slug"] for track in dual_python_filter.json()["tracks"]} == {"python"}
     assert hidden_python_stage.status_code == 404
     assert unavailable_company.status_code == 404
+
+
+async def test_admin_sees_all_catalog_directions_and_interview_tracks(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    created = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={
+            "company_name": "Admin Catalog Company",
+            "track_id": str(seeded.python_track_id),
+        },
+    )
+
+    directions = await client.get(
+        "/api/v1/interviews/catalog/directions", headers=auth(seeded.admin_id)
+    )
+    companies = await client.get(
+        "/api/v1/interviews/catalog/companies?q=Admin Catalog Company",
+        headers=auth(seeded.admin_id),
+    )
+    processes = await client.get(
+        "/api/v1/admin/interviews/processes", headers=auth(seeded.admin_id)
+    )
+
+    assert created.status_code == 201
+    assert {item["slug"] for item in directions.json()} == {"python", "go"}
+    assert companies.status_code == 200
+    assert companies.json()["total"] == 1
+    assert companies.json()["limit"] == 24
+    assert companies.json()["items"][0]["name"] == created.json()["company_name"]
+    assert processes.status_code == 200
+    assert processes.json()["total"] == 1
+    assert processes.json()["items"][0]["id"] == created.json()["id"]
+    assert processes.json()["items"][0]["author"]["id"] == str(seeded.student_id)
+    assert processes.json()["items"][0]["company_id"] == companies.json()["items"][0]["id"]

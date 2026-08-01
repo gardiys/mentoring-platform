@@ -32,6 +32,8 @@ async def admin_students(
     _admin: AdminUser,
     q: str | None = Query(default=None, max_length=160),
     access: Literal["all", "active", "blocked"] = Query(default="all"),
+    mentor_id: UUID | None = None,
+    without_mentor: bool = False,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> AdminStudentPage:
@@ -39,6 +41,8 @@ async def admin_students(
         session,
         query=q,
         access=access,
+        mentor_id=mentor_id,
+        without_mentor=without_mentor,
         limit=limit,
         offset=offset,
     )

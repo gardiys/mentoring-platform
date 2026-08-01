@@ -84,6 +84,22 @@ class MentorStudent(Base):
     )
 
 
+class MentorTrackAssignment(Base):
+    __tablename__ = "mentor_track_assignments"
+
+    mentor_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    track_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("learning_tracks.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class MentorStudentNote(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "mentor_student_notes"
     __table_args__ = (Index("ix_mentor_student_notes_student_created", "student_id", "created_at"),)

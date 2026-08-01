@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import StudentUser
+from app.auth.dependencies import JournalUser
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
@@ -74,7 +74,7 @@ def _upload_intent_read(intent: object) -> InterviewUploadIntent:
 @router.get("/companies", response_model=list[CompanyOption])
 async def journal_company_suggestions(
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
     q: str = Query(min_length=1, max_length=240),
     limit: int = Query(default=8, ge=1, le=20),
 ) -> list[CompanyOption]:
@@ -84,15 +84,15 @@ async def journal_company_suggestions(
 
 @router.get("/directions", response_model=list[InterviewDirectionOption])
 async def journal_directions(
-    session: Session, student: StudentUser
+    session: Session, student: JournalUser
 ) -> list[InterviewDirectionOption]:
-    return await list_interview_directions(session)
+    return await list_interview_directions(session, student)
 
 
 @router.get("/tracks", response_model=list[InterviewProcessSummary])
 async def journal_tracks(
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
     status_filter: Literal["all", "active", "closed", "offer"] = Query(
         default="all", alias="status"
     ),
@@ -103,14 +103,14 @@ async def journal_tracks(
 
 @router.post("/tracks", response_model=InterviewProcessDetail, status_code=status.HTTP_201_CREATED)
 async def journal_create_track(
-    payload: InterviewProcessMutation, session: Session, student: StudentUser
+    payload: InterviewProcessMutation, session: Session, student: JournalUser
 ) -> InterviewProcessDetail:
     return await create_process(session, student, payload)
 
 
 @router.get("/tracks/{process_id}", response_model=InterviewProcessDetail)
 async def journal_track(
-    process_id: UUID, session: Session, student: StudentUser
+    process_id: UUID, session: Session, student: JournalUser
 ) -> InterviewProcessDetail:
     return await process_detail(session, student, process_id)
 
@@ -120,7 +120,7 @@ async def journal_update_track(
     process_id: UUID,
     payload: InterviewProcessMutation,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewProcessDetail:
     return await update_process(session, student, process_id, payload)
 
@@ -130,7 +130,7 @@ async def journal_track_recruiters(
     process_id: UUID,
     payload: InterviewProcessRecruitersMutation,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewProcessDetail:
     return await set_process_recruiters(session, student, process_id, payload)
 
@@ -140,7 +140,7 @@ async def journal_track_outcome(
     process_id: UUID,
     payload: InterviewProcessOutcomeMutation,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewProcessDetail:
     return await set_process_outcome(session, student, process_id, payload)
 
@@ -150,7 +150,7 @@ async def journal_create_stage(
     process_id: UUID,
     payload: InterviewProcessStageMutation,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewProcessDetail:
     return await create_stage(session, student, process_id, payload)
 
@@ -161,7 +161,7 @@ async def journal_update_stage(
     stage_id: UUID,
     payload: InterviewProcessStageMutation,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewProcessDetail:
     return await update_stage(session, student, process_id, stage_id, payload)
 
@@ -175,7 +175,7 @@ async def journal_create_stage_media_upload(
     stage_id: UUID,
     payload: InterviewUploadRequest,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewUploadIntent:
     await get_stage_model(session, student, process_id, stage_id)
     allowed_types, max_bytes = _media_upload_rules(payload.content_type)
@@ -200,7 +200,7 @@ async def journal_complete_stage_media_upload(
     stage_id: UUID,
     payload: InterviewUploadComplete,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewProcessDetail:
     await get_stage_model(session, student, process_id, stage_id)
     allowed_types, max_bytes = _media_upload_rules(payload.content_type)
@@ -231,7 +231,7 @@ async def journal_download_stage_media(
     process_id: UUID,
     stage_id: UUID,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
     inline: bool = Query(default=False),
 ) -> InterviewDownloadUrl:
     stage = await get_stage_model(session, student, process_id, stage_id)
@@ -257,7 +257,7 @@ async def journal_download_stage_media(
     response_class=Response,
 )
 async def journal_delete_stage_media(
-    process_id: UUID, stage_id: UUID, session: Session, student: StudentUser
+    process_id: UUID, stage_id: UUID, session: Session, student: JournalUser
 ) -> Response:
     _, previous_key = await clear_stage_media(session, student, process_id, stage_id)
     await store.delete(previous_key)
@@ -273,7 +273,7 @@ async def journal_create_stage_attachment_upload(
     stage_id: UUID,
     payload: InterviewUploadRequest,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewUploadIntent:
     await ensure_stage_attachment_capacity(session, student, process_id, stage_id)
     intent = store.create_upload_intent(
@@ -297,7 +297,7 @@ async def journal_complete_stage_attachment_upload(
     stage_id: UUID,
     payload: InterviewUploadComplete,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewProcessDetail:
     await ensure_stage_attachment_capacity(session, student, process_id, stage_id)
     upload = await store.complete_upload(
@@ -326,7 +326,7 @@ async def journal_download_stage_attachment(
     stage_id: UUID,
     attachment_id: UUID,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
     inline: bool = Query(default=False),
 ) -> InterviewDownloadUrl:
     attachment = await get_stage_attachment_model(
@@ -358,7 +358,7 @@ async def journal_delete_stage_attachment(
     stage_id: UUID,
     attachment_id: UUID,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> Response:
     _, storage_key = await clear_stage_attachment(
         session, student, process_id, stage_id, attachment_id
@@ -375,7 +375,7 @@ async def journal_create_offer_upload(
     process_id: UUID,
     payload: InterviewUploadRequest,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewUploadIntent:
     await get_process_model(session, student, process_id)
     intent = store.create_upload_intent(
@@ -398,7 +398,7 @@ async def journal_complete_offer_upload(
     process_id: UUID,
     payload: InterviewUploadComplete,
     session: Session,
-    student: StudentUser,
+    student: JournalUser,
 ) -> InterviewProcessDetail:
     await get_process_model(session, student, process_id)
     upload = await store.complete_upload(
@@ -422,7 +422,7 @@ async def journal_complete_offer_upload(
 
 @router.get("/tracks/{process_id}/offer", response_model=InterviewDownloadUrl)
 async def journal_download_offer(
-    process_id: UUID, session: Session, student: StudentUser
+    process_id: UUID, session: Session, student: JournalUser
 ) -> InterviewDownloadUrl:
     process = await get_process_model(session, student, process_id)
     if (
@@ -450,7 +450,7 @@ async def journal_download_offer(
     response_class=Response,
 )
 async def journal_delete_offer(
-    process_id: UUID, session: Session, student: StudentUser
+    process_id: UUID, session: Session, student: JournalUser
 ) -> Response:
     _, previous_key = await cancel_offer(session, student, process_id)
     await store.delete(previous_key)

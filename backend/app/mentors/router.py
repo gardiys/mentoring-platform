@@ -9,7 +9,11 @@ from app.auth.dependencies import MentorUser, StudentUser
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
-from app.interviews.journal_service import get_stage_attachment_model, get_stage_model
+from app.interviews.journal_service import (
+    get_process_model,
+    get_stage_attachment_model,
+    get_stage_model,
+)
 from app.interviews.media import ensure_stage_media_browser_playable
 from app.interviews.schemas import (
     InterviewCatalogCommentMutation,
@@ -20,7 +24,11 @@ from app.interviews.schemas import (
     InterviewUploadRequest,
 )
 from app.interviews.uploads import InterviewUploadStore, StoredUpload
-from app.mentors.models import MentorDocumentKind, MentorStudentDocument
+from app.mentors.models import (
+    MentorDocumentKind,
+    MentorStudentDocument,
+    StudentLearningStatus,
+)
 from app.mentors.schemas import (
     MentorDocumentContentMutation,
     MentorDocumentRead,
@@ -28,7 +36,7 @@ from app.mentors.schemas import (
     MentorNoteMutation,
     MentorNoteRead,
     MentorStudentDetail,
-    MentorStudentListItem,
+    MentorStudentPage,
     MentorStudentStateMutation,
     MockInterviewFeedbackMutation,
     MockInterviewMutation,
@@ -101,9 +109,29 @@ def _media_rules(content_type: str) -> tuple[tuple[str, ...], int]:
     api_error(415, "unsupported_mock_media_type", "Select an audio or video recording")
 
 
-@router.get("/students", response_model=list[MentorStudentListItem])
-async def mentor_students(session: Session, mentor: MentorUser) -> list[MentorStudentListItem]:
-    return await list_students(session, mentor)
+@router.get("/students", response_model=MentorStudentPage)
+async def mentor_students(
+    session: Session,
+    mentor: MentorUser,
+    query: str | None = Query(default=None, max_length=200),
+    track_id: UUID | None = None,
+    mentor_id: UUID | None = None,
+    without_mentor: bool = False,
+    learning_status: Annotated[list[StudentLearningStatus] | None, Query()] = None,
+    limit: int = Query(default=12, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> MentorStudentPage:
+    return await list_students(
+        session,
+        mentor,
+        query=query,
+        track_id=track_id,
+        mentor_id=mentor_id,
+        without_mentor=without_mentor,
+        learning_statuses=learning_status,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/students/{student_id}", response_model=MentorStudentDetail)
@@ -408,10 +436,14 @@ async def mentor_interview_media(
     session: Session,
     mentor: MentorUser,
 ) -> InterviewDownloadUrl:
-    student, _ = await assigned_student(session, mentor, student_id)
+    await mentor_interview_detail(session, mentor, student_id, process_id)
+    student, _ = await assigned_student(session, mentor, student_id, allow_any_user_for_admin=True)
     stage = await get_stage_model(session, student, process_id, stage_id)
-    if not all(
-        (stage.media_storage_key, stage.media_filename, stage.media_content_type, stage.media_size)
+    if (
+        stage.media_storage_key is None
+        or stage.media_filename is None
+        or stage.media_content_type is None
+        or stage.media_size is None
     ):
         api_error(404, "interview_media_not_found", "Interview media was not found")
     upload = await ensure_stage_media_browser_playable(session, stage, store)
@@ -430,7 +462,8 @@ async def mentor_interview_attachment(
     session: Session,
     mentor: MentorUser,
 ) -> InterviewDownloadUrl:
-    student, _ = await assigned_student(session, mentor, student_id)
+    await mentor_interview_detail(session, mentor, student_id, process_id)
+    student, _ = await assigned_student(session, mentor, student_id, allow_any_user_for_admin=True)
     attachment = await get_stage_attachment_model(
         session, student, process_id, stage_id, attachment_id
     )
@@ -444,6 +477,34 @@ async def mentor_interview_attachment(
             ),
             inline=attachment.content_type.startswith("image/")
             or attachment.content_type == "application/pdf",
+        )
+    )
+
+
+@router.get(
+    "/students/{student_id}/interviews/{process_id}/offer",
+    response_model=InterviewDownloadUrl,
+)
+async def mentor_interview_offer(
+    student_id: UUID,
+    process_id: UUID,
+    session: Session,
+    mentor: MentorUser,
+) -> InterviewDownloadUrl:
+    await mentor_interview_detail(session, mentor, student_id, process_id)
+    student, _ = await assigned_student(session, mentor, student_id, allow_any_user_for_admin=True)
+    process = await get_process_model(session, student, process_id)
+    return InterviewDownloadUrl(
+        url=store.download_url(
+            _stored_upload(
+                process.offer_storage_key,
+                process.offer_filename,
+                process.offer_content_type,
+                process.offer_size,
+                code="interview_offer_not_found",
+                message="Offer file was not found",
+            ),
+            inline=True,
         )
     )
 

@@ -1,13 +1,18 @@
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import delete, desc, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import api_error
-from app.knowledge.models import KnowledgeEntry, KnowledgeEntryKind, KnowledgeTopic
+from app.knowledge.models import (
+    KnowledgeEntry,
+    KnowledgeEntryKind,
+    KnowledgeTopic,
+    KnowledgeTopicTrack,
+)
 from app.knowledge.schemas import (
     AdminKnowledgeEntryMutation,
     AdminKnowledgeEntryRead,
@@ -24,6 +29,9 @@ from app.knowledge.schemas import (
     KnowledgeTopicDetail,
     KnowledgeTopicListItem,
 )
+from app.tracks.access import accessible_track_ids
+from app.tracks.models import LearningTrack
+from app.users.models import User, UserRole
 
 
 def _entry_list_item(entry: KnowledgeEntry) -> KnowledgeEntryListItem:
@@ -40,13 +48,27 @@ def _topic_context(topic: KnowledgeTopic) -> KnowledgeTopicContext:
     return KnowledgeTopicContext(id=topic.id, slug=topic.slug, title=topic.title)
 
 
-async def list_public_topics(session: AsyncSession) -> list[KnowledgeTopicListItem]:
+async def _content_track_ids(session: AsyncSession, user: User) -> set[UUID] | None:
+    if user.role is UserRole.ADMIN:
+        return None
+    return await accessible_track_ids(session, user)
+
+
+async def list_public_topics(
+    session: AsyncSession, user: User
+) -> list[KnowledgeTopicListItem]:
+    statement = select(KnowledgeTopic).where(KnowledgeTopic.is_published.is_(True))
+    track_ids = await _content_track_ids(session, user)
+    if track_ids is not None:
+        statement = statement.join(KnowledgeTopicTrack).where(
+            KnowledgeTopicTrack.track_id.in_(track_ids)
+        )
     topics = list(
         await session.scalars(
-            select(KnowledgeTopic)
-            .where(KnowledgeTopic.is_published.is_(True))
+            statement
             .order_by(KnowledgeTopic.position, KnowledgeTopic.title)
             .options(selectinload(KnowledgeTopic.entries))
+            .distinct()
         )
     )
     return [
@@ -68,15 +90,19 @@ async def list_public_topics(session: AsyncSession) -> list[KnowledgeTopicListIt
     ]
 
 
-async def get_public_topic(session: AsyncSession, slug: str) -> KnowledgeTopicDetail:
-    topic = await session.scalar(
-        select(KnowledgeTopic)
-        .where(
-            KnowledgeTopic.slug == slug,
-            KnowledgeTopic.is_published.is_(True),
-        )
-        .options(selectinload(KnowledgeTopic.entries))
+async def get_public_topic(
+    session: AsyncSession, slug: str, user: User
+) -> KnowledgeTopicDetail:
+    statement = select(KnowledgeTopic).where(
+        KnowledgeTopic.slug == slug,
+        KnowledgeTopic.is_published.is_(True),
     )
+    track_ids = await _content_track_ids(session, user)
+    if track_ids is not None:
+        statement = statement.join(KnowledgeTopicTrack).where(
+            KnowledgeTopicTrack.track_id.in_(track_ids)
+        )
+    topic = await session.scalar(statement.options(selectinload(KnowledgeTopic.entries)))
     if topic is None:
         api_error(404, "knowledge_topic_not_found", "Knowledge topic was not found")
     entries = [
@@ -93,8 +119,10 @@ async def get_public_topic(session: AsyncSession, slug: str) -> KnowledgeTopicDe
     )
 
 
-async def get_public_entry(session: AsyncSession, slug: str) -> KnowledgeEntryDetail:
-    entry = await session.scalar(
+async def get_public_entry(
+    session: AsyncSession, slug: str, user: User
+) -> KnowledgeEntryDetail:
+    statement = (
         select(KnowledgeEntry)
         .join(KnowledgeTopic, KnowledgeTopic.id == KnowledgeEntry.topic_id)
         .where(
@@ -102,8 +130,13 @@ async def get_public_entry(session: AsyncSession, slug: str) -> KnowledgeEntryDe
             KnowledgeEntry.is_published.is_(True),
             KnowledgeTopic.is_published.is_(True),
         )
-        .options(selectinload(KnowledgeEntry.topic))
     )
+    track_ids = await _content_track_ids(session, user)
+    if track_ids is not None:
+        statement = statement.join(KnowledgeTopicTrack).where(
+            KnowledgeTopicTrack.track_id.in_(track_ids)
+        )
+    entry = await session.scalar(statement.options(selectinload(KnowledgeEntry.topic)))
     if entry is None:
         api_error(404, "knowledge_entry_not_found", "Knowledge entry was not found")
     return KnowledgeEntryDetail(
@@ -115,7 +148,7 @@ async def get_public_entry(session: AsyncSession, slug: str) -> KnowledgeEntryDe
 
 
 async def search_public_entries(
-    session: AsyncSession, query_text: str, limit: int
+    session: AsyncSession, query_text: str, limit: int, user: User
 ) -> list[KnowledgeSearchResult]:
     search_query = func.websearch_to_tsquery("russian", query_text)
     rank = func.ts_rank_cd(KnowledgeEntry.search_vector, search_query)
@@ -123,9 +156,8 @@ async def search_public_entries(
         func.regexp_replace(KnowledgeEntry.content_markdown, r"[#*`_>\[\]()]", "", "g"),
         280,
     )
-    rows = (
-        await session.execute(
-            select(KnowledgeEntry, KnowledgeTopic, rank.label("rank"), excerpt.label("excerpt"))
+    statement = (
+        select(KnowledgeEntry, KnowledgeTopic, rank.label("rank"), excerpt.label("excerpt"))
             .join(KnowledgeTopic, KnowledgeTopic.id == KnowledgeEntry.topic_id)
             .where(
                 KnowledgeEntry.is_published.is_(True),
@@ -134,8 +166,13 @@ async def search_public_entries(
             )
             .order_by(desc("rank"), KnowledgeEntry.title)
             .limit(limit)
+    )
+    track_ids = await _content_track_ids(session, user)
+    if track_ids is not None:
+        statement = statement.join(KnowledgeTopicTrack).where(
+            KnowledgeTopicTrack.track_id.in_(track_ids)
         )
-    ).all()
+    rows = (await session.execute(statement)).all()
     return [
         KnowledgeSearchResult(
             **_entry_list_item(entry).model_dump(),
@@ -169,6 +206,7 @@ def _admin_topic_read(topic: KnowledgeTopic) -> AdminKnowledgeTopicRead:
         description=topic.description,
         position=topic.position,
         is_published=topic.is_published,
+        track_ids=[link.track_id for link in topic.track_links],
         entries=[
             _admin_entry_read(entry)
             for entry in sorted(topic.entries, key=lambda item: item.position)
@@ -183,6 +221,7 @@ async def _admin_topic_model(
         select(KnowledgeTopic)
         .where(KnowledgeTopic.id == topic_id)
         .options(selectinload(KnowledgeTopic.entries))
+        .options(selectinload(KnowledgeTopic.track_links))
     )
     if lock:
         statement = statement.with_for_update()
@@ -198,6 +237,7 @@ async def list_admin_topics(session: AsyncSession) -> list[AdminKnowledgeTopicRe
             select(KnowledgeTopic)
             .order_by(KnowledgeTopic.position, KnowledgeTopic.title)
             .options(selectinload(KnowledgeTopic.entries))
+            .options(selectinload(KnowledgeTopic.track_links))
         )
     )
     return [_admin_topic_read(topic) for topic in topics]
@@ -220,6 +260,7 @@ async def list_admin_topic_summaries(
         await session.execute(
             select(KnowledgeTopic, article_count, question_count)
             .outerjoin(KnowledgeEntry, KnowledgeEntry.topic_id == KnowledgeTopic.id)
+            .options(selectinload(KnowledgeTopic.track_links))
             .group_by(KnowledgeTopic.id)
             .order_by(KnowledgeTopic.position, KnowledgeTopic.title)
         )
@@ -232,6 +273,7 @@ async def list_admin_topic_summaries(
             description=topic.description,
             position=topic.position,
             is_published=topic.is_published,
+            track_ids=[link.track_id for link in topic.track_links],
             article_count=articles,
             question_count=questions,
         )
@@ -250,6 +292,7 @@ async def get_admin_topic_outline(
         description=topic.description,
         position=topic.position,
         is_published=topic.is_published,
+        track_ids=[link.track_id for link in topic.track_links],
         entries=[
             AdminKnowledgeEntrySummary(
                 id=entry.id,
@@ -284,6 +327,7 @@ async def update_admin_topic_settings(
     topic.description = payload.description
     topic.position = payload.position
     topic.is_published = payload.is_published
+    await _sync_topic_tracks(session, topic.id, payload.track_ids)
     try:
         await session.commit()
     except IntegrityError:
@@ -383,6 +427,29 @@ def _apply_entry(entry: KnowledgeEntry, payload: AdminKnowledgeEntryMutation) ->
     entry.is_published = payload.is_published
 
 
+async def _sync_topic_tracks(
+    session: AsyncSession, topic_id: UUID, track_ids: list[UUID]
+) -> None:
+    count = int(
+        await session.scalar(
+            select(func.count(LearningTrack.id)).where(LearningTrack.id.in_(track_ids))
+        )
+        or 0
+    )
+    if count != len(set(track_ids)):
+        api_error(
+            422,
+            "invalid_knowledge_tracks",
+            "Одно или несколько направлений не найдены",
+        )
+    await session.execute(
+        delete(KnowledgeTopicTrack).where(KnowledgeTopicTrack.topic_id == topic_id)
+    )
+    session.add_all(
+        [KnowledgeTopicTrack(topic_id=topic_id, track_id=track_id) for track_id in track_ids]
+    )
+
+
 async def create_admin_topic(
     session: AsyncSession, payload: AdminKnowledgeTopicMutation
 ) -> AdminKnowledgeTopicRead:
@@ -400,6 +467,8 @@ async def create_admin_topic(
         topic.entries.append(entry)
     session.add(topic)
     try:
+        await session.flush()
+        await _sync_topic_tracks(session, topic.id, payload.track_ids)
         await session.commit()
     except IntegrityError:
         await session.rollback()
@@ -424,6 +493,7 @@ async def update_admin_topic(
     topic.description = payload.description
     topic.position = payload.position
     topic.is_published = payload.is_published
+    await _sync_topic_tracks(session, topic.id, payload.track_ids)
     for entry in list(topic.entries):
         if entry.id not in supplied_ids:
             topic.entries.remove(entry)

@@ -25,6 +25,10 @@ import type {
   AdminStudentMutation,
   AdminStudentOptions,
   AdminStudentPage,
+  AdminMentorCandidate,
+  AdminMentorListItem,
+  AdminMentorMutation,
+  AdminInterviewProcessPage,
   AdminTopicCreate,
   AdminTopicRead,
   AdminTrackMutation,
@@ -53,7 +57,7 @@ import type {
   InterviewCatalogCommentRead,
   InterviewCatalogAuthorRead,
   InterviewCatalogCompanyDetail,
-  InterviewCatalogCompanyListItem,
+  InterviewCatalogCompanyPage,
   InterviewCatalogFilters,
   CompanyOption,
   MentorDocumentKind,
@@ -61,7 +65,7 @@ import type {
   MentorInterviewDetail,
   MentorNoteRead,
   MentorStudentDetail,
-  MentorStudentListItem,
+  MentorStudentPage,
   MockInterviewRead,
   StudentLearningStatus,
   StudentStrengthLevel,
@@ -124,9 +128,10 @@ export const api = {
   roadmaps: () => apiRequest<RoadmapListItem[]>("/api/v1/roadmaps"),
   roadmap: (slug: string) =>
     apiRequest<RoadmapDetail>(`/api/v1/roadmaps/${slug}`),
-  startRoadmap: (slug: string) =>
+  startRoadmap: (slug: string, startedOn: string) =>
     apiRequest<RoadmapDetail>(`/api/v1/roadmaps/${slug}/start`, {
       method: "POST",
+      body: JSON.stringify({ started_on: startedOn }),
     }),
   topic: (id: string) => apiRequest<TopicDetail>(`/api/v1/topics/${id}`),
   updateProgress: (id: string, status: ProgressStatus) =>
@@ -134,8 +139,30 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ status }),
     }),
-  mentorStudents: () =>
-    apiRequest<MentorStudentListItem[]>("/api/v1/mentor/students"),
+  mentorStudents: (
+    options: {
+      query?: string;
+      trackId?: string | null;
+      mentorId?: string | null;
+      withoutMentor?: boolean;
+      learningStatuses?: StudentLearningStatus[];
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
+    const params = new URLSearchParams({
+      limit: String(options.limit ?? 12),
+      offset: String(options.offset ?? 0),
+    });
+    if (options.query) params.set("query", options.query);
+    if (options.trackId) params.set("track_id", options.trackId);
+    if (options.mentorId) params.set("mentor_id", options.mentorId);
+    if (options.withoutMentor) params.set("without_mentor", "true");
+    options.learningStatuses?.forEach((status) =>
+      params.append("learning_status", status),
+    );
+    return apiRequest<MentorStudentPage>(`/api/v1/mentor/students?${params}`);
+  },
   mentorStudent: (id: string) =>
     apiRequest<MentorStudentDetail>(`/api/v1/mentor/students/${id}`),
   updateMentorStudentState: (
@@ -234,14 +261,6 @@ export const api = {
       `/api/v1/mentor/students/${studentId}/interviews/stages/${stageId}/feedback`,
       { method: "POST", body: JSON.stringify({ body }) },
     ),
-  openMentorInterviewMedia: (
-    studentId: string,
-    processId: string,
-    stageId: string,
-  ) =>
-    apiRequest<InterviewDownloadUrl>(
-      `/api/v1/mentor/students/${studentId}/interviews/${processId}/stages/${stageId}/media`,
-    ).then((result) => result.url),
   openMentorInterviewAttachment: (
     studentId: string,
     processId: string,
@@ -250,6 +269,10 @@ export const api = {
   ) =>
     apiRequest<InterviewDownloadUrl>(
       `/api/v1/mentor/students/${studentId}/interviews/${processId}/stages/${stageId}/attachments/${attachmentId}`,
+    ).then((result) => result.url),
+  openMentorInterviewOffer: (studentId: string, processId: string) =>
+    apiRequest<InterviewDownloadUrl>(
+      `/api/v1/mentor/students/${studentId}/interviews/${processId}/offer`,
     ).then((result) => result.url),
   myMockInterviews: () =>
     apiRequest<MockInterviewRead[]>("/api/v1/mentor/me/mock-interviews"),
@@ -267,6 +290,8 @@ export const api = {
     options: {
       query?: string;
       access?: "all" | "active" | "blocked";
+      mentorId?: string | null;
+      withoutMentor?: boolean;
       limit?: number;
       offset?: number;
     } = {},
@@ -277,6 +302,8 @@ export const api = {
       offset: String(options.offset ?? 0),
     });
     if (options.query) params.set("q", options.query);
+    if (options.mentorId) params.set("mentor_id", options.mentorId);
+    if (options.withoutMentor) params.set("without_mentor", "true");
     return apiRequest<AdminStudentPage>(`/api/v1/admin/students?${params}`);
   },
   adminStudent: (id: string) =>
@@ -297,6 +324,39 @@ export const api = {
     apiRequest<AdminStudentDetail>(`/api/v1/admin/students/${id}/access`, {
       method: "PATCH",
       body: JSON.stringify({ is_active: isActive }),
+    }),
+  adminMentors: () =>
+    apiRequest<AdminMentorListItem[]>("/api/v1/admin/mentors"),
+  adminMentorCandidates: (query = "") =>
+    apiRequest<AdminMentorCandidate[]>(
+      `/api/v1/admin/mentors/candidates${query ? `?q=${encodeURIComponent(query)}` : ""}`,
+    ),
+  createAdminMentor: (payload: AdminMentorMutation) =>
+    apiRequest<AdminMentorListItem>("/api/v1/admin/mentors", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  promoteAdminStudent: (studentId: string) =>
+    apiRequest<AdminMentorListItem>(
+      `/api/v1/admin/mentors/${studentId}/promote`,
+      { method: "POST" },
+    ),
+  removeAdminMentor: (mentorId: string) =>
+    apiRequest<void>(`/api/v1/admin/mentors/${mentorId}`, {
+      method: "DELETE",
+    }),
+  updateAdminMentorDirections: (mentorId: string, trackIds: string[]) =>
+    apiRequest<AdminMentorListItem>(
+      `/api/v1/admin/mentors/${mentorId}/directions`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ track_ids: trackIds }),
+      },
+    ),
+  reassignAdminMentorStudent: (studentId: string, mentorId: string) =>
+    apiRequest<void>(`/api/v1/admin/mentors/students/${studentId}/mentor`, {
+      method: "PATCH",
+      body: JSON.stringify({ mentor_id: mentorId }),
     }),
   adminRoadmaps: () => apiRequest<AdminRoadmapRead[]>("/api/v1/admin/roadmaps"),
   adminRoadmapSummaries: () =>
@@ -602,8 +662,14 @@ export const api = {
     apiRequest<void>(`/api/v1/interviews/journal/tracks/${processId}/offer`, {
       method: "DELETE",
     }),
-  interviewCatalogCompanies: (filters: InterviewCatalogFilters) => {
-    const params = new URLSearchParams();
+  interviewCatalogCompanies: (
+    filters: InterviewCatalogFilters,
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = new URLSearchParams({
+      limit: String(options.limit ?? 24),
+      offset: String(options.offset ?? 0),
+    });
     if (filters.query) params.set("q", filters.query);
     if (filters.authorId) params.set("author_id", filters.authorId);
     if (filters.trackId) params.set("track_id", filters.trackId);
@@ -611,7 +677,7 @@ export const api = {
     if (filters.hasOffer) params.set("has_offer", "true");
     if (filters.mediaKind) params.set("media_kind", filters.mediaKind);
     const query = params.toString();
-    return apiRequest<InterviewCatalogCompanyListItem[]>(
+    return apiRequest<InterviewCatalogCompanyPage>(
       `/api/v1/interviews/catalog/companies${query ? `?${query}` : ""}`,
     );
   },
@@ -672,6 +738,19 @@ export const api = {
     ),
   adminInterviewDecks: () =>
     apiRequest<AdminInterviewDeckRead[]>("/api/v1/admin/interviews/decks"),
+  adminInterviewProcesses: (
+    status: InterviewProcessStatus | "all" = "all",
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = new URLSearchParams({
+      status,
+      limit: String(options.limit ?? 24),
+      offset: String(options.offset ?? 0),
+    });
+    return apiRequest<AdminInterviewProcessPage>(
+      `/api/v1/admin/interviews/processes?${params}`,
+    );
+  },
   adminInterviewDeckSummaries: () =>
     apiRequest<AdminInterviewDeckSummary[]>(
       "/api/v1/admin/interviews/decks/summaries",

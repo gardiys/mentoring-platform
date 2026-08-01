@@ -29,6 +29,7 @@ import {
   useSetAdminStudentAccess,
   useUpdateAdminStudent,
 } from "./studentQueries";
+import { usePromoteAdminStudent } from "./mentorQueries";
 
 interface Props {
   options: AdminStudentOptions;
@@ -64,6 +65,7 @@ export function AdminStudentForm({ options, student }: Props) {
   const createMutation = useCreateAdminStudent();
   const updateMutation = useUpdateAdminStudent();
   const accessMutation = useSetAdminStudentAccess();
+  const promoteMutation = usePromoteAdminStudent();
   const navigate = useNavigate();
   const editing = Boolean(student);
   const pending = createMutation.isPending || updateMutation.isPending;
@@ -137,6 +139,28 @@ export function AdminStudentForm({ options, student }: Props) {
     );
   };
 
+  const promoteToMentor = () => {
+    if (!student) return;
+    if (
+      !window.confirm(
+        "Перевести ученика в менторы? Его прогресс сохранится, а назначение текущего ментора будет снято.",
+      )
+    ) {
+      return;
+    }
+    promoteMutation.mutate(student.id, {
+      onSuccess: () => {
+        notifications.show({
+          color: "green",
+          message: "Ученик переведён в менторы",
+        });
+        navigate("/admin/mentors");
+      },
+      onError: (mutationError) =>
+        notifications.show({ color: "red", message: mutationError.message }),
+    });
+  };
+
   return (
     <form onSubmit={submit}>
       <Stack gap="xl">
@@ -177,6 +201,14 @@ export function AdminStudentForm({ options, student }: Props) {
                 onClick={changeAccess}
               >
                 {student.is_active ? "Закрыть доступ" : "Открыть доступ"}
+              </Button>
+              <Button
+                type="button"
+                variant="light"
+                loading={promoteMutation.isPending}
+                onClick={promoteToMentor}
+              >
+                Перевести в менторы
               </Button>
             </Group>
           </Card>

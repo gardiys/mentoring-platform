@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Group,
+  MultiSelect,
   NumberInput,
   Stack,
   Switch,
@@ -24,6 +25,7 @@ import {
   useAdminKnowledgeTopic,
   useUpdateAdminKnowledgeTopicSettings,
 } from "../features/admin/knowledgeQueries";
+import { useAdminStudentOptions } from "../features/admin/studentQueries";
 import type { AdminKnowledgeTopicOutline } from "../types/api";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -35,9 +37,14 @@ function TopicEditor({ topic }: { topic: AdminKnowledgeTopicOutline }) {
     description: topic.description,
     position: topic.position,
     is_published: topic.is_published,
+    track_ids: topic.track_ids,
   });
+  const options = useAdminStudentOptions();
   const mutation = useUpdateAdminKnowledgeTopicSettings();
-  const valid = form.title.trim().length > 0 && SLUG_PATTERN.test(form.slug);
+  const valid =
+    form.title.trim().length > 0 &&
+    SLUG_PATTERN.test(form.slug) &&
+    form.track_ids.length > 0;
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!valid || mutation.isPending) return;
@@ -106,6 +113,20 @@ function TopicEditor({ topic }: { topic: AdminKnowledgeTopicOutline }) {
                   ...current,
                   description: event.currentTarget.value || null,
                 }))
+              }
+            />
+            <MultiSelect
+              required
+              searchable
+              label="Направления"
+              description="Тема видна пользователям только выбранных направлений"
+              data={(options.data?.tracks ?? []).map((track) => ({
+                value: track.id,
+                label: track.title,
+              }))}
+              value={form.track_ids}
+              onChange={(track_ids) =>
+                setForm((current) => ({ ...current, track_ids }))
               }
             />
             <Group grow>

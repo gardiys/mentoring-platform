@@ -102,14 +102,37 @@ async def _student_mentors(
     }
 
 
+async def _available_mentors(session: AsyncSession) -> list[AdminStudentMentorRead]:
+    mentors = list(
+        await session.scalars(
+            select(User)
+            .where(User.role == UserRole.MENTOR)
+            .order_by(User.first_name, User.last_name, User.id)
+        )
+    )
+    return [
+        AdminStudentMentorRead(
+            id=mentor.id,
+            first_name=mentor.first_name,
+            last_name=mentor.last_name,
+            telegram_username=mentor.telegram_username,
+        )
+        for mentor in mentors
+    ]
+
+
 async def list_students(
     session: AsyncSession,
     *,
     query: str | None,
     access: str,
+    mentor_id: UUID | None,
+    without_mentor: bool,
     limit: int,
     offset: int,
 ) -> AdminStudentPage:
+    if mentor_id is not None and without_mentor:
+        api_error(422, "mentor_filter_conflict", "Choose a mentor or students without a mentor")
     conditions = [User.role == UserRole.STUDENT]
     if query:
         pattern = f"%{query.strip()}%"
@@ -125,6 +148,11 @@ async def list_students(
         conditions.append(User.is_active.is_(True))
     elif access == "blocked":
         conditions.append(User.is_active.is_(False))
+    mentor_relation = select(MentorStudent.student_id).where(MentorStudent.student_id == User.id)
+    if mentor_id is not None:
+        conditions.append(mentor_relation.where(MentorStudent.mentor_id == mentor_id).exists())
+    elif without_mentor:
+        conditions.append(~mentor_relation.exists())
 
     total = int(await session.scalar(select(func.count(User.id)).where(*conditions)) or 0)
     students = list(
@@ -160,6 +188,7 @@ async def list_students(
         total=total,
         limit=limit,
         offset=offset,
+        mentors=await _available_mentors(session),
     )
 
 
@@ -191,13 +220,7 @@ async def student_options(session: AsyncSession) -> AdminStudentOptions:
             select(LearningTrack).order_by(LearningTrack.position, LearningTrack.title)
         )
     )
-    mentors = list(
-        await session.scalars(
-            select(User)
-            .where(User.role == UserRole.MENTOR, User.is_active.is_(True))
-            .order_by(User.first_name, User.last_name)
-        )
-    )
+    mentors = await _available_mentors(session)
     return AdminStudentOptions(
         tracks=[
             AdminStudentTrackOption(
@@ -208,15 +231,7 @@ async def student_options(session: AsyncSession) -> AdminStudentOptions:
             )
             for track in tracks
         ],
-        mentors=[
-            AdminStudentMentorRead(
-                id=mentor.id,
-                first_name=mentor.first_name,
-                last_name=mentor.last_name,
-                telegram_username=mentor.telegram_username,
-            )
-            for mentor in mentors
-        ],
+        mentors=mentors,
     )
 
 

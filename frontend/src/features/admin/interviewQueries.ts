@@ -16,10 +16,24 @@ export const adminInterviewKeys = {
     ["admin", "interviews", deckId, "card", cardId] as const,
 };
 
+const PROCESS_PAGE_SIZE = 12;
+
 export function useAdminInterviewDecks() {
   return useQuery({
     queryKey: adminInterviewKeys.all,
     queryFn: api.adminInterviewDeckSummaries,
+  });
+}
+
+export function useAdminInterviewProcesses(page: number, enabled = true) {
+  return useQuery({
+    queryKey: [...adminInterviewKeys.all, "processes", page],
+    queryFn: () =>
+      api.adminInterviewProcesses("all", {
+        limit: PROCESS_PAGE_SIZE,
+        offset: (page - 1) * PROCESS_PAGE_SIZE,
+      }),
+    enabled,
   });
 }
 

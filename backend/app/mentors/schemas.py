@@ -57,6 +57,29 @@ class MentorStudentListItem(BaseModel):
     mock_interview_count: int
 
 
+class MentorStudentDirectionOption(BaseModel):
+    id: UUID
+    slug: str
+    title: str
+
+
+class MentorStudentMentorOption(BaseModel):
+    id: UUID
+    first_name: str
+    last_name: str | None
+    telegram_username: str | None
+
+
+class MentorStudentPage(BaseModel):
+    items: list[MentorStudentListItem]
+    total: int
+    limit: int
+    offset: int
+    directions: list[MentorStudentDirectionOption]
+    mentors: list[MentorStudentMentorOption] = Field(default_factory=list)
+    can_filter_by_mentor: bool = False
+
+
 class MentorStudentStateMutation(BaseModel):
     learning_status: StudentLearningStatus
     strength_level: StudentStrengthLevel | None = None

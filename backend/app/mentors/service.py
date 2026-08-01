@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
@@ -37,7 +37,10 @@ from app.mentors.schemas import (
     MentorInterviewStageFeedback,
     MentorNoteRead,
     MentorStudentDetail,
+    MentorStudentDirectionOption,
     MentorStudentListItem,
+    MentorStudentMentorOption,
+    MentorStudentPage,
     MentorStudentStateMutation,
     MockInterviewFeedbackMutation,
     MockInterviewMutation,
@@ -48,6 +51,7 @@ from app.progress.models import ProgressStatus, TopicProgress
 from app.roadmaps.models import Roadmap, RoadmapEnrollment, RoadmapSection, Topic
 from app.roadmaps.queries import build_roadmap_detail, get_roadmap_model, list_roadmaps
 from app.roadmaps.schemas import RoadmapDetail
+from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack, LearningTrackEnrollment, LearningTrackRoadmap
 from app.users.models import User, UserRole
 
@@ -56,9 +60,12 @@ async def assigned_student(
     session: AsyncSession,
     mentor: User,
     student_id: UUID,
+    *,
+    allow_any_user_for_admin: bool = False,
 ) -> tuple[User, MentorStudent | None]:
     student = await session.get(User, student_id)
-    if student is None or student.role is not UserRole.STUDENT:
+    admin_can_read_any_user = mentor.role is UserRole.ADMIN and allow_any_user_for_admin
+    if student is None or (student.role is not UserRole.STUDENT and not admin_can_read_any_user):
         api_error(404, "student_not_found", "Student was not found")
     relation = await session.scalar(
         select(MentorStudent).where(MentorStudent.student_id == student_id)
@@ -72,8 +79,10 @@ async def assigned_student(
     return student, relation
 
 
-async def _roadmap_details(session: AsyncSession, student_id: UUID) -> list[RoadmapDetail]:
-    summaries = await list_roadmaps(session, student_id)
+async def _roadmap_details(
+    session: AsyncSession, student_id: UUID, track_ids: set[UUID] | None = None
+) -> list[RoadmapDetail]:
+    summaries = await list_roadmaps(session, student_id, track_ids=track_ids)
     result: list[RoadmapDetail] = []
     for summary in summaries:
         roadmap = await get_roadmap_model(session, summary.slug)
@@ -199,84 +208,186 @@ async def _student_item(
     )
 
 
-async def list_students(session: AsyncSession, mentor: User) -> list[MentorStudentListItem]:
+async def list_students(
+    session: AsyncSession,
+    mentor: User,
+    *,
+    query: str | None = None,
+    track_id: UUID | None = None,
+    mentor_id: UUID | None = None,
+    without_mentor: bool = False,
+    learning_statuses: list[StudentLearningStatus] | None = None,
+    limit: int = 12,
+    offset: int = 0,
+) -> MentorStudentPage:
+    allowed_track_ids = await accessible_track_ids(session, mentor)
+    if track_id is not None and track_id not in allowed_track_ids:
+        api_error(404, "learning_track_not_found", "Learning track was not found")
+    if mentor_id is not None and without_mentor:
+        api_error(422, "mentor_filter_conflict", "Choose a mentor or students without a mentor")
+    if (mentor_id is not None or without_mentor) and mentor.role is not UserRole.ADMIN:
+        api_error(403, "admin_mentor_filter_required", "Only administrators can filter by mentor")
+
     if mentor.role is UserRole.ADMIN:
-        rows = (
-            await session.execute(
-                select(User, MentorStudent)
-                .outerjoin(MentorStudent, MentorStudent.student_id == User.id)
-                .where(User.role == UserRole.STUDENT)
-                .order_by(User.first_name, User.last_name)
-            )
-        ).all()
+        statement = (
+            select(User, MentorStudent)
+            .outerjoin(MentorStudent, MentorStudent.student_id == User.id)
+            .where(User.role == UserRole.STUDENT)
+        )
     else:
-        rows = (
-            await session.execute(
-                select(User, MentorStudent)
-                .join(MentorStudent, MentorStudent.student_id == User.id)
-                .where(MentorStudent.mentor_id == mentor.id)
-                .order_by(User.first_name, User.last_name)
+        statement = (
+            select(User, MentorStudent)
+            .join(MentorStudent, MentorStudent.student_id == User.id)
+            .where(MentorStudent.mentor_id == mentor.id)
+        )
+
+    normalized_query = query.strip() if query else ""
+    if normalized_query:
+        pattern = f"%{normalized_query}%"
+        statement = statement.where(
+            or_(
+                User.first_name.ilike(pattern),
+                User.last_name.ilike(pattern),
+                User.email.ilike(pattern),
+                User.telegram_username.ilike(pattern),
             )
-        ).all()
-    return await _batch_student_items(session, [(student, relation) for student, relation in rows])
+        )
+    if track_id is not None:
+        statement = statement.where(
+            select(LearningTrackEnrollment.user_id)
+            .where(
+                LearningTrackEnrollment.user_id == User.id,
+                LearningTrackEnrollment.track_id == track_id,
+            )
+            .exists()
+        )
+    if mentor_id is not None:
+        statement = statement.where(MentorStudent.mentor_id == mentor_id)
+    elif without_mentor:
+        statement = statement.where(MentorStudent.student_id.is_(None))
+    if learning_statuses:
+        if mentor.role is UserRole.ADMIN and StudentLearningStatus.LEARNING in learning_statuses:
+            statement = statement.where(
+                or_(
+                    MentorStudent.learning_status.in_(learning_statuses),
+                    MentorStudent.student_id.is_(None),
+                )
+            )
+        else:
+            statement = statement.where(MentorStudent.learning_status.in_(learning_statuses))
+
+    total = int(
+        await session.scalar(select(func.count()).select_from(statement.order_by(None).subquery()))
+        or 0
+    )
+    rows = (
+        await session.execute(
+            statement.order_by(User.first_name, User.last_name, User.id).limit(limit).offset(offset)
+        )
+    ).all()
+    directions = list(
+        await session.scalars(
+            select(LearningTrack)
+            .where(
+                LearningTrack.id.in_(allowed_track_ids),
+                LearningTrack.is_published.is_(True),
+            )
+            .order_by(LearningTrack.position, LearningTrack.title)
+        )
+    )
+    mentor_options = (
+        list(
+            await session.scalars(
+                select(User)
+                .where(User.role == UserRole.MENTOR)
+                .order_by(User.first_name, User.last_name, User.id)
+            )
+        )
+        if mentor.role is UserRole.ADMIN
+        else []
+    )
+    return MentorStudentPage(
+        items=await _batch_student_items(
+            session, [(student, relation) for student, relation in rows], mentor
+        ),
+        total=total,
+        limit=limit,
+        offset=offset,
+        directions=[
+            MentorStudentDirectionOption(id=item.id, slug=item.slug, title=item.title)
+            for item in directions
+        ],
+        mentors=[
+            MentorStudentMentorOption(
+                id=item.id,
+                first_name=item.first_name,
+                last_name=item.last_name,
+                telegram_username=item.telegram_username,
+            )
+            for item in mentor_options
+        ],
+        can_filter_by_mentor=mentor.role is UserRole.ADMIN,
+    )
 
 
 async def _batch_student_items(
     session: AsyncSession,
     user_rows: list[tuple[User, MentorStudent | None]],
+    mentor: User,
 ) -> list[MentorStudentListItem]:
     if not user_rows:
         return []
     student_ids = [student.id for student, _ in user_rows]
     now = datetime.now(UTC)
-    roadmap_rows = (
-        await session.execute(
-            select(
-                LearningTrackEnrollment.user_id,
-                Roadmap,
-                RoadmapEnrollment,
-                RoadmapSection,
-                Topic,
-                TopicProgress,
-            )
-            .join(LearningTrack, LearningTrack.id == LearningTrackEnrollment.track_id)
-            .join(
-                LearningTrackRoadmap,
-                LearningTrackRoadmap.track_id == LearningTrackEnrollment.track_id,
-            )
-            .join(Roadmap, Roadmap.id == LearningTrackRoadmap.roadmap_id)
-            .outerjoin(
-                RoadmapEnrollment,
-                and_(
-                    RoadmapEnrollment.user_id == LearningTrackEnrollment.user_id,
-                    RoadmapEnrollment.roadmap_id == Roadmap.id,
-                ),
-            )
-            .outerjoin(RoadmapSection, RoadmapSection.roadmap_id == Roadmap.id)
-            .outerjoin(
-                Topic,
-                and_(Topic.section_id == RoadmapSection.id, Topic.is_published.is_(True)),
-            )
-            .outerjoin(
-                TopicProgress,
-                and_(
-                    TopicProgress.user_id == LearningTrackEnrollment.user_id,
-                    TopicProgress.topic_id == Topic.id,
-                ),
-            )
-            .where(
-                LearningTrackEnrollment.user_id.in_(student_ids),
-                LearningTrack.is_published.is_(True),
-                Roadmap.is_published.is_(True),
-            )
-            .order_by(
-                LearningTrackEnrollment.user_id,
-                Roadmap.position,
-                RoadmapSection.position,
-                Topic.position,
-            )
+    allowed_track_ids = await accessible_track_ids(session, mentor)
+    roadmap_statement = (
+        select(
+            LearningTrackEnrollment.user_id,
+            Roadmap,
+            RoadmapEnrollment,
+            RoadmapSection,
+            Topic,
+            TopicProgress,
         )
-    ).all()
+        .join(LearningTrack, LearningTrack.id == LearningTrackEnrollment.track_id)
+        .join(
+            LearningTrackRoadmap,
+            LearningTrackRoadmap.track_id == LearningTrackEnrollment.track_id,
+        )
+        .join(Roadmap, Roadmap.id == LearningTrackRoadmap.roadmap_id)
+        .outerjoin(
+            RoadmapEnrollment,
+            and_(
+                RoadmapEnrollment.user_id == LearningTrackEnrollment.user_id,
+                RoadmapEnrollment.roadmap_id == Roadmap.id,
+            ),
+        )
+        .outerjoin(RoadmapSection, RoadmapSection.roadmap_id == Roadmap.id)
+        .outerjoin(
+            Topic,
+            and_(Topic.section_id == RoadmapSection.id, Topic.is_published.is_(True)),
+        )
+        .outerjoin(
+            TopicProgress,
+            and_(
+                TopicProgress.user_id == LearningTrackEnrollment.user_id,
+                TopicProgress.topic_id == Topic.id,
+            ),
+        )
+        .where(
+            LearningTrackEnrollment.user_id.in_(student_ids),
+            LearningTrack.is_published.is_(True),
+            Roadmap.is_published.is_(True),
+            LearningTrackEnrollment.track_id.in_(allowed_track_ids),
+        )
+        .order_by(
+            LearningTrackEnrollment.user_id,
+            Roadmap.position,
+            RoadmapSection.position,
+            Topic.position,
+        )
+    )
+    roadmap_rows = (await session.execute(roadmap_statement)).all()
     roadmap_data: dict[UUID, dict[UUID, dict[str, object]]] = {
         student_id: {} for student_id in student_ids
     }
@@ -498,12 +609,13 @@ async def student_detail(
     session: AsyncSession, mentor: User, student_id: UUID
 ) -> MentorStudentDetail:
     student, relation = await assigned_student(session, mentor, student_id)
-    roadmaps = await _roadmap_details(session, student.id)
+    allowed_track_ids = await accessible_track_ids(session, mentor)
+    roadmaps = await _roadmap_details(session, student.id, allowed_track_ids)
     item = await _student_item(session, student, relation, roadmap_details=roadmaps)
     return MentorStudentDetail(
         **item.model_dump(exclude={"roadmaps"}),
         roadmaps=roadmaps,
-        interviews=await list_processes(session, student, None),
+        interviews=await list_processes(session, student, None, allowed_track_ids),
         mock_interviews=await _student_mocks(session, student.id, mentor),
         documents=await _student_documents(session, student.id, mentor),
         notes=await _student_notes(session, student.id, mentor),
@@ -765,8 +877,10 @@ async def mentor_interview_detail(
     student_id: UUID,
     process_id: UUID,
 ) -> MentorInterviewDetail:
-    student, _ = await assigned_student(session, mentor, student_id)
+    student, _ = await assigned_student(session, mentor, student_id, allow_any_user_for_admin=True)
     process = await process_detail(session, student, process_id)
+    if process.track_id not in await accessible_track_ids(session, mentor):
+        api_error(404, "interview_process_not_found", "Interview process was not found")
     stage_ids = [stage.id for stage in process.stages]
     comment_rows = (
         (
@@ -825,6 +939,9 @@ async def add_interview_feedback(
         )
     )
     if stage is None:
+        api_error(404, "interview_stage_not_found", "Interview stage was not found")
+    process = await session.get(InterviewProcess, stage.process_id)
+    if process is None or process.track_id not in await accessible_track_ids(session, mentor):
         api_error(404, "interview_stage_not_found", "Interview stage was not found")
     comment = InterviewStageComment(stage_id=stage_id, user_id=mentor.id, body=body)
     session.add(comment)

@@ -1,0 +1,438 @@
+import {
+  Badge,
+  Button,
+  Card,
+  Group,
+  Modal,
+  MultiSelect,
+  NumberInput,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { useDebouncedValue, useDisclosure } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
+import { type FormEvent, useState } from "react";
+
+import { ErrorState } from "../components/ErrorState";
+import { LoadingState } from "../components/LoadingState";
+import { PageHeader } from "../components/PageHeader";
+import {
+  useAdminMentorCandidates,
+  useAdminMentors,
+  useCreateAdminMentor,
+  usePromoteAdminStudent,
+  useRemoveAdminMentor,
+  useReassignAdminMentorStudent,
+  useUpdateAdminMentorDirections,
+} from "../features/admin/mentorQueries";
+import { useAdminStudentOptions } from "../features/admin/studentQueries";
+import type { AdminMentorListItem, AdminMentorMutation } from "../types/api";
+
+const emptyForm: AdminMentorMutation = {
+  telegram_id: 0,
+  telegram_username: null,
+  first_name: "",
+  last_name: null,
+  email: null,
+  track_ids: [],
+};
+
+function fullName(firstName: string, lastName: string | null) {
+  return [firstName, lastName].filter(Boolean).join(" ");
+}
+
+function MentorCard({
+  mentor,
+  mentors,
+  trackOptions,
+  onRemove,
+  removePending,
+}: {
+  mentor: AdminMentorListItem;
+  mentors: AdminMentorListItem[];
+  trackOptions: Array<{ value: string; label: string }>;
+  onRemove: (mentorId: string, name: string) => void;
+  removePending: boolean;
+}) {
+  const name = fullName(mentor.first_name, mentor.last_name);
+  const [trackIds, setTrackIds] = useState(
+    mentor.tracks.map((track) => track.id),
+  );
+  const [targets, setTargets] = useState<Record<string, string | null>>({});
+  const updateDirections = useUpdateAdminMentorDirections();
+  const reassign = useReassignAdminMentorStudent();
+
+  const saveDirections = () => {
+    if (trackIds.length === 0) return;
+    updateDirections.mutate(
+      { mentorId: mentor.id, trackIds },
+      {
+        onSuccess: () =>
+          notifications.show({
+            color: "green",
+            message: "Направления сохранены",
+          }),
+        onError: (error) =>
+          notifications.show({ color: "red", message: error.message }),
+      },
+    );
+  };
+
+  return (
+    <Card withBorder>
+      <Stack>
+        <Group justify="space-between">
+          <Title order={2}>{name}</Title>
+          <Badge variant="light">{mentor.student_count} учеников</Badge>
+        </Group>
+        <Text size="sm">{mentor.email ?? "Email не указан"}</Text>
+        <Text size="sm" c="dimmed">
+          {mentor.telegram_username
+            ? `@${mentor.telegram_username}`
+            : mentor.telegram_id
+              ? `Telegram ID: ${mentor.telegram_id}`
+              : "Telegram не указан"}
+        </Text>
+        <MultiSelect
+          label="Направления ментора"
+          data={trackOptions}
+          value={trackIds}
+          onChange={setTrackIds}
+          searchable
+          required
+        />
+        <Button
+          variant="light"
+          disabled={trackIds.length === 0}
+          loading={updateDirections.isPending}
+          onClick={saveDirections}
+        >
+          Сохранить направления
+        </Button>
+
+        {mentor.students.length > 0 && (
+          <Stack gap="xs">
+            <Text fw={700}>Ученики</Text>
+            {mentor.students.map((student) => (
+              <Card key={student.id} withBorder padding="sm">
+                <Stack gap="xs">
+                  <Text fw={600} size="sm">
+                    {fullName(student.first_name, student.last_name)}
+                    {student.telegram_username
+                      ? ` · @${student.telegram_username}`
+                      : ""}
+                  </Text>
+                  <Group align="flex-end">
+                    <Select
+                      label="Переназначить"
+                      placeholder="Другой ментор"
+                      data={mentors
+                        .filter((item) => item.id !== mentor.id)
+                        .map((item) => ({
+                          value: item.id,
+                          label: fullName(item.first_name, item.last_name),
+                        }))}
+                      value={targets[student.id] ?? null}
+                      onChange={(value) =>
+                        setTargets((current) => ({
+                          ...current,
+                          [student.id]: value,
+                        }))
+                      }
+                      style={{ flex: 1 }}
+                    />
+                    <Button
+                      size="sm"
+                      disabled={!targets[student.id]}
+                      loading={reassign.isPending}
+                      onClick={() => {
+                        const mentorId = targets[student.id];
+                        if (!mentorId) return;
+                        reassign.mutate(
+                          { studentId: student.id, mentorId },
+                          {
+                            onSuccess: () =>
+                              notifications.show({
+                                color: "green",
+                                message: "Ученик переназначен",
+                              }),
+                            onError: (error) =>
+                              notifications.show({
+                                color: "red",
+                                message: error.message,
+                              }),
+                          },
+                        );
+                      }}
+                    >
+                      Переназначить
+                    </Button>
+                  </Group>
+                </Stack>
+              </Card>
+            ))}
+          </Stack>
+        )}
+        <Button
+          color="red"
+          variant="light"
+          disabled={mentor.student_count > 0}
+          title={
+            mentor.student_count > 0
+              ? "Сначала переназначьте учеников другому ментору"
+              : undefined
+          }
+          loading={removePending}
+          onClick={() => onRemove(mentor.id, name)}
+        >
+          Убрать из менторов
+        </Button>
+        {mentor.student_count > 0 && (
+          <Text size="xs" c="dimmed">
+            Перед удалением роли переназначьте учеников.
+          </Text>
+        )}
+      </Stack>
+    </Card>
+  );
+}
+
+export function AdminMentorsPage() {
+  const mentors = useAdminMentors();
+  const options = useAdminStudentOptions();
+  const [candidateSearch, setCandidateSearch] = useState("");
+  const [debouncedCandidateSearch] = useDebouncedValue(
+    candidateSearch.trim(),
+    250,
+  );
+  const candidates = useAdminMentorCandidates(debouncedCandidateSearch);
+  const create = useCreateAdminMentor();
+  const promote = usePromoteAdminStudent();
+  const remove = useRemoveAdminMentor();
+  const [opened, { open, close }] = useDisclosure(false);
+  const [candidateId, setCandidateId] = useState<string | null>(null);
+  const [form, setForm] = useState<AdminMentorMutation>(emptyForm);
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (
+      !form.telegram_id ||
+      !form.first_name.trim() ||
+      form.track_ids.length === 0
+    )
+      return;
+    create.mutate(
+      {
+        ...form,
+        first_name: form.first_name.trim(),
+        last_name: form.last_name?.trim() || null,
+        email: form.email?.trim() || null,
+        telegram_username: form.telegram_username?.trim() || null,
+      },
+      {
+        onSuccess: () => {
+          notifications.show({ color: "green", message: "Ментор добавлен" });
+          setForm(emptyForm);
+          close();
+        },
+        onError: (error) =>
+          notifications.show({ color: "red", message: error.message }),
+      },
+    );
+  };
+
+  const promoteCandidate = () => {
+    if (!candidateId) return;
+    promote.mutate(candidateId, {
+      onSuccess: () => {
+        notifications.show({
+          color: "green",
+          message: "Ученик переведён в менторы",
+        });
+        setCandidateId(null);
+      },
+      onError: (error) =>
+        notifications.show({ color: "red", message: error.message }),
+    });
+  };
+
+  const removeMentor = (mentorId: string, name: string) => {
+    if (!window.confirm(`Убрать роль ментора у ${name}?`)) return;
+    remove.mutate(mentorId, {
+      onSuccess: () =>
+        notifications.show({
+          color: "green",
+          message: "Пользователь переведён в ученики",
+        }),
+      onError: (error) =>
+        notifications.show({ color: "red", message: error.message }),
+    });
+  };
+
+  return (
+    <Stack gap="xl">
+      <Group justify="space-between" align="flex-end">
+        <PageHeader
+          eyebrow="Админ-панель · Команда"
+          title="Менторы"
+          description="Добавляйте менторов, переводите учеников и контролируйте назначения."
+        />
+        <Button onClick={open}>+ Добавить нового ментора</Button>
+      </Group>
+
+      <Card withBorder>
+        <Stack>
+          <Title order={2}>Перевести ученика в менторы</Title>
+          <Text size="sm" c="dimmed">
+            Учебный прогресс и история собеседований сохранятся. Текущее
+            назначение его ментора будет снято.
+          </Text>
+          <Group align="flex-end">
+            <Select
+              searchable
+              clearable
+              label="Ученик"
+              placeholder="Выберите пользователя"
+              value={candidateId}
+              onChange={setCandidateId}
+              searchValue={candidateSearch}
+              onSearchChange={setCandidateSearch}
+              data={(candidates.data ?? []).map((candidate) => ({
+                value: candidate.id,
+                label: candidate.telegram_username
+                  ? `${fullName(candidate.first_name, candidate.last_name)} · @${candidate.telegram_username}`
+                  : fullName(candidate.first_name, candidate.last_name),
+              }))}
+              style={{ flex: 1 }}
+              disabled={candidates.isPending || candidates.isError}
+            />
+            <Button
+              disabled={!candidateId}
+              loading={promote.isPending}
+              onClick={promoteCandidate}
+            >
+              Перевести
+            </Button>
+          </Group>
+        </Stack>
+      </Card>
+
+      {mentors.isPending || options.isPending ? (
+        <LoadingState label="Загружаем менторов…" />
+      ) : mentors.isError || options.isError ? (
+        <ErrorState
+          retry={() => {
+            void mentors.refetch();
+            void options.refetch();
+          }}
+        />
+      ) : mentors.data.length === 0 ? (
+        <Text c="dimmed">Менторы пока не добавлены.</Text>
+      ) : (
+        <SimpleGrid cols={{ base: 1, md: 2 }}>
+          {mentors.data.map((mentor) => (
+            <MentorCard
+              key={mentor.id}
+              mentor={mentor}
+              mentors={mentors.data}
+              trackOptions={(options.data?.tracks ?? []).map((track) => ({
+                value: track.id,
+                label: track.title,
+              }))}
+              onRemove={removeMentor}
+              removePending={remove.isPending}
+            />
+          ))}
+        </SimpleGrid>
+      )}
+
+      <Modal opened={opened} onClose={close} title="Новый ментор" centered>
+        <form onSubmit={submit}>
+          <Stack>
+            <TextInput
+              required
+              label="Имя"
+              value={form.first_name}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  first_name: event.currentTarget.value,
+                }))
+              }
+            />
+            <MultiSelect
+              required
+              label="Направления"
+              placeholder="Python, Go"
+              data={(options.data?.tracks ?? []).map((track) => ({
+                value: track.id,
+                label: track.title,
+              }))}
+              value={form.track_ids}
+              onChange={(track_ids) =>
+                setForm((current) => ({ ...current, track_ids }))
+              }
+            />
+            <TextInput
+              label="Фамилия"
+              value={form.last_name ?? ""}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  last_name: event.currentTarget.value || null,
+                }))
+              }
+            />
+            <TextInput
+              type="email"
+              label="Email"
+              value={form.email ?? ""}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  email: event.currentTarget.value || null,
+                }))
+              }
+            />
+            <NumberInput
+              required
+              min={1}
+              allowDecimal={false}
+              label="Telegram ID"
+              value={form.telegram_id || ""}
+              onChange={(value) =>
+                setForm((current) => ({
+                  ...current,
+                  telegram_id: typeof value === "number" ? value : 0,
+                }))
+              }
+            />
+            <TextInput
+              label="Telegram username"
+              placeholder="username без @"
+              value={form.telegram_username ?? ""}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  telegram_username: event.currentTarget.value || null,
+                }))
+              }
+            />
+            <Group justify="flex-end">
+              <Button variant="subtle" onClick={close} type="button">
+                Отмена
+              </Button>
+              <Button type="submit" loading={create.isPending}>
+                Добавить
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+    </Stack>
+  );
+}

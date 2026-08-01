@@ -69,6 +69,7 @@ it("показывает данные, треки и статус ученика
     total: 1,
     limit: 50,
     offset: 0,
+    mentors: [mentor],
   };
   vi.spyOn(api, "adminStudents").mockResolvedValue(page);
 
@@ -78,6 +79,7 @@ it("показывает данные, треки и статус ученика
   expect(screen.getByText("student@example.com")).toBeInTheDocument();
   expect(screen.getByText("Python")).toBeInTheDocument();
   expect(screen.getByText("Открыт")).toBeInTheDocument();
+  expect(screen.getAllByLabelText("Ментор")[0]).toBeInTheDocument();
 });
 
 it("создаёт ученика с выбранным треком", async () => {

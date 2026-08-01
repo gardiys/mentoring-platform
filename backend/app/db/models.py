@@ -16,12 +16,18 @@ from app.interviews.models import (
     InterviewStageType,
     InterviewTopicSelection,
 )
-from app.knowledge.models import KnowledgeEntry, KnowledgeEntryKind, KnowledgeTopic
+from app.knowledge.models import (
+    KnowledgeEntry,
+    KnowledgeEntryKind,
+    KnowledgeTopic,
+    KnowledgeTopicTrack,
+)
 from app.mentors.models import (
     MentorDocumentKind,
     MentorStudent,
     MentorStudentDocument,
     MentorStudentNote,
+    MentorTrackAssignment,
     MockInterview,
     MockInterviewStatus,
     StudentLearningStatus,
@@ -36,6 +42,7 @@ __all__ = [
     "Company",
     "CompanyAlias",
     "MentorStudent",
+    "MentorTrackAssignment",
     "MentorStudentDocument",
     "MentorStudentNote",
     "MentorDocumentKind",
@@ -46,6 +53,7 @@ __all__ = [
     "KnowledgeEntry",
     "KnowledgeEntryKind",
     "KnowledgeTopic",
+    "KnowledgeTopicTrack",
     "InterviewCard",
     "InterviewCardFrequency",
     "InterviewCardProgress",

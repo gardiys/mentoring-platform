@@ -62,6 +62,7 @@ class AdminStudentPage(BaseModel):
     total: int
     limit: int
     offset: int
+    mentors: list[AdminStudentMentorRead] = Field(default_factory=list)
 
 
 class AdminStudentTrackOption(BaseModel):

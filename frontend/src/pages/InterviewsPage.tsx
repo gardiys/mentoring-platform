@@ -36,14 +36,21 @@ function formatDate(value: string) {
 export function InterviewsPage() {
   const me = useMe();
   const isStudent = me.data?.role === "student";
+  const isAdmin = me.data?.role === "admin";
+  const isMentor = me.data?.role === "mentor";
+  const canOwnJournal = isStudent || isMentor || isAdmin;
   const query = useInterviewDecks();
-  const processes = useInterviewProcesses("all", isStudent);
+  const processes = useInterviewProcesses("all", canOwnJournal);
   const mocks = useMyMockInterviews(isStudent);
   const documents = useMyMentorDocuments(isStudent);
-  if (me.isPending || query.isPending || (isStudent && processes.isPending)) {
+  if (
+    me.isPending ||
+    query.isPending ||
+    (canOwnJournal && processes.isPending)
+  ) {
     return <LoadingState label="Загружаем собеседования…" />;
   }
-  if (me.isError || query.isError || (isStudent && processes.isError)) {
+  if (me.isError || query.isError || (canOwnJournal && processes.isError)) {
     return (
       <ErrorState
         retry={() => {
@@ -70,7 +77,7 @@ export function InterviewsPage() {
         description="Готовьтесь по карточкам и ведите личный дневник процессов по компаниям."
       />
 
-      {isStudent && (
+      {canOwnJournal && (
         <Stack gap="md">
           <Group justify="space-between" align="flex-end">
             <div>
@@ -180,7 +187,7 @@ export function InterviewsPage() {
             </Card>
           )}
 
-          {(mocks.data?.length ?? 0) > 0 && (
+          {isStudent && (mocks.data?.length ?? 0) > 0 && (
             <Stack gap="sm">
               <div>
                 <Text className="brand-eyebrow">Практика с ментором</Text>
@@ -252,7 +259,7 @@ export function InterviewsPage() {
             </Stack>
           )}
 
-          {(documents.data?.length ?? 0) > 0 && (
+          {isStudent && (documents.data?.length ?? 0) > 0 && (
             <Stack gap="sm">
               <div>
                 <Text className="brand-eyebrow">Материалы от ментора</Text>

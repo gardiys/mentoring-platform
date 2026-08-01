@@ -71,6 +71,7 @@ class AdminKnowledgeTopicMutation(BaseModel):
     description: str | None = None
     position: int = Field(default=0, ge=0)
     is_published: bool = False
+    track_ids: list[UUID] = Field(min_length=1)
     entries: list[AdminKnowledgeEntryMutation] = Field(default_factory=list)
 
     @field_validator("entries")
@@ -95,6 +96,7 @@ class AdminKnowledgeTopicSettingsMutation(BaseModel):
     description: str | None = None
     position: int = Field(default=0, ge=0)
     is_published: bool = False
+    track_ids: list[UUID] = Field(min_length=1)
 
 
 class AdminKnowledgeEntryRead(BaseModel):
@@ -116,6 +118,7 @@ class AdminKnowledgeTopicRead(BaseModel):
     description: str | None
     position: int
     is_published: bool
+    track_ids: list[UUID]
     entries: list[AdminKnowledgeEntryRead]
 
 

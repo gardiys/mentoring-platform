@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   Group,
+  Pagination,
   Select,
   SimpleGrid,
   Stack,
@@ -56,9 +57,10 @@ export function InterviewCatalogPage() {
   const currentFilters = interviewCatalogFiltersFromParams(searchParams);
   const [debouncedSearch] = useDebouncedValue(currentFilters.query.trim(), 250);
   const filters = { ...currentFilters, query: debouncedSearch };
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const directions = useInterviewCatalogDirections();
   const authors = useInterviewCatalogAuthors();
-  const query = useInterviewCatalogCompanies(filters);
+  const query = useInterviewCatalogCompanies(filters, page);
   const hasFilters = Boolean(
     currentFilters.query ||
     currentFilters.authorId ||
@@ -74,6 +76,7 @@ export function InterviewCatalogPage() {
         const next = new URLSearchParams(current);
         if (value) next.set(name, value);
         else next.delete(name);
+        if (name !== "page") next.delete("page");
         return next;
       },
       { replace: true },
@@ -185,7 +188,7 @@ export function InterviewCatalogPage() {
         <LoadingState label="Загружаем компании…" />
       ) : query.isError ? (
         <ErrorState retry={() => void query.refetch()} />
-      ) : query.data.length === 0 ? (
+      ) : query.data.items.length === 0 ? (
         <Card withBorder>
           <Text fw={600}>Компании не найдены</Text>
           <Text c="dimmed" size="sm" mt={4}>
@@ -195,7 +198,7 @@ export function InterviewCatalogPage() {
         </Card>
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-          {query.data.map((company) => (
+          {query.data.items.map((company) => (
             <Card key={company.id} withBorder>
               <Stack h="100%">
                 <Group justify="space-between">
@@ -227,6 +230,14 @@ export function InterviewCatalogPage() {
             </Card>
           ))}
         </SimpleGrid>
+      )}
+      {(query.data?.total ?? 0) > 24 && (
+        <Pagination
+          value={page}
+          onChange={(nextPage) => updateFilter("page", String(nextPage))}
+          total={Math.ceil((query.data?.total ?? 0) / 24)}
+          mx="auto"
+        />
       )}
     </Stack>
   );

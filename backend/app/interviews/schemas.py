@@ -339,6 +339,18 @@ class InterviewProcessSummary(BaseModel):
     updated_at: datetime
 
 
+class AdminInterviewProcessSummary(InterviewProcessSummary):
+    author: "InterviewCatalogAuthorRead"
+    company_id: UUID
+
+
+class AdminInterviewProcessPage(BaseModel):
+    items: list[AdminInterviewProcessSummary]
+    total: int
+    limit: int
+    offset: int
+
+
 class InterviewProcessDetail(InterviewProcessSummary):
     stages: list[InterviewProcessStageRead]
     offer: InterviewAttachmentRead | None
@@ -402,6 +414,13 @@ class InterviewCatalogCompanyListItem(BaseModel):
     track_count: int
     interview_count: int
     last_interview_at: datetime | None
+
+
+class InterviewCatalogCompanyPage(BaseModel):
+    items: list[InterviewCatalogCompanyListItem]
+    total: int
+    limit: int
+    offset: int
 
 
 class InterviewCatalogCompanyDetail(BaseModel):

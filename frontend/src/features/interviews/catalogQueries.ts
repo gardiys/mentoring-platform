@@ -42,7 +42,7 @@ export const interviewCatalogKeys = {
   all: ["interviews", "catalog"] as const,
   directions: ["interviews", "catalog", "directions"] as const,
   authors: ["interviews", "catalog", "authors"] as const,
-  companies: (filters: InterviewCatalogFilters) =>
+  companies: (filters: InterviewCatalogFilters, page: number) =>
     [
       "interviews",
       "catalog",
@@ -53,6 +53,7 @@ export const interviewCatalogKeys = {
       filters.stageType,
       filters.hasOffer,
       filters.mediaKind,
+      page,
     ] as const,
   companyRoot: (companyId: string) =>
     ["interviews", "catalog", "company", companyId] as const,
@@ -83,10 +84,17 @@ export function useInterviewCatalogAuthors() {
   });
 }
 
-export function useInterviewCatalogCompanies(filters: InterviewCatalogFilters) {
+export function useInterviewCatalogCompanies(
+  filters: InterviewCatalogFilters,
+  page: number,
+) {
   return useQuery({
-    queryKey: interviewCatalogKeys.companies(filters),
-    queryFn: () => api.interviewCatalogCompanies(filters),
+    queryKey: interviewCatalogKeys.companies(filters, page),
+    queryFn: () =>
+      api.interviewCatalogCompanies(filters, {
+        limit: 24,
+        offset: (page - 1) * 24,
+      }),
   });
 }
 

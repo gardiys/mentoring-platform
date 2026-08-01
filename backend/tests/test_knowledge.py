@@ -50,6 +50,7 @@ def knowledge_payload(
 
 async def create_topic(client: AsyncClient, seeded: SeededData, **changes: object):
     payload = knowledge_payload()
+    payload["track_ids"] = [str(seeded.python_track_id)]
     payload.update(changes)
     return await client.post(
         "/api/v1/admin/knowledge/topics",
@@ -92,6 +93,49 @@ async def test_public_knowledge_shows_published_topics_articles_and_questions(
     ]
     assert "tsvector" in entry.json()["content_markdown"]
     assert entry.json()["topic"]["slug"] == "backend-practice"
+
+
+async def test_knowledge_is_scoped_by_mentor_directions(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await create_topic(client, seeded)
+
+    python_mentor = await client.get(
+        "/api/v1/knowledge/topics", headers=auth(seeded.mentor_id)
+    )
+    go_mentor = await client.get(
+        "/api/v1/knowledge/topics", headers=auth(seeded.other_mentor_id)
+    )
+    admin = await client.get(
+        "/api/v1/knowledge/topics", headers=auth(seeded.admin_id)
+    )
+
+    assert [topic["slug"] for topic in python_mentor.json()] == ["backend-practice"]
+    assert go_mentor.json() == []
+    assert [topic["slug"] for topic in admin.json()] == ["backend-practice"]
+
+
+async def test_admin_sees_available_articles_and_all_drafts_in_editor(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await create_topic(client, seeded)
+
+    available = await client.get(
+        "/api/v1/knowledge/topics/backend-practice",
+        headers=auth(seeded.admin_id),
+    )
+    editor = await client.get("/api/v1/admin/knowledge/topics", headers=auth(seeded.admin_id))
+
+    assert available.status_code == 200
+    assert {item["title"] for item in available.json()["entries"]} == {
+        "Полнотекстовый поиск PostgreSQL",
+        "Как работает event loop?",
+    }
+    assert {item["title"] for item in editor.json()[0]["entries"]} == {
+        "Полнотекстовый поиск PostgreSQL",
+        "Как работает event loop?",
+        "Черновик",
+    }
 
 
 async def test_full_text_search_uses_article_content_and_ignores_drafts(

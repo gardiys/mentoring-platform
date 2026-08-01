@@ -57,6 +57,7 @@ it("RoadmapPage отображает разделы и темы", async () => {
   expect(
     screen.getByRole("button", { name: "Начать прохождение" }),
   ).toBeInTheDocument();
+  expect(screen.getByLabelText(/Дата начала прохождения/)).toBeInTheDocument();
 });
 
 it("запускает роадмап и показывает рассчитанные дедлайны", async () => {
@@ -78,11 +79,15 @@ it("запускает роадмап и показывает рассчитан
     "/roadmaps/:roadmapSlug",
   );
 
+  const startedOn = await screen.findByLabelText(/Дата начала прохождения/);
+  await userEvent.clear(startedOn);
+  await userEvent.type(startedOn, "2030-01-01");
+
   await userEvent.click(
     await screen.findByRole("button", { name: "Начать прохождение" }),
   );
 
-  expect(start).toHaveBeenCalledWith("python-backend");
+  expect(start).toHaveBeenCalledWith("python-backend", "2030-01-01");
   expect(
     await screen.findByText(/Плановое завершение — 3 января 2030/),
   ).toBeInTheDocument();

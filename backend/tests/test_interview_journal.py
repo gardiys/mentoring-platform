@@ -78,7 +78,7 @@ async def create_process(
     return response.json()
 
 
-async def test_only_students_can_use_personal_interview_journal(
+async def test_students_mentors_and_admins_can_use_personal_interview_journal(
     client: AsyncClient, seeded: SeededData
 ) -> None:
     student = await client.get("/api/v1/interviews/journal/tracks", headers=auth(seeded.student_id))
@@ -87,7 +87,83 @@ async def test_only_students_can_use_personal_interview_journal(
 
     assert student.status_code == 200
     assert student.json() == []
-    assert mentor.status_code == admin.status_code == 403
+    assert mentor.status_code == 200
+    assert mentor.json() == []
+    assert admin.status_code == 200
+    assert admin.json() == []
+
+
+async def test_admin_creates_and_opens_own_interview_track(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    created = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.admin_id),
+        json=process_payload("AcmeTech", seeded.go_track_id),
+    )
+    detail = await client.get(
+        f"/api/v1/interviews/journal/tracks/{created.json()['id']}",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert created.status_code == 201
+    assert detail.status_code == 200
+    assert detail.json()["company_name"] == "AcmeTech"
+    assert detail.json()["track_slug"] == "go"
+
+
+async def test_mentor_creates_own_track_only_in_assigned_direction_and_publishes_to_catalog(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    directions = await client.get(
+        "/api/v1/interviews/journal/directions",
+        headers=auth(seeded.mentor_id),
+    )
+    unavailable = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.mentor_id),
+        json=process_payload("Mentor Go Company", seeded.go_track_id),
+    )
+    created = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.mentor_id),
+        json=process_payload("Mentor Catalog Company", seeded.python_track_id),
+    )
+    process_id = created.json()["id"]
+    stage = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process_id}/stages",
+        headers=auth(seeded.mentor_id),
+        json=stage_payload(),
+    )
+    student_cannot_edit = await client.put(
+        f"/api/v1/interviews/journal/tracks/{process_id}",
+        headers=auth(seeded.student_id),
+        json=process_payload("Чужое изменение", seeded.python_track_id),
+    )
+    companies = await client.get(
+        "/api/v1/interviews/catalog/companies?q=Mentor Catalog Company",
+        headers=auth(seeded.student_id),
+    )
+    company_id = companies.json()["items"][0]["id"]
+    catalog = await client.get(
+        f"/api/v1/interviews/catalog/companies/{company_id}",
+        headers=auth(seeded.student_id),
+    )
+
+    assert [item["slug"] for item in directions.json()] == ["python"]
+    assert unavailable.status_code == 422
+    assert unavailable.json()["detail"]["code"] == "interview_direction_not_available"
+    assert created.status_code == 201
+    assert stage.status_code == 200
+    assert student_cannot_edit.status_code == 404
+    assert companies.status_code == 200
+    assert companies.json()["total"] == 1
+    assert catalog.json()["tracks"][0]["id"] == process_id
+    assert catalog.json()["tracks"][0]["author"] == {
+        "id": str(seeded.mentor_id),
+        "name": "Антон",
+        "telegram_username": None,
+    }
 
 
 async def test_student_creates_process_and_multiple_interview_stages(
@@ -113,7 +189,7 @@ async def test_student_creates_process_and_multiple_interview_stages(
         headers=auth(seeded.student_id),
     )
 
-    assert [item["slug"] for item in directions.json()] == ["python", "go"]
+    assert [item["slug"] for item in directions.json()] == ["python"]
     assert process["track_id"] == str(seeded.python_track_id)
     assert process["track_title"] == "Python"
     assert first.status_code == second.status_code == 200
@@ -310,7 +386,7 @@ async def test_other_student_cannot_read_or_mutate_personal_journal_track(
         "/api/v1/interviews/catalog/companies?q=Яндекс", headers=other_headers
     )
     catalog_detail = await client.get(
-        f"/api/v1/interviews/catalog/companies/{catalog_listing.json()[0]['id']}",
+        f"/api/v1/interviews/catalog/companies/{catalog_listing.json()['items'][0]['id']}",
         headers=other_headers,
     )
 

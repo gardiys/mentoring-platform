@@ -84,6 +84,17 @@ it("рендерит Markdown материала", async () => {
 });
 
 it("администратор создаёт тему с вопросом", async () => {
+  vi.spyOn(api, "adminStudentOptions").mockResolvedValue({
+    tracks: [
+      {
+        id: "30000000-0000-4000-8000-000000000001",
+        slug: "python",
+        title: "Python",
+        is_published: true,
+      },
+    ],
+    mentors: [],
+  });
   const create = vi
     .spyOn(api, "createAdminKnowledgeTopic")
     .mockReturnValue(new Promise(() => undefined));
@@ -94,6 +105,8 @@ it("администратор создаёт тему с вопросом", asy
     "Собеседования",
   );
   await userEvent.type(screen.getByLabelText(/^Slug темы/), "interview");
+  await userEvent.click(screen.getByRole("textbox", { name: "Направления" }));
+  await userEvent.keyboard("{ArrowDown}{Enter}");
   await userEvent.click(screen.getByRole("button", { name: "+ Вопрос" }));
   await userEvent.type(
     screen.getByLabelText(/^Заголовок/),

@@ -1,10 +1,14 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from app.progress.models import ProgressStatus
 from app.progress.schemas import ProgressSummary
+
+
+class RoadmapStartRequest(BaseModel):
+    started_on: date | None = None
 
 
 class RoadmapListItem(ProgressSummary):

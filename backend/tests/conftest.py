@@ -14,6 +14,7 @@ from app.db.models import (
     LearningTrackEnrollment,
     LearningTrackRoadmap,
     MentorStudent,
+    MentorTrackAssignment,
     Roadmap,
     RoadmapEnrollment,
     RoadmapSection,
@@ -154,6 +155,14 @@ async def seeded() -> SeededData:
                 LearningTrackEnrollment(
                     user_id=data.student_id,
                     track_id=data.python_track_id,
+                ),
+                MentorTrackAssignment(
+                    mentor_id=data.mentor_id,
+                    track_id=data.python_track_id,
+                ),
+                MentorTrackAssignment(
+                    mentor_id=data.other_mentor_id,
+                    track_id=data.go_track_id,
                 ),
             ]
         )

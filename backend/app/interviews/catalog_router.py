@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import StudentUser
+from app.auth.dependencies import CatalogUser
 from app.auth.web_session import SignedPayloadError
 from app.core.config import get_settings
 from app.core.errors import api_error
@@ -32,7 +32,7 @@ from app.interviews.schemas import (
     InterviewCatalogCommentMutation,
     InterviewCatalogCommentRead,
     InterviewCatalogCompanyDetail,
-    InterviewCatalogCompanyListItem,
+    InterviewCatalogCompanyPage,
     InterviewCatalogMediaKind,
     InterviewDirectionOption,
     InterviewDownloadUrl,
@@ -56,29 +56,31 @@ def _stream_secret() -> str:
 
 @router.get("/directions", response_model=list[InterviewDirectionOption])
 async def catalog_directions(
-    session: Session, student: StudentUser
+    session: Session, student: CatalogUser
 ) -> list[InterviewDirectionOption]:
     return await list_catalog_directions(session, student)
 
 
 @router.get("/authors", response_model=list[InterviewCatalogAuthorRead])
 async def catalog_authors(
-    session: Session, student: StudentUser
+    session: Session, student: CatalogUser
 ) -> list[InterviewCatalogAuthorRead]:
     return await list_catalog_authors(session, student)
 
 
-@router.get("/companies", response_model=list[InterviewCatalogCompanyListItem])
+@router.get("/companies", response_model=InterviewCatalogCompanyPage)
 async def catalog_companies(
     session: Session,
-    student: StudentUser,
+    student: CatalogUser,
     q: str | None = Query(default=None, min_length=1, max_length=240),
     author_id: UUID | None = None,
     track_id: UUID | None = None,
     stage_type: InterviewStageType | None = None,
     has_offer: bool = False,
     media_kind: InterviewCatalogMediaKind | None = None,
-) -> list[InterviewCatalogCompanyListItem]:
+    limit: int = Query(default=24, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> InterviewCatalogCompanyPage:
     return await list_catalog_companies(
         session,
         student,
@@ -88,6 +90,8 @@ async def catalog_companies(
         stage_type=stage_type,
         has_offer=has_offer,
         media_kind=media_kind,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -95,7 +99,7 @@ async def catalog_companies(
 async def catalog_company(
     company_id: UUID,
     session: Session,
-    student: StudentUser,
+    student: CatalogUser,
     author_id: UUID | None = None,
     track_id: UUID | None = None,
     stage_type: InterviewStageType | None = None,
@@ -118,7 +122,7 @@ async def catalog_company(
 async def catalog_stage_media(
     stage_id: UUID,
     session: Session,
-    student: StudentUser,
+    student: CatalogUser,
     request: Request,
     response: Response,
 ) -> InterviewDownloadUrl:
@@ -176,7 +180,11 @@ async def catalog_stream_stage_media(
         api_error(403, "interview_media_player_required", "Use the platform media player")
 
     user = await session.get(User, user_id)
-    if user is None or user.role is not UserRole.STUDENT or not user.is_active:
+    if (
+        user is None
+        or user.role not in {UserRole.STUDENT, UserRole.MENTOR, UserRole.ADMIN}
+        or (user.role is UserRole.STUDENT and not user.is_active)
+    ):
         api_error(403, "interview_stream_access_denied", "Playback access is not available")
     stage = await get_catalog_stage(session, user, stage_id)
     if (
@@ -229,7 +237,7 @@ async def catalog_stage_attachment(
     stage_id: UUID,
     attachment_id: UUID,
     session: Session,
-    student: StudentUser,
+    student: CatalogUser,
     inline: bool = Query(default=False),
 ) -> InterviewDownloadUrl:
     attachment = await get_catalog_attachment(session, student, stage_id, attachment_id)
@@ -258,7 +266,7 @@ async def catalog_create_comment(
     stage_id: UUID,
     payload: InterviewCatalogCommentMutation,
     session: Session,
-    student: StudentUser,
+    student: CatalogUser,
 ) -> InterviewCatalogCommentRead:
     return await create_catalog_comment(session, student, stage_id, payload)
 
@@ -269,7 +277,7 @@ async def catalog_create_comment(
     response_class=Response,
 )
 async def catalog_delete_comment(
-    comment_id: UUID, session: Session, student: StudentUser
+    comment_id: UUID, session: Session, student: CatalogUser
 ) -> Response:
     await delete_catalog_comment(session, student, comment_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

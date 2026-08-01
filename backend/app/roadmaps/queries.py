@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import cast
 from uuid import UUID
 
@@ -20,18 +20,34 @@ from app.roadmaps.schemas import (
 from app.tracks.models import LearningTrack, LearningTrackEnrollment, LearningTrackRoadmap
 
 
-async def list_roadmaps(session: AsyncSession, user_id: UUID) -> list[RoadmapListItem]:
-    roadmaps = (
-        await session.scalars(
-            select(Roadmap)
-            .join(LearningTrackRoadmap, LearningTrackRoadmap.roadmap_id == Roadmap.id)
+async def list_roadmaps(
+    session: AsyncSession,
+    user_id: UUID,
+    *,
+    include_all_published: bool = False,
+    track_ids: set[UUID] | None = None,
+    require_enrollment: bool = True,
+) -> list[RoadmapListItem]:
+    statement = select(Roadmap).where(Roadmap.is_published.is_(True))
+    if include_all_published:
+        statement = statement.options(selectinload(Roadmap.sections)).order_by(Roadmap.position)
+    elif not require_enrollment:
+        statement = (
+            statement.join(LearningTrackRoadmap, LearningTrackRoadmap.roadmap_id == Roadmap.id)
+            .where(LearningTrackRoadmap.track_id.in_(track_ids or set()))
+            .options(selectinload(Roadmap.sections))
+            .distinct()
+            .order_by(Roadmap.position)
+        )
+    else:
+        statement = (
+            statement.join(LearningTrackRoadmap, LearningTrackRoadmap.roadmap_id == Roadmap.id)
             .join(
                 LearningTrackEnrollment,
                 LearningTrackEnrollment.track_id == LearningTrackRoadmap.track_id,
             )
             .join(LearningTrack, LearningTrack.id == LearningTrackRoadmap.track_id)
             .where(
-                Roadmap.is_published.is_(True),
                 LearningTrack.is_published.is_(True),
                 LearningTrackEnrollment.user_id == user_id,
             )
@@ -39,7 +55,9 @@ async def list_roadmaps(session: AsyncSession, user_id: UUID) -> list[RoadmapLis
             .distinct()
             .order_by(Roadmap.position)
         )
-    ).all()
+        if track_ids is not None:
+            statement = statement.where(LearningTrackRoadmap.track_id.in_(track_ids))
+    roadmaps = (await session.scalars(statement)).all()
     result: list[RoadmapListItem] = []
     for roadmap in roadmaps:
         enrollment = await session.get(RoadmapEnrollment, (user_id, roadmap.id))
@@ -96,6 +114,22 @@ async def has_roadmap_access(session: AsyncSession, user_id: UUID, roadmap_id: U
         .limit(1)
     )
     return track_id is not None
+
+
+async def roadmap_in_tracks(session: AsyncSession, roadmap_id: UUID, track_ids: set[UUID]) -> bool:
+    if not track_ids:
+        return False
+    return (
+        await session.scalar(
+            select(LearningTrackRoadmap.roadmap_id)
+            .where(
+                LearningTrackRoadmap.roadmap_id == roadmap_id,
+                LearningTrackRoadmap.track_id.in_(track_ids),
+            )
+            .limit(1)
+        )
+        is not None
+    )
 
 
 async def build_roadmap_detail(
@@ -175,13 +209,23 @@ async def build_roadmap_detail(
     )
 
 
-async def start_roadmap(session: AsyncSession, *, user_id: UUID, roadmap_id: UUID) -> None:
+async def start_roadmap(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    roadmap_id: UUID,
+    started_on: date | None = None,
+) -> None:
     enrollment = await session.get(RoadmapEnrollment, (user_id, roadmap_id), with_for_update=True)
     if enrollment is None:
         enrollment = RoadmapEnrollment(user_id=user_id, roadmap_id=roadmap_id)
         session.add(enrollment)
     if enrollment.started_at is None:
-        enrollment.started_at = datetime.now(UTC)
+        enrollment.started_at = (
+            datetime.now(UTC)
+            if started_on is None
+            else datetime.combine(started_on, time.min, tzinfo=UTC)
+        )
     await session.commit()
 
 

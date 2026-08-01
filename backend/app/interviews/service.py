@@ -32,15 +32,13 @@ from app.interviews.schemas import (
     InterviewStudySession,
     InterviewTopicOption,
 )
-from app.tracks.models import LearningTrack, LearningTrackEnrollment
-from app.users.models import User, UserRole
+from app.tracks.access import accessible_track_ids, has_track_access
+from app.tracks.models import LearningTrack
+from app.users.models import User
 
 
 async def _has_track_access(session: AsyncSession, user: User, track_id: UUID) -> bool:
-    if user.role is UserRole.ADMIN:
-        return True
-    enrollment = await session.get(LearningTrackEnrollment, (user.id, track_id))
-    return enrollment is not None
+    return await has_track_access(session, user, track_id)
 
 
 async def _public_deck_model(
@@ -185,11 +183,9 @@ async def list_interview_decks(session: AsyncSession, user: User) -> list[Interv
         )
         .order_by(LearningTrack.position, InterviewDeck.position, InterviewDeck.title)
     )
-    if user.role is not UserRole.ADMIN:
-        statement = statement.join(
-            LearningTrackEnrollment,
-            LearningTrackEnrollment.track_id == InterviewDeck.track_id,
-        ).where(LearningTrackEnrollment.user_id == user.id)
+    track_ids = await accessible_track_ids(session, user)
+    if track_ids is not None:
+        statement = statement.where(InterviewDeck.track_id.in_(track_ids))
     rows = (await session.execute(statement)).all()
     return [await _deck_list_item(session, user.id, deck, track) for deck, track in rows]
 

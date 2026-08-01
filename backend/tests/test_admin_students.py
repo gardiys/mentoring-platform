@@ -152,12 +152,29 @@ async def test_admin_student_list_supports_search_access_filter_and_options(
         "/api/v1/admin/students/options",
         headers=auth(seeded.admin_id),
     )
+    assigned_to_mentor = await client.get(
+        "/api/v1/admin/students",
+        headers=auth(seeded.admin_id),
+        params={"mentor_id": str(seeded.mentor_id)},
+    )
+    without_mentor = await client.get(
+        "/api/v1/admin/students?without_mentor=true",
+        headers=auth(seeded.admin_id),
+    )
 
     assert search.json()["total"] == 1
     assert search.json()["items"][0]["first_name"] == "Мария"
     assert blocked.json()["total"] == 1
     assert blocked.json()["items"][0]["is_active"] is False
     assert [track["slug"] for track in options.json()["tracks"]] == ["python", "go"]
+    assert assigned_to_mentor.json()["total"] == 1
+    assert assigned_to_mentor.json()["items"][0]["id"] == str(seeded.student_id)
+    assert without_mentor.json()["total"] == 1
+    assert without_mentor.json()["items"][0]["id"] == created.json()["id"]
+    assert [mentor["id"] for mentor in without_mentor.json()["mentors"]] == [
+        str(seeded.mentor_id),
+        str(seeded.other_mentor_id),
+    ]
 
 
 async def test_admin_rejects_duplicate_student_identifiers(

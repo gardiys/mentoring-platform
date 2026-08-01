@@ -9,6 +9,7 @@ export type StudentAccessFilter = "all" | "active" | "blocked";
 export interface AdminStudentListOptions {
   query: string;
   access: StudentAccessFilter;
+  mentorFilter: string;
   page: number;
 }
 
@@ -29,9 +30,16 @@ export function useAdminStudents(options: AdminStudentListOptions) {
       api.adminStudents({
         query: options.query,
         access: options.access,
+        mentorId:
+          options.mentorFilter !== "all" &&
+          options.mentorFilter !== "unassigned"
+            ? options.mentorFilter
+            : null,
+        withoutMentor: options.mentorFilter === "unassigned",
         limit: PAGE_SIZE,
         offset: (options.page - 1) * PAGE_SIZE,
       }),
+    placeholderData: (previousData) => previousData,
   });
 }
 

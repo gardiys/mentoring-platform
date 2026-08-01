@@ -8,7 +8,9 @@ import {
   Paper,
   Stack,
   Text,
+  TextInput,
 } from "@mantine/core";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
@@ -29,10 +31,18 @@ function formatDate(value: string) {
   return dateFormatter.format(new Date(value));
 }
 
+function currentLocalDate() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
+}
+
 export function RoadmapPage() {
   const { roadmapSlug = "" } = useParams();
   const query = useRoadmap(roadmapSlug);
   const startMutation = useStartRoadmap(roadmapSlug);
+  const [startedOn, setStartedOn] = useState(currentLocalDate);
   if (query.isPending) return <LoadingState />;
   if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
 
@@ -68,12 +78,22 @@ export function RoadmapPage() {
             </Text>
           </Stack>
           {!query.data.started_at && (
-            <Button
-              loading={startMutation.isPending}
-              onClick={() => startMutation.mutate()}
-            >
-              Начать прохождение
-            </Button>
+            <Group align="flex-end">
+              <TextInput
+                label="Дата начала прохождения"
+                type="date"
+                value={startedOn}
+                onChange={(event) => setStartedOn(event.currentTarget.value)}
+                required
+              />
+              <Button
+                loading={startMutation.isPending}
+                disabled={!startedOn}
+                onClick={() => startMutation.mutate(startedOn)}
+              >
+                Начать прохождение
+              </Button>
+            </Group>
           )}
         </Group>
         {startMutation.isError && (

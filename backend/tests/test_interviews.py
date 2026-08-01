@@ -79,6 +79,17 @@ async def test_student_sees_only_decks_from_enrolled_tracks(
     )
     assert response.status_code == 403
 
+    python_mentor = await client.get(
+        "/api/v1/interviews/decks", headers=auth(seeded.mentor_id)
+    )
+    go_mentor = await client.get(
+        "/api/v1/interviews/decks", headers=auth(seeded.other_mentor_id)
+    )
+    assert [deck["slug"] for deck in python_mentor.json()] == [
+        "python-core-interview"
+    ]
+    assert [deck["slug"] for deck in go_mentor.json()] == ["go-core-interview"]
+
 
 async def test_session_prioritizes_frequent_cards_and_tracks_learning(
     client: AsyncClient, seeded: SeededData
