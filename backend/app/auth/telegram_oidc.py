@@ -118,8 +118,14 @@ def _decode_id_token(id_token: str, jwks: dict[str, Any], client_id: str) -> dic
 
 
 def _identity_from_claims(claims: dict[str, Any]) -> TelegramIdentity:
-    telegram_id = claims.get("id")
-    if not isinstance(telegram_id, int) or isinstance(telegram_id, bool) or telegram_id <= 0:
+    raw_telegram_id = claims.get("id")
+    if isinstance(raw_telegram_id, str) and raw_telegram_id.isascii() and raw_telegram_id.isdigit():
+        telegram_id = int(raw_telegram_id)
+    elif isinstance(raw_telegram_id, int) and not isinstance(raw_telegram_id, bool):
+        telegram_id = raw_telegram_id
+    else:
+        telegram_id = 0
+    if telegram_id <= 0:
         raise TelegramOidcError("Telegram profile does not contain a valid user id")
 
     given_name = claims.get("given_name")

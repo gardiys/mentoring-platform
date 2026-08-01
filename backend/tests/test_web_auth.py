@@ -191,7 +191,7 @@ def test_telegram_id_token_signature_and_claims_are_verified() -> None:
         "sub": "telegram-subject",
         "iat": now,
         "exp": now + timedelta(minutes=5),
-        "id": TELEGRAM_ID,
+        "id": str(TELEGRAM_ID),
         "given_name": "Иван",
         "family_name": "Иванов",
     }
