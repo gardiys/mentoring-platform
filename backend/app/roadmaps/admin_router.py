@@ -51,9 +51,7 @@ async def admin_create_roadmap(
 
 
 @router.get("/summaries", response_model=list[AdminRoadmapSummary])
-async def admin_roadmap_summaries(
-    session: Session, _admin: AdminUser
-) -> list[AdminRoadmapSummary]:
+async def admin_roadmap_summaries(session: Session, _admin: AdminUser) -> list[AdminRoadmapSummary]:
     return await list_admin_roadmap_summaries(session)
 
 
@@ -151,9 +149,7 @@ async def admin_update_roadmap_topic(
 
 
 @router.get("/{roadmap_id}", response_model=AdminRoadmapRead)
-async def admin_roadmap(
-    roadmap_id: UUID, session: Session, _admin: AdminUser
-) -> AdminRoadmapRead:
+async def admin_roadmap(roadmap_id: UUID, session: Session, _admin: AdminUser) -> AdminRoadmapRead:
     return await get_admin_roadmap(session, roadmap_id)
 
 

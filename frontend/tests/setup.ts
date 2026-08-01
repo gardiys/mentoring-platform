@@ -25,3 +25,8 @@ class ResizeObserverStub {
 }
 
 globalThis.ResizeObserver = ResizeObserverStub;
+
+Object.defineProperty(Element.prototype, "scrollIntoView", {
+  configurable: true,
+  value: () => undefined,
+});

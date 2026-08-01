@@ -5,6 +5,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -17,6 +18,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,6 +35,21 @@ class InterviewReviewRating(StrEnum):
     HARD = "hard"
     GOOD = "good"
     EASY = "easy"
+
+
+class InterviewProcessStatus(StrEnum):
+    ACTIVE = "active"
+    CLOSED = "closed"
+    OFFER = "offer"
+
+
+class InterviewStageType(StrEnum):
+    SCREENING = "screening"
+    TECHNICAL_SCREENING = "technical_screening"
+    TECHNICAL_INTERVIEW = "technical_interview"
+    SYSTEM_DESIGN = "system_design"
+    FINAL_INTERVIEW = "final_interview"
+    OTHER = "other"
 
 
 class InterviewDeck(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -150,3 +167,150 @@ class InterviewTopicSelection(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class Company(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "companies"
+
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(240), unique=True, nullable=False)
+    transliterated_name: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+
+    aliases = relationship(
+        "CompanyAlias",
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+
+
+class CompanyAlias(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "company_aliases"
+
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(240), unique=True, nullable=False)
+    transliterated_name: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+
+    company = relationship("Company", back_populates="aliases")
+
+
+class InterviewProcess(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "interview_processes"
+    __table_args__ = (Index("ix_interview_processes_user_status", "user_id", "status"),)
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    track_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("learning_tracks.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    company_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    company_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    recruiter_telegram_usernames: Mapped[list[str]] = mapped_column(
+        ARRAY(String(32)), default=list, server_default="{}", nullable=False
+    )
+    status: Mapped[InterviewProcessStatus] = mapped_column(
+        Enum(
+            InterviewProcessStatus,
+            name="interview_process_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        default=InterviewProcessStatus.ACTIVE,
+        nullable=False,
+    )
+    close_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    offer_storage_key: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    offer_filename: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    offer_content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    offer_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    stages = relationship(
+        "InterviewProcessStage",
+        back_populates="process",
+        cascade="all, delete-orphan",
+        order_by="InterviewProcessStage.scheduled_at",
+    )
+
+
+class InterviewProcessStage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "interview_process_stages"
+    __table_args__ = (
+        Index("ix_interview_process_stages_process_date", "process_id", "scheduled_at"),
+    )
+
+    process_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("interview_processes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    stage_type: Mapped[InterviewStageType] = mapped_column(
+        Enum(
+            InterviewStageType,
+            name="interview_stage_type",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+    )
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_storage_key: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    media_filename: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    media_content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    media_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    process = relationship("InterviewProcess", back_populates="stages")
+    attachments = relationship(
+        "InterviewProcessStageAttachment",
+        back_populates="stage",
+        cascade="all, delete-orphan",
+        order_by="InterviewProcessStageAttachment.created_at",
+    )
+
+
+class InterviewProcessStageAttachment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "interview_process_stage_attachments"
+    __table_args__ = (Index("ix_interview_stage_attachments_stage", "stage_id", "created_at"),)
+
+    stage_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("interview_process_stages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    storage_key: Mapped[str] = mapped_column(String(180), nullable=False)
+    filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(160), nullable=False)
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    stage = relationship("InterviewProcessStage", back_populates="attachments")
+
+
+class InterviewStageComment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "interview_stage_comments"
+    __table_args__ = (Index("ix_interview_stage_comments_stage_created", "stage_id", "created_at"),)
+
+    stage_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("interview_process_stages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)

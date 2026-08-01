@@ -2,6 +2,11 @@ import { getDevUserId } from "../features/auth/devAuth";
 
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+export function resolveApiUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  return new URL(path, API_URL || window.location.origin).toString();
+}
+
 interface ErrorDetail {
   code: string;
   message: string;
@@ -32,19 +37,26 @@ function isErrorDetail(value: unknown): value is { detail: ErrorDetail } {
   );
 }
 
-export async function apiRequest<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
+function authenticatedHeaders(init?: RequestInit): Headers {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
-  if (init?.body) headers.set("Content-Type", "application/json");
   const telegramInitData = window.Telegram?.WebApp?.initData;
   if (telegramInitData) {
     headers.set("Authorization", `tma ${telegramInitData}`);
   } else if (import.meta.env.DEV) {
     const userId = getDevUserId();
     if (userId) headers.set("X-Dev-User-Id", userId);
+  }
+  return headers;
+}
+
+export async function apiRequest<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const headers = authenticatedHeaders(init);
+  if (init?.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
 
   const response = await fetch(`${API_URL}${path}`, {
@@ -68,4 +80,23 @@ export async function apiRequest<T>(
     );
   }
   return payload as T;
+}
+
+export async function uploadPresignedPost(
+  intent: { upload_url: string; fields: Record<string, string> },
+  file: File,
+): Promise<void> {
+  const body = new FormData();
+  Object.entries(intent.fields).forEach(([key, value]) =>
+    body.append(key, value),
+  );
+  body.append("file", file);
+  const response = await fetch(intent.upload_url, { method: "POST", body });
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      "interview_s3_upload_failed",
+      "Не удалось загрузить файл в хранилище",
+    );
+  }
 }

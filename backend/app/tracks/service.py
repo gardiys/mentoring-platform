@@ -16,6 +16,7 @@ from app.tracks.schemas import (
     AdminTrackRoadmapRead,
     AdminTrackStudentOption,
 )
+from app.users.learning import learning_start_datetime
 from app.users.models import User, UserRole
 
 
@@ -173,6 +174,9 @@ async def ensure_track_access(
         )
         .returning(LearningTrackEnrollment.user_id)
     )
+    learning_start_date = await session.scalar(
+        select(User.learning_start_date).where(User.id == user_id)
+    )
     roadmap_ids = list(
         await session.scalars(
             select(LearningTrackRoadmap.roadmap_id).where(LearningTrackRoadmap.track_id == track_id)
@@ -181,7 +185,11 @@ async def ensure_track_access(
     for roadmap_id in roadmap_ids:
         await session.execute(
             insert(RoadmapEnrollment)
-            .values(user_id=user_id, roadmap_id=roadmap_id)
+            .values(
+                user_id=user_id,
+                roadmap_id=roadmap_id,
+                started_at=learning_start_datetime(learning_start_date),
+            )
             .on_conflict_do_nothing(
                 index_elements=[RoadmapEnrollment.user_id, RoadmapEnrollment.roadmap_id]
             )

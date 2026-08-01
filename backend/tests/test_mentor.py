@@ -3,12 +3,8 @@ from httpx import AsyncClient
 from tests.conftest import SeededData, auth
 
 
-async def test_student_cannot_use_mentor_endpoint(
-    client: AsyncClient, seeded: SeededData
-) -> None:
-    response = await client.get(
-        "/api/v1/mentor/students", headers=auth(seeded.student_id)
-    )
+async def test_student_cannot_use_mentor_endpoint(client: AsyncClient, seeded: SeededData) -> None:
+    response = await client.get("/api/v1/mentor/students", headers=auth(seeded.student_id))
     assert response.status_code == 403
 
 
@@ -20,9 +16,7 @@ async def test_mentor_sees_assigned_student_and_topic_history(
         headers=auth(seeded.student_id),
         json={"status": "completed"},
     )
-    listing = await client.get(
-        "/api/v1/mentor/students", headers=auth(seeded.mentor_id)
-    )
+    listing = await client.get("/api/v1/mentor/students", headers=auth(seeded.mentor_id))
     detail = await client.get(
         f"/api/v1/mentor/students/{seeded.student_id}",
         headers=auth(seeded.mentor_id),
@@ -37,9 +31,7 @@ async def test_mentor_sees_assigned_student_and_topic_history(
 async def test_mentor_cannot_see_unassigned_student(
     client: AsyncClient, seeded: SeededData
 ) -> None:
-    listing = await client.get(
-        "/api/v1/mentor/students", headers=auth(seeded.other_mentor_id)
-    )
+    listing = await client.get("/api/v1/mentor/students", headers=auth(seeded.other_mentor_id))
     detail = await client.get(
         f"/api/v1/mentor/students/{seeded.student_id}",
         headers=auth(seeded.other_mentor_id),

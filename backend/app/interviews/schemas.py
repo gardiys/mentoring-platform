@@ -1,9 +1,16 @@
+import re
 from datetime import datetime
+from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.interviews.models import InterviewCardFrequency, InterviewReviewRating
+from app.interviews.models import (
+    InterviewCardFrequency,
+    InterviewProcessStatus,
+    InterviewReviewRating,
+    InterviewStageType,
+)
 from app.roadmaps.admin_schemas import SLUG_PATTERN
 
 
@@ -181,3 +188,223 @@ class AdminInterviewCardPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class InterviewAttachmentRead(BaseModel):
+    filename: str
+    content_type: str
+    size: int
+
+
+class InterviewStageAttachmentRead(InterviewAttachmentRead):
+    id: UUID
+    created_at: datetime
+
+
+class InterviewUploadRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    filename: str = Field(min_length=1, max_length=500)
+    content_type: str = Field(min_length=1, max_length=160)
+    size: int = Field(gt=0)
+
+
+class InterviewUploadIntent(BaseModel):
+    upload_url: str
+    fields: dict[str, str]
+    storage_key: str
+    filename: str
+    content_type: str
+    size: int
+    expires_in: int
+
+
+class InterviewUploadComplete(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    storage_key: str = Field(min_length=1, max_length=500)
+    filename: str = Field(min_length=1, max_length=500)
+    content_type: str = Field(min_length=1, max_length=160)
+    size: int = Field(gt=0)
+
+
+class InterviewDownloadUrl(BaseModel):
+    url: str
+
+
+class CompanyOption(BaseModel):
+    id: UUID
+    name: str
+
+
+class InterviewDirectionOption(BaseModel):
+    id: UUID
+    slug: str
+    title: str
+
+
+TELEGRAM_USERNAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
+
+
+def _normalize_telegram_usernames(values: list[str]) -> list[str]:
+    usernames: list[str] = []
+    seen: set[str] = set()
+    for raw_value in values:
+        value = raw_value.strip()
+        for prefix in ("https://t.me/", "http://t.me/", "t.me/"):
+            if value.casefold().startswith(prefix):
+                value = value[len(prefix) :].strip("/")
+                break
+        username = value.lstrip("@").casefold()
+        if not TELEGRAM_USERNAME_PATTERN.fullmatch(username):
+            raise ValueError("Enter a valid Telegram username, for example @recruiter_name")
+        if username not in seen:
+            seen.add(username)
+            usernames.append(username)
+    return usernames
+
+
+class InterviewProcessMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    company_name: str = Field(min_length=1, max_length=240)
+    track_id: UUID
+    company_id: UUID | None = None
+    company_alias: str | None = Field(default=None, min_length=1, max_length=240)
+    recruiter_telegram_usernames: list[str] | None = Field(default=None, max_length=20)
+
+    @field_validator("recruiter_telegram_usernames")
+    @classmethod
+    def normalize_recruiter_usernames(cls, values: list[str] | None) -> list[str] | None:
+        return _normalize_telegram_usernames(values) if values is not None else None
+
+
+class InterviewProcessRecruitersMutation(BaseModel):
+    recruiter_telegram_usernames: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("recruiter_telegram_usernames")
+    @classmethod
+    def normalize_recruiter_usernames(cls, values: list[str]) -> list[str]:
+        return _normalize_telegram_usernames(values)
+
+
+class InterviewProcessStageMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    stage_type: InterviewStageType
+    scheduled_at: datetime
+    description: str | None = Field(default=None, max_length=10_000)
+
+
+class InterviewProcessOutcomeMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    status: InterviewProcessStatus
+    close_reason: str | None = Field(default=None, max_length=5_000)
+
+    @model_validator(mode="after")
+    def closed_process_has_reason(self) -> "InterviewProcessOutcomeMutation":
+        if self.status is InterviewProcessStatus.CLOSED and not self.close_reason:
+            raise ValueError("A close reason is required for a closed interview process")
+        return self
+
+
+class InterviewProcessStageRead(BaseModel):
+    id: UUID
+    stage_type: InterviewStageType
+    scheduled_at: datetime
+    description: str | None
+    media: InterviewAttachmentRead | None
+    attachments: list[InterviewStageAttachmentRead]
+    created_at: datetime
+    updated_at: datetime
+
+
+class InterviewProcessSummary(BaseModel):
+    id: UUID
+    company_name: str
+    recruiter_telegram_usernames: list[str]
+    track_id: UUID
+    track_slug: str
+    track_title: str
+    status: InterviewProcessStatus
+    close_reason: str | None = Field(description="Latest closure reason, retained after reopening")
+    closed_at: datetime | None = Field(
+        description="Time of the latest closure, retained after reopening"
+    )
+    stage_count: int
+    next_stage_at: datetime | None
+    has_offer_file: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class InterviewProcessDetail(InterviewProcessSummary):
+    stages: list[InterviewProcessStageRead]
+    offer: InterviewAttachmentRead | None
+
+
+class InterviewCatalogAuthorRead(BaseModel):
+    id: UUID
+    name: str
+    telegram_username: str | None
+
+
+class InterviewCatalogMediaKind(StrEnum):
+    ANY = "any"
+    VIDEO = "video"
+    AUDIO = "audio"
+
+
+class InterviewCatalogCommentMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    body: str = Field(min_length=1, max_length=5_000)
+
+
+class InterviewCatalogCommentRead(BaseModel):
+    id: UUID
+    author: InterviewCatalogAuthorRead
+    body: str
+    is_own: bool
+    is_mentor_feedback: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class InterviewCatalogStageRead(BaseModel):
+    id: UUID
+    stage_type: InterviewStageType
+    scheduled_at: datetime
+    description: str | None
+    media: InterviewAttachmentRead | None
+    attachments: list[InterviewStageAttachmentRead]
+    comments: list[InterviewCatalogCommentRead]
+
+
+class InterviewCatalogTrackRead(BaseModel):
+    id: UUID
+    author: InterviewCatalogAuthorRead
+    recruiter_telegram_usernames: list[str]
+    track_id: UUID
+    track_slug: str
+    track_title: str
+    status: InterviewProcessStatus
+    close_reason: str | None
+    created_at: datetime
+    updated_at: datetime
+    stages: list[InterviewCatalogStageRead]
+
+
+class InterviewCatalogCompanyListItem(BaseModel):
+    id: UUID
+    name: str
+    track_count: int
+    interview_count: int
+    last_interview_at: datetime | None
+
+
+class InterviewCatalogCompanyDetail(BaseModel):
+    id: UUID
+    name: str
+    tracks: list[InterviewCatalogTrackRead]

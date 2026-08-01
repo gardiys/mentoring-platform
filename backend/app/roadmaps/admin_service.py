@@ -120,9 +120,7 @@ async def list_admin_roadmap_summaries(
     ]
 
 
-async def get_admin_roadmap_outline(
-    session: AsyncSession, roadmap_id: UUID
-) -> AdminRoadmapOutline:
+async def get_admin_roadmap_outline(session: AsyncSession, roadmap_id: UUID) -> AdminRoadmapOutline:
     roadmap = await session.get(Roadmap, roadmap_id)
     if roadmap is None:
         api_error(404, "roadmap_not_found", "Roadmap was not found")
@@ -190,9 +188,7 @@ async def update_roadmap_settings(
     roadmap = await session.get(Roadmap, roadmap_id, with_for_update=True)
     if roadmap is None:
         api_error(404, "roadmap_not_found", "Roadmap was not found")
-    conflict = select(Roadmap.id).where(
-        Roadmap.slug == payload.slug, Roadmap.id != roadmap_id
-    )
+    conflict = select(Roadmap.id).where(Roadmap.slug == payload.slug, Roadmap.id != roadmap_id)
     if await session.scalar(conflict) is not None:
         api_error(409, "roadmap_slug_conflict", "Roadmap slug is already in use")
     roadmap.slug = payload.slug

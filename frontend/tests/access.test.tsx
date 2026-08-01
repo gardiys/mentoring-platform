@@ -14,6 +14,7 @@ const browserUser = {
   email: null,
   role: "student" as const,
   onboarding_completed_at: "2026-08-01T00:00:00Z",
+  is_active: true,
 };
 
 afterEach(() => {
@@ -61,4 +62,32 @@ it("объясняет Telegram-пользователю, что доступ о
   expect(
     screen.getByText(/Вернитесь в бота и завершите оплату/),
   ).toBeInTheDocument();
+});
+
+it("объясняет ученику, что администратор приостановил доступ", async () => {
+  window.Telegram = {
+    WebApp: {
+      initData: "query_id=test",
+      colorScheme: "light",
+      BackButton: {
+        show: vi.fn(),
+        hide: vi.fn(),
+        onClick: vi.fn(),
+        offClick: vi.fn(),
+      },
+      ready: vi.fn(),
+      expand: vi.fn(),
+      onEvent: vi.fn(),
+      offEvent: vi.fn(),
+      close: vi.fn(),
+    },
+  };
+  vi.spyOn(api, "me").mockRejectedValue(
+    new ApiError(403, "student_access_suspended", "Access suspended"),
+  );
+
+  renderPage(<ProtectedLayout />);
+
+  expect(await screen.findByText("Доступ закрыт")).toBeInTheDocument();
+  expect(screen.getByText(/Свяжитесь с ментором/)).toBeInTheDocument();
 });

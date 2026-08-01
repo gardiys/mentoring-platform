@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-import { apiRequest } from "../src/api/client";
+import { apiRequest, uploadPresignedPost } from "../src/api/client";
 import { clearDevUserId, setDevUserId } from "../src/features/auth/devAuth";
 
 afterEach(() => {
@@ -55,4 +55,28 @@ it("использует UUID-заголовок только как development
     "20000000-0000-4000-8000-000000000001",
   );
   expect(headers.has("Authorization")).toBe(false);
+});
+
+it("загружает файл напрямую по подписанной S3 POST-форме", async () => {
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+    ok: true,
+    status: 204,
+  } as Response);
+  const file = new File(["video"], "interview.mp4", { type: "video/mp4" });
+
+  await uploadPresignedPost(
+    {
+      upload_url: "http://localhost:9000/mentoring-platform",
+      fields: { key: "pending/media/user/id", policy: "signed" },
+    },
+    file,
+  );
+
+  const body = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+  expect(fetchMock).toHaveBeenCalledWith(
+    "http://localhost:9000/mentoring-platform",
+    expect.objectContaining({ method: "POST" }),
+  );
+  expect(body.get("key")).toBe("pending/media/user/id");
+  expect(body.get("file")).toBe(file);
 });

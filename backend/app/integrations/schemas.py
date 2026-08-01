@@ -10,10 +10,12 @@ class ProvisionTelegramStudentRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     telegram_id: int = Field(gt=0)
+    telegram_username: str | None = Field(default=None, max_length=64)
     first_name: str = Field(min_length=1, max_length=120)
     last_name: str | None = Field(default=None, max_length=120)
     email: str | None = Field(default=None, max_length=320)
     track_slug: str = Field(min_length=1, max_length=160, pattern=SLUG_PATTERN)
+    mentor_telegram_id: int | None = Field(default=None, gt=0)
 
 
 class GrantedTrackRead(BaseModel):

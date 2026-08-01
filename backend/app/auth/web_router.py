@@ -23,7 +23,7 @@ from app.auth.web_session import (
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
-from app.users.models import User
+from app.users.models import User, UserRole
 
 router = APIRouter(prefix="/auth/web", tags=["web-auth"])
 settings = get_settings()
@@ -134,9 +134,19 @@ async def telegram_callback(
         response.delete_cookie(OAUTH_STATE_COOKIE, path="/api/v1/auth/web/telegram")
         return response
 
-    if (user.first_name, user.last_name) != (identity.first_name, identity.last_name):
+    if user.role is UserRole.STUDENT and not user.is_active:
+        response = RedirectResponse(_frontend_redirect("/login", error="student_access_suspended"))
+        response.delete_cookie(OAUTH_STATE_COOKIE, path="/api/v1/auth/web/telegram")
+        return response
+
+    if (user.first_name, user.last_name, user.telegram_username) != (
+        identity.first_name,
+        identity.last_name,
+        identity.telegram_username,
+    ):
         user.first_name = identity.first_name
         user.last_name = identity.last_name
+        user.telegram_username = identity.telegram_username
         await session.commit()
         await session.refresh(user)
 

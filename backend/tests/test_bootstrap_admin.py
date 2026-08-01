@@ -30,9 +30,7 @@ def test_bootstrap_admin_registers_all_sqlalchemy_models_in_clean_process() -> N
 async def test_bootstrap_admin_creates_and_idempotently_updates_user() -> None:
     telegram_id = 987654321
     async with TestSession() as session:
-        user_id = await bootstrap_admin_user(
-            session, telegram_id, first_name="Антон"
-        )
+        user_id = await bootstrap_admin_user(session, telegram_id, first_name="Антон")
         repeated_id = await bootstrap_admin_user(
             session,
             telegram_id,

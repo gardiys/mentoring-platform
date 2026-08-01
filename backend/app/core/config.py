@@ -25,6 +25,18 @@ class Settings(BaseSettings):
     web_session_secret: SecretStr | None = None
     web_session_ttl_seconds: int = Field(default=2_592_000, ge=3_600, le=31_536_000)
     web_oauth_state_ttl_seconds: int = Field(default=600, ge=300, le=1_800)
+    s3_bucket: str = "mentoring-platform"
+    s3_region: str = "us-east-1"
+    s3_endpoint_url: str | None = "http://localhost:9000"
+    s3_public_endpoint_url: str | None = "http://localhost:9000"
+    s3_access_key_id: str = "mentoring-minio"
+    s3_secret_access_key: SecretStr = SecretStr("mentoring-minio-secret")
+    s3_presign_ttl_seconds: int = Field(default=900, ge=60, le=3_600)
+    interview_stream_ticket_ttl_seconds: int = Field(default=600, ge=60, le=3_600)
+    interview_video_max_bytes: int = Field(default=2_147_483_648, ge=1_048_576, le=5_368_709_120)
+    interview_audio_max_bytes: int = Field(default=524_288_000, ge=1_048_576, le=2_147_483_648)
+    interview_offer_max_bytes: int = Field(default=20_971_520, ge=1_048_576, le=104_857_600)
+    interview_attachment_max_bytes: int = Field(default=52_428_800, ge=1_048_576, le=524_288_000)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -45,6 +57,11 @@ class Settings(BaseSettings):
     )
     @classmethod
     def empty_secret_is_none(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @field_validator("s3_endpoint_url", "s3_public_endpoint_url", mode="before")
+    @classmethod
+    def empty_s3_endpoint_is_none(cls, value: object) -> object:
         return None if value == "" else value
 
     @field_validator("bot_integration_token")

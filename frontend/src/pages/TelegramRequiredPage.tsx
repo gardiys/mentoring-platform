@@ -17,6 +17,8 @@ import { telegramMiniAppLink } from "../platform/telegramLinks";
 const errorMessages: Record<string, string> = {
   platform_access_not_granted:
     "Ваш Telegram-аккаунт пока не получил доступ. Завершите оплату в боте и попробуйте снова.",
+  student_access_suspended:
+    "Доступ к платформе приостановлен. Свяжитесь с ментором или администратором.",
   invalid_login_state:
     "Запрос на вход устарел или уже был использован. Начните вход заново.",
   telegram_login_failed:

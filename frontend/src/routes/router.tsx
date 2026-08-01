@@ -10,6 +10,9 @@ import { AdminRoadmapsPage } from "../pages/AdminRoadmapsPage";
 import { AdminTrackCreatePage } from "../pages/AdminTrackCreatePage";
 import { AdminTrackEditPage } from "../pages/AdminTrackEditPage";
 import { AdminTracksPage } from "../pages/AdminTracksPage";
+import { AdminStudentCreatePage } from "../pages/AdminStudentCreatePage";
+import { AdminStudentEditPage } from "../pages/AdminStudentEditPage";
+import { AdminStudentsPage } from "../pages/AdminStudentsPage";
 import { AdminKnowledgeTopicCreatePage } from "../pages/AdminKnowledgeTopicCreatePage";
 import { AdminKnowledgeTopicEditPage } from "../pages/AdminKnowledgeTopicEditPage";
 import { AdminKnowledgeEntryEditPage } from "../pages/AdminKnowledgeEntryEditPage";
@@ -21,11 +24,16 @@ import { AdminInterviewDecksPage } from "../pages/AdminInterviewDecksPage";
 import { DevLoginPage } from "../pages/DevLoginPage";
 import { MentorStudentPage } from "../pages/MentorStudentPage";
 import { MentorStudentsPage } from "../pages/MentorStudentsPage";
+import { MentorInterviewPage } from "../pages/MentorInterviewPage";
 import { KnowledgeBasePage } from "../pages/KnowledgeBasePage";
 import { KnowledgeEntryPage } from "../pages/KnowledgeEntryPage";
 import { KnowledgeTopicPage } from "../pages/KnowledgeTopicPage";
 import { InterviewsPage } from "../pages/InterviewsPage";
 import { InterviewStudyPage } from "../pages/InterviewStudyPage";
+import { InterviewProcessCreatePage } from "../pages/InterviewProcessCreatePage";
+import { InterviewProcessPage } from "../pages/InterviewProcessPage";
+import { InterviewCatalogPage } from "../pages/InterviewCatalogPage";
+import { InterviewCatalogCompanyPage } from "../pages/InterviewCatalogCompanyPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { OnboardingPage } from "../pages/OnboardingPage";
 import { RoadmapPage } from "../pages/RoadmapPage";
@@ -65,6 +73,19 @@ export const router = createBrowserRouter([
             element: <KnowledgeEntryPage />,
           },
           { path: "/interviews", element: <InterviewsPage /> },
+          { path: "/interviews/catalog", element: <InterviewCatalogPage /> },
+          {
+            path: "/interviews/catalog/:companyId",
+            element: <InterviewCatalogCompanyPage />,
+          },
+          {
+            path: "/interviews/journal/new",
+            element: <InterviewProcessCreatePage />,
+          },
+          {
+            path: "/interviews/journal/:processId",
+            element: <InterviewProcessPage />,
+          },
           {
             path: "/interviews/:deckSlug",
             element: <InterviewStudyPage />,
@@ -73,6 +94,10 @@ export const router = createBrowserRouter([
           {
             path: "/mentor/students/:studentId",
             element: <MentorStudentPage />,
+          },
+          {
+            path: "/mentor/students/:studentId/interviews/:processId",
+            element: <MentorInterviewPage />,
           },
           { path: "/admin/roadmaps", element: <AdminRoadmapsPage /> },
           { path: "/admin/roadmaps/new", element: <AdminRoadmapCreatePage /> },
@@ -101,6 +126,15 @@ export const router = createBrowserRouter([
           {
             path: "/admin/tracks/:trackId/edit",
             element: <AdminTrackEditPage />,
+          },
+          { path: "/admin/students", element: <AdminStudentsPage /> },
+          {
+            path: "/admin/students/new",
+            element: <AdminStudentCreatePage />,
+          },
+          {
+            path: "/admin/students/:studentId/edit",
+            element: <AdminStudentEditPage />,
           },
           { path: "/admin/knowledge", element: <AdminKnowledgeTopicsPage /> },
           {

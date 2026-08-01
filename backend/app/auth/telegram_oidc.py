@@ -26,6 +26,7 @@ class TelegramIdentity:
     telegram_id: int
     first_name: str
     last_name: str | None
+    telegram_username: str | None = None
 
 
 def _telegram_http_client(proxy_url: str | None = None) -> httpx.AsyncClient:
@@ -138,8 +139,15 @@ def _identity_from_claims(claims: dict[str, Any]) -> TelegramIdentity:
     last_name = (
         family_name.strip() if isinstance(family_name, str) and family_name.strip() else None
     )
+    raw_username = claims.get("preferred_username", claims.get("username"))
+    telegram_username = (
+        raw_username.strip().lstrip("@")[:64]
+        if isinstance(raw_username, str) and raw_username.strip().lstrip("@")
+        else None
+    )
     return TelegramIdentity(
         telegram_id=telegram_id,
         first_name=given_name.strip(),
         last_name=last_name,
+        telegram_username=telegram_username,
     )

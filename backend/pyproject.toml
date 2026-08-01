@@ -16,6 +16,8 @@ alembic = "^1.16.4"
 pydantic-settings = "^2.10.1"
 httpx = "^0.28.1"
 pyjwt = {version = "^2.10.1", extras = ["crypto"]}
+cryptography = "46.0.3"
+boto3 = "^1.40.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
@@ -46,4 +48,8 @@ exclude = ["migrations"]
 
 [[tool.mypy.overrides]]
 module = "asyncpg.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["boto3.*", "botocore.*"]
 ignore_missing_imports = true

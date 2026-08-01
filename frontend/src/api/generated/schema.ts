@@ -38,6 +38,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/web/telegram/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Start Telegram Login */
+        get: operations["start_telegram_login_api_v1_auth_web_telegram_start_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/web/telegram/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Telegram Callback */
+        get: operations["telegram_callback_api_v1_auth_web_telegram_callback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/web/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout */
+        post: operations["logout_api_v1_auth_web_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integrations/telegram/students": {
         parameters: {
             query?: never;
@@ -119,6 +170,453 @@ export interface paths {
         /** Interview Card Review */
         post: operations["interview_card_review_api_v1_interviews_cards__card_id__reviews_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/directions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog Directions */
+        get: operations["catalog_directions_api_v1_interviews_catalog_directions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/authors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog Authors */
+        get: operations["catalog_authors_api_v1_interviews_catalog_authors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/companies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog Companies */
+        get: operations["catalog_companies_api_v1_interviews_catalog_companies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/companies/{company_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog Company */
+        get: operations["catalog_company_api_v1_interviews_catalog_companies__company_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/stages/{stage_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog Stage Media */
+        get: operations["catalog_stage_media_api_v1_interviews_catalog_stages__stage_id__media_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/stages/{stage_id}/media/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog Stream Stage Media */
+        get: operations["catalog_stream_stage_media_api_v1_interviews_catalog_stages__stage_id__media_stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/stages/{stage_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog Stage Attachment */
+        get: operations["catalog_stage_attachment_api_v1_interviews_catalog_stages__stage_id__attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/stages/{stage_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Catalog Create Comment */
+        post: operations["catalog_create_comment_api_v1_interviews_catalog_stages__stage_id__comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/comments/{comment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Catalog Delete Comment */
+        delete: operations["catalog_delete_comment_api_v1_interviews_catalog_comments__comment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/companies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Journal Company Suggestions */
+        get: operations["journal_company_suggestions_api_v1_interviews_journal_companies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/directions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Journal Directions */
+        get: operations["journal_directions_api_v1_interviews_journal_directions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Journal Tracks */
+        get: operations["journal_tracks_api_v1_interviews_journal_tracks_get"];
+        put?: never;
+        /** Journal Create Track */
+        post: operations["journal_create_track_api_v1_interviews_journal_tracks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Journal Track */
+        get: operations["journal_track_api_v1_interviews_journal_tracks__process_id__get"];
+        /** Journal Update Track */
+        put: operations["journal_update_track_api_v1_interviews_journal_tracks__process_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/recruiters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Journal Track Recruiters */
+        patch: operations["journal_track_recruiters_api_v1_interviews_journal_tracks__process_id__recruiters_patch"];
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Journal Track Outcome */
+        patch: operations["journal_track_outcome_api_v1_interviews_journal_tracks__process_id__outcome_patch"];
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/stages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Journal Create Stage */
+        post: operations["journal_create_stage_api_v1_interviews_journal_tracks__process_id__stages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Journal Update Stage */
+        put: operations["journal_update_stage_api_v1_interviews_journal_tracks__process_id__stages__stage_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}/media/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Journal Create Stage Media Upload */
+        post: operations["journal_create_stage_media_upload_api_v1_interviews_journal_tracks__process_id__stages__stage_id__media_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}/media/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Journal Complete Stage Media Upload */
+        post: operations["journal_complete_stage_media_upload_api_v1_interviews_journal_tracks__process_id__stages__stage_id__media_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Journal Download Stage Media */
+        get: operations["journal_download_stage_media_api_v1_interviews_journal_tracks__process_id__stages__stage_id__media_get"];
+        put?: never;
+        post?: never;
+        /** Journal Delete Stage Media */
+        delete: operations["journal_delete_stage_media_api_v1_interviews_journal_tracks__process_id__stages__stage_id__media_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}/attachments/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Journal Create Stage Attachment Upload */
+        post: operations["journal_create_stage_attachment_upload_api_v1_interviews_journal_tracks__process_id__stages__stage_id__attachments_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}/attachments/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Journal Complete Stage Attachment Upload */
+        post: operations["journal_complete_stage_attachment_upload_api_v1_interviews_journal_tracks__process_id__stages__stage_id__attachments_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Journal Download Stage Attachment */
+        get: operations["journal_download_stage_attachment_api_v1_interviews_journal_tracks__process_id__stages__stage_id__attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
+        /** Journal Delete Stage Attachment */
+        delete: operations["journal_delete_stage_attachment_api_v1_interviews_journal_tracks__process_id__stages__stage_id__attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/offer/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Journal Create Offer Upload */
+        post: operations["journal_create_offer_upload_api_v1_interviews_journal_tracks__process_id__offer_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/offer/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Journal Complete Offer Upload */
+        post: operations["journal_complete_offer_upload_api_v1_interviews_journal_tracks__process_id__offer_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/tracks/{process_id}/offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Journal Download Offer */
+        get: operations["journal_download_offer_api_v1_interviews_journal_tracks__process_id__offer_get"];
+        put?: never;
+        post?: never;
+        /** Journal Delete Offer */
+        delete: operations["journal_delete_offer_api_v1_interviews_journal_tracks__process_id__offer_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -531,8 +1029,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Students */
-        get: operations["students_api_v1_mentor_students_get"];
+        /** Mentor Students */
+        get: operations["mentor_students_api_v1_mentor_students_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -548,8 +1046,349 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Student Detail */
-        get: operations["student_detail_api_v1_mentor_students__student_id__get"];
+        /** Mentor Student */
+        get: operations["mentor_student_api_v1_mentor_students__student_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mentor Student State */
+        patch: operations["mentor_student_state_api_v1_mentor_students__student_id__state_patch"];
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Create Note */
+        post: operations["mentor_create_note_api_v1_mentor_students__student_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/notes/{note_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mentor Update Note */
+        put: operations["mentor_update_note_api_v1_mentor_students__student_id__notes__note_id__put"];
+        post?: never;
+        /** Mentor Delete Note */
+        delete: operations["mentor_delete_note_api_v1_mentor_students__student_id__notes__note_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/documents/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mentor Set Document Text */
+        put: operations["mentor_set_document_text_api_v1_mentor_students__student_id__documents__kind__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/documents/{kind}/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Document Upload */
+        post: operations["mentor_document_upload_api_v1_mentor_students__student_id__documents__kind__upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/documents/{kind}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Document Complete */
+        post: operations["mentor_document_complete_api_v1_mentor_students__student_id__documents__kind__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/documents/{kind}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Document File */
+        get: operations["mentor_document_file_api_v1_mentor_students__student_id__documents__kind__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/mock-interviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Create Mock */
+        post: operations["mentor_create_mock_api_v1_mentor_students__student_id__mock_interviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/mock-interviews/{mock_id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mentor Complete Mock */
+        patch: operations["mentor_complete_mock_api_v1_mentor_students__student_id__mock_interviews__mock_id__feedback_patch"];
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/mock-interviews/{mock_id}/media/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Mock Media Upload */
+        post: operations["mentor_mock_media_upload_api_v1_mentor_students__student_id__mock_interviews__mock_id__media_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/mock-interviews/{mock_id}/media/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Mock Media Complete */
+        post: operations["mentor_mock_media_complete_api_v1_mentor_students__student_id__mock_interviews__mock_id__media_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/mock-interviews/{mock_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Mock Media */
+        get: operations["mentor_mock_media_api_v1_mentor_students__student_id__mock_interviews__mock_id__media_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/interviews/{process_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Interview */
+        get: operations["mentor_interview_api_v1_mentor_students__student_id__interviews__process_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/interviews/stages/{stage_id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Interview Feedback */
+        post: operations["mentor_interview_feedback_api_v1_mentor_students__student_id__interviews_stages__stage_id__feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/interviews/{process_id}/stages/{stage_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Interview Media */
+        get: operations["mentor_interview_media_api_v1_mentor_students__student_id__interviews__process_id__stages__stage_id__media_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/interviews/{process_id}/stages/{stage_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Interview Attachment */
+        get: operations["mentor_interview_attachment_api_v1_mentor_students__student_id__interviews__process_id__stages__stage_id__attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/me/mock-interviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Mock Interviews */
+        get: operations["my_mock_interviews_api_v1_mentor_me_mock_interviews_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/me/mock-interviews/{mock_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Mock Interview Media */
+        get: operations["my_mock_interview_media_api_v1_mentor_me_mock_interviews__mock_id__media_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/me/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Mentor Documents */
+        get: operations["my_mentor_documents_api_v1_mentor_me_documents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/me/documents/{document_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Mentor Document File */
+        get: operations["my_mentor_document_file_api_v1_mentor_me_documents__document_id__file_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -768,6 +1607,76 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Students */
+        get: operations["admin_students_api_v1_admin_students_get"];
+        put?: never;
+        /** Admin Create Student */
+        post: operations["admin_create_student_api_v1_admin_students_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/students/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Student Options */
+        get: operations["admin_student_options_api_v1_admin_students_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/students/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Student */
+        get: operations["admin_student_api_v1_admin_students__student_id__get"];
+        /** Admin Update Student */
+        put: operations["admin_update_student_api_v1_admin_students__student_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/students/{student_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Set Student Access */
+        patch: operations["admin_set_student_access_api_v1_admin_students__student_id__access_patch"];
         trace?: never;
     };
 }
@@ -1393,6 +2302,160 @@ export interface components {
             /** Topics */
             topics: components["schemas"]["AdminTopicUpdate"][];
         };
+        /** AdminStudentAccessMutation */
+        AdminStudentAccessMutation: {
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** AdminStudentDetail */
+        AdminStudentDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Telegram Id */
+            telegram_id: number | null;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string | null;
+            /** Email */
+            email: string | null;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Learning Start Date */
+            learning_start_date: string | null;
+            mentor: components["schemas"]["AdminStudentMentorRead"] | null;
+            /** Tracks */
+            tracks: components["schemas"]["AdminStudentTrackRead"][];
+            /** Last Progress At */
+            last_progress_at: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Onboarding Completed At */
+            onboarding_completed_at: string | null;
+        };
+        /** AdminStudentListItem */
+        AdminStudentListItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Telegram Id */
+            telegram_id: number | null;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string | null;
+            /** Email */
+            email: string | null;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Learning Start Date */
+            learning_start_date: string | null;
+            mentor: components["schemas"]["AdminStudentMentorRead"] | null;
+            /** Tracks */
+            tracks: components["schemas"]["AdminStudentTrackRead"][];
+            /** Last Progress At */
+            last_progress_at: string | null;
+        };
+        /** AdminStudentMentorRead */
+        AdminStudentMentorRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string | null;
+            /** Telegram Username */
+            telegram_username: string | null;
+        };
+        /** AdminStudentMutation */
+        AdminStudentMutation: {
+            /** Telegram Id */
+            telegram_id: number;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Learning Start Date */
+            learning_start_date?: string | null;
+            /** Mentor Id */
+            mentor_id?: string | null;
+            /** Track Ids */
+            track_ids?: string[];
+        };
+        /** AdminStudentOptions */
+        AdminStudentOptions: {
+            /** Tracks */
+            tracks: components["schemas"]["AdminStudentTrackOption"][];
+            /** Mentors */
+            mentors: components["schemas"]["AdminStudentMentorRead"][];
+        };
+        /** AdminStudentPage */
+        AdminStudentPage: {
+            /** Items */
+            items: components["schemas"]["AdminStudentListItem"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** AdminStudentTrackOption */
+        AdminStudentTrackOption: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Is Published */
+            is_published: boolean;
+        };
+        /** AdminStudentTrackRead */
+        AdminStudentTrackRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+            /** Is Published */
+            is_published: boolean;
+            /**
+             * Granted At
+             * Format: date-time
+             */
+            granted_at: string;
+        };
         /** AdminTopicCreate */
         AdminTopicCreate: {
             /** Slug */
@@ -1563,6 +2626,16 @@ export interface components {
             /** Telegram Id */
             telegram_id: number | null;
         };
+        /** CompanyOption */
+        CompanyOption: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** GrantedRoadmapRead */
         GrantedRoadmapRead: {
             /**
@@ -1592,6 +2665,15 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** InterviewAttachmentRead */
+        InterviewAttachmentRead: {
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
+        };
         /**
          * InterviewCardFrequency
          * @enum {string}
@@ -1619,6 +2701,140 @@ export interface components {
             is_new: boolean;
             /** Repetitions */
             repetitions: number;
+        };
+        /** InterviewCatalogAuthorRead */
+        InterviewCatalogAuthorRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Telegram Username */
+            telegram_username: string | null;
+        };
+        /** InterviewCatalogCommentMutation */
+        InterviewCatalogCommentMutation: {
+            /** Body */
+            body: string;
+        };
+        /** InterviewCatalogCommentRead */
+        InterviewCatalogCommentRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            author: components["schemas"]["InterviewCatalogAuthorRead"];
+            /** Body */
+            body: string;
+            /** Is Own */
+            is_own: boolean;
+            /**
+             * Is Mentor Feedback
+             * @default false
+             */
+            is_mentor_feedback: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** InterviewCatalogCompanyDetail */
+        InterviewCatalogCompanyDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Tracks */
+            tracks: components["schemas"]["InterviewCatalogTrackRead"][];
+        };
+        /** InterviewCatalogCompanyListItem */
+        InterviewCatalogCompanyListItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Track Count */
+            track_count: number;
+            /** Interview Count */
+            interview_count: number;
+            /** Last Interview At */
+            last_interview_at: string | null;
+        };
+        /**
+         * InterviewCatalogMediaKind
+         * @enum {string}
+         */
+        InterviewCatalogMediaKind: "any" | "video" | "audio";
+        /** InterviewCatalogStageRead */
+        InterviewCatalogStageRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            stage_type: components["schemas"]["InterviewStageType"];
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+            /** Description */
+            description: string | null;
+            media: components["schemas"]["InterviewAttachmentRead"] | null;
+            /** Attachments */
+            attachments: components["schemas"]["InterviewStageAttachmentRead"][];
+            /** Comments */
+            comments: components["schemas"]["InterviewCatalogCommentRead"][];
+        };
+        /** InterviewCatalogTrackRead */
+        InterviewCatalogTrackRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            author: components["schemas"]["InterviewCatalogAuthorRead"];
+            /** Recruiter Telegram Usernames */
+            recruiter_telegram_usernames: string[];
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            /** Track Slug */
+            track_slug: string;
+            /** Track Title */
+            track_title: string;
+            status: components["schemas"]["InterviewProcessStatus"];
+            /** Close Reason */
+            close_reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Stages */
+            stages: components["schemas"]["InterviewCatalogStageRead"][];
         };
         /** InterviewDeckListItem */
         InterviewDeckListItem: {
@@ -1663,6 +2879,194 @@ export interface components {
             /** Progress Percent */
             progress_percent: number;
         };
+        /** InterviewDirectionOption */
+        InterviewDirectionOption: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+        };
+        /** InterviewDownloadUrl */
+        InterviewDownloadUrl: {
+            /** Url */
+            url: string;
+        };
+        /** InterviewProcessDetail */
+        InterviewProcessDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Company Name */
+            company_name: string;
+            /** Recruiter Telegram Usernames */
+            recruiter_telegram_usernames: string[];
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            /** Track Slug */
+            track_slug: string;
+            /** Track Title */
+            track_title: string;
+            status: components["schemas"]["InterviewProcessStatus"];
+            /**
+             * Close Reason
+             * @description Latest closure reason, retained after reopening
+             */
+            close_reason: string | null;
+            /**
+             * Closed At
+             * @description Time of the latest closure, retained after reopening
+             */
+            closed_at: string | null;
+            /** Stage Count */
+            stage_count: number;
+            /** Next Stage At */
+            next_stage_at: string | null;
+            /** Has Offer File */
+            has_offer_file: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Stages */
+            stages: components["schemas"]["InterviewProcessStageRead"][];
+            offer: components["schemas"]["InterviewAttachmentRead"] | null;
+        };
+        /** InterviewProcessMutation */
+        InterviewProcessMutation: {
+            /** Company Name */
+            company_name: string;
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            /** Company Id */
+            company_id?: string | null;
+            /** Company Alias */
+            company_alias?: string | null;
+            /** Recruiter Telegram Usernames */
+            recruiter_telegram_usernames?: string[] | null;
+        };
+        /** InterviewProcessOutcomeMutation */
+        InterviewProcessOutcomeMutation: {
+            status: components["schemas"]["InterviewProcessStatus"];
+            /** Close Reason */
+            close_reason?: string | null;
+        };
+        /** InterviewProcessRecruitersMutation */
+        InterviewProcessRecruitersMutation: {
+            /** Recruiter Telegram Usernames */
+            recruiter_telegram_usernames?: string[];
+        };
+        /** InterviewProcessStageMutation */
+        InterviewProcessStageMutation: {
+            stage_type: components["schemas"]["InterviewStageType"];
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+            /** Description */
+            description?: string | null;
+        };
+        /** InterviewProcessStageRead */
+        InterviewProcessStageRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            stage_type: components["schemas"]["InterviewStageType"];
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+            /** Description */
+            description: string | null;
+            media: components["schemas"]["InterviewAttachmentRead"] | null;
+            /** Attachments */
+            attachments: components["schemas"]["InterviewStageAttachmentRead"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * InterviewProcessStatus
+         * @enum {string}
+         */
+        InterviewProcessStatus: "active" | "closed" | "offer";
+        /** InterviewProcessSummary */
+        InterviewProcessSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Company Name */
+            company_name: string;
+            /** Recruiter Telegram Usernames */
+            recruiter_telegram_usernames: string[];
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            /** Track Slug */
+            track_slug: string;
+            /** Track Title */
+            track_title: string;
+            status: components["schemas"]["InterviewProcessStatus"];
+            /**
+             * Close Reason
+             * @description Latest closure reason, retained after reopening
+             */
+            close_reason: string | null;
+            /**
+             * Closed At
+             * @description Time of the latest closure, retained after reopening
+             */
+            closed_at: string | null;
+            /** Stage Count */
+            stage_count: number;
+            /** Next Stage At */
+            next_stage_at: string | null;
+            /** Has Offer File */
+            has_offer_file: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** InterviewReviewMutation */
         InterviewReviewMutation: {
             rating: components["schemas"]["InterviewReviewRating"];
@@ -1692,6 +3096,30 @@ export interface components {
             /** Learned */
             learned: boolean;
         };
+        /** InterviewStageAttachmentRead */
+        InterviewStageAttachmentRead: {
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * InterviewStageType
+         * @enum {string}
+         */
+        InterviewStageType: "screening" | "technical_screening" | "technical_interview" | "system_design" | "final_interview" | "other";
         /** InterviewStudySession */
         InterviewStudySession: {
             deck: components["schemas"]["InterviewDeckListItem"];
@@ -1713,6 +3141,45 @@ export interface components {
         InterviewTopicSelectionMutation: {
             /** Categories */
             categories?: string[];
+        };
+        /** InterviewUploadComplete */
+        InterviewUploadComplete: {
+            /** Storage Key */
+            storage_key: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
+        };
+        /** InterviewUploadIntent */
+        InterviewUploadIntent: {
+            /** Upload Url */
+            upload_url: string;
+            /** Fields */
+            fields: {
+                [key: string]: string;
+            };
+            /** Storage Key */
+            storage_key: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
+            /** Expires In */
+            expires_in: number;
+        };
+        /** InterviewUploadRequest */
+        InterviewUploadRequest: {
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
         };
         /** KnowledgeEntryDetail */
         KnowledgeEntryDetail: {
@@ -1823,6 +3290,113 @@ export interface components {
             /** Question Count */
             question_count: number;
         };
+        /** MentorCurrentTopic */
+        MentorCurrentTopic: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Section Title */
+            section_title: string;
+            /** Roadmap Title */
+            roadmap_title: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Days In Topic */
+            days_in_topic: number;
+            /** Deadline At */
+            deadline_at: string | null;
+            /** Is Overdue */
+            is_overdue: boolean;
+        };
+        /** MentorDocumentContentMutation */
+        MentorDocumentContentMutation: {
+            /** Text Content */
+            text_content?: string | null;
+            /**
+             * Keep File
+             * @default true
+             */
+            keep_file: boolean;
+        };
+        /**
+         * MentorDocumentKind
+         * @enum {string}
+         */
+        MentorDocumentKind: "resume" | "legend";
+        /** MentorDocumentRead */
+        MentorDocumentRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["MentorDocumentKind"];
+            /** Text Content */
+            text_content: string | null;
+            file: components["schemas"]["InterviewAttachmentRead"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** MentorInterviewDetail */
+        MentorInterviewDetail: {
+            process: components["schemas"]["InterviewProcessDetail"];
+            /** Feedback */
+            feedback: components["schemas"]["MentorInterviewStageFeedback"][];
+        };
+        /** MentorInterviewStageFeedback */
+        MentorInterviewStageFeedback: {
+            /**
+             * Stage Id
+             * Format: uuid
+             */
+            stage_id: string;
+            /** Comments */
+            comments: components["schemas"]["InterviewCatalogCommentRead"][];
+        };
+        /** MentorNoteMutation */
+        MentorNoteMutation: {
+            /** Body */
+            body: string;
+        };
+        /** MentorNoteRead */
+        MentorNoteRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Body */
+            body: string;
+            /** Author Name */
+            author_name: string;
+            /** Is Own */
+            is_own: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** MentorStudentDetail */
         MentorStudentDetail: {
             /**
@@ -1836,8 +3410,30 @@ export interface components {
             last_name: string | null;
             /** Email */
             email: string | null;
+            /** Telegram Username */
+            telegram_username: string | null;
+            learning_status: components["schemas"]["StudentLearningStatus"];
+            strength_level: components["schemas"]["StudentStrengthLevel"] | null;
             /** Roadmaps */
             roadmaps: components["schemas"]["RoadmapDetail"][];
+            /** Current Topics */
+            current_topics: components["schemas"]["MentorCurrentTopic"][];
+            /** Last Progress At */
+            last_progress_at: string | null;
+            /** Completed Topics This Week */
+            completed_topics_this_week: number;
+            /** Is Overdue */
+            is_overdue: boolean;
+            /** Mock Interview Count */
+            mock_interview_count: number;
+            /** Interviews */
+            interviews: components["schemas"]["InterviewProcessSummary"][];
+            /** Mock Interviews */
+            mock_interviews: components["schemas"]["MockInterviewRead"][];
+            /** Documents */
+            documents: components["schemas"]["MentorDocumentRead"][];
+            /** Notes */
+            notes: components["schemas"]["MentorNoteRead"][];
         };
         /** MentorStudentListItem */
         MentorStudentListItem: {
@@ -1852,11 +3448,88 @@ export interface components {
             last_name: string | null;
             /** Email */
             email: string | null;
+            /** Telegram Username */
+            telegram_username: string | null;
+            learning_status: components["schemas"]["StudentLearningStatus"];
+            strength_level: components["schemas"]["StudentStrengthLevel"] | null;
             /** Roadmaps */
             roadmaps: components["schemas"]["StudentRoadmapSummary"][];
+            /** Current Topics */
+            current_topics: components["schemas"]["MentorCurrentTopic"][];
             /** Last Progress At */
             last_progress_at: string | null;
+            /** Completed Topics This Week */
+            completed_topics_this_week: number;
+            /** Is Overdue */
+            is_overdue: boolean;
+            /** Mock Interview Count */
+            mock_interview_count: number;
         };
+        /** MentorStudentStateMutation */
+        MentorStudentStateMutation: {
+            learning_status: components["schemas"]["StudentLearningStatus"];
+            strength_level?: components["schemas"]["StudentStrengthLevel"] | null;
+        };
+        /** MockInterviewFeedbackMutation */
+        MockInterviewFeedbackMutation: {
+            /** Feedback */
+            feedback: string;
+            /** Conducted At */
+            conducted_at?: string | null;
+        };
+        /** MockInterviewMutation */
+        MockInterviewMutation: {
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+            /** Description */
+            description?: string | null;
+        };
+        /** MockInterviewRead */
+        MockInterviewRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Mentor Name */
+            mentor_name: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+            status: components["schemas"]["MockInterviewStatus"];
+            /** Description */
+            description: string | null;
+            /** Feedback */
+            feedback: string | null;
+            /** Conducted At */
+            conducted_at: string | null;
+            media: components["schemas"]["InterviewAttachmentRead"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * MockInterviewStatus
+         * @enum {string}
+         */
+        MockInterviewStatus: "planned" | "completed";
         /**
          * ProgressStatus
          * @enum {string}
@@ -1885,6 +3558,8 @@ export interface components {
         ProvisionTelegramStudentRequest: {
             /** Telegram Id */
             telegram_id: number;
+            /** Telegram Username */
+            telegram_username?: string | null;
             /** First Name */
             first_name: string;
             /** Last Name */
@@ -1893,6 +3568,8 @@ export interface components {
             email?: string | null;
             /** Track Slug */
             track_slug: string;
+            /** Mentor Telegram Id */
+            mentor_telegram_id?: number | null;
         };
         /** ProvisionTelegramStudentResponse */
         ProvisionTelegramStudentResponse: {
@@ -1981,6 +3658,11 @@ export interface components {
             /** Topics */
             topics: components["schemas"]["TopicListItem"][];
         };
+        /**
+         * StudentLearningStatus
+         * @enum {string}
+         */
+        StudentLearningStatus: "learning" | "interviewing" | "probation" | "finished";
         /** StudentRoadmapSummary */
         StudentRoadmapSummary: {
             /**
@@ -1998,14 +3680,21 @@ export interface components {
             total_topics: number;
             /** Progress Percent */
             progress_percent: number;
-            /**
-             * Started At
-             * Format: date-time
-             */
-            started_at: string;
+            /** Started At */
+            started_at: string | null;
             /** Completed At */
             completed_at: string | null;
+            /**
+             * Overdue Sections
+             * @default 0
+             */
+            overdue_sections: number;
         };
+        /**
+         * StudentStrengthLevel
+         * @enum {string}
+         */
+        StudentStrengthLevel: "weak" | "medium" | "strong";
         /** TopicContext */
         TopicContext: {
             /**
@@ -2114,6 +3803,8 @@ export interface components {
             telegram_id: number | null;
             /** Onboarding Completed At */
             onboarding_completed_at: string | null;
+            /** Is Active */
+            is_active: boolean;
         };
         /**
          * UserRole
@@ -2182,6 +3873,86 @@ export interface operations {
             };
         };
     };
+    start_telegram_login_api_v1_auth_web_telegram_start_get: {
+        parameters: {
+            query?: {
+                next?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            307: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    telegram_callback_api_v1_auth_web_telegram_callback_get: {
+        parameters: {
+            query?: {
+                code?: string | null;
+                state?: string | null;
+                error?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                mentoring_oauth_state?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            307: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_v1_auth_web_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     provision_student_api_v1_integrations_telegram_students_post: {
         parameters: {
             query?: never;
@@ -2225,7 +3996,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2261,7 +4034,9 @@ export interface operations {
             path: {
                 deck_slug: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2295,7 +4070,9 @@ export interface operations {
             path: {
                 deck_slug: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2329,7 +4106,9 @@ export interface operations {
             path: {
                 deck_slug: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -2367,7 +4146,9 @@ export interface operations {
             path: {
                 card_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -2395,6 +4176,1183 @@ export interface operations {
             };
         };
     };
+    catalog_directions_api_v1_interviews_catalog_directions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDirectionOption"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_authors_api_v1_interviews_catalog_authors_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCatalogAuthorRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_companies_api_v1_interviews_catalog_companies_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                author_id?: string | null;
+                track_id?: string | null;
+                stage_type?: components["schemas"]["InterviewStageType"] | null;
+                has_offer?: boolean;
+                media_kind?: components["schemas"]["InterviewCatalogMediaKind"] | null;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCatalogCompanyListItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_company_api_v1_interviews_catalog_companies__company_id__get: {
+        parameters: {
+            query?: {
+                author_id?: string | null;
+                track_id?: string | null;
+                stage_type?: components["schemas"]["InterviewStageType"] | null;
+                has_offer?: boolean;
+                media_kind?: components["schemas"]["InterviewCatalogMediaKind"] | null;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                company_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCatalogCompanyDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_stage_media_api_v1_interviews_catalog_stages__stage_id__media_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_stream_stage_media_api_v1_interviews_catalog_stages__stage_id__media_stream_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stage_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_stage_attachment_api_v1_interviews_catalog_stages__stage_id__attachments__attachment_id__get: {
+        parameters: {
+            query?: {
+                inline?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                stage_id: string;
+                attachment_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_create_comment_api_v1_interviews_catalog_stages__stage_id__comments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewCatalogCommentMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCatalogCommentRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_delete_comment_api_v1_interviews_catalog_comments__comment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                comment_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_company_suggestions_api_v1_interviews_journal_companies_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyOption"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_directions_api_v1_interviews_journal_directions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDirectionOption"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_tracks_api_v1_interviews_journal_tracks_get: {
+        parameters: {
+            query?: {
+                status?: "all" | "active" | "closed" | "offer";
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_create_track_api_v1_interviews_journal_tracks_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewProcessMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_track_api_v1_interviews_journal_tracks__process_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_update_track_api_v1_interviews_journal_tracks__process_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewProcessMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_track_recruiters_api_v1_interviews_journal_tracks__process_id__recruiters_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewProcessRecruitersMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_track_outcome_api_v1_interviews_journal_tracks__process_id__outcome_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewProcessOutcomeMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_create_stage_api_v1_interviews_journal_tracks__process_id__stages_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewProcessStageMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_update_stage_api_v1_interviews_journal_tracks__process_id__stages__stage_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewProcessStageMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_create_stage_media_upload_api_v1_interviews_journal_tracks__process_id__stages__stage_id__media_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewUploadIntent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_complete_stage_media_upload_api_v1_interviews_journal_tracks__process_id__stages__stage_id__media_complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadComplete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_download_stage_media_api_v1_interviews_journal_tracks__process_id__stages__stage_id__media_get: {
+        parameters: {
+            query?: {
+                inline?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_delete_stage_media_api_v1_interviews_journal_tracks__process_id__stages__stage_id__media_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_create_stage_attachment_upload_api_v1_interviews_journal_tracks__process_id__stages__stage_id__attachments_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewUploadIntent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_complete_stage_attachment_upload_api_v1_interviews_journal_tracks__process_id__stages__stage_id__attachments_complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadComplete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_download_stage_attachment_api_v1_interviews_journal_tracks__process_id__stages__stage_id__attachments__attachment_id__get: {
+        parameters: {
+            query?: {
+                inline?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+                stage_id: string;
+                attachment_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_delete_stage_attachment_api_v1_interviews_journal_tracks__process_id__stages__stage_id__attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+                stage_id: string;
+                attachment_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_create_offer_upload_api_v1_interviews_journal_tracks__process_id__offer_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewUploadIntent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_complete_offer_upload_api_v1_interviews_journal_tracks__process_id__offer_complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadComplete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewProcessDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_download_offer_api_v1_interviews_journal_tracks__process_id__offer_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_delete_offer_api_v1_interviews_journal_tracks__process_id__offer_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_interview_decks_api_v1_admin_interviews_decks_get: {
         parameters: {
             query?: never;
@@ -2403,7 +5361,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2435,7 +5395,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -2471,7 +5433,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2505,7 +5469,9 @@ export interface operations {
             path: {
                 deck_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2539,7 +5505,9 @@ export interface operations {
             path: {
                 deck_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -2581,7 +5549,9 @@ export interface operations {
             path: {
                 deck_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2615,7 +5585,9 @@ export interface operations {
             path: {
                 deck_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -2654,7 +5626,9 @@ export interface operations {
                 deck_id: string;
                 card_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2689,7 +5663,9 @@ export interface operations {
                 deck_id: string;
                 card_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -2727,7 +5703,9 @@ export interface operations {
             path: {
                 deck_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2761,7 +5739,9 @@ export interface operations {
             path: {
                 deck_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -2797,7 +5777,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2831,7 +5813,9 @@ export interface operations {
             path: {
                 topic_slug: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2865,7 +5849,9 @@ export interface operations {
             path: {
                 entry_slug: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2900,7 +5886,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2932,7 +5920,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -2964,7 +5954,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3000,7 +5992,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3034,7 +6028,9 @@ export interface operations {
             path: {
                 topic_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3068,7 +6064,9 @@ export interface operations {
             path: {
                 topic_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3106,7 +6104,9 @@ export interface operations {
             path: {
                 topic_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3145,7 +6145,9 @@ export interface operations {
                 topic_id: string;
                 entry_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3180,7 +6182,9 @@ export interface operations {
                 topic_id: string;
                 entry_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3218,7 +6222,9 @@ export interface operations {
             path: {
                 topic_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3252,7 +6258,9 @@ export interface operations {
             path: {
                 topic_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3288,7 +6296,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3320,7 +6330,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3352,7 +6364,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3386,7 +6400,9 @@ export interface operations {
             path: {
                 roadmap_slug: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3420,7 +6436,9 @@ export interface operations {
             path: {
                 roadmap_slug: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3454,7 +6472,9 @@ export interface operations {
             path: {
                 topic_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3488,7 +6508,9 @@ export interface operations {
             path: {
                 topic_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3516,7 +6538,7 @@ export interface operations {
             };
         };
     };
-    students_api_v1_mentor_students_get: {
+    mentor_students_api_v1_mentor_students_get: {
         parameters: {
             query?: never;
             header?: {
@@ -3524,7 +6546,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3548,7 +6572,7 @@ export interface operations {
             };
         };
     };
-    student_detail_api_v1_mentor_students__student_id__get: {
+    mentor_student_api_v1_mentor_students__student_id__get: {
         parameters: {
             query?: never;
             header?: {
@@ -3558,7 +6582,9 @@ export interface operations {
             path: {
                 student_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3582,6 +6608,819 @@ export interface operations {
             };
         };
     };
+    mentor_student_state_api_v1_mentor_students__student_id__state_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorStudentStateMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorStudentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_create_note_api_v1_mentor_students__student_id__notes_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorNoteMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorNoteRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_update_note_api_v1_mentor_students__student_id__notes__note_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                note_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorNoteMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorNoteRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_delete_note_api_v1_mentor_students__student_id__notes__note_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                note_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_set_document_text_api_v1_mentor_students__student_id__documents__kind__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                kind: components["schemas"]["MentorDocumentKind"];
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorDocumentContentMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorDocumentRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_document_upload_api_v1_mentor_students__student_id__documents__kind__upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                kind: components["schemas"]["MentorDocumentKind"];
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewUploadIntent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_document_complete_api_v1_mentor_students__student_id__documents__kind__complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                kind: components["schemas"]["MentorDocumentKind"];
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadComplete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorDocumentRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_document_file_api_v1_mentor_students__student_id__documents__kind__file_get: {
+        parameters: {
+            query?: {
+                inline?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                kind: components["schemas"]["MentorDocumentKind"];
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_create_mock_api_v1_mentor_students__student_id__mock_interviews_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MockInterviewMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockInterviewRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_complete_mock_api_v1_mentor_students__student_id__mock_interviews__mock_id__feedback_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                mock_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MockInterviewFeedbackMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockInterviewRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_mock_media_upload_api_v1_mentor_students__student_id__mock_interviews__mock_id__media_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                mock_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewUploadIntent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_mock_media_complete_api_v1_mentor_students__student_id__mock_interviews__mock_id__media_complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                mock_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadComplete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockInterviewRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_mock_media_api_v1_mentor_students__student_id__mock_interviews__mock_id__media_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                mock_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_interview_api_v1_mentor_students__student_id__interviews__process_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorInterviewDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_interview_feedback_api_v1_mentor_students__student_id__interviews_stages__stage_id__feedback_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewCatalogCommentMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCatalogCommentRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_interview_media_api_v1_mentor_students__student_id__interviews__process_id__stages__stage_id__media_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                process_id: string;
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_interview_attachment_api_v1_mentor_students__student_id__interviews__process_id__stages__stage_id__attachments__attachment_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                process_id: string;
+                stage_id: string;
+                attachment_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_mock_interviews_api_v1_mentor_me_mock_interviews_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MockInterviewRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_mock_interview_media_api_v1_mentor_me_mock_interviews__mock_id__media_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                mock_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_mentor_documents_api_v1_mentor_me_documents_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorDocumentRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_mentor_document_file_api_v1_mentor_me_documents__document_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_roadmaps_api_v1_admin_roadmaps_get: {
         parameters: {
             query?: never;
@@ -3590,7 +7429,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3622,7 +7463,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3658,7 +7501,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3692,7 +7537,9 @@ export interface operations {
             path: {
                 roadmap_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3726,7 +7573,9 @@ export interface operations {
             path: {
                 roadmap_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3764,7 +7613,9 @@ export interface operations {
             path: {
                 roadmap_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3803,7 +7654,9 @@ export interface operations {
                 roadmap_id: string;
                 section_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3838,7 +7691,9 @@ export interface operations {
                 roadmap_id: string;
                 section_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3877,7 +7732,9 @@ export interface operations {
                 roadmap_id: string;
                 section_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3917,7 +7774,9 @@ export interface operations {
                 section_id: string;
                 topic_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -3953,7 +7812,9 @@ export interface operations {
                 section_id: string;
                 topic_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -3991,7 +7852,9 @@ export interface operations {
             path: {
                 roadmap_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -4025,7 +7888,9 @@ export interface operations {
             path: {
                 roadmap_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -4061,7 +7926,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -4093,7 +7960,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -4129,7 +7998,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -4163,7 +8034,9 @@ export interface operations {
             path: {
                 track_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -4197,7 +8070,9 @@ export interface operations {
             path: {
                 track_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -4236,7 +8111,9 @@ export interface operations {
                 track_id: string;
                 student_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -4271,7 +8148,9 @@ export interface operations {
                 track_id: string;
                 student_id: string;
             };
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -4281,6 +8160,233 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_students_api_v1_admin_students_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                access?: "all" | "active" | "blocked";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStudentPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_student_api_v1_admin_students_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStudentMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStudentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_student_options_api_v1_admin_students_options_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStudentOptions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_student_api_v1_admin_students__student_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStudentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_student_api_v1_admin_students__student_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStudentMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStudentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_set_student_access_api_v1_admin_students__student_id__access_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStudentAccessMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStudentDetail"];
+                };
             };
             /** @description Validation Error */
             422: {

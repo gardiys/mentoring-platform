@@ -70,6 +70,7 @@ async def seed() -> None:
             )
             session.add(student)
         student.onboarding_completed_at = student.onboarding_completed_at or datetime.now(UTC)
+        student.learning_start_date = student.learning_start_date or datetime.now(UTC).date()
         admin = await session.get(User, ADMIN_ID)
         if admin is None:
             admin = User(

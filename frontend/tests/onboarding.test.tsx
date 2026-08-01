@@ -15,6 +15,7 @@ const telegramUser: User = {
   telegram_id: 987654321,
   role: "student",
   onboarding_completed_at: null,
+  is_active: true,
 };
 
 afterEach(() => vi.restoreAllMocks());

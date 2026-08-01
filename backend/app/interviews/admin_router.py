@@ -82,9 +82,7 @@ async def admin_interview_cards(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> AdminInterviewCardPage:
-    return await list_admin_interview_cards(
-        session, deck_id, query=q, limit=limit, offset=offset
-    )
+    return await list_admin_interview_cards(session, deck_id, query=q, limit=limit, offset=offset)
 
 
 @router.post(

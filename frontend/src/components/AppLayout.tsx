@@ -157,8 +157,8 @@ export function AppLayout() {
             <NavLink
               component={Link}
               to="/mentor/students"
-              label="Ученики"
-              description="Прогресс потока"
+              label={admin ? "Прогресс" : "Ученики"}
+              description={admin ? "Учебная активность" : "Прогресс потока"}
               leftSection={<span className="nav-index">04</span>}
               className="brand-nav-link"
               active={location.pathname.startsWith("/mentor")}
@@ -169,10 +169,20 @@ export function AppLayout() {
             <>
               <NavLink
                 component={Link}
+                to="/admin/students"
+                label="Ученики"
+                description="Данные и доступы"
+                leftSection={<span className="nav-index">05</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/admin/students")}
+                onClick={close}
+              />
+              <NavLink
+                component={Link}
                 to="/admin/tracks"
                 label="Треки"
                 description="Направления и доступы"
-                leftSection={<span className="nav-index">05</span>}
+                leftSection={<span className="nav-index">06</span>}
                 className="brand-nav-link"
                 active={location.pathname.startsWith("/admin/tracks")}
                 onClick={close}
@@ -182,7 +192,7 @@ export function AppLayout() {
                 to="/admin/roadmaps"
                 label="Роадмапы"
                 description="Материалы курса"
-                leftSection={<span className="nav-index">06</span>}
+                leftSection={<span className="nav-index">07</span>}
                 className="brand-nav-link"
                 active={location.pathname.startsWith("/admin/roadmaps")}
                 onClick={close}
@@ -192,7 +202,7 @@ export function AppLayout() {
                 to="/admin/knowledge"
                 label="Редактор знаний"
                 description="Темы и материалы"
-                leftSection={<span className="nav-index">07</span>}
+                leftSection={<span className="nav-index">08</span>}
                 className="brand-nav-link"
                 active={location.pathname.startsWith("/admin/knowledge")}
                 onClick={close}
@@ -202,7 +212,7 @@ export function AppLayout() {
                 to="/admin/interviews"
                 label="Карточки интервью"
                 description="Колоды Python и Go"
-                leftSection={<span className="nav-index">08</span>}
+                leftSection={<span className="nav-index">09</span>}
                 className="brand-nav-link"
                 active={location.pathname.startsWith("/admin/interviews")}
                 onClick={close}

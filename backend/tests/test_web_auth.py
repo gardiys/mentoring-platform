@@ -70,6 +70,7 @@ async def test_web_login_creates_cookie_session_and_logout_clears_it(
             telegram_id=TELEGRAM_ID,
             first_name="Новое имя",
             last_name="Из Telegram",
+            telegram_username="new_name",
         )
 
     monkeypatch.setattr(web_router.telegram_oidc, "exchange_code_for_identity", exchange)
@@ -88,6 +89,10 @@ async def test_web_login_creates_cookie_session_and_logout_clears_it(
     assert me.status_code == 200
     assert me.json()["id"] == str(seeded.student_id)
     assert me.json()["first_name"] == "Новое имя"
+    async with TestSession() as session:
+        user = await session.get(User, seeded.student_id)
+        assert user is not None
+        assert user.telegram_username == "new_name"
 
     logout = await client.post("/api/v1/auth/web/logout")
     assert logout.status_code == 204
@@ -118,6 +123,40 @@ async def test_web_login_rejects_unknown_user_and_open_redirect(
     assert response.status_code == 307
     assert response.headers["location"] == (
         "http://frontend.test/login?error=platform_access_not_granted"
+    )
+    assert "mentoring_session" not in client.cookies
+
+
+async def test_web_login_rejects_suspended_student(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    configure_web_auth(monkeypatch)
+    await grant_telegram_id(seeded)
+    async with TestSession() as session:
+        user = await session.get(User, seeded.student_id)
+        assert user is not None
+        user.is_active = False
+        await session.commit()
+    state = await begin_login(client)
+
+    async def exchange(**_: str) -> TelegramIdentity:
+        return TelegramIdentity(
+            telegram_id=TELEGRAM_ID,
+            first_name="Закрытый",
+            last_name=None,
+        )
+
+    monkeypatch.setattr(web_router.telegram_oidc, "exchange_code_for_identity", exchange)
+    response = await client.get(
+        "/api/v1/auth/web/telegram/callback",
+        params={"code": "authorization-code", "state": state},
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"] == (
+        "http://frontend.test/login?error=student_access_suspended"
     )
     assert "mentoring_session" not in client.cookies
 
@@ -194,6 +233,7 @@ def test_telegram_id_token_signature_and_claims_are_verified() -> None:
         "id": str(TELEGRAM_ID),
         "given_name": "Иван",
         "family_name": "Иванов",
+        "preferred_username": "@ivan_backend",
     }
     id_token = jwt.encode(
         claims,
@@ -212,6 +252,7 @@ def test_telegram_id_token_signature_and_claims_are_verified() -> None:
     assert identity.telegram_id == TELEGRAM_ID
     assert identity.first_name == "Иван"
     assert identity.last_name == "Иванов"
+    assert identity.telegram_username == "ivan_backend"
     with raises(telegram_oidc.TelegramOidcError):
         telegram_oidc._decode_id_token(
             id_token,

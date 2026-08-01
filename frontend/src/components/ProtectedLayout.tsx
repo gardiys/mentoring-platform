@@ -49,6 +49,7 @@ export function ProtectedLayout() {
     const apiError = query.error instanceof ApiError ? query.error : null;
     const expired = apiError?.status === 401;
     const accessNotGranted = apiError?.code === "platform_access_not_granted";
+    const accessSuspended = apiError?.code === "student_access_suspended";
     if (!platform.isTelegram && expired) {
       const next = encodeURIComponent(`${location.pathname}${location.search}`);
       return (
@@ -62,26 +63,34 @@ export function ProtectedLayout() {
       <Center mih="100vh" p="md">
         <Alert
           color="brandYellow"
-          title={accessNotGranted ? "Доступ ещё не открыт" : "Вход не выполнен"}
+          title={
+            accessSuspended
+              ? "Доступ закрыт"
+              : accessNotGranted
+                ? "Доступ ещё не открыт"
+                : "Вход не выполнен"
+          }
           maw={520}
         >
           <Stack align="flex-start">
             <Text>
-              {accessNotGranted
-                ? "Вернитесь в бота и завершите оплату. После подтверждения откройте платформу ещё раз."
-                : expired
-                  ? "Сессия Telegram истекла. Закройте Mini App и откройте его заново."
-                  : "Не удалось проверить данные пользователя. Попробуйте ещё раз."}
+              {accessSuspended
+                ? "Доступ к платформе приостановлен. Свяжитесь с ментором или администратором."
+                : accessNotGranted
+                  ? "Вернитесь в бота и завершите оплату. После подтверждения откройте платформу ещё раз."
+                  : expired
+                    ? "Сессия Telegram истекла. Закройте Mini App и откройте его заново."
+                    : "Не удалось проверить данные пользователя. Попробуйте ещё раз."}
             </Text>
-            {accessNotGranted ? (
+            {(accessNotGranted || accessSuspended) && platform.isTelegram ? (
               <Button variant="light" onClick={() => platform.close()}>
                 Вернуться в бота
               </Button>
-            ) : (
+            ) : !accessNotGranted && !accessSuspended ? (
               <Button variant="light" onClick={() => void query.refetch()}>
                 Повторить
               </Button>
-            )}
+            ) : null}
           </Stack>
         </Alert>
       </Center>

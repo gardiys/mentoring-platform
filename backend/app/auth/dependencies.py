@@ -19,6 +19,16 @@ from app.users.models import User, UserRole
 settings = get_settings()
 
 
+def _ensure_platform_access(user: User) -> User:
+    if user.role is UserRole.STUDENT and not user.is_active:
+        api_error(
+            403,
+            "student_access_suspended",
+            "Student access has been suspended",
+        )
+    return user
+
+
 async def _telegram_user(session: AsyncSession, init_data: str) -> User:
     if settings.telegram_bot_token is None:
         api_error(503, "telegram_auth_unavailable", "Telegram authentication is not configured")
@@ -41,13 +51,17 @@ async def _telegram_user(session: AsyncSession, init_data: str) -> User:
             "platform_access_not_granted",
             "Platform access has not been granted",
         )
+    _ensure_platform_access(user)
 
-    if (user.first_name, user.last_name) != (
+    telegram_username = telegram_user.username.lstrip("@") if telegram_user.username else None
+    if (user.first_name, user.last_name, user.telegram_username) != (
         telegram_user.first_name,
         telegram_user.last_name,
+        telegram_username,
     ):
         user.first_name = telegram_user.first_name
         user.last_name = telegram_user.last_name
+        user.telegram_username = telegram_username
         await session.commit()
         await session.refresh(user)
     return user
@@ -73,7 +87,7 @@ async def get_current_user(
         user = await session.get(User, user_id)
         if user is None:
             api_error(401, "user_not_found", "User was not found")
-        return user
+        return _ensure_platform_access(user)
 
     if settings.app_env != "development":
         unauthorized()
@@ -82,7 +96,7 @@ async def get_current_user(
     user = await session.get(User, x_dev_user_id)
     if user is None:
         api_error(401, "user_not_found", "User was not found")
-    return user
+    return _ensure_platform_access(user)
 
 
 async def require_mentor(
@@ -101,6 +115,15 @@ async def require_admin(
     return user
 
 
+async def require_student(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if user.role is not UserRole.STUDENT:
+        forbidden("Student access is required")
+    return user
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
 MentorUser = Annotated[User, Depends(require_mentor)]
 AdminUser = Annotated[User, Depends(require_admin)]
+StudentUser = Annotated[User, Depends(require_student)]

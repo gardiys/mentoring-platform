@@ -21,6 +21,7 @@ def integration_auth(token: str = INTEGRATION_TOKEN) -> dict[str, str]:
 def student_payload(**changes: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "telegram_id": 987654321,
+        "telegram_username": "@paid_student",
         "first_name": "Оплаченный",
         "last_name": "Ученик",
         "email": "paid@example.com",
@@ -71,6 +72,10 @@ async def test_bot_provisions_paid_student_and_grants_selected_track(
         headers=integration_auth(),
         json=student_payload(),
     )
+    async with TestSession() as session:
+        student = await session.scalar(select(User).where(User.telegram_id == 987654321))
+        assert student is not None
+        assert student.telegram_username == "paid_student"
     me = await client.get("/api/v1/me", headers=telegram_auth())
     roadmaps = await client.get("/api/v1/roadmaps", headers=telegram_auth())
 
@@ -127,6 +132,37 @@ async def test_bot_provisioning_is_idempotent_and_updates_student_data(
     assert second.json()["user"]["id"] == first.json()["user"]["id"]
     assert second.json()["user"]["first_name"] == "Новое имя"
     assert user_count == enrollment_count == access_count == 1
+
+
+async def test_bot_payment_restores_suspended_student_access(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        integration_dependencies.settings,
+        "bot_integration_token",
+        SecretStr(INTEGRATION_TOKEN),
+    )
+    first = await client.post(
+        "/api/v1/integrations/telegram/students",
+        headers=integration_auth(),
+        json=student_payload(),
+    )
+    await client.patch(
+        f"/api/v1/admin/students/{first.json()['user']['id']}/access",
+        headers={"X-Dev-User-Id": str(seeded.admin_id)},
+        json={"is_active": False},
+    )
+
+    restored = await client.post(
+        "/api/v1/integrations/telegram/students",
+        headers=integration_auth(),
+        json=student_payload(),
+    )
+
+    assert restored.status_code == 200
+    assert restored.json()["user"]["is_active"] is True
 
 
 async def test_bot_rejects_unknown_direction_without_creating_student(

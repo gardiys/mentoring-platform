@@ -16,3 +16,4 @@ class UserRead(BaseModel):
     email: str | None
     telegram_id: int | None
     onboarding_completed_at: datetime | None
+    is_active: bool

@@ -94,8 +94,21 @@ const adminDeck: AdminInterviewDeckRead = {
 
 afterEach(() => vi.restoreAllMocks());
 
+const student = {
+  id: "20000000-0000-4000-8000-000000000001",
+  telegram_id: 987654321,
+  first_name: "Иван",
+  last_name: null,
+  email: null,
+  role: "student" as const,
+  onboarding_completed_at: "2026-08-01T00:00:00Z",
+  is_active: true,
+};
+
 it("показывает изученные и оставшиеся карточки", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
   vi.spyOn(api, "interviewDecks").mockResolvedValue([deck]);
+  vi.spyOn(api, "interviewProcesses").mockResolvedValue([]);
   renderPage(<InterviewsPage />, "/interviews", "/interviews");
 
   expect(await screen.findByText(deck.title)).toBeInTheDocument();

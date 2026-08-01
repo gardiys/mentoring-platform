@@ -19,9 +19,7 @@ class ProgressStatus(StrEnum):
 
 class TopicProgress(Base):
     __tablename__ = "topic_progress"
-    __table_args__ = (
-        Index("ix_topic_progress_user_updated", "user_id", "updated_at"),
-    )
+    __table_args__ = (Index("ix_topic_progress_user_updated", "user_id", "updated_at"),)
 
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
