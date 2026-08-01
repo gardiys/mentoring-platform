@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 PROD_COMPOSE := docker compose -f infra/docker-compose.prod.yml --env-file .env.production
 first_name ?= Администратор
 
-.PHONY: install up down backend frontend migrate migration seed test test-backend test-frontend lint format typecheck api-generate ensure-test-db prod-config prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend migrate migration seed test test-backend test-frontend lint format typecheck api-generate ensure-test-db prod-init prod-volume-check prod-config prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -55,10 +55,16 @@ typecheck:
 api-generate:
 	cd frontend && pnpm api:generate
 
+prod-init:
+	docker volume create mentoring-platform-production_postgres_data >/dev/null
+
+prod-volume-check:
+	docker volume inspect mentoring-platform-production_postgres_data >/dev/null
+
 prod-config:
 	$(PROD_COMPOSE) config --quiet
 
-prod-up: prod-config
+prod-up: prod-volume-check prod-config
 	$(PROD_COMPOSE) up --build -d
 
 prod-down:

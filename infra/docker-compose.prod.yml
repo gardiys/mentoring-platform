@@ -147,5 +147,11 @@ services:
 
 volumes:
   postgres_data:
+    # Keep the database outside the Compose project lifecycle. In particular,
+    # `docker compose down -v` never removes volumes declared as external.
+    # This is also the exact name used by earlier versions of this project, so
+    # an existing production database is reused during the upgrade.
+    external: true
+    name: mentoring-platform-production_postgres_data
   caddy_data:
   caddy_config:
