@@ -1,0 +1,132 @@
+name: mentoring-platform-production
+
+x-backend-environment: &backend-environment
+  APP_ENV: production
+  APP_DEBUG: "false"
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.production}
+  CORS_ORIGINS: https://${DOMAIN:?Set DOMAIN in .env.production}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env.production}
+  BOT_INTEGRATION_TOKEN: ${BOT_INTEGRATION_TOKEN:?Set BOT_INTEGRATION_TOKEN in .env.production}
+  TELEGRAM_INIT_DATA_TTL_SECONDS: ${TELEGRAM_INIT_DATA_TTL_SECONDS:-86400}
+
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mentoring}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-mentoring}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-mentoring} -d ${POSTGRES_DB:-mentoring}",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *default-logging
+
+  migrate:
+    build:
+      context: ../backend
+    environment: *backend-environment
+    command: alembic upgrade head
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *default-logging
+
+  backend:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    init: true
+    environment: *backend-environment
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--workers",
+        "${BACKEND_WORKERS:-2}",
+        "--proxy-headers",
+        "--forwarded-allow-ips=*",
+      ]
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    logging: *default-logging
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.production
+      args:
+        VITE_API_URL: ""
+        VITE_TELEGRAM_BOT_URL: ${TELEGRAM_BOT_URL:?Set TELEGRAM_BOT_URL in .env.production}
+    restart: unless-stopped
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env.production}
+      CADDY_EMAIL: ${CADDY_EMAIL:?Set CADDY_EMAIL in .env.production}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    logging: *default-logging
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

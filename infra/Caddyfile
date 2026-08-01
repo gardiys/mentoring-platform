@@ -1,0 +1,18 @@
+{
+	email {$CADDY_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	@backend path /api/* /health /ready
+	reverse_proxy @backend backend:8000
+	reverse_proxy frontend:8080
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

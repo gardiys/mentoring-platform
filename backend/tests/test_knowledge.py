@@ -150,3 +150,51 @@ async def test_admin_updates_content_and_can_remove_entry(
     assert len(updated.json()["entries"]) == 1
     assert search.json()[0]["slug"] == "backend-practice-postgres-search"
     assert removed.status_code == 404
+
+
+async def test_admin_outline_omits_content_and_updates_one_entry(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    created = (await create_topic(client, seeded)).json()
+    topic_id = created["id"]
+    entry = created["entries"][0]
+
+    summaries = await client.get(
+        "/api/v1/admin/knowledge/topics/summaries",
+        headers=auth(seeded.admin_id),
+    )
+    outline = await client.get(
+        f"/api/v1/admin/knowledge/topics/{topic_id}/outline",
+        headers=auth(seeded.admin_id),
+    )
+    assert summaries.status_code == outline.status_code == 200
+    assert summaries.json()[0]["article_count"] == 2
+    assert "entries" not in summaries.json()[0]
+    assert "content_markdown" not in outline.json()["entries"][0]
+
+    payload = {
+        key: entry[key]
+        for key in (
+            "id",
+            "kind",
+            "slug",
+            "title",
+            "summary",
+            "content_markdown",
+            "position",
+            "is_published",
+        )
+    }
+    payload["title"] = "Поиск PostgreSQL — обновлено"
+    updated = await client.put(
+        f"/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry['id']}",
+        headers=auth(seeded.admin_id),
+        json=payload,
+    )
+    detail = await client.get(
+        f"/api/v1/admin/knowledge/topics/{topic_id}",
+        headers=auth(seeded.admin_id),
+    )
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "Поиск PostgreSQL — обновлено"
+    assert len(detail.json()["entries"]) == 3

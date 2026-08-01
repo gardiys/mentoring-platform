@@ -24,7 +24,14 @@ export function ProtectedLayout() {
   const query = useMe(hasCredentials);
 
   if (!hasCredentials) {
-    if (!platform.isTelegram) return <Navigate to="/dev-login" replace />;
+    if (!platform.isTelegram) {
+      return (
+        <Navigate
+          to={import.meta.env.DEV ? "/dev-login" : "/telegram-required"}
+          replace
+        />
+      );
+    }
     return (
       <Center mih="100vh" p="md">
         <Paper withBorder p="xl" maw={520}>
@@ -61,8 +68,8 @@ export function ProtectedLayout() {
               {accessNotGranted
                 ? "Вернитесь в бота и завершите оплату. После подтверждения откройте платформу ещё раз."
                 : expired
-                ? "Сессия Telegram истекла. Закройте Mini App и откройте его заново."
-                : "Не удалось проверить данные пользователя. Попробуйте ещё раз."}
+                  ? "Сессия Telegram истекла. Закройте Mini App и откройте его заново."
+                  : "Не удалось проверить данные пользователя. Попробуйте ещё раз."}
             </Text>
             {accessNotGranted ? (
               <Button variant="light" onClick={() => platform.close()}>

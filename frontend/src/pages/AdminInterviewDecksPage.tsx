@@ -38,9 +38,6 @@ export function AdminInterviewDecksPage() {
       ) : (
         <SimpleGrid cols={{ base: 1, md: 2 }}>
           {query.data.map((deck) => {
-            const frequent = deck.cards.filter(
-              (card) => card.frequency === "frequent",
-            ).length;
             return (
               <Card key={deck.id} withBorder className="roadmap-card">
                 <Stack h="100%">
@@ -61,8 +58,8 @@ export function AdminInterviewDecksPage() {
                     <Text c="dimmed">{deck.description}</Text>
                   )}
                   <Group mt="auto">
-                    <Text size="sm">{deck.cards.length} карточек</Text>
-                    <Text size="sm">{frequent} частых</Text>
+                    <Text size="sm">{deck.card_count} карточек</Text>
+                    <Text size="sm">{deck.frequent_count} частых</Text>
                   </Group>
                   <Button
                     component={Link}

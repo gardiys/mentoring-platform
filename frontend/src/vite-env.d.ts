@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_DEV_STUDENT_ID?: string;
   readonly VITE_DEV_MENTOR_ID?: string;
   readonly VITE_DEV_ADMIN_ID?: string;
+  readonly VITE_TELEGRAM_BOT_URL?: string;
 }
 
 interface ImportMeta {

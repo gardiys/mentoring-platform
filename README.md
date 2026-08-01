@@ -8,7 +8,7 @@
 
 - `backend/`: Python 3.12, FastAPI, Pydantic v2, async SQLAlchemy/asyncpg, Alembic, PostgreSQL;
 - `frontend/`: React, TypeScript strict, Vite, React Router, TanStack Query, Mantine, react-markdown;
-- `infra/`: Docker Compose с PostgreSQL, backend и frontend.
+- `infra/`: development Compose и production-контур с PostgreSQL, автоматическими миграциями, Nginx и Caddy/HTTPS.
 
 Backend разделён по предметным модулям `auth`, `users`, `tracks`, `roadmaps`, `progress`, `mentors`, `knowledge`, `interviews`. `LearningTrackEnrollment` определяет доступ к материалам и колодам направления, а `RoadmapEnrollment` хранит состояние прохождения. Процент не хранится в БД. Frontend хранит серверное состояние только в TanStack Query. В Telegram исходный `initData` берётся непосредственно из SDK и не копируется в отдельное хранилище. Временный UUID хранится в `localStorage` только в development-сборке.
 
@@ -32,6 +32,52 @@ make seed
 Откройте `http://localhost:5173`. API доступен на `http://localhost:8000`, OpenAPI — на `http://localhost:8000/docs`.
 
 Миграции не запускаются автоматически при старте контейнера. Это явный шаг `make migrate`.
+
+## Production-деплой на VPS
+
+Production-конфигурация рассчитана на Linux-сервер с Docker Compose, публичным доменом и открытыми портами `80/tcp`, `443/tcp` и `443/udp`. DNS-запись `A` (и `AAAA`, если используется IPv6) должна указывать на сервер. PostgreSQL и FastAPI наружу не публикуются; единственная публичная точка входа — Caddy, который автоматически получает и обновляет TLS-сертификат.
+
+На сервере скопируйте production-шаблон:
+
+```bash
+cp .env.production.example .env.production
+openssl rand -hex 32  # пароль PostgreSQL
+openssl rand -hex 32  # BOT_INTEGRATION_TOKEN
+```
+
+Заполните `.env.production`: укажите домен, email для сертификата, два сгенерированных секрета, token из `@BotFather` и ссылку вида `https://t.me/your_bot`. Значение `POSTGRES_PASSWORD` в примере должно совпадать с паролем внутри `DATABASE_URL`. Файл `.env.production` исключён из Git и не должен отправляться в репозиторий или Telegram.
+
+Проверить конфигурацию и запустить сервис:
+
+```bash
+make prod-config
+make prod-up
+make prod-ps
+curl https://platform.example.com/health
+curl https://platform.example.com/ready
+```
+
+При `make prod-up` frontend собирается в production-режиме, миграции Alembic выполняются отдельным одноразовым контейнером, и только после них запускается API. `make seed` в production выполнять не нужно: учебные данные Python импортируются миграциями, а ученики поступают из платёжного бота.
+
+После первого запуска назначьте свой Telegram-аккаунт администратором:
+
+```bash
+make prod-admin telegram_id=123456789 first_name=Антон
+```
+
+Команда идемпотентна: она создаёт пользователя или повышает существующего до роли `admin`. Затем в `@BotFather` укажите `https://platform.example.com` как URL Mini App и откройте платформу из меню своего бота. В production обычный браузер показывает приглашение открыть Telegram; страница UUID-входа недоступна.
+
+Обновление и обслуживание:
+
+```bash
+git pull
+make prod-up       # пересобирает образы и применяет новые миграции
+make prod-logs     # общие логи
+make prod-backup   # PostgreSQL dump в локальный каталог backups/
+make prod-down     # остановка без удаления volume с данными
+```
+
+Не запускайте `docker compose down -v`: флаг `-v` удалит production-базу. Резервные копии из `backups/` нужно дополнительно выгружать за пределы сервера.
 
 ## Telegram Mini App
 
@@ -161,26 +207,30 @@ Seed всегда выводит UUID и создаёт:
 - `POST /api/v1/admin/roadmaps` — атомарное создание roadmap с разделами и темами.
 - `GET /api/v1/admin/roadmaps/{roadmap_id}` — данные для редактора;
 - `PUT /api/v1/admin/roadmaps/{roadmap_id}` — обновление структуры с сохранением UUID.
+- `GET /api/v1/admin/roadmaps/summaries` и `GET/PATCH /api/v1/admin/roadmaps/{roadmap_id}/outline` — облегчённые список и структура без Markdown;
+- `POST/GET/PUT /api/v1/admin/roadmaps/{roadmap_id}/sections/...` — точечное создание и редактирование разделов и тем.
 - `GET/POST /api/v1/admin/tracks` — список и создание треков обучения;
 - `GET/PUT /api/v1/admin/tracks/{track_id}` — состав и настройки трека;
 - `GET /api/v1/admin/tracks/options` — доступные роадмапы и ученики;
 - `PUT/DELETE /api/v1/admin/tracks/{track_id}/students/{student_id}` — выдать или отозвать доступ.
 - `GET/POST /api/v1/admin/knowledge/topics` — список и создание тем базы знаний;
 - `GET/PUT /api/v1/admin/knowledge/topics/{topic_id}` — редактирование темы, статей и вопросов.
+- `GET /api/v1/admin/knowledge/topics/summaries`, `GET/PATCH .../{topic_id}/outline` и `POST/GET/PUT .../{topic_id}/entries/...` — облегчённый табличный редактор и точечные операции.
 - `GET/POST /api/v1/admin/interviews/decks` — список и создание колод интервью;
 - `GET/PUT /api/v1/admin/interviews/decks/{deck_id}` — редактирование карточек колоды.
+- `GET /api/v1/admin/interviews/decks/summaries`, `GET .../{deck_id}/cards?limit=50&offset=...` и `POST/GET/PUT .../{deck_id}/cards/...` — краткие списки, поиск, пагинация и редактирование одной карточки.
 
-Admin frontend для треков доступен по `/admin/tracks`: администратор включает роадмапы в направления Python/Go и управляет доступом учеников. Конструктор контента доступен по `/admin/roadmaps`; формы поддерживают несколько разделов и тем, Markdown-контент, estimated time и независимые флаги публикации. Редактирование сохраняет UUID существующих тем, а отзыв трека не удаляет историю прогресса.
+Admin frontend для треков доступен по `/admin/tracks`: администратор включает роадмапы в направления Python/Go и управляет доступом учеников. Конструктор контента доступен по `/admin/roadmaps`. Создание поддерживает вложенную структуру, а редактирование показывает разделы и темы таблицами и открывает только одну запись с Markdown-контентом. Точечное сохранение сохраняет UUID и прогресс существующих тем, а отзыв трека не удаляет историю прогресса.
 
 ## База знаний
 
-Пользовательский интерфейс доступен по `/knowledge`, редактор администратора — по `/admin/knowledge`. База организована по темам; внутри темы можно создавать статьи и вопросы, независимо менять их порядок и публикацию, а текст хранится в Markdown. Неопубликованные темы и материалы не попадают в публичные списки, прямые ссылки и результаты поиска.
+Пользовательский интерфейс доступен по `/knowledge`, редактор администратора — по `/admin/knowledge`. База организована по темам; внутри темы материалы показаны таблицей, а каждая статья или вопрос редактируются на отдельной странице. Полный Markdown не загружается в общий список. Неопубликованные темы и материалы не попадают в публичные списки, прямые ссылки и результаты поиска.
 
 Полнотекстовый поиск реализован средствами PostgreSQL: generated-колонка `TSVECTOR` использует русскую конфигурацию и разные веса для заголовка, описания и полного текста, а GIN-индекс ускоряет выборку. Отдельный поисковый сервис для MVP не требуется. `make seed` добавляет демонстрационные темы и материалы.
 
 ## Собеседования
 
-Модуль доступен ученику по `/interviews`, административный редактор — по `/admin/interviews`. Он не связан с таблицами базы знаний и может независимо расширяться новыми сервисами, например загрузкой и разбором записей собеседований.
+Модуль доступен ученику по `/interviews`, административный редактор — по `/admin/interviews`. В админке вопросы показаны таблицей с поиском и серверной пагинацией по 50 строк; полный ответ загружается только при открытии одной карточки. Модуль не связан с таблицами базы знаний и может независимо расширяться новыми сервисами, например загрузкой и разбором записей собеседований.
 
 Каждая колода относится к треку Python или Go и видна только ученикам с доступом к нему. Перед началом ученик выбирает уже пройденные темы; без выбора сессия остаётся пустой. Выбор хранится персонально для каждой колоды, а статистика, новые вопросы и повторения считаются только внутри выбранных тем. Это не позволяет преждевременно показывать, например, архитектуру приложений ученику, который пока прошёл только основы Python.
 

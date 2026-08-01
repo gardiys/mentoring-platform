@@ -1,4 +1,6 @@
 .env
+.env.production
+.env.*.local
 .DS_Store
 .idea/
 .vscode/
@@ -14,4 +16,5 @@ backend/.venv/
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/
+backups/
 *.tsbuildinfo

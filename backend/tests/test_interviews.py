@@ -204,3 +204,56 @@ async def test_admin_updates_deck_and_removes_card(client: AsyncClient, seeded: 
     assert updated["title"] == "Python Advanced"
     assert len(updated["cards"]) == 1
     assert updated["cards"][0]["answer_markdown"] == "Обновлённый ответ про CPython."
+
+
+async def test_admin_card_table_is_paginated_and_updates_one_card(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    deck = await create_deck(client, seeded)
+    deck_id = deck["id"]
+    card_id = deck["cards"][0]["id"]
+
+    summaries = await client.get(
+        "/api/v1/admin/interviews/decks/summaries",
+        headers=auth(seeded.admin_id),
+    )
+    page = await client.get(
+        f"/api/v1/admin/interviews/decks/{deck_id}/cards",
+        params={"limit": 1, "offset": 0},
+        headers=auth(seeded.admin_id),
+    )
+    assert summaries.status_code == page.status_code == 200
+    assert summaries.json()[0]["card_count"] == 2
+    assert "cards" not in summaries.json()[0]
+    assert page.json()["total"] == 2
+    assert len(page.json()["items"]) == 1
+    assert "answer_markdown" not in page.json()["items"][0]
+
+    card = deck["cards"][0]
+    payload = {
+        key: card[key]
+        for key in (
+            "id",
+            "slug",
+            "category",
+            "companies",
+            "question_markdown",
+            "answer_markdown",
+            "frequency",
+            "position",
+            "is_published",
+        )
+    }
+    payload["answer_markdown"] = "Точечно обновлённый ответ."
+    updated = await client.put(
+        f"/api/v1/admin/interviews/decks/{deck_id}/cards/{card_id}",
+        headers=auth(seeded.admin_id),
+        json=payload,
+    )
+    detail = await client.get(
+        f"/api/v1/admin/interviews/decks/{deck_id}",
+        headers=auth(seeded.admin_id),
+    )
+    assert updated.status_code == 200
+    assert updated.json()["answer_markdown"] == "Точечно обновлённый ответ."
+    assert len(detail.json()["cards"]) == 2

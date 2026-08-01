@@ -4,15 +4,19 @@ import { AppLayout } from "../components/AppLayout";
 import { ProtectedLayout } from "../components/ProtectedLayout";
 import { AdminRoadmapCreatePage } from "../pages/AdminRoadmapCreatePage";
 import { AdminRoadmapEditPage } from "../pages/AdminRoadmapEditPage";
+import { AdminRoadmapSectionEditPage } from "../pages/AdminRoadmapSectionEditPage";
+import { AdminRoadmapTopicEditPage } from "../pages/AdminRoadmapTopicEditPage";
 import { AdminRoadmapsPage } from "../pages/AdminRoadmapsPage";
 import { AdminTrackCreatePage } from "../pages/AdminTrackCreatePage";
 import { AdminTrackEditPage } from "../pages/AdminTrackEditPage";
 import { AdminTracksPage } from "../pages/AdminTracksPage";
 import { AdminKnowledgeTopicCreatePage } from "../pages/AdminKnowledgeTopicCreatePage";
 import { AdminKnowledgeTopicEditPage } from "../pages/AdminKnowledgeTopicEditPage";
+import { AdminKnowledgeEntryEditPage } from "../pages/AdminKnowledgeEntryEditPage";
 import { AdminKnowledgeTopicsPage } from "../pages/AdminKnowledgeTopicsPage";
 import { AdminInterviewDeckCreatePage } from "../pages/AdminInterviewDeckCreatePage";
 import { AdminInterviewDeckEditPage } from "../pages/AdminInterviewDeckEditPage";
+import { AdminInterviewCardEditPage } from "../pages/AdminInterviewCardEditPage";
 import { AdminInterviewDecksPage } from "../pages/AdminInterviewDecksPage";
 import { DevLoginPage } from "../pages/DevLoginPage";
 import { MentorStudentPage } from "../pages/MentorStudentPage";
@@ -27,9 +31,18 @@ import { OnboardingPage } from "../pages/OnboardingPage";
 import { RoadmapPage } from "../pages/RoadmapPage";
 import { RoadmapsPage } from "../pages/RoadmapsPage";
 import { TopicPage } from "../pages/TopicPage";
+import { TelegramRequiredPage } from "../pages/TelegramRequiredPage";
 
 export const router = createBrowserRouter([
-  { path: "/dev-login", element: <DevLoginPage /> },
+  {
+    path: "/dev-login",
+    element: import.meta.env.DEV ? (
+      <DevLoginPage />
+    ) : (
+      <Navigate to="/telegram-required" replace />
+    ),
+  },
+  { path: "/telegram-required", element: <TelegramRequiredPage /> },
   {
     element: <ProtectedLayout />,
     children: [
@@ -66,6 +79,22 @@ export const router = createBrowserRouter([
             path: "/admin/roadmaps/:roadmapId/edit",
             element: <AdminRoadmapEditPage />,
           },
+          {
+            path: "/admin/roadmaps/:roadmapId/sections/:sectionId/edit",
+            element: <AdminRoadmapSectionEditPage />,
+          },
+          {
+            path: "/admin/roadmaps/:roadmapId/sections/new",
+            element: <AdminRoadmapSectionEditPage />,
+          },
+          {
+            path: "/admin/roadmaps/:roadmapId/sections/:sectionId/topics/new",
+            element: <AdminRoadmapTopicEditPage />,
+          },
+          {
+            path: "/admin/roadmaps/:roadmapId/sections/:sectionId/topics/:topicId/edit",
+            element: <AdminRoadmapTopicEditPage />,
+          },
           { path: "/admin/tracks", element: <AdminTracksPage /> },
           { path: "/admin/tracks/new", element: <AdminTrackCreatePage /> },
           {
@@ -82,6 +111,14 @@ export const router = createBrowserRouter([
             element: <AdminKnowledgeTopicEditPage />,
           },
           {
+            path: "/admin/knowledge/:topicId/entries/new",
+            element: <AdminKnowledgeEntryEditPage />,
+          },
+          {
+            path: "/admin/knowledge/:topicId/entries/:entryId/edit",
+            element: <AdminKnowledgeEntryEditPage />,
+          },
+          {
             path: "/admin/interviews",
             element: <AdminInterviewDecksPage />,
           },
@@ -92,6 +129,14 @@ export const router = createBrowserRouter([
           {
             path: "/admin/interviews/:deckId/edit",
             element: <AdminInterviewDeckEditPage />,
+          },
+          {
+            path: "/admin/interviews/:deckId/cards/new",
+            element: <AdminInterviewCardEditPage />,
+          },
+          {
+            path: "/admin/interviews/:deckId/cards/:cardId/edit",
+            element: <AdminInterviewCardEditPage />,
           },
         ],
       },

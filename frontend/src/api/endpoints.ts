@@ -1,11 +1,28 @@
 import type {
   AdminKnowledgeTopicMutation,
+  AdminKnowledgeEntryMutation,
+  AdminKnowledgeEntryRead,
+  AdminKnowledgeTopicOutline,
   AdminKnowledgeTopicRead,
+  AdminKnowledgeTopicSettingsMutation,
+  AdminKnowledgeTopicSummary,
+  AdminInterviewCardMutation,
+  AdminInterviewCardPage,
+  AdminInterviewCardRead,
   AdminInterviewDeckMutation,
   AdminInterviewDeckRead,
+  AdminInterviewDeckSettingsMutation,
+  AdminInterviewDeckSummary,
   AdminRoadmapCreate,
+  AdminRoadmapOutline,
   AdminRoadmapRead,
+  AdminRoadmapSettingsMutation,
+  AdminRoadmapSummary,
   AdminRoadmapUpdate,
+  AdminSectionMutation,
+  AdminSectionOutline,
+  AdminTopicCreate,
+  AdminTopicRead,
   AdminTrackMutation,
   AdminTrackOptions,
   AdminTrackRead,
@@ -51,6 +68,62 @@ export const api = {
   mentorStudent: (id: string) =>
     apiRequest<MentorStudentDetail>(`/api/v1/mentor/students/${id}`),
   adminRoadmaps: () => apiRequest<AdminRoadmapRead[]>("/api/v1/admin/roadmaps"),
+  adminRoadmapSummaries: () =>
+    apiRequest<AdminRoadmapSummary[]>("/api/v1/admin/roadmaps/summaries"),
+  adminRoadmapOutline: (id: string) =>
+    apiRequest<AdminRoadmapOutline>(`/api/v1/admin/roadmaps/${id}/outline`),
+  updateAdminRoadmapSettings: (
+    id: string,
+    payload: AdminRoadmapSettingsMutation,
+  ) =>
+    apiRequest<AdminRoadmapOutline>(`/api/v1/admin/roadmaps/${id}/outline`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  adminRoadmapSection: (roadmapId: string, sectionId: string) =>
+    apiRequest<AdminSectionOutline>(
+      `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}`,
+    ),
+  createAdminRoadmapSection: (
+    roadmapId: string,
+    payload: AdminSectionMutation,
+  ) =>
+    apiRequest<AdminSectionOutline>(
+      `/api/v1/admin/roadmaps/${roadmapId}/sections`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  updateAdminRoadmapSection: (
+    roadmapId: string,
+    sectionId: string,
+    payload: AdminSectionMutation,
+  ) =>
+    apiRequest<AdminSectionOutline>(
+      `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
+  adminRoadmapTopic: (roadmapId: string, sectionId: string, topicId: string) =>
+    apiRequest<AdminTopicRead>(
+      `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}/topics/${topicId}`,
+    ),
+  createAdminRoadmapTopic: (
+    roadmapId: string,
+    sectionId: string,
+    payload: AdminTopicCreate,
+  ) =>
+    apiRequest<AdminTopicRead>(
+      `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}/topics`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  updateAdminRoadmapTopic: (
+    roadmapId: string,
+    sectionId: string,
+    topicId: string,
+    payload: AdminTopicCreate,
+  ) =>
+    apiRequest<AdminTopicRead>(
+      `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}/topics/${topicId}`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
   adminRoadmap: (id: string) =>
     apiRequest<AdminRoadmapRead>(`/api/v1/admin/roadmaps/${id}`),
   createAdminRoadmap: (payload: AdminRoadmapCreate) =>
@@ -98,6 +171,43 @@ export const api = {
     ),
   adminKnowledgeTopics: () =>
     apiRequest<AdminKnowledgeTopicRead[]>("/api/v1/admin/knowledge/topics"),
+  adminKnowledgeTopicSummaries: () =>
+    apiRequest<AdminKnowledgeTopicSummary[]>(
+      "/api/v1/admin/knowledge/topics/summaries",
+    ),
+  adminKnowledgeTopicOutline: (id: string) =>
+    apiRequest<AdminKnowledgeTopicOutline>(
+      `/api/v1/admin/knowledge/topics/${id}/outline`,
+    ),
+  updateAdminKnowledgeTopicSettings: (
+    id: string,
+    payload: AdminKnowledgeTopicSettingsMutation,
+  ) =>
+    apiRequest<AdminKnowledgeTopicOutline>(
+      `/api/v1/admin/knowledge/topics/${id}/outline`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+  adminKnowledgeEntry: (topicId: string, entryId: string) =>
+    apiRequest<AdminKnowledgeEntryRead>(
+      `/api/v1/admin/knowledge/topics/${topicId}/entries/${entryId}`,
+    ),
+  createAdminKnowledgeEntry: (
+    topicId: string,
+    payload: AdminKnowledgeEntryMutation,
+  ) =>
+    apiRequest<AdminKnowledgeEntryRead>(
+      `/api/v1/admin/knowledge/topics/${topicId}/entries`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  updateAdminKnowledgeEntry: (
+    topicId: string,
+    entryId: string,
+    payload: AdminKnowledgeEntryMutation,
+  ) =>
+    apiRequest<AdminKnowledgeEntryRead>(
+      `/api/v1/admin/knowledge/topics/${topicId}/entries/${entryId}`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
   adminKnowledgeTopic: (id: string) =>
     apiRequest<AdminKnowledgeTopicRead>(`/api/v1/admin/knowledge/topics/${id}`),
   createAdminKnowledgeTopic: (payload: AdminKnowledgeTopicMutation) =>
@@ -144,6 +254,56 @@ export const api = {
     ),
   adminInterviewDecks: () =>
     apiRequest<AdminInterviewDeckRead[]>("/api/v1/admin/interviews/decks"),
+  adminInterviewDeckSummaries: () =>
+    apiRequest<AdminInterviewDeckSummary[]>(
+      "/api/v1/admin/interviews/decks/summaries",
+    ),
+  adminInterviewDeckOverview: (id: string) =>
+    apiRequest<AdminInterviewDeckSummary>(
+      `/api/v1/admin/interviews/decks/${id}/overview`,
+    ),
+  updateAdminInterviewDeckSettings: (
+    id: string,
+    payload: AdminInterviewDeckSettingsMutation,
+  ) =>
+    apiRequest<AdminInterviewDeckSummary>(
+      `/api/v1/admin/interviews/decks/${id}/overview`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+  adminInterviewCards: (
+    deckId: string,
+    options: { query?: string; limit?: number; offset?: number } = {},
+  ) => {
+    const params = new URLSearchParams({
+      limit: String(options.limit ?? 50),
+      offset: String(options.offset ?? 0),
+    });
+    if (options.query) params.set("q", options.query);
+    return apiRequest<AdminInterviewCardPage>(
+      `/api/v1/admin/interviews/decks/${deckId}/cards?${params}`,
+    );
+  },
+  adminInterviewCard: (deckId: string, cardId: string) =>
+    apiRequest<AdminInterviewCardRead>(
+      `/api/v1/admin/interviews/decks/${deckId}/cards/${cardId}`,
+    ),
+  createAdminInterviewCard: (
+    deckId: string,
+    payload: AdminInterviewCardMutation,
+  ) =>
+    apiRequest<AdminInterviewCardRead>(
+      `/api/v1/admin/interviews/decks/${deckId}/cards`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  updateAdminInterviewCard: (
+    deckId: string,
+    cardId: string,
+    payload: AdminInterviewCardMutation,
+  ) =>
+    apiRequest<AdminInterviewCardRead>(
+      `/api/v1/admin/interviews/decks/${deckId}/cards/${cardId}`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
   adminInterviewDeck: (id: string) =>
     apiRequest<AdminInterviewDeckRead>(`/api/v1/admin/interviews/decks/${id}`),
   createAdminInterviewDeck: (payload: AdminInterviewDeckMutation) =>

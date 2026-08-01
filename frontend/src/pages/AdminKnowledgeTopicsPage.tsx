@@ -37,10 +37,6 @@ export function AdminKnowledgeTopicsPage() {
       ) : (
         <SimpleGrid cols={{ base: 1, md: 2 }}>
           {query.data.map((topic) => {
-            const articles = topic.entries.filter(
-              (entry) => entry.kind === "article",
-            ).length;
-            const questions = topic.entries.length - articles;
             return (
               <Card
                 key={topic.id}
@@ -62,8 +58,8 @@ export function AdminKnowledgeTopicsPage() {
                     <Text c="dimmed">{topic.description}</Text>
                   )}
                   <Group>
-                    <Text size="sm">{articles} статей</Text>
-                    <Text size="sm">{questions} вопросов</Text>
+                    <Text size="sm">{topic.article_count} статей</Text>
+                    <Text size="sm">{topic.question_count} вопросов</Text>
                   </Group>
                   <Button
                     component={Link}

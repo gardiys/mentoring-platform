@@ -6,7 +6,11 @@ import { api } from "../src/api/endpoints";
 import { AdminRoadmapCreatePage } from "../src/pages/AdminRoadmapCreatePage";
 import { AdminRoadmapEditPage } from "../src/pages/AdminRoadmapEditPage";
 import { AdminRoadmapsPage } from "../src/pages/AdminRoadmapsPage";
-import type { AdminRoadmapRead } from "../src/types/api";
+import type {
+  AdminRoadmapOutline,
+  AdminRoadmapRead,
+  AdminRoadmapSummary,
+} from "../src/types/api";
 import { renderPage } from "./render";
 
 const created: AdminRoadmapRead = {
@@ -41,8 +45,38 @@ const created: AdminRoadmapRead = {
 
 afterEach(() => vi.restoreAllMocks());
 
+const summary: AdminRoadmapSummary = {
+  id: created.id,
+  slug: created.slug,
+  title: created.title,
+  description: created.description,
+  position: created.position,
+  is_published: created.is_published,
+  section_count: 1,
+  topic_count: 1,
+};
+
+const outline: AdminRoadmapOutline = {
+  ...summary,
+  sections: created.sections.map((section) => ({
+    id: section.id,
+    title: section.title,
+    description: section.description,
+    position: section.position,
+    duration_days: section.duration_days,
+    topics: section.topics.map((topic) => ({
+      id: topic.id,
+      slug: topic.slug,
+      title: topic.title,
+      position: topic.position,
+      estimated_minutes: topic.estimated_minutes,
+      is_published: topic.is_published,
+    })),
+  })),
+};
+
 it("AdminRoadmapsPage показывает черновики", async () => {
-  vi.spyOn(api, "adminRoadmaps").mockResolvedValue([created]);
+  vi.spyOn(api, "adminRoadmapSummaries").mockResolvedValue([summary]);
   renderPage(<AdminRoadmapsPage />);
 
   expect(await screen.findByText("Django Backend")).toBeInTheDocument();
@@ -92,10 +126,10 @@ it("конструктор отправляет вложенный roadmap", asy
   );
 });
 
-it("редактор сохраняет изменения с UUID существующих тем", async () => {
-  vi.spyOn(api, "adminRoadmap").mockResolvedValue(created);
+it("редактор сохраняет настройки без отправки всех тем", async () => {
+  vi.spyOn(api, "adminRoadmapOutline").mockResolvedValue(outline);
   const update = vi
-    .spyOn(api, "updateAdminRoadmap")
+    .spyOn(api, "updateAdminRoadmapSettings")
     .mockReturnValue(new Promise(() => undefined));
   renderPage(
     <AdminRoadmapEditPage />,
@@ -103,26 +137,19 @@ it("редактор сохраняет изменения с UUID сущест�
     "/admin/roadmaps/:roadmapId/edit",
   );
 
-  const title = await screen.findByLabelText(/^Название роадмапа/);
+  const title = await screen.findByLabelText(/^Название/);
   await userEvent.clear(title);
   await userEvent.type(title, "Django Backend Updated");
-  expect(
-    screen.getByRole("button", { name: "Удалить раздел 1" }),
-  ).toBeDisabled();
   await userEvent.click(
-    screen.getByRole("button", { name: "Сохранить изменения" }),
+    screen.getByRole("button", { name: "Сохранить настройки" }),
   );
 
   expect(update).toHaveBeenCalledWith(
     "roadmap-id",
     expect.objectContaining({
       title: "Django Backend Updated",
-      sections: [
-        expect.objectContaining({
-          id: "section-id",
-          topics: [expect.objectContaining({ id: "topic-id" })],
-        }),
-      ],
     }),
   );
+  expect(screen.getByText("Django ORM")).toBeInTheDocument();
+  expect(screen.queryByLabelText(/Содержание/)).not.toBeInTheDocument();
 });

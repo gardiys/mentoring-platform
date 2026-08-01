@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/endpoints";
 import type {
   AdminRoadmapCreate,
+  AdminRoadmapSettingsMutation,
+  AdminSectionMutation,
+  AdminTopicCreate,
   AdminRoadmapUpdate,
   AdminTrackMutation,
 } from "../../types/api";
@@ -10,19 +13,51 @@ import type {
 export const adminRoadmapKeys = {
   all: ["admin", "roadmaps"] as const,
   detail: (id: string) => ["admin", "roadmaps", id] as const,
+  section: (roadmapId: string, sectionId: string) =>
+    ["admin", "roadmaps", roadmapId, "section", sectionId] as const,
+  topic: (roadmapId: string, sectionId: string, topicId: string) =>
+    [
+      "admin",
+      "roadmaps",
+      roadmapId,
+      "section",
+      sectionId,
+      "topic",
+      topicId,
+    ] as const,
 };
 
 export function useAdminRoadmaps() {
   return useQuery({
     queryKey: adminRoadmapKeys.all,
-    queryFn: api.adminRoadmaps,
+    queryFn: api.adminRoadmapSummaries,
   });
 }
 
 export function useAdminRoadmap(id: string) {
   return useQuery({
     queryKey: adminRoadmapKeys.detail(id),
-    queryFn: () => api.adminRoadmap(id),
+    queryFn: () => api.adminRoadmapOutline(id),
+  });
+}
+
+export function useAdminRoadmapSection(roadmapId: string, sectionId?: string) {
+  return useQuery({
+    queryKey: adminRoadmapKeys.section(roadmapId, sectionId ?? "new"),
+    queryFn: () => api.adminRoadmapSection(roadmapId, sectionId!),
+    enabled: Boolean(sectionId),
+  });
+}
+
+export function useAdminRoadmapTopic(
+  roadmapId: string,
+  sectionId: string,
+  topicId?: string,
+) {
+  return useQuery({
+    queryKey: adminRoadmapKeys.topic(roadmapId, sectionId, topicId ?? "new"),
+    queryFn: () => api.adminRoadmapTopic(roadmapId, sectionId, topicId!),
+    enabled: Boolean(topicId),
   });
 }
 
@@ -55,6 +90,80 @@ export function useUpdateAdminRoadmap() {
         queryClient.invalidateQueries({ queryKey: adminRoadmapKeys.all }),
         queryClient.invalidateQueries({
           queryKey: adminRoadmapKeys.detail(roadmap.id),
+        }),
+        queryClient.invalidateQueries({ queryKey: ["roadmaps"] }),
+      ]);
+    },
+  });
+}
+
+export function useUpdateAdminRoadmapSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: AdminRoadmapSettingsMutation;
+    }) => api.updateAdminRoadmapSettings(id, payload),
+    onSuccess: async (roadmap) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: adminRoadmapKeys.all }),
+        queryClient.invalidateQueries({
+          queryKey: adminRoadmapKeys.detail(roadmap.id),
+        }),
+        queryClient.invalidateQueries({ queryKey: ["roadmaps"] }),
+      ]);
+    },
+  });
+}
+
+export function useSaveAdminRoadmapSection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      roadmapId,
+      sectionId,
+      payload,
+    }: {
+      roadmapId: string;
+      sectionId?: string;
+      payload: AdminSectionMutation;
+    }) =>
+      sectionId
+        ? api.updateAdminRoadmapSection(roadmapId, sectionId, payload)
+        : api.createAdminRoadmapSection(roadmapId, payload),
+    onSuccess: async (_section, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: adminRoadmapKeys.detail(variables.roadmapId),
+      });
+      await queryClient.invalidateQueries({ queryKey: adminRoadmapKeys.all });
+    },
+  });
+}
+
+export function useSaveAdminRoadmapTopic() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      roadmapId,
+      sectionId,
+      topicId,
+      payload,
+    }: {
+      roadmapId: string;
+      sectionId: string;
+      topicId?: string;
+      payload: AdminTopicCreate;
+    }) =>
+      topicId
+        ? api.updateAdminRoadmapTopic(roadmapId, sectionId, topicId, payload)
+        : api.createAdminRoadmapTopic(roadmapId, sectionId, payload),
+    onSuccess: async (_topic, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: adminRoadmapKeys.detail(variables.roadmapId),
         }),
         queryClient.invalidateQueries({ queryKey: ["roadmaps"] }),
       ]);

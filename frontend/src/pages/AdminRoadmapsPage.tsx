@@ -37,10 +37,6 @@ export function AdminRoadmapsPage() {
       ) : (
         <SimpleGrid cols={{ base: 1, md: 2 }}>
           {query.data.map((roadmap) => {
-            const topics = roadmap.sections.reduce(
-              (total, section) => total + section.topics.length,
-              0,
-            );
             return (
               <Card
                 key={roadmap.id}
@@ -67,7 +63,7 @@ export function AdminRoadmapsPage() {
                   </div>
                   {roadmap.description && <Text>{roadmap.description}</Text>}
                   <Text size="sm">
-                    {roadmap.sections.length} разделов · {topics} тем
+                    {roadmap.section_count} разделов · {roadmap.topic_count} тем
                   </Text>
                   <Button
                     component={Link}

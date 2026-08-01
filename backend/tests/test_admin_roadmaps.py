@@ -161,3 +161,46 @@ async def test_editor_rejects_removal_of_persisted_topic(
         response.json()["detail"]["code"]
         == "roadmap_structure_removal_not_supported"
     )
+
+
+async def test_admin_outline_omits_markdown_and_updates_one_topic(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    summaries = await client.get(
+        "/api/v1/admin/roadmaps/summaries", headers=auth(seeded.admin_id)
+    )
+    outline = await client.get(
+        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}/outline",
+        headers=auth(seeded.admin_id),
+    )
+    assert summaries.status_code == outline.status_code == 200
+    python_summary = next(
+        item for item in summaries.json() if item["id"] == str(seeded.roadmap_id)
+    )
+    assert python_summary["section_count"] == 1
+    assert python_summary["topic_count"] == 2
+    assert "sections" not in python_summary
+    topic_summary = outline.json()["sections"][0]["topics"][0]
+    assert "content_markdown" not in topic_summary
+
+    topic_id = topic_summary["id"]
+    section_id = outline.json()["sections"][0]["id"]
+    detail = await client.get(
+        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}/sections/{section_id}/topics/{topic_id}",
+        headers=auth(seeded.admin_id),
+    )
+    payload = detail.json()
+    payload.pop("id")
+    payload["title"] = "Точечно обновлённая тема"
+    updated = await client.put(
+        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}/sections/{section_id}/topics/{topic_id}",
+        headers=auth(seeded.admin_id),
+        json=payload,
+    )
+    full = await client.get(
+        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}",
+        headers=auth(seeded.admin_id),
+    )
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "Точечно обновлённая тема"
+    assert len(full.json()["sections"][0]["topics"]) == 2
