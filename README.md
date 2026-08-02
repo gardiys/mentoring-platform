@@ -311,6 +311,105 @@ Admin frontend для треков доступен по `/admin/tracks`: адм
 
 Ошибки предметной области имеют форму `{"detail":{"code":"...","message":"..."}}`. Request middleware добавляет `X-Request-Id` и пишет method, path, status и duration без чувствительных заголовков.
 
+## Interview Intelligence
+
+Разбор записей встроен в существующий журнал собеседований: `IntelligenceInterview` связан один-к-одному с `InterviewProcessStage`, поэтому компания, направление и дата не дублируются. Запись остаётся в приватном S3, браузер загружает её напрямую по presigned POST, а FastAPI только проверяет объект и ставит задачу в Redis. ARQ worker выполняет внешний pipeline:
+
+```text
+S3 upload → Nexara transcription + diarization → выбор кандидата
+          → OpenAI structure extraction → per-answer review → mentor moderation
+```
+
+В development весь сценарий работает без внешних кредитов:
+
+```dotenv
+TRANSCRIPTION_PROVIDER=fake
+INTERVIEW_AI_PROVIDER=fake
+```
+
+`docker compose` запускает Redis и `intelligence-worker` автоматически. При запуске без Compose worker можно поднять отдельно командой `make worker`. Fake-провайдеры намеренно запрещены при `APP_ENV=production`.
+
+### Nexara
+
+Production-адаптер использует официальный асинхронный Python SDK `nexara`. Он передаёт Nexara короткоживущую подписанную S3-ссылку, создаёт фоновую задачу с `task="diarize"`, опрашивает её по `job_id` и немедленно сохраняет сегменты, спикеров и временные метки в PostgreSQL. Это важно: готовый результат Nexara хранится 12 часов. Лимит платформы 2 GiB для видео укладывается в опубликованный Nexara лимит 3 ГБ.
+
+```dotenv
+TRANSCRIPTION_PROVIDER=nexara
+NEXARA_API_KEY=nx-...
+NEXARA_BASE_URL=https://api.nexara.ru/v1
+NEXARA_MODEL=whisper-1
+NEXARA_TIMEOUT_SECONDS=600
+NEXARA_MAX_RETRIES=2
+```
+
+Проверить ключ без платной транскрибации можно запросом баланса:
+
+```bash
+make check-nexara
+```
+
+Команда выводит только результат подключения и модель — API key и баланс не печатаются. Nexara вызывается напрямую и не использует Amsterdam proxy.
+Для `.env.production` используйте `make prod-check-nexara`.
+
+Для настоящей Nexara при локальном MinIO внешний сервис должен получить доступ к
+записи. Поднимите временный HTTPS tunnel к `localhost:9000` и задайте его URL в
+`NEXARA_MEDIA_PUBLIC_ENDPOINT_URL`. Без этой настройки worker использует внутренний
+адрес `http://minio:9000`, подходящий только для fake-провайдера.
+
+Если в `.env` уже настроено отдельное публичное S3, tunnel не нужен. Подключите
+явный override `infra/docker-compose.external-s3.yml`: он переключает только backend
+и intelligence-worker на `S3_*` из `.env`. Обычный dev-compose продолжает использовать
+MinIO по умолчанию, чтобы локальный запуск случайно не изменил production bucket.
+
+### OpenAI и Amsterdam egress
+
+Извлечение и первичная классификация вопросов используют дешёвую модель. Она за один проход
+присваивает каждому вопросу тип `technical`, `hr`, `organizational` или `other`. Дорогая модель
+получает только технические пары «вопрос + ответ» и максимум три соседние реплики. HR,
+организационные вопросы и общее резюме обрабатывает дешёвая модель. Все вызовы используют
+официальный async OpenAI SDK, Responses API и Pydantic Structured Outputs.
+
+```dotenv
+INTERVIEW_AI_PROVIDER=openai
+OPENAI_API_KEY=...
+OPENAI_EXTRACTION_MODEL=...
+OPENAI_ANALYSIS_MODEL=...
+OPENAI_LIGHT_REVIEW_MODEL=...
+OPENAI_PROXY_URL=http://10.8.0.1:3128
+OPENAI_MAX_RETRIES=0
+```
+
+`OPENAI_EXTRACTION_MODEL` должна быть дешёвой моделью: она одновременно извлекает и
+классифицирует вопросы. `OPENAI_LIGHT_REVIEW_MODEL` используется для HR/организационного
+фидбека и общего резюме; если параметр пуст, используется `OPENAI_EXTRACTION_MODEL`.
+`OPENAI_ANALYSIS_MODEL` предназначена только для углублённой проверки технических ответов.
+
+Если `OPENAI_PROXY_URL` пуст, SDK подключается напрямую. Если URL задан, proxy передаётся только в централизованный `httpx.AsyncClient`; бизнес-логика и Nexara о нём не знают.
+Повторы OpenAI-запросов выполняет worker с экспоненциальной задержкой и сохраняет каждую
+попытку в базе, поэтому встроенные повторы SDK по умолчанию отключены.
+
+```text
+RU Application Server
+       │  WireGuard / firewall allowlist
+       ▼
+Amsterdam forward proxy
+       │  HTTP CONNECT, no TLS MITM
+       ▼
+OpenAI API
+```
+
+Минимальный закрытый Squid-конфиг находится в `infra/amsterdam/squid.conf.example`. Порт proxy нельзя публиковать для всего интернета: разрешайте только private IP application server, не устанавливайте MITM CA и не сохраняйте пароль proxy в Git. OpenAI API key остаётся только на RU application server и внутри TLS-туннеля не виден proxy. Перед production deployment отдельно проверьте, что использование OpenAI и выбранная географическая маршрутизация соответствуют актуальным условиям сервиса.
+
+### Retry и безопасность
+
+Статусы обработки и каждая попытка сохраняются в БД. `POST /api/v1/interviews/{id}/retry` повторяет только упавший этап: Nexara submit/poll, extraction либо review. В интерфейс возвращается безопасное сообщение без provider payload и секретов. Signed S3 URL, исходный transcript и API keys не пишутся в diagnostic JSON или application log.
+
+Ученик читает и удаляет только собственные разборы; назначенный ментор видит интервью своих учеников и модерирует AI-рекомендации; администратор видит всё. Изменения ментора не перезаписывают AI-версию: edit создаёт новую review-запись, approve/reject сохраняют решение. Удаление интервью каскадно удаляет transcript, вопросы, оценки и комментарии, а связанные S3-объекты удаляются отдельно.
+
+AI-разбор запускается из этапа дневника с уже загруженной записью. Результат открывается на
+`/interviews/analysis/{id}`, очередь ментора находится на `/mentor/interview-reviews`. API
+документирован в OpenAPI под `/api/v1/interviews` и `/api/v1/mentor/interviews`.
+
 ## Тесты
 
 Backend tests используют отдельную PostgreSQL database `mentoring_test`. Она создаётся init-скриптом нового Compose volume; `make test-backend` также безопасно пытается создать её для существующего volume. В production runtime `create_all()` не используется; оно разрешено только в изолированных тестах.

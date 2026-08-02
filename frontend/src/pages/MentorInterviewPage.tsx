@@ -159,7 +159,12 @@ function MentorStage({
                 key={comment.id}
                 withBorder
                 style={
-                  comment.is_mentor_feedback
+                  comment.is_ai_feedback
+                    ? {
+                        borderColor: "var(--mantine-color-violet-6)",
+                        boxShadow: "inset 3px 0 var(--mantine-color-violet-6)",
+                      }
+                    : comment.is_mentor_feedback
                     ? {
                         borderColor: "var(--mantine-color-blue-6)",
                         boxShadow: "inset 3px 0 var(--mantine-color-blue-6)",
@@ -169,8 +174,11 @@ function MentorStage({
               >
                 <Text style={{ whiteSpace: "pre-wrap" }}>{comment.body}</Text>
                 <Text size="xs" c="dimmed" mt="xs">
-                  {comment.author.name}
-                  {comment.is_mentor_feedback ? " · фидбек ментора" : ""}
+                  {comment.is_ai_feedback
+                    ? "AI · автоматический разбор"
+                    : comment.author
+                      ? `${comment.author.name}${comment.author.telegram_username ? ` · @${comment.author.telegram_username}` : ""}${comment.is_mentor_feedback ? " · фидбек ментора" : ""}`
+                      : "Пользователь удалён"}
                 </Text>
               </Card>
             ))}

@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -9,6 +10,9 @@ from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
 from app.interviews.companies import suggest_companies
+from app.interviews.intelligence_queue import enqueue_intelligence_job
+from app.interviews.intelligence_schemas import IntelligenceInterviewDetail
+from app.interviews.intelligence_service import intelligence_detail, start_stage_ai_analysis
 from app.interviews.journal_service import (
     add_stage_attachment,
     cancel_offer,
@@ -31,7 +35,7 @@ from app.interviews.journal_service import (
     update_stage,
 )
 from app.interviews.media import ensure_stage_media_browser_playable
-from app.interviews.models import InterviewProcessStatus
+from app.interviews.models import InterviewProcessStage, InterviewProcessStatus
 from app.interviews.schemas import (
     CompanyOption,
     InterviewDirectionOption,
@@ -52,6 +56,17 @@ router = APIRouter(prefix="/interviews/journal", tags=["interview-journal"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
 settings = get_settings()
 store = InterviewUploadStore(settings)
+logger = logging.getLogger(__name__)
+
+
+async def _enqueue_ai_analysis(interview_id: UUID) -> None:
+    try:
+        job_id = await enqueue_intelligence_job("submit_transcription", str(interview_id))
+    except Exception:
+        logger.exception("Could not enqueue AI analysis interview_id=%s", interview_id)
+        api_error(503, "interview_processing_unavailable", "Processing queue is unavailable")
+    if job_id is None:
+        api_error(503, "interview_processing_unavailable", "Processing queue is unavailable")
 
 
 def _media_upload_rules(content_type: str) -> tuple[tuple[str, ...], int]:
@@ -167,6 +182,30 @@ async def journal_update_stage(
 
 
 @router.post(
+    "/tracks/{process_id}/stages/{stage_id}/ai-analysis",
+    response_model=IntelligenceInterviewDetail,
+    status_code=status.HTTP_201_CREATED,
+)
+async def journal_start_stage_ai_analysis(
+    process_id: UUID,
+    stage_id: UUID,
+    session: Session,
+    student: JournalUser,
+) -> IntelligenceInterviewDetail:
+    interview = await start_stage_ai_analysis(session, student, process_id, stage_id)
+    try:
+        await _enqueue_ai_analysis(interview.id)
+    except Exception:
+        stage = await session.get(InterviewProcessStage, stage_id)
+        if stage is not None:
+            stage.ai_analysis_requested_at = None
+        await session.delete(interview)
+        await session.commit()
+        raise
+    return await intelligence_detail(session, student, interview.id)
+
+
+@router.post(
     "/tracks/{process_id}/stages/{stage_id}/media/upload",
     response_model=InterviewUploadIntent,
 )
@@ -177,7 +216,13 @@ async def journal_create_stage_media_upload(
     session: Session,
     student: JournalUser,
 ) -> InterviewUploadIntent:
-    await get_stage_model(session, student, process_id, stage_id)
+    stage = await get_stage_model(session, student, process_id, stage_id)
+    if stage.ai_analysis_requested_at is not None:
+        api_error(
+            409,
+            "interview_recording_locked_for_ai_analysis",
+            "The recording cannot be replaced after AI analysis was requested",
+        )
     allowed_types, max_bytes = _media_upload_rules(payload.content_type)
     intent = store.create_upload_intent(
         user_id=student.id,

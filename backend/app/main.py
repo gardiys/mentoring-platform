@@ -11,6 +11,8 @@ from app.integrations.router import router as integrations_router
 from app.interviews.admin_process_router import router as admin_interview_processes_router
 from app.interviews.admin_router import router as admin_interviews_router
 from app.interviews.catalog_router import router as interview_catalog_router
+from app.interviews.intelligence_router import mentor_router as mentor_intelligence_router
+from app.interviews.intelligence_router import router as interview_intelligence_router
 from app.interviews.journal_router import router as interview_journal_router
 from app.interviews.router import router as interviews_router
 from app.knowledge.admin_router import router as admin_knowledge_router
@@ -43,6 +45,8 @@ app.include_router(interview_catalog_router, prefix="/api/v1")
 app.include_router(interview_journal_router, prefix="/api/v1")
 app.include_router(admin_interviews_router, prefix="/api/v1")
 app.include_router(admin_interview_processes_router, prefix="/api/v1")
+app.include_router(interview_intelligence_router, prefix="/api/v1")
+app.include_router(mentor_intelligence_router, prefix="/api/v1")
 app.include_router(knowledge_router, prefix="/api/v1")
 app.include_router(admin_knowledge_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")

@@ -59,6 +59,10 @@ class OpenedDownload:
             self.body.close()
 
 
+class InterviewStorageReadError(RuntimeError):
+    """A private interview object could not be staged for external processing."""
+
+
 class InterviewUploadStore:
     def __init__(self, settings: Settings) -> None:
         self.bucket = settings.s3_bucket
@@ -240,6 +244,24 @@ class InterviewUploadStore:
             )
         except (BotoCoreError, ClientError) as error:
             self._storage_unavailable(error)
+
+    async def download_to_path(self, upload: StoredUpload, destination: Path) -> None:
+        external_location = self._external_media_location(upload.storage_key)
+        client = self.legacy_client if external_location is not None else self.client
+        bucket, key = external_location or (self.bucket, upload.storage_key)
+        try:
+            await anyio.to_thread.run_sync(
+                lambda: client.download_file(bucket, key, str(destination))
+            )
+        except (BotoCoreError, ClientError) as error:
+            logger.error(
+                "Could not stage interview object for processing bucket=%s key=%s",
+                bucket,
+                key,
+            )
+            raise InterviewStorageReadError(
+                "Could not stage interview object for processing"
+            ) from error
 
     async def open_download(
         self,

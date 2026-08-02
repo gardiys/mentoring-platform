@@ -268,3 +268,205 @@ export interface MentorInterviewDetail {
     comments: InterviewCatalogCommentRead[];
   }>;
 }
+
+export type IntelligenceInterviewType =
+  | "hr"
+  | "screening"
+  | "technical"
+  | "final"
+  | "system_design"
+  | "live_coding"
+  | "other";
+export type IntelligenceProcessingStatus =
+  | "draft"
+  | "uploaded"
+  | "transcription_submitted"
+  | "transcribing"
+  | "transcript_ready"
+  | "awaiting_candidate_speaker"
+  | "analyzing"
+  | "ready"
+  | "failed";
+export type IntelligenceSpeakerRole =
+  "unknown" | "candidate" | "interviewer" | "recruiter" | "other";
+export type IntelligenceReviewStatus =
+  "suggested" | "approved" | "edited" | "rejected";
+export type IntelligenceAssessment =
+  | "correct"
+  | "mostly_correct"
+  | "partial"
+  | "mostly_incorrect"
+  | "incorrect"
+  | "unable_to_assess";
+
+export interface IntelligenceInterviewCreate {
+  company_name: string;
+  company_id?: string | null;
+  company_alias?: string | null;
+  track_id: string;
+  position_name?: string | null;
+  interview_type: IntelligenceInterviewType;
+  interviewed_at: string;
+}
+
+export interface IntelligenceInterviewSummary {
+  id: string;
+  stage_id: string;
+  process_id: string;
+  student_id: string;
+  student_name: string;
+  company_name: string;
+  position_name: string | null;
+  track_id: string;
+  track_slug: string;
+  track_title: string;
+  interview_type: IntelligenceInterviewType;
+  interviewed_at: string;
+  processing_status: IntelligenceProcessingStatus;
+  duration_ms: number | null;
+  question_count: number;
+  suggested_review_count: number;
+  reviewed_count: number;
+  reviewed_at: string | null;
+  reviewed_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntelligenceInterviewPage {
+  items: IntelligenceInterviewSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface IntelligenceUtterance {
+  id: string;
+  speaker_id: string;
+  speaker_key: string;
+  speaker_role: IntelligenceSpeakerRole;
+  sequence_number: number;
+  start_ms: number;
+  end_ms: number;
+  text: string;
+}
+
+export interface IntelligenceSpeaker {
+  id: string;
+  provider_speaker_key: string;
+  role: IntelligenceSpeakerRole;
+  display_name: string | null;
+  examples: IntelligenceUtterance[];
+}
+
+export interface IntelligenceReview {
+  id: string;
+  parent_review_id: string | null;
+  source: "ai" | "mentor";
+  status: IntelligenceReviewStatus;
+  assessment: IntelligenceAssessment;
+  score: number | null;
+  summary: string | null;
+  strengths: Array<Record<string, unknown>>;
+  problems: Array<Record<string, unknown>>;
+  missing_points: unknown[];
+  incorrect_statements: Array<Record<string, unknown>>;
+  suggested_better_answer: string | null;
+  model_name: string | null;
+  prompt_version: string | null;
+  created_by_user_id: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+}
+
+export interface IntelligenceQuestion {
+  id: string;
+  sequence_number: number;
+  question_text: string;
+  question_start_ms: number;
+  question_end_ms: number | null;
+  answer_start_ms: number | null;
+  answer_end_ms: number | null;
+  category: string;
+  question_kind: "technical" | "hr" | "organizational" | "other";
+  subcategory: string | null;
+  difficulty: "unknown" | "junior" | "middle" | "senior";
+  confidence: number;
+  is_low_confidence: boolean;
+  moderation_status: "pending" | "mentor_approved" | "approved" | "rejected";
+  published_card_id: string | null;
+  answer: {
+    id: string;
+    answer_text: string;
+    start_ms: number | null;
+    end_ms: number | null;
+    reviews: IntelligenceReview[];
+  } | null;
+}
+
+export interface IntelligenceMentorComment {
+  id: string;
+  mentor_id: string;
+  mentor_name: string;
+  mentor_telegram_username: string | null;
+  question_id: string | null;
+  timestamp_ms: number | null;
+  text: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntelligenceProcessing {
+  status: IntelligenceProcessingStatus;
+  failed_stage: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  transcribed: boolean;
+  candidate_selected: boolean;
+  questions_found: number;
+  reviews_completed: number;
+  attempts: Array<{
+    id: string;
+    stage: string;
+    status: "started" | "completed" | "failed";
+    attempt_number: number;
+    provider: string | null;
+    error_code: string | null;
+    error_message: string | null;
+    started_at: string;
+    finished_at: string | null;
+  }>;
+}
+
+export interface IntelligenceCommunicationDimension {
+  name: string;
+  score: number | null;
+  summary: string;
+  evidence_utterance_ids: string[];
+  confidence: number;
+}
+
+export interface IntelligenceInterviewOverview {
+  overall_summary: string;
+  key_topics: string[];
+  communication_summary: string;
+  communication_score: number | null;
+  communication_dimensions: IntelligenceCommunicationDimension[];
+  communication_strengths: string[];
+  communication_growth_areas: string[];
+  caveats: string[];
+  model_name: string | null;
+  prompt_version: string | null;
+}
+
+export interface IntelligenceInterviewDetail extends IntelligenceInterviewSummary {
+  media_filename: string | null;
+  media_content_type: string | null;
+  media_size: number | null;
+  speakers: IntelligenceSpeaker[];
+  transcript: IntelligenceUtterance[];
+  questions: IntelligenceQuestion[];
+  mentor_comments: IntelligenceMentorComment[];
+  overview: IntelligenceInterviewOverview | null;
+  processing: IntelligenceProcessing;
+}

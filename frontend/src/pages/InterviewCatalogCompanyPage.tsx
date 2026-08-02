@@ -326,7 +326,12 @@ function CatalogStage({
                 withBorder
                 padding="sm"
                 style={
-                  item.is_mentor_feedback
+                  item.is_ai_feedback
+                    ? {
+                        borderColor: "var(--mantine-color-violet-6)",
+                        boxShadow: "inset 3px 0 var(--mantine-color-violet-6)",
+                      }
+                    : item.is_mentor_feedback
                     ? {
                         borderColor: "var(--mantine-color-blue-6)",
                         boxShadow: "inset 3px 0 var(--mantine-color-blue-6)",
@@ -337,13 +342,21 @@ function CatalogStage({
                 <Group justify="space-between" align="flex-start">
                   <div>
                     <Text fw={600} size="sm">
-                      {formatAuthor(item.author)}
+                      {item.is_ai_feedback
+                        ? "AI"
+                        : item.author
+                          ? formatAuthor(item.author)
+                          : "Пользователь удалён"}
                     </Text>
-                    {item.is_mentor_feedback && (
+                    {item.is_ai_feedback ? (
+                      <Badge color="violet" size="xs" variant="light" mt={4}>
+                        Автоматический разбор
+                      </Badge>
+                    ) : item.is_mentor_feedback ? (
                       <Badge size="xs" variant="light" mt={4}>
                         Фидбек ментора
                       </Badge>
-                    )}
+                    ) : null}
                     <Text size="xs" c="dimmed">
                       {formatDate(item.created_at)}
                     </Text>

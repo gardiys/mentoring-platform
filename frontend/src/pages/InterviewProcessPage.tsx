@@ -30,6 +30,7 @@ import {
   useMarkInterviewOffer,
   useSetInterviewProcessOutcome,
   useSetInterviewProcessRecruiters,
+  useStartInterviewStageAnalysis,
   useUploadInterviewStageMedia,
   useUploadInterviewStageAttachments,
 } from "../features/interviews/journalQueries";
@@ -120,6 +121,7 @@ function StageMedia({
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const [isPlayerLoading, setIsPlayerLoading] = useState(false);
   const mutation = useUploadInterviewStageMedia();
+  const analysisMutation = useStartInterviewStageAnalysis();
 
   useEffect(() => {
     setPlayerUrl(null);
@@ -240,28 +242,78 @@ function StageMedia({
               Ваш браузер не поддерживает воспроизведение аудио.
             </audio>
           )}
+          <Group justify="flex-end">
+            {stage.ai_analysis_id ? (
+              <Button
+                component={Link}
+                to={`/interviews/analysis/${stage.ai_analysis_id}`}
+                variant="light"
+              >
+                {stage.ai_analysis_status === "ready"
+                  ? "Открыть AI-разбор"
+                  : stage.ai_analysis_status === "failed"
+                    ? "Открыть ошибку AI-разбора"
+                    : "AI-разбор выполняется"}
+              </Button>
+            ) : stage.ai_analysis_requested_at ? (
+              <Button disabled variant="light">
+                AI-разбор уже запрашивался
+              </Button>
+            ) : (
+              <Button
+                loading={analysisMutation.isPending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Запустить AI-разбор? Для одного собеседования это можно сделать только один раз.",
+                    )
+                  )
+                    return;
+                  analysisMutation.mutate(
+                    { processId, stageId: stage.id },
+                    {
+                      onSuccess: () =>
+                        notifications.show({
+                          color: "green",
+                          message: "AI-разбор запущен",
+                        }),
+                      onError: (error) =>
+                        notifications.show({
+                          color: "red",
+                          message: error.message,
+                        }),
+                    },
+                  );
+                }}
+              >
+                Разобрать с AI
+              </Button>
+            )}
+          </Group>
         </>
       )}
-      <Group align="flex-end">
-        <FileInput
-          flex={1}
-          label={stage.media ? "Заменить запись" : "Добавить запись"}
-          placeholder="Аудио или видео"
-          description="Видео до 2 ГБ, аудио до 500 МБ"
-          accept="audio/*,video/*"
-          value={file}
-          onChange={setFile}
-          clearable
-        />
-        <Button
-          variant="light"
-          disabled={!file}
-          loading={mutation.isPending}
-          onClick={upload}
-        >
-          Загрузить
-        </Button>
-      </Group>
+      {!stage.ai_analysis_requested_at && (
+        <Group align="flex-end">
+          <FileInput
+            flex={1}
+            label={stage.media ? "Заменить запись" : "Добавить запись"}
+            placeholder="Аудио или видео"
+            description="Видео до 2 ГБ, аудио до 500 МБ"
+            accept="audio/*,video/*"
+            value={file}
+            onChange={setFile}
+            clearable
+          />
+          <Button
+            variant="light"
+            disabled={!file}
+            loading={mutation.isPending}
+            onClick={upload}
+          >
+            Загрузить
+          </Button>
+        </Group>
+      )}
     </Stack>
   );
 }
@@ -707,6 +759,43 @@ export function InterviewProcessPage() {
                 {stage.description && <Text>{stage.description}</Text>}
                 <StageMedia processId={processId} stage={stage} />
                 <StageAttachments processId={processId} stage={stage} />
+                {(stage.comments ?? []).length > 0 && (
+                  <Stack gap="xs">
+                    <Text fw={700}>Обратная связь</Text>
+                    {(stage.comments ?? []).map((comment) => (
+                      <Card
+                        key={comment.id}
+                        withBorder
+                        style={
+                          comment.is_ai_feedback
+                            ? {
+                                borderColor: "var(--mantine-color-violet-6)",
+                                boxShadow:
+                                  "inset 3px 0 var(--mantine-color-violet-6)",
+                              }
+                            : comment.is_mentor_feedback
+                              ? {
+                                  borderColor: "var(--mantine-color-blue-6)",
+                                  boxShadow:
+                                    "inset 3px 0 var(--mantine-color-blue-6)",
+                                }
+                              : undefined
+                        }
+                      >
+                        <Text style={{ whiteSpace: "pre-wrap" }}>
+                          {comment.body}
+                        </Text>
+                        <Text size="xs" c="dimmed" mt="xs">
+                          {comment.is_ai_feedback
+                            ? "AI · автоматический разбор"
+                            : comment.author
+                              ? `${comment.author.name}${comment.author.telegram_username ? ` · @${comment.author.telegram_username}` : ""}`
+                              : "Пользователь удалён"}
+                        </Text>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
               </Stack>
             </Card>
           ))

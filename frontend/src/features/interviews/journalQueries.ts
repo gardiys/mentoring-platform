@@ -118,6 +118,13 @@ export function useCreateInterviewStage() {
   );
 }
 
+export function useStartInterviewStageAnalysis() {
+  return useJournalMutation(
+    ({ processId, stageId }: { processId: string; stageId: string }) =>
+      api.startInterviewStageAnalysis(processId, stageId),
+  );
+}
+
 export function useUploadInterviewStageMedia() {
   return useJournalMutation(
     ({

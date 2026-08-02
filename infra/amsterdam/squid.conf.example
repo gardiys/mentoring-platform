@@ -1,0 +1,17 @@
+# Bind this proxy only to a private WireGuard interface or protect port 3128
+# with a firewall allowlist. Replace 10.8.0.2 with the RU application server.
+http_port 10.8.0.1:3128
+
+acl application_server src 10.8.0.2/32
+acl SSL_ports port 443
+acl CONNECT method CONNECT
+
+http_access deny !SSL_ports
+http_access allow application_server CONNECT
+http_access deny all
+
+# Do not retain destination/request metadata on this egress host.
+access_log none
+cache deny all
+via off
+forwarded_for delete

@@ -6,17 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
 from app.interviews.companies import resolve_company
+from app.interviews.intelligence_models import IntelligenceInterview
 from app.interviews.models import (
     InterviewProcess,
     InterviewProcessStage,
     InterviewProcessStageAttachment,
     InterviewProcessStatus,
+    InterviewStageComment,
 )
 from app.interviews.schemas import (
     AdminInterviewProcessPage,
     AdminInterviewProcessSummary,
     InterviewAttachmentRead,
     InterviewCatalogAuthorRead,
+    InterviewCatalogCommentRead,
     InterviewDirectionOption,
     InterviewProcessDetail,
     InterviewProcessMutation,
@@ -63,6 +66,9 @@ def _stage_attachment_read(
 def _stage_read(
     stage: InterviewProcessStage,
     attachments: list[InterviewProcessStageAttachment],
+    comments: list[tuple[InterviewStageComment, User | None]],
+    analysis: IntelligenceInterview | None,
+    current_user: User,
 ) -> InterviewProcessStageRead:
     return InterviewProcessStageRead(
         id=stage.id,
@@ -75,6 +81,32 @@ def _stage_read(
             stage.media_size,
         ),
         attachments=[_stage_attachment_read(attachment) for attachment in attachments],
+        comments=[
+            InterviewCatalogCommentRead(
+                id=comment.id,
+                author=(
+                    InterviewCatalogAuthorRead(
+                        id=author.id,
+                        name=author.first_name,
+                        telegram_username=author.telegram_username,
+                    )
+                    if author is not None
+                    else None
+                ),
+                body=comment.body,
+                is_own=comment.user_id == current_user.id,
+                is_mentor_feedback=(
+                    author is not None and author.role.value in {"mentor", "admin"}
+                ),
+                is_ai_feedback=comment.is_ai_feedback,
+                created_at=comment.created_at,
+                updated_at=comment.updated_at,
+            )
+            for comment, author in comments
+        ],
+        ai_analysis_id=analysis.id if analysis else None,
+        ai_analysis_status=analysis.processing_status if analysis else None,
+        ai_analysis_requested_at=stage.ai_analysis_requested_at,
         created_at=stage.created_at,
         updated_at=stage.updated_at,
     )
@@ -367,6 +399,28 @@ async def process_detail(
         )
         for attachment in attachments:
             attachments_by_stage[attachment.stage_id].append(attachment)
+    comments_by_stage: dict[UUID, list[tuple[InterviewStageComment, User | None]]] = {
+        stage.id: [] for stage in stages
+    }
+    analyses_by_stage: dict[UUID, IntelligenceInterview] = {}
+    if stages:
+        stage_ids = [stage.id for stage in stages]
+        comment_rows = (
+            await session.execute(
+                select(InterviewStageComment, User)
+                .outerjoin(User, User.id == InterviewStageComment.user_id)
+                .where(InterviewStageComment.stage_id.in_(stage_ids))
+                .order_by(InterviewStageComment.created_at)
+            )
+        ).all()
+        for comment, author in comment_rows:
+            comments_by_stage[comment.stage_id].append((comment, author))
+        analyses = list(
+            await session.scalars(
+                select(IntelligenceInterview).where(IntelligenceInterview.stage_id.in_(stage_ids))
+            )
+        )
+        analyses_by_stage = {analysis.stage_id: analysis for analysis in analyses}
     now = datetime.now(UTC)
     next_stage_at = next(
         (stage.scheduled_at for stage in stages if stage.scheduled_at >= now),
@@ -375,7 +429,16 @@ async def process_detail(
     summary = _summary(process, track, len(stages), next_stage_at)
     return InterviewProcessDetail(
         **summary.model_dump(),
-        stages=[_stage_read(stage, attachments_by_stage[stage.id]) for stage in stages],
+        stages=[
+            _stage_read(
+                stage,
+                attachments_by_stage[stage.id],
+                comments_by_stage[stage.id],
+                analyses_by_stage.get(stage.id),
+                user,
+            )
+            for stage in stages
+        ],
         offer=_attachment(
             process.offer_filename,
             process.offer_content_type,
@@ -511,6 +574,12 @@ async def set_stage_media(
     upload: StoredUpload,
 ) -> tuple[InterviewProcessDetail, str | None]:
     stage = await get_stage_model(session, user, process_id, stage_id, lock=True)
+    if stage.ai_analysis_requested_at is not None:
+        api_error(
+            409,
+            "interview_recording_locked_for_ai_analysis",
+            "The recording cannot be replaced after AI analysis was requested",
+        )
     previous_key = stage.media_storage_key
     stage.media_storage_key = upload.storage_key
     stage.media_filename = upload.filename
@@ -524,6 +593,12 @@ async def clear_stage_media(
     session: AsyncSession, user: User, process_id: UUID, stage_id: UUID
 ) -> tuple[InterviewProcessDetail, str | None]:
     stage = await get_stage_model(session, user, process_id, stage_id, lock=True)
+    if stage.ai_analysis_requested_at is not None:
+        api_error(
+            409,
+            "interview_recording_locked_for_ai_analysis",
+            "The recording cannot be deleted after AI analysis was requested",
+        )
     previous_key = stage.media_storage_key
     stage.media_storage_key = None
     stage.media_filename = None

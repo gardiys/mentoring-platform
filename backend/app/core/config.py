@@ -37,6 +37,26 @@ class Settings(BaseSettings):
     interview_audio_max_bytes: int = Field(default=524_288_000, ge=1_048_576, le=2_147_483_648)
     interview_offer_max_bytes: int = Field(default=20_971_520, ge=1_048_576, le=104_857_600)
     interview_attachment_max_bytes: int = Field(default=52_428_800, ge=1_048_576, le=524_288_000)
+    interview_max_upload_mb: int = Field(default=2_048, ge=1, le=5_120)
+    redis_url: str = "redis://localhost:6379/0"
+    transcription_provider: str = "fake"
+    transcription_max_concurrency: int = Field(default=4, ge=1, le=32)
+    nexara_api_key: SecretStr | None = None
+    nexara_base_url: str = "https://api.nexara.ru/v1"
+    nexara_model: str = "whisper-1"
+    nexara_timeout_seconds: float = Field(default=600, ge=10, le=1_800)
+    nexara_max_retries: int = Field(default=2, ge=0, le=5)
+    interview_ai_provider: str = "fake"
+    openai_api_key: SecretStr | None = None
+    openai_analysis_model: str | None = None
+    openai_extraction_model: str | None = None
+    openai_light_review_model: str | None = None
+    openai_proxy_url: SecretStr | None = None
+    openai_timeout_seconds: float = Field(default=120, ge=10, le=600)
+    # ARQ owns observable retries and persists every attempt; avoid nested SDK retries.
+    openai_max_retries: int = Field(default=0, ge=0, le=5)
+    openai_max_concurrency: int = Field(default=4, ge=1, le=32)
+    interview_ai_extraction_confidence_threshold: float = Field(default=0.65, ge=0, le=1)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -53,6 +73,9 @@ class Settings(BaseSettings):
         "telegram_web_client_secret",
         "telegram_oidc_proxy_url",
         "web_session_secret",
+        "nexara_api_key",
+        "openai_api_key",
+        "openai_proxy_url",
         mode="before",
     )
     @classmethod
@@ -78,7 +101,15 @@ class Settings(BaseSettings):
             raise ValueError("WEB_SESSION_SECRET must contain at least 32 characters")
         return value
 
-    @field_validator("telegram_web_client_id", "telegram_web_redirect_uri", mode="before")
+    @field_validator(
+        "telegram_web_client_id",
+        "telegram_web_redirect_uri",
+        "nexara_model",
+        "openai_analysis_model",
+        "openai_extraction_model",
+        "openai_light_review_model",
+        mode="before",
+    )
     @classmethod
     def empty_string_is_none(cls, value: object) -> object:
         return None if value == "" else value

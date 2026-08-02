@@ -16,6 +16,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -271,6 +272,9 @@ class InterviewProcessStage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     media_filename: Mapped[str | None] = mapped_column(String(500), nullable=True)
     media_content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
     media_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    ai_analysis_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     process = relationship("InterviewProcess", back_populates="stages")
     attachments = relationship(
@@ -300,17 +304,31 @@ class InterviewProcessStageAttachment(UUIDPrimaryKeyMixin, TimestampMixin, Base)
 
 class InterviewStageComment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "interview_stage_comments"
-    __table_args__ = (Index("ix_interview_stage_comments_stage_created", "stage_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_interview_stage_comments_stage_created", "stage_id", "created_at"),
+        UniqueConstraint(
+            "intelligence_interview_id",
+            name="uq_interview_stage_comments_intelligence_interview",
+        ),
+    )
 
     stage_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("interview_process_stages.id", ondelete="CASCADE"),
         nullable=False,
     )
-    user_id: Mapped[UUID] = mapped_column(
+    user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    is_ai_feedback: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    intelligence_interview_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("intelligence_interviews.id", ondelete="CASCADE"),
+        nullable=True,
+    )

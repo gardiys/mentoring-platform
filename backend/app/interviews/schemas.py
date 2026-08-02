@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.interviews.intelligence_models import IntelligenceProcessingStatus
 from app.interviews.models import (
     InterviewCardFrequency,
     InterviewProcessStatus,
@@ -309,6 +310,23 @@ class InterviewProcessOutcomeMutation(BaseModel):
         return self
 
 
+class InterviewCatalogAuthorRead(BaseModel):
+    id: UUID
+    name: str
+    telegram_username: str | None
+
+
+class InterviewCatalogCommentRead(BaseModel):
+    id: UUID
+    author: InterviewCatalogAuthorRead | None
+    body: str
+    is_own: bool
+    is_mentor_feedback: bool = False
+    is_ai_feedback: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
 class InterviewProcessStageRead(BaseModel):
     id: UUID
     stage_type: InterviewStageType
@@ -316,6 +334,10 @@ class InterviewProcessStageRead(BaseModel):
     description: str | None
     media: InterviewAttachmentRead | None
     attachments: list[InterviewStageAttachmentRead]
+    comments: list[InterviewCatalogCommentRead] = Field(default_factory=list)
+    ai_analysis_id: UUID | None = None
+    ai_analysis_status: IntelligenceProcessingStatus | None = None
+    ai_analysis_requested_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -356,12 +378,6 @@ class InterviewProcessDetail(InterviewProcessSummary):
     offer: InterviewAttachmentRead | None
 
 
-class InterviewCatalogAuthorRead(BaseModel):
-    id: UUID
-    name: str
-    telegram_username: str | None
-
-
 class InterviewCatalogMediaKind(StrEnum):
     ANY = "any"
     VIDEO = "video"
@@ -372,16 +388,6 @@ class InterviewCatalogCommentMutation(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     body: str = Field(min_length=1, max_length=5_000)
-
-
-class InterviewCatalogCommentRead(BaseModel):
-    id: UUID
-    author: InterviewCatalogAuthorRead
-    body: str
-    is_own: bool
-    is_mentor_feedback: bool = False
-    created_at: datetime
-    updated_at: datetime
 
 
 class InterviewCatalogStageRead(BaseModel):

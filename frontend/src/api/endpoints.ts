@@ -59,6 +59,9 @@ import type {
   InterviewCatalogCompanyDetail,
   InterviewCatalogCompanyPage,
   InterviewCatalogFilters,
+  IntelligenceInterviewDetail,
+  IntelligenceInterviewPage,
+  IntelligenceReview,
   CompanyOption,
   MentorDocumentKind,
   MentorDocumentRead,
@@ -125,6 +128,86 @@ export const api = {
   logout: () => apiRequest<null>("/api/v1/auth/web/logout", { method: "POST" }),
   completeOnboarding: () =>
     apiRequest<User>("/api/v1/me/onboarding", { method: "POST" }),
+  intelligenceInterviews: (options: { limit?: number; offset?: number } = {}) =>
+    apiRequest<IntelligenceInterviewPage>(
+      `/api/v1/interviews?limit=${options.limit ?? 20}&offset=${options.offset ?? 0}`,
+    ),
+  intelligenceInterview: (id: string) =>
+    apiRequest<IntelligenceInterviewDetail>(`/api/v1/interviews/${id}`),
+  startInterviewStageAnalysis: (processId: string, stageId: string) =>
+    apiRequest<IntelligenceInterviewDetail>(
+      `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/ai-analysis`,
+      { method: "POST" },
+    ),
+  selectIntelligenceCandidate: (id: string, speakerId: string) =>
+    apiRequest<IntelligenceInterviewDetail>(
+      `/api/v1/interviews/${id}/candidate-speaker`,
+      { method: "PUT", body: JSON.stringify({ speaker_id: speakerId }) },
+    ),
+  retryIntelligenceInterview: (id: string) =>
+    apiRequest<IntelligenceInterviewDetail>(`/api/v1/interviews/${id}/retry`, {
+      method: "POST",
+    }),
+  intelligenceMedia: (id: string) =>
+    apiRequest<{ url: string; content_type: string }>(
+      `/api/v1/interviews/${id}/media`,
+    ),
+  deleteIntelligenceInterview: (id: string) =>
+    apiRequest<void>(`/api/v1/interviews/${id}`, { method: "DELETE" }),
+  mentorIntelligenceInterviews: (
+    reviewStatus: "needs_review" | "reviewed" | "processing" | "all",
+    options: { limit?: number; offset?: number } = {},
+  ) =>
+    apiRequest<IntelligenceInterviewPage>(
+      `/api/v1/mentor/interviews?status=${reviewStatus}&limit=${options.limit ?? 20}&offset=${options.offset ?? 0}`,
+    ),
+  addIntelligenceMentorComment: (
+    id: string,
+    payload: {
+      question_id?: string | null;
+      timestamp_ms?: number | null;
+      text: string;
+    },
+  ) =>
+    apiRequest(`/api/v1/mentor/interviews/${id}/comments`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  approveIntelligenceReview: (interviewId: string, reviewId: string) =>
+    apiRequest<IntelligenceReview>(
+      `/api/v1/mentor/interviews/${interviewId}/reviews/${reviewId}/approve`,
+      { method: "POST" },
+    ),
+  rejectIntelligenceReview: (interviewId: string, reviewId: string) =>
+    apiRequest<IntelligenceReview>(
+      `/api/v1/mentor/interviews/${interviewId}/reviews/${reviewId}/reject`,
+      { method: "POST", body: JSON.stringify({ reason: "other" }) },
+    ),
+  moderateIntelligenceQuestion: (
+    interviewId: string,
+    questionId: string,
+    payload: {
+      action: "recommend" | "approve" | "reject";
+      question_markdown?: string;
+      answer_markdown?: string;
+      category?: string;
+      frequency?: "frequent" | "occasional";
+    },
+  ) =>
+    apiRequest<IntelligenceInterviewDetail>(
+      `/api/v1/mentor/interviews/${interviewId}/questions/${questionId}/moderation`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  completeIntelligenceReview: (interviewId: string) =>
+    apiRequest<IntelligenceInterviewDetail>(
+      `/api/v1/mentor/interviews/${interviewId}/complete-review`,
+      { method: "POST" },
+    ),
+  generateIntelligenceOverview: (interviewId: string) =>
+    apiRequest<IntelligenceInterviewDetail>(
+      `/api/v1/mentor/interviews/${interviewId}/generate-overview`,
+      { method: "POST" },
+    ),
   roadmaps: () => apiRequest<RoadmapListItem[]>("/api/v1/roadmaps"),
   roadmap: (slug: string) =>
     apiRequest<RoadmapDetail>(`/api/v1/roadmaps/${slug}`),

@@ -48,8 +48,7 @@ async def _mentor_read(
         is_active=user.is_active,
         student_count=student_count,
         tracks=[
-            AdminMentorTrackRead(id=item.id, slug=item.slug, title=item.title)
-            for item in tracks
+            AdminMentorTrackRead(id=item.id, slug=item.slug, title=item.title) for item in tracks
         ],
         students=[
             AdminMentorStudentRead(
@@ -217,18 +216,14 @@ async def update_mentor_directions(
     await session.commit()
     student_count = int(
         await session.scalar(
-            select(func.count(MentorStudent.student_id)).where(
-                MentorStudent.mentor_id == mentor.id
-            )
+            select(func.count(MentorStudent.student_id)).where(MentorStudent.mentor_id == mentor.id)
         )
         or 0
     )
     return await _mentor_read(session, mentor, student_count)
 
 
-async def reassign_student(
-    session: AsyncSession, student_id: UUID, mentor_id: UUID
-) -> None:
+async def reassign_student(session: AsyncSession, student_id: UUID, mentor_id: UUID) -> None:
     student = await session.get(User, student_id)
     mentor = await session.get(User, mentor_id)
     if student is None or student.role is not UserRole.STUDENT:

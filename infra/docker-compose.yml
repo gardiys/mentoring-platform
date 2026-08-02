@@ -1,4 +1,17 @@
 services:
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -19,8 +32,8 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-mentoring-minio}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-mentoring-minio-secret}
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY_ID:-mentoring-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_ACCESS_KEY:-mentoring-minio-secret}
       MINIO_API_CORS_ALLOW_ORIGIN: http://localhost:5173
     command: server /data --console-address ":9001"
     ports:
@@ -37,9 +50,9 @@ services:
   minio-init:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     environment:
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-mentoring-minio}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-mentoring-minio-secret}
-      S3_BUCKET: ${S3_BUCKET:-mentoring-platform}
+      S3_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY_ID:-mentoring-minio}
+      S3_SECRET_ACCESS_KEY: ${MINIO_SECRET_ACCESS_KEY:-mentoring-minio-secret}
+      S3_BUCKET: ${MINIO_BUCKET:-mentoring-platform}
     depends_on:
       minio:
         condition: service_healthy
@@ -61,17 +74,29 @@ services:
       CORS_ORIGINS: http://localhost:5173
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       BOT_INTEGRATION_TOKEN: ${BOT_INTEGRATION_TOKEN:-}
-      S3_BUCKET: ${S3_BUCKET:-mentoring-platform}
+      S3_BUCKET: ${MINIO_BUCKET:-mentoring-platform}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ENDPOINT_URL: http://minio:9000
       S3_PUBLIC_ENDPOINT_URL: http://localhost:9000
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-mentoring-minio}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-mentoring-minio-secret}
+      S3_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY_ID:-mentoring-minio}
+      S3_SECRET_ACCESS_KEY: ${MINIO_SECRET_ACCESS_KEY:-mentoring-minio-secret}
       INTERVIEW_STREAM_TICKET_TTL_SECONDS: ${INTERVIEW_STREAM_TICKET_TTL_SECONDS:-600}
       INTERVIEW_VIDEO_MAX_BYTES: ${INTERVIEW_VIDEO_MAX_BYTES:-2147483648}
       INTERVIEW_AUDIO_MAX_BYTES: ${INTERVIEW_AUDIO_MAX_BYTES:-524288000}
       INTERVIEW_OFFER_MAX_BYTES: ${INTERVIEW_OFFER_MAX_BYTES:-20971520}
       INTERVIEW_ATTACHMENT_MAX_BYTES: ${INTERVIEW_ATTACHMENT_MAX_BYTES:-52428800}
+      REDIS_URL: redis://redis:6379/0
+      TRANSCRIPTION_PROVIDER: ${TRANSCRIPTION_PROVIDER:-fake}
+      NEXARA_API_KEY: ${NEXARA_API_KEY:-}
+      NEXARA_BASE_URL: ${NEXARA_BASE_URL:-https://api.nexara.ru/v1}
+      NEXARA_MODEL: ${NEXARA_MODEL:-whisper-1}
+      INTERVIEW_AI_PROVIDER: ${INTERVIEW_AI_PROVIDER:-fake}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_ANALYSIS_MODEL: ${OPENAI_ANALYSIS_MODEL:-}
+      OPENAI_EXTRACTION_MODEL: ${OPENAI_EXTRACTION_MODEL:-}
+      OPENAI_LIGHT_REVIEW_MODEL: ${OPENAI_LIGHT_REVIEW_MODEL:-}
+      OPENAI_PROXY_URL: ${OPENAI_PROXY_URL:-}
+      OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-0}
       TELEGRAM_INIT_DATA_TTL_SECONDS: ${TELEGRAM_INIT_DATA_TTL_SECONDS:-86400}
     ports:
       - "8000:8000"
@@ -82,7 +107,43 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  intelligence-worker:
+    build: ../backend
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mentoring}:${POSTGRES_PASSWORD:-mentoring}@postgres:5432/${POSTGRES_DB:-mentoring}
+      REDIS_URL: redis://redis:6379/0
+      TRANSCRIPTION_PROVIDER: ${TRANSCRIPTION_PROVIDER:-fake}
+      NEXARA_API_KEY: ${NEXARA_API_KEY:-}
+      NEXARA_BASE_URL: ${NEXARA_BASE_URL:-https://api.nexara.ru/v1}
+      NEXARA_MODEL: ${NEXARA_MODEL:-whisper-1}
+      INTERVIEW_AI_PROVIDER: ${INTERVIEW_AI_PROVIDER:-fake}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_ANALYSIS_MODEL: ${OPENAI_ANALYSIS_MODEL:-}
+      OPENAI_EXTRACTION_MODEL: ${OPENAI_EXTRACTION_MODEL:-}
+      OPENAI_LIGHT_REVIEW_MODEL: ${OPENAI_LIGHT_REVIEW_MODEL:-}
+      OPENAI_PROXY_URL: ${OPENAI_PROXY_URL:-}
+      OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-0}
+      S3_BUCKET: ${MINIO_BUCKET:-mentoring-platform}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_PUBLIC_ENDPOINT_URL: ${NEXARA_MEDIA_PUBLIC_ENDPOINT_URL:-http://minio:9000}
+      S3_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY_ID:-mentoring-minio}
+      S3_SECRET_ACCESS_KEY: ${MINIO_SECRET_ACCESS_KEY:-mentoring-minio-secret}
+    volumes:
+      - ../backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    command: arq app.interviews.intelligence_jobs.WorkerSettings
 
   frontend:
     build: ../frontend
@@ -102,4 +163,5 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  redis_data:
   frontend_node_modules:

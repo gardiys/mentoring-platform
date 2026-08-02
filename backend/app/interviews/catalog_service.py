@@ -133,14 +133,17 @@ def _attachment(
 
 
 def _comment(
-    comment: InterviewStageComment, author: User, current_user: User
+    comment: InterviewStageComment, author: User | None, current_user: User
 ) -> InterviewCatalogCommentRead:
     return InterviewCatalogCommentRead(
         id=comment.id,
-        author=_author(author),
+        author=_author(author) if author is not None else None,
         body=comment.body,
         is_own=comment.user_id == current_user.id,
-        is_mentor_feedback=author.role.value in {"mentor", "admin"},
+        is_mentor_feedback=(
+            author is not None and author.role.value in {"mentor", "admin"}
+        ),
+        is_ai_feedback=comment.is_ai_feedback,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
     )
@@ -206,9 +209,7 @@ async def list_catalog_companies(
             Company.name,
         )
     total = int(
-        await session.scalar(
-            select(func.count()).select_from(statement.order_by(None).subquery())
-        )
+        await session.scalar(select(func.count()).select_from(statement.order_by(None).subquery()))
         or 0
     )
     rows = (await session.execute(statement.limit(limit).offset(offset))).all()
@@ -350,7 +351,7 @@ async def catalog_company_detail(
         (
             await session.execute(
                 select(InterviewStageComment, User)
-                .join(User, User.id == InterviewStageComment.user_id)
+                .outerjoin(User, User.id == InterviewStageComment.user_id)
                 .where(InterviewStageComment.stage_id.in_(stage_ids))
                 .order_by(InterviewStageComment.created_at)
             )
@@ -364,7 +365,7 @@ async def catalog_company_detail(
     }
     for attachment in attachments:
         attachments_by_stage[attachment.stage_id].append(attachment)
-    comments_by_stage: dict[UUID, list[tuple[InterviewStageComment, User]]] = {
+    comments_by_stage: dict[UUID, list[tuple[InterviewStageComment, User | None]]] = {
         stage_id: [] for stage_id in stage_ids
     }
     for comment, author in comment_rows:

@@ -24,6 +24,4 @@ async def admin_interview_processes(
     offset: int = Query(default=0, ge=0),
 ) -> AdminInterviewProcessPage:
     selected_status = None if status_filter == "all" else InterviewProcessStatus(status_filter)
-    return await list_admin_processes(
-        session, selected_status, limit=limit, offset=offset
-    )
+    return await list_admin_processes(session, selected_status, limit=limit, offset=offset)

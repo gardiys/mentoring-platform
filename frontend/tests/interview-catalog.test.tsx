@@ -71,6 +71,7 @@ const detail: InterviewCatalogCompanyDetail = {
               body: "Полезно повторить оценку сложности алгоритмов",
               is_own: false,
               is_mentor_feedback: false,
+              is_ai_feedback: false,
               created_at: "2026-08-11T10:00:00Z",
               updated_at: "2026-08-11T10:00:00Z",
             },

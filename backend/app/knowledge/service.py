@@ -54,9 +54,7 @@ async def _content_track_ids(session: AsyncSession, user: User) -> set[UUID] | N
     return await accessible_track_ids(session, user)
 
 
-async def list_public_topics(
-    session: AsyncSession, user: User
-) -> list[KnowledgeTopicListItem]:
+async def list_public_topics(session: AsyncSession, user: User) -> list[KnowledgeTopicListItem]:
     statement = select(KnowledgeTopic).where(KnowledgeTopic.is_published.is_(True))
     track_ids = await _content_track_ids(session, user)
     if track_ids is not None:
@@ -65,8 +63,7 @@ async def list_public_topics(
         )
     topics = list(
         await session.scalars(
-            statement
-            .order_by(KnowledgeTopic.position, KnowledgeTopic.title)
+            statement.order_by(KnowledgeTopic.position, KnowledgeTopic.title)
             .options(selectinload(KnowledgeTopic.entries))
             .distinct()
         )
@@ -90,9 +87,7 @@ async def list_public_topics(
     ]
 
 
-async def get_public_topic(
-    session: AsyncSession, slug: str, user: User
-) -> KnowledgeTopicDetail:
+async def get_public_topic(session: AsyncSession, slug: str, user: User) -> KnowledgeTopicDetail:
     statement = select(KnowledgeTopic).where(
         KnowledgeTopic.slug == slug,
         KnowledgeTopic.is_published.is_(True),
@@ -119,9 +114,7 @@ async def get_public_topic(
     )
 
 
-async def get_public_entry(
-    session: AsyncSession, slug: str, user: User
-) -> KnowledgeEntryDetail:
+async def get_public_entry(session: AsyncSession, slug: str, user: User) -> KnowledgeEntryDetail:
     statement = (
         select(KnowledgeEntry)
         .join(KnowledgeTopic, KnowledgeTopic.id == KnowledgeEntry.topic_id)
@@ -158,14 +151,14 @@ async def search_public_entries(
     )
     statement = (
         select(KnowledgeEntry, KnowledgeTopic, rank.label("rank"), excerpt.label("excerpt"))
-            .join(KnowledgeTopic, KnowledgeTopic.id == KnowledgeEntry.topic_id)
-            .where(
-                KnowledgeEntry.is_published.is_(True),
-                KnowledgeTopic.is_published.is_(True),
-                KnowledgeEntry.search_vector.op("@@")(search_query),
-            )
-            .order_by(desc("rank"), KnowledgeEntry.title)
-            .limit(limit)
+        .join(KnowledgeTopic, KnowledgeTopic.id == KnowledgeEntry.topic_id)
+        .where(
+            KnowledgeEntry.is_published.is_(True),
+            KnowledgeTopic.is_published.is_(True),
+            KnowledgeEntry.search_vector.op("@@")(search_query),
+        )
+        .order_by(desc("rank"), KnowledgeEntry.title)
+        .limit(limit)
     )
     track_ids = await _content_track_ids(session, user)
     if track_ids is not None:
@@ -427,9 +420,7 @@ def _apply_entry(entry: KnowledgeEntry, payload: AdminKnowledgeEntryMutation) ->
     entry.is_published = payload.is_published
 
 
-async def _sync_topic_tracks(
-    session: AsyncSession, topic_id: UUID, track_ids: list[UUID]
-) -> None:
+async def _sync_topic_tracks(session: AsyncSession, topic_id: UUID, track_ids: list[UUID]) -> None:
     count = int(
         await session.scalar(
             select(func.count(LearningTrack.id)).where(LearningTrack.id.in_(track_ids))

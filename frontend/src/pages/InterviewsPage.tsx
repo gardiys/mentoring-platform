@@ -17,6 +17,7 @@ import { PageHeader } from "../components/PageHeader";
 import { useMe } from "../features/auth/queries";
 import { useInterviewDecks } from "../features/interviews/queries";
 import { useInterviewProcesses } from "../features/interviews/journalQueries";
+import { useIntelligenceInterviews } from "../features/interviews/intelligenceQueries";
 import {
   useMyMentorDocuments,
   useMyMockInterviews,
@@ -43,6 +44,7 @@ export function InterviewsPage() {
   const processes = useInterviewProcesses("all", canOwnJournal);
   const mocks = useMyMockInterviews(isStudent);
   const documents = useMyMentorDocuments(isStudent);
+  const intelligence = useIntelligenceInterviews(isStudent);
   if (
     me.isPending ||
     query.isPending ||
@@ -76,6 +78,61 @@ export function InterviewsPage() {
         title="Собеседования"
         description="Готовьтесь по карточкам и ведите личный дневник процессов по компаниям."
       />
+
+      {isStudent && (
+        <Stack gap="md">
+          <Group justify="space-between" align="flex-end">
+            <div>
+              <Text className="brand-eyebrow">Interview Intelligence</Text>
+              <Title order={2}>Разбор записей</Title>
+              <Text c="dimmed" mt={4}>
+                Расшифровка по спикерам, вопросы и персональный разбор ответов.
+              </Text>
+            </div>
+            <Button component={Link} to="/interviews/journal/new">
+              + Добавить собеседование
+            </Button>
+          </Group>
+          {(intelligence.data?.items.length ?? 0) === 0 ? (
+            <Card withBorder>
+              <Text fw={600}>Разборов пока нет</Text>
+              <Text size="sm" c="dimmed">
+                Добавьте запись в нужный этап дневника и запустите разбор там.
+              </Text>
+            </Card>
+          ) : (
+            <SimpleGrid cols={{ base: 1, md: 2 }}>
+              {intelligence.data?.items.map((interview) => (
+                <Card key={interview.id} withBorder>
+                  <Stack h="100%">
+                    <Group justify="space-between">
+                      <Badge>{interview.track_title}</Badge>
+                      <Text className="technical-label">
+                        {interview.processing_status === "ready"
+                          ? "✓ Разобрано"
+                          : interview.processing_status === "failed"
+                            ? "Ошибка"
+                            : "● Анализируется"}
+                      </Text>
+                    </Group>
+                    <Title order={3}>{interview.company_name}</Title>
+                    <Text c="dimmed">{interview.position_name}</Text>
+                    <Text size="sm">{interview.question_count} вопросов</Text>
+                    <Button
+                      component={Link}
+                      to={`/interviews/analysis/${interview.id}`}
+                      variant="light"
+                      mt="auto"
+                    >
+                      Открыть разбор
+                    </Button>
+                  </Stack>
+                </Card>
+              ))}
+            </SimpleGrid>
+          )}
+        </Stack>
+      )}
 
       {canOwnJournal && (
         <Stack gap="md">

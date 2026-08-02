@@ -49,9 +49,7 @@ class KnowledgeTopic(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         order_by="KnowledgeEntry.position",
     )
 
-    track_links = relationship(
-        "KnowledgeTopicTrack", cascade="all, delete-orphan"
-    )
+    track_links = relationship("KnowledgeTopicTrack", cascade="all, delete-orphan")
 
 
 class KnowledgeTopicTrack(Base):

@@ -74,6 +74,10 @@ const processDetail: InterviewProcessDetail = {
       description: "Алгоритмы и Python",
       media: null,
       attachments: [],
+      comments: [],
+      ai_analysis_id: null,
+      ai_analysis_status: null,
+      ai_analysis_requested_at: null,
       created_at: "2026-08-01T10:00:00Z",
       updated_at: "2026-08-01T10:00:00Z",
     },
@@ -426,6 +430,41 @@ it("проигрывает видеозапись собеседования н�
     expect(player).not.toBeNull();
     expect(player?.src).toContain("interview.mp4?inline=true");
   });
+});
+
+it("запускает единственный AI-разбор из уже загруженного этапа", async () => {
+  const processWithRecording: InterviewProcessDetail = {
+    ...processDetail,
+    stages: [
+      {
+        ...processDetail.stages[0]!,
+        media: {
+          filename: "interview.mp3",
+          content_type: "audio/mpeg",
+          size: 1024,
+        },
+      },
+    ],
+  };
+  vi.spyOn(api, "interviewProcess").mockResolvedValue(processWithRecording);
+  const start = vi
+    .spyOn(api, "startInterviewStageAnalysis")
+    .mockReturnValue(new Promise(() => undefined));
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  renderPage(
+    <InterviewProcessPage />,
+    `/interviews/journal/${processWithRecording.id}`,
+    "/interviews/journal/:processId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Разобрать с AI" }),
+  );
+
+  expect(start).toHaveBeenCalledWith(
+    processWithRecording.id,
+    processWithRecording.stages[0]!.id,
+  );
 });
 
 it("добавляет несколько файлов к описанию собеседования", async () => {

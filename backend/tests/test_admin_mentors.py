@@ -19,9 +19,7 @@ async def test_only_admin_can_manage_mentors(client: AsyncClient, seeded: Seeded
     }
     primary = next(item for item in allowed.json() if item["id"] == str(seeded.mentor_id))
     assert [track["slug"] for track in primary["tracks"]] == ["python"]
-    assert [student["id"] for student in primary["students"]] == [
-        str(seeded.student_id)
-    ]
+    assert [student["id"] for student in primary["students"]] == [str(seeded.student_id)]
 
 
 async def test_admin_creates_and_removes_unassigned_mentor(
@@ -118,9 +116,7 @@ async def test_admin_updates_directions_and_reassigns_students(
         headers=auth(seeded.admin_id),
         json={"mentor_id": str(seeded.other_mentor_id)},
     )
-    listing = await client.get(
-        "/api/v1/admin/mentors", headers=auth(seeded.admin_id)
-    )
+    listing = await client.get("/api/v1/admin/mentors", headers=auth(seeded.admin_id))
 
     assert rejected.status_code == 422
     assert rejected.json()["detail"]["code"] == "mentor_directions_have_students"
@@ -128,6 +124,4 @@ async def test_admin_updates_directions_and_reassigns_students(
     assert reassigned.status_code == 204
     mentors = {item["id"]: item for item in listing.json()}
     assert mentors[str(seeded.mentor_id)]["students"] == []
-    assert mentors[str(seeded.other_mentor_id)]["students"][0]["id"] == str(
-        seeded.student_id
-    )
+    assert mentors[str(seeded.other_mentor_id)]["students"][0]["id"] == str(seeded.student_id)

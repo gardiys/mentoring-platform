@@ -886,7 +886,7 @@ async def mentor_interview_detail(
         (
             await session.execute(
                 select(InterviewStageComment, User)
-                .join(User, User.id == InterviewStageComment.user_id)
+                .outerjoin(User, User.id == InterviewStageComment.user_id)
                 .where(InterviewStageComment.stage_id.in_(stage_ids))
                 .order_by(InterviewStageComment.created_at)
             )
@@ -901,14 +901,21 @@ async def mentor_interview_detail(
         comments[comment.stage_id].append(
             InterviewCatalogCommentRead(
                 id=comment.id,
-                author=InterviewCatalogAuthorRead(
-                    id=author.id,
-                    name=author.first_name,
-                    telegram_username=author.telegram_username,
+                author=(
+                    InterviewCatalogAuthorRead(
+                        id=author.id,
+                        name=author.first_name,
+                        telegram_username=author.telegram_username,
+                    )
+                    if author is not None
+                    else None
                 ),
                 body=comment.body,
                 is_own=comment.user_id == mentor.id,
-                is_mentor_feedback=author.role in {UserRole.MENTOR, UserRole.ADMIN},
+                is_mentor_feedback=(
+                    author is not None and author.role in {UserRole.MENTOR, UserRole.ADMIN}
+                ),
+                is_ai_feedback=comment.is_ai_feedback,
                 created_at=comment.created_at,
                 updated_at=comment.updated_at,
             )
@@ -957,6 +964,7 @@ async def add_interview_feedback(
         body=comment.body,
         is_own=True,
         is_mentor_feedback=True,
+        is_ai_feedback=False,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
     )

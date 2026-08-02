@@ -28,6 +28,22 @@ x-backend-environment: &backend-environment
   INTERVIEW_AUDIO_MAX_BYTES: ${INTERVIEW_AUDIO_MAX_BYTES:-524288000}
   INTERVIEW_OFFER_MAX_BYTES: ${INTERVIEW_OFFER_MAX_BYTES:-20971520}
   INTERVIEW_ATTACHMENT_MAX_BYTES: ${INTERVIEW_ATTACHMENT_MAX_BYTES:-52428800}
+  REDIS_URL: redis://redis:6379/0
+  TRANSCRIPTION_PROVIDER: ${TRANSCRIPTION_PROVIDER:?Set TRANSCRIPTION_PROVIDER in .env.production}
+  TRANSCRIPTION_MAX_CONCURRENCY: ${TRANSCRIPTION_MAX_CONCURRENCY:-4}
+  NEXARA_API_KEY: ${NEXARA_API_KEY:?Set NEXARA_API_KEY in .env.production}
+  NEXARA_BASE_URL: ${NEXARA_BASE_URL:-https://api.nexara.ru/v1}
+  NEXARA_MODEL: ${NEXARA_MODEL:-whisper-1}
+  NEXARA_TIMEOUT_SECONDS: ${NEXARA_TIMEOUT_SECONDS:-600}
+  NEXARA_MAX_RETRIES: ${NEXARA_MAX_RETRIES:-2}
+  INTERVIEW_AI_PROVIDER: ${INTERVIEW_AI_PROVIDER:?Set INTERVIEW_AI_PROVIDER in .env.production}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env.production}
+  OPENAI_ANALYSIS_MODEL: ${OPENAI_ANALYSIS_MODEL:?Set OPENAI_ANALYSIS_MODEL in .env.production}
+  OPENAI_EXTRACTION_MODEL: ${OPENAI_EXTRACTION_MODEL:?Set OPENAI_EXTRACTION_MODEL in .env.production}
+  OPENAI_LIGHT_REVIEW_MODEL: ${OPENAI_LIGHT_REVIEW_MODEL:-}
+  OPENAI_PROXY_URL: ${OPENAI_PROXY_URL:-}
+  OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-120}
+  OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-0}
 
 x-logging: &default-logging
   driver: local
@@ -36,6 +52,19 @@ x-logging: &default-logging
     max-file: "5"
 
 services:
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *default-logging
+
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -107,6 +136,22 @@ services:
       start_period: 10s
     logging: *default-logging
 
+  intelligence-worker:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    init: true
+    environment: *backend-environment
+    command: arq app.interviews.intelligence_jobs.WorkerSettings
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    logging: *default-logging
+
   frontend:
     build:
       context: ../frontend
@@ -155,3 +200,4 @@ volumes:
     name: mentoring-platform-production_postgres_data
   caddy_data:
   caddy_config:
+  redis_data:

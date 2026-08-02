@@ -154,16 +154,30 @@ export function AppLayout() {
             onClick={close}
           />
           {mentor && (
-            <NavLink
-              component={Link}
-              to="/mentor/students"
-              label={admin ? "Прогресс" : "Ученики"}
-              description={admin ? "Учебная активность" : "Прогресс потока"}
-              leftSection={<span className="nav-index">04</span>}
-              className="brand-nav-link"
-              active={location.pathname.startsWith("/mentor")}
-              onClick={close}
-            />
+            <>
+              <NavLink
+                component={Link}
+                to="/mentor/students"
+                label={admin ? "Прогресс" : "Ученики"}
+                description={admin ? "Учебная активность" : "Прогресс потока"}
+                leftSection={<span className="nav-index">04</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/mentor/students")}
+                onClick={close}
+              />
+              <NavLink
+                component={Link}
+                to="/mentor/interview-reviews"
+                label="Разборы интервью"
+                description="AI и менторский фидбек"
+                leftSection={<span className="nav-index">AI</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith(
+                  "/mentor/interview-reviews",
+                )}
+                onClick={close}
+              />
+            </>
           )}
           {admin && (
             <>

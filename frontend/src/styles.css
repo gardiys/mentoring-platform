@@ -10,6 +10,34 @@
   --brand-border: #e2dacd;
 }
 
+.transcript-line {
+  display: grid;
+  grid-template-columns: 64px minmax(100px, 150px) 1fr;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.transcript-line:hover {
+  background: var(--mantine-color-default-hover);
+}
+
+@media (max-width: 48em) {
+  .transcript-line {
+    grid-template-columns: 52px 1fr;
+  }
+
+  .transcript-line > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
 [data-mantine-color-scheme="dark"] {
   --brand-warm: #101d2d;
   --brand-sand: #17283d;

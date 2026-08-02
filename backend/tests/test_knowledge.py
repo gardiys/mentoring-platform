@@ -100,15 +100,9 @@ async def test_knowledge_is_scoped_by_mentor_directions(
 ) -> None:
     await create_topic(client, seeded)
 
-    python_mentor = await client.get(
-        "/api/v1/knowledge/topics", headers=auth(seeded.mentor_id)
-    )
-    go_mentor = await client.get(
-        "/api/v1/knowledge/topics", headers=auth(seeded.other_mentor_id)
-    )
-    admin = await client.get(
-        "/api/v1/knowledge/topics", headers=auth(seeded.admin_id)
-    )
+    python_mentor = await client.get("/api/v1/knowledge/topics", headers=auth(seeded.mentor_id))
+    go_mentor = await client.get("/api/v1/knowledge/topics", headers=auth(seeded.other_mentor_id))
+    admin = await client.get("/api/v1/knowledge/topics", headers=auth(seeded.admin_id))
 
     assert [topic["slug"] for topic in python_mentor.json()] == ["backend-practice"]
     assert go_mentor.json() == []

@@ -35,6 +35,8 @@ import { InterviewProcessCreatePage } from "../pages/InterviewProcessCreatePage"
 import { InterviewProcessPage } from "../pages/InterviewProcessPage";
 import { InterviewCatalogPage } from "../pages/InterviewCatalogPage";
 import { InterviewCatalogCompanyPage } from "../pages/InterviewCatalogCompanyPage";
+import { InterviewIntelligencePage } from "../pages/InterviewIntelligencePage";
+import { MentorInterviewIntelligencePage } from "../pages/MentorInterviewIntelligencePage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { OnboardingPage } from "../pages/OnboardingPage";
 import { RoadmapPage } from "../pages/RoadmapPage";
@@ -88,10 +90,22 @@ export const router = createBrowserRouter([
             element: <InterviewProcessPage />,
           },
           {
+            path: "/interviews/analysis/:interviewId",
+            element: <InterviewIntelligencePage />,
+          },
+          {
             path: "/interviews/:deckSlug",
             element: <InterviewStudyPage />,
           },
           { path: "/mentor/students", element: <MentorStudentsPage /> },
+          {
+            path: "/mentor/interview-reviews",
+            element: <MentorInterviewIntelligencePage />,
+          },
+          {
+            path: "/mentor/interview-reviews/:interviewId",
+            element: <InterviewIntelligencePage />,
+          },
           {
             path: "/mentor/students/:studentId",
             element: <MentorStudentPage />,
