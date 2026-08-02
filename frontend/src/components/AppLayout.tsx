@@ -241,6 +241,18 @@ export function AppLayout() {
                 active={location.pathname.startsWith("/admin/interviews")}
                 onClick={close}
               />
+              <NavLink
+                component={Link}
+                to="/admin/interview-question-moderation"
+                label="Вопросы из разборов"
+                description="Очередь добавления карточек"
+                leftSection={<span className="nav-index">AI</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith(
+                  "/admin/interview-question-moderation",
+                )}
+                onClick={close}
+              />
             </>
           )}
           {import.meta.env.DEV && !platform.isTelegram && (

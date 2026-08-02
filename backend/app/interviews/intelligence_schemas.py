@@ -248,6 +248,37 @@ class IntelligenceReviewQueuePage(BaseModel):
     offset: int
 
 
+class AdminQuestionModerationSummary(BaseModel):
+    question_id: UUID
+    interview_id: UUID
+    question_text: str
+    category: str
+    question_kind: IntelligenceQuestionKind
+    difficulty: IntelligenceDifficulty
+    moderation_status: IntelligenceQuestionModerationStatus
+    company_name: str
+    track_id: UUID
+    track_slug: str
+    track_title: str
+    student_name: str
+    interviewed_at: datetime
+
+
+class AdminQuestionModerationDetail(AdminQuestionModerationSummary):
+    candidate_answer: str | None
+    suggested_answer: str | None
+    matched_card_id: UUID | None
+    matched_card_question: str | None
+    matched_card_asked_count: int | None
+
+
+class AdminQuestionModerationPage(BaseModel):
+    items: list[AdminQuestionModerationSummary]
+    total: int
+    limit: int
+    offset: int
+
+
 class IntelligenceReviewQueueFilter(BaseModel):
     status: str = "all"
 

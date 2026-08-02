@@ -1,5 +1,6 @@
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Group,
@@ -7,6 +8,7 @@ import {
   Select,
   Stack,
   Switch,
+  Text,
   Textarea,
   TextInput,
 } from "@mantine/core";
@@ -83,6 +85,16 @@ function CardForm({
           title={card ? "Редактирование вопроса" : "Новый вопрос"}
           description="На странице загружена только эта карточка. Остальная колода не перерисовывается."
         />
+        {card && (
+          <Group>
+            <Badge variant="light">Спросили раз: {card.asked_count}</Badge>
+            {card.companies && (
+              <Text size="sm" c="dimmed">
+                Компании: {card.companies}
+              </Text>
+            )}
+          </Group>
+        )}
         <Card withBorder>
           <Stack>
             {mutation.error && (

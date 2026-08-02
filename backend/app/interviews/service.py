@@ -444,6 +444,7 @@ def _admin_card_read(card: InterviewCard) -> AdminInterviewCardRead:
         frequency=card.frequency,
         position=card.position,
         is_published=card.is_published,
+        asked_count=card.asked_count,
         updated_at=card.updated_at,
     )
 
@@ -600,6 +601,7 @@ async def list_admin_interview_cards(
                 frequency=card.frequency,
                 position=card.position,
                 is_published=card.is_published,
+                asked_count=card.asked_count,
             )
             for card in cards
         ],

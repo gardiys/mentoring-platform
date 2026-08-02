@@ -204,6 +204,7 @@ function DeckEditor({ deck }: { deck: AdminInterviewDeckSummary }) {
                       <Table.Th>Вопрос</Table.Th>
                       <Table.Th>Тема</Table.Th>
                       <Table.Th>Частота</Table.Th>
+                      <Table.Th>Спросили раз</Table.Th>
                       <Table.Th>Статус</Table.Th>
                       <Table.Th />
                     </Table.Tr>
@@ -226,6 +227,7 @@ function DeckEditor({ deck }: { deck: AdminInterviewDeckSummary }) {
                               : "Обычный"}
                           </Badge>
                         </Table.Td>
+                        <Table.Td>{card.asked_count}</Table.Td>
                         <Table.Td>
                           {card.is_published ? "Опубликован" : "Черновик"}
                         </Table.Td>

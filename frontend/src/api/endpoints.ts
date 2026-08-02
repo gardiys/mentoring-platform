@@ -1,4 +1,6 @@
 import type {
+  AdminQuestionModerationDetail,
+  AdminQuestionModerationPage,
   AdminKnowledgeTopicMutation,
   AdminKnowledgeEntryMutation,
   AdminKnowledgeEntryRead,
@@ -131,6 +133,28 @@ export const api = {
   intelligenceInterviews: (options: { limit?: number; offset?: number } = {}) =>
     apiRequest<IntelligenceInterviewPage>(
       `/api/v1/interviews?limit=${options.limit ?? 20}&offset=${options.offset ?? 0}`,
+    ),
+  adminQuestionModeration: (
+    options: {
+      status?: "needs_review" | "mentor_approved" | "approved" | "rejected" | "all";
+      q?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
+    const params = new URLSearchParams({
+      status: options.status ?? "needs_review",
+      limit: String(options.limit ?? 20),
+      offset: String(options.offset ?? 0),
+    });
+    if (options.q) params.set("q", options.q);
+    return apiRequest<AdminQuestionModerationPage>(
+      `/api/v1/admin/interviews/question-moderation?${params.toString()}`,
+    );
+  },
+  adminQuestionModerationDetail: (questionId: string) =>
+    apiRequest<AdminQuestionModerationDetail>(
+      `/api/v1/admin/interviews/question-moderation/${questionId}`,
     ),
   intelligenceInterview: (id: string) =>
     apiRequest<IntelligenceInterviewDetail>(`/api/v1/interviews/${id}`),

@@ -7,12 +7,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import CurrentUser, JournalUser, MentorUser
+from app.auth.dependencies import AdminUser, CurrentUser, JournalUser, MentorUser
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
 from app.interviews.intelligence_queue import enqueue_intelligence_job
 from app.interviews.intelligence_schemas import (
+    AdminQuestionModerationDetail,
+    AdminQuestionModerationPage,
     IntelligenceCandidateSpeakerMutation,
     IntelligenceInterviewDetail,
     IntelligenceMediaRead,
@@ -32,8 +34,10 @@ from app.interviews.intelligence_service import (
     complete_interview_review,
     create_mentor_comment,
     delete_intelligence_interview,
+    get_admin_question_moderation,
     get_intelligence_interview,
     intelligence_detail,
+    list_admin_question_moderation,
     list_intelligence_interviews,
     moderate_intelligence_question,
     prepare_interview_overview_generation,
@@ -46,10 +50,43 @@ from app.interviews.uploads import InterviewUploadStore, StoredUpload
 
 router = APIRouter(prefix="/interviews", tags=["interview-intelligence"])
 mentor_router = APIRouter(prefix="/mentor/interviews", tags=["mentor-interview-intelligence"])
+admin_router = APIRouter(
+    prefix="/admin/interviews/question-moderation",
+    tags=["admin-interview-question-moderation"],
+)
 Session = Annotated[AsyncSession, Depends(get_db_session)]
 settings = get_settings()
 store = InterviewUploadStore(settings)
 logger = logging.getLogger(__name__)
+
+
+@admin_router.get("", response_model=AdminQuestionModerationPage)
+async def admin_question_moderation_queue(
+    session: Session,
+    _admin: AdminUser,
+    queue_status: Literal[
+        "needs_review", "mentor_approved", "approved", "rejected", "all"
+    ] = Query(default="needs_review", alias="status"),
+    track_id: Annotated[UUID | None, Query()] = None,
+    q: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> AdminQuestionModerationPage:
+    return await list_admin_question_moderation(
+        session,
+        status=queue_status,
+        track_id=track_id,
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@admin_router.get("/{question_id}", response_model=AdminQuestionModerationDetail)
+async def admin_question_moderation_detail(
+    question_id: UUID, session: Session, _admin: AdminUser
+) -> AdminQuestionModerationDetail:
+    return await get_admin_question_moderation(session, question_id)
 
 
 async def _enqueue(function: str, interview_id: UUID) -> None:

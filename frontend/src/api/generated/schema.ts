@@ -1087,6 +1087,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/interviews/question-moderation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Question Moderation Queue */
+        get: operations["admin_question_moderation_queue_api_v1_admin_interviews_question_moderation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/interviews/question-moderation/{question_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Question Moderation Detail */
+        get: operations["admin_question_moderation_detail_api_v1_admin_interviews_question_moderation__question_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/topics": {
         parameters: {
             query?: never;
@@ -2228,6 +2262,8 @@ export interface components {
             position: number;
             /** Is Published */
             is_published: boolean;
+            /** Asked Count */
+            asked_count: number;
             /**
              * Updated At
              * Format: date-time
@@ -2252,6 +2288,8 @@ export interface components {
             position: number;
             /** Is Published */
             is_published: boolean;
+            /** Asked Count */
+            asked_count: number;
         };
         /** AdminInterviewDeckMutation */
         AdminInterviewDeckMutation: {
@@ -2727,6 +2765,103 @@ export interface components {
             slug: string;
             /** Title */
             title: string;
+        };
+        /** AdminQuestionModerationDetail */
+        AdminQuestionModerationDetail: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /**
+             * Interview Id
+             * Format: uuid
+             */
+            interview_id: string;
+            /** Question Text */
+            question_text: string;
+            /** Category */
+            category: string;
+            question_kind: components["schemas"]["IntelligenceQuestionKind"];
+            difficulty: components["schemas"]["IntelligenceDifficulty"];
+            moderation_status: components["schemas"]["IntelligenceQuestionModerationStatus"];
+            /** Company Name */
+            company_name: string;
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            /** Track Slug */
+            track_slug: string;
+            /** Track Title */
+            track_title: string;
+            /** Student Name */
+            student_name: string;
+            /**
+             * Interviewed At
+             * Format: date-time
+             */
+            interviewed_at: string;
+            /** Candidate Answer */
+            candidate_answer: string | null;
+            /** Suggested Answer */
+            suggested_answer: string | null;
+            /** Matched Card Id */
+            matched_card_id: string | null;
+            /** Matched Card Question */
+            matched_card_question: string | null;
+            /** Matched Card Asked Count */
+            matched_card_asked_count: number | null;
+        };
+        /** AdminQuestionModerationPage */
+        AdminQuestionModerationPage: {
+            /** Items */
+            items: components["schemas"]["AdminQuestionModerationSummary"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** AdminQuestionModerationSummary */
+        AdminQuestionModerationSummary: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /**
+             * Interview Id
+             * Format: uuid
+             */
+            interview_id: string;
+            /** Question Text */
+            question_text: string;
+            /** Category */
+            category: string;
+            question_kind: components["schemas"]["IntelligenceQuestionKind"];
+            difficulty: components["schemas"]["IntelligenceDifficulty"];
+            moderation_status: components["schemas"]["IntelligenceQuestionModerationStatus"];
+            /** Company Name */
+            company_name: string;
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            /** Track Slug */
+            track_slug: string;
+            /** Track Title */
+            track_title: string;
+            /** Student Name */
+            student_name: string;
+            /**
+             * Interviewed At
+             * Format: date-time
+             */
+            interviewed_at: string;
         };
         /** AdminRoadmapCreate */
         AdminRoadmapCreate: {
@@ -7844,6 +7979,82 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntelligenceReviewRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_question_moderation_queue_api_v1_admin_interviews_question_moderation_get: {
+        parameters: {
+            query?: {
+                status?: "needs_review" | "mentor_approved" | "approved" | "rejected" | "all";
+                track_id?: string | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminQuestionModerationPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_question_moderation_detail_api_v1_admin_interviews_question_moderation__question_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                question_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminQuestionModerationDetail"];
                 };
             };
             /** @description Validation Error */

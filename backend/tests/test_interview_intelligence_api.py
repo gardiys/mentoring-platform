@@ -19,6 +19,8 @@ from app.interviews.intelligence_models import (
 from app.interviews.intelligence_providers import FakeTranscriptionProvider
 from app.interviews.intelligence_service import select_candidate_speaker
 from app.interviews.models import (
+    InterviewCard,
+    InterviewCardOccurrence,
     InterviewCardProgress,
     InterviewDeck,
     InterviewProcessStage,
@@ -260,6 +262,19 @@ async def test_fake_processing_pipeline_reaches_ready(
             is_published=True,
         )
         session.add(deck)
+        existing_card = InterviewCard(
+            deck=deck,
+            slug="existing-gil-question",
+            category="python",
+            companies="Ozon",
+            question_markdown="## Как работает GIL в Python?",
+            answer_markdown="Проверенный существующий ответ",
+            frequency="frequent",
+            position=0,
+            is_published=True,
+            asked_count=4,
+        )
+        session.add(existing_card)
         missed_question_id = UUID(detail["questions"][-1]["id"])
         missed_answer = await session.scalar(
             select(IntelligenceAnswer).where(
@@ -316,6 +331,22 @@ async def test_fake_processing_pipeline_reaches_ready(
     assert recommended.status_code == 200, recommended.text
     assert recommended.json()["questions"][0]["moderation_status"] == "mentor_approved"
 
+    queue = await client.get(
+        "/api/v1/admin/interviews/question-moderation?status=needs_review",
+        headers=auth(seeded.admin_id),
+    )
+    assert queue.status_code == 200, queue.text
+    assert {item["question_id"] for item in queue.json()["items"]} == {
+        question["id"] for question in detail["questions"]
+    }
+    queue_detail = await client.get(
+        f"/api/v1/admin/interviews/question-moderation/{first_question_id}",
+        headers=auth(seeded.admin_id),
+    )
+    assert queue_detail.status_code == 200, queue_detail.text
+    assert queue_detail.json()["matched_card_id"] == str(existing_card.id)
+    assert queue_detail.json()["matched_card_asked_count"] == 4
+
     ai_reviews = [
         question["answer"]["reviews"][0]
         for question in detail["questions"]
@@ -343,6 +374,13 @@ async def test_fake_processing_pipeline_reaches_ready(
         )
         assert approved.status_code == 200, approved.text
 
+    completed = await client.post(
+        f"/api/v1/mentor/interviews/{interview_id}/complete-review",
+        headers=auth(seeded.admin_id),
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["reviewed_at"] is not None
+
     for question in detail["questions"]:
         review = question["answer"]["reviews"][-1] if question["answer"] else None
         moderated = await client.post(
@@ -363,7 +401,37 @@ async def test_fake_processing_pipeline_reaches_ready(
         )
         assert moderated.status_code == 200, moderated.text
 
+    repeated = await client.post(
+        f"/api/v1/mentor/interviews/{interview_id}/questions/{first_question_id}/moderation",
+        headers=auth(seeded.admin_id),
+        json={
+            "action": "approve",
+            "question_markdown": "Как работает GIL в Python?",
+            "answer_markdown": "Проверенный существующий ответ",
+            "category": "python",
+            "frequency": "frequent",
+        },
+    )
+    assert repeated.status_code == 200, repeated.text
+
     async with TestSession() as session:
+        existing_card = await session.scalar(
+            select(InterviewCard).where(InterviewCard.slug == "existing-gil-question")
+        )
+        assert existing_card is not None
+        assert existing_card.asked_count == 5
+        assert existing_card.companies is not None
+        assert "Ozon" in existing_card.companies
+        assert detail["company_name"] in existing_card.companies
+        occurrences = list(
+            await session.scalars(
+                select(InterviewCardOccurrence).where(
+                    InterviewCardOccurrence.card_id == existing_card.id
+                )
+            )
+        )
+        assert len(occurrences) == 1
+        assert occurrences[0].company_name == detail["company_name"]
         missed_question = await session.get(IntelligenceQuestion, missed_question_id)
         assert missed_question is not None and missed_question.published_card_id is not None
         progress = await session.get(
@@ -383,13 +451,6 @@ async def test_fake_processing_pipeline_reaches_ready(
         )
         assert progress is not None and progress.repetitions == 0
         assert selection is not None
-
-    completed = await client.post(
-        f"/api/v1/mentor/interviews/{interview_id}/complete-review",
-        headers=auth(seeded.admin_id),
-    )
-    assert completed.status_code == 200, completed.text
-    assert completed.json()["reviewed_at"] is not None
 
     reviewed = await client.get(
         "/api/v1/mentor/interviews?status=reviewed", headers=auth(seeded.admin_id)

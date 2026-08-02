@@ -340,6 +340,38 @@ export interface IntelligenceInterviewPage {
   offset: number;
 }
 
+export interface AdminQuestionModerationSummary {
+  question_id: string;
+  interview_id: string;
+  question_text: string;
+  category: string;
+  question_kind: "technical" | "hr" | "organizational" | "other";
+  difficulty: "unknown" | "junior" | "middle" | "senior";
+  moderation_status: "pending" | "mentor_approved" | "approved" | "rejected";
+  company_name: string;
+  track_id: string;
+  track_slug: string;
+  track_title: string;
+  student_name: string;
+  interviewed_at: string;
+}
+
+export interface AdminQuestionModerationDetail
+  extends AdminQuestionModerationSummary {
+  candidate_answer: string | null;
+  suggested_answer: string | null;
+  matched_card_id: string | null;
+  matched_card_question: string | null;
+  matched_card_asked_count: number | null;
+}
+
+export interface AdminQuestionModerationPage {
+  items: AdminQuestionModerationSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface IntelligenceUtterance {
   id: string;
   speaker_id: string;

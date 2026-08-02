@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections import defaultdict
 from datetime import UTC, datetime
 from uuid import UUID
@@ -28,6 +30,9 @@ from app.interviews.intelligence_models import (
     IntelligenceUtterance,
 )
 from app.interviews.intelligence_schemas import (
+    AdminQuestionModerationDetail,
+    AdminQuestionModerationPage,
+    AdminQuestionModerationSummary,
     IntelligenceAnswerRead,
     IntelligenceInterviewCreate,
     IntelligenceInterviewDetail,
@@ -46,6 +51,7 @@ from app.interviews.intelligence_schemas import (
 )
 from app.interviews.models import (
     InterviewCard,
+    InterviewCardOccurrence,
     InterviewCardProgress,
     InterviewDeck,
     InterviewProcess,
@@ -709,26 +715,6 @@ async def complete_interview_review(
             "intelligence_reviews_pending",
             "Resolve all AI recommendations before completing the review",
         )
-    unmoderated_questions = int(
-        await session.scalar(
-            select(func.count(IntelligenceQuestion.id)).where(
-                IntelligenceQuestion.interview_id == interview.id,
-                IntelligenceQuestion.moderation_status.in_(
-                    [
-                        IntelligenceQuestionModerationStatus.PENDING,
-                        IntelligenceQuestionModerationStatus.MENTOR_APPROVED,
-                    ]
-                ),
-            )
-        )
-        or 0
-    )
-    if unmoderated_questions:
-        api_error(
-            409,
-            "intelligence_questions_pending_moderation",
-            "Approve or reject every extracted question before completing the review",
-        )
     interview.reviewed_at = datetime.now(UTC)
     interview.reviewed_by_user_id = reviewer.id
     await session.commit()
@@ -854,14 +840,26 @@ async def moderate_intelligence_question(
             select(InterviewDeck)
             .where(InterviewDeck.track_id == process.track_id, InterviewDeck.is_published.is_(True))
             .order_by(InterviewDeck.position, InterviewDeck.created_at)
+            .with_for_update()
         )
         if deck is None:
             api_error(409, "interview_deck_missing", "Publish a question deck for this direction")
-        card = await session.scalar(
-            select(InterviewCard).where(
-                InterviewCard.deck_id == deck.id,
-                func.lower(func.trim(InterviewCard.question_markdown)) == question_text.casefold(),
+        cards = list(
+            await session.scalars(
+                select(InterviewCard)
+                .where(InterviewCard.deck_id == deck.id)
+                .order_by(InterviewCard.position, InterviewCard.id)
+                .with_for_update()
             )
+        )
+        normalized_question = _normalize_card_question(question_text)
+        card = next(
+            (
+                item
+                for item in cards
+                if _normalize_card_question(item.question_markdown) == normalized_question
+            ),
+            None,
         )
         if card is None:
             max_position_value = await session.scalar(
@@ -878,9 +876,29 @@ async def moderate_intelligence_question(
                 frequency=payload.frequency,
                 position=max_position + 1,
                 is_published=True,
+                asked_count=0,
             )
             session.add(card)
             await session.flush()
+        occurrence = await session.scalar(
+            select(InterviewCardOccurrence).where(
+                InterviewCardOccurrence.source_question_id == question.id
+            )
+        )
+        if occurrence is None:
+            session.add(
+                InterviewCardOccurrence(
+                    card_id=card.id,
+                    source_question_id=question.id,
+                    interview_id=interview.id,
+                    process_id=process.id,
+                    company_id=process.company_id,
+                    company_name=process.company_name,
+                    asked_at=stage.scheduled_at,
+                )
+            )
+            card.asked_count = (card.asked_count or 0) + 1
+            card.companies = _merge_company_name(card.companies, process.company_name)
         question.moderation_status = IntelligenceQuestionModerationStatus.APPROVED
         question.admin_reviewed_by_user_id = reviewer.id
         question.admin_reviewed_at = now
@@ -920,6 +938,204 @@ async def moderate_intelligence_question(
         raise ValueError("Unknown moderation action")
     await session.commit()
     return interview
+
+
+async def list_admin_question_moderation(
+    session: AsyncSession,
+    *,
+    status: str,
+    track_id: UUID | None,
+    query: str | None,
+    limit: int,
+    offset: int,
+) -> AdminQuestionModerationPage:
+    filters = []
+    if status == "needs_review":
+        filters.append(
+            IntelligenceQuestion.moderation_status.in_(
+                [
+                    IntelligenceQuestionModerationStatus.PENDING,
+                    IntelligenceQuestionModerationStatus.MENTOR_APPROVED,
+                ]
+            )
+        )
+    elif status == "mentor_approved":
+        filters.append(
+            IntelligenceQuestion.moderation_status
+            == IntelligenceQuestionModerationStatus.MENTOR_APPROVED
+        )
+    elif status == "approved":
+        filters.append(
+            IntelligenceQuestion.moderation_status
+            == IntelligenceQuestionModerationStatus.APPROVED
+        )
+    elif status == "rejected":
+        filters.append(
+            IntelligenceQuestion.moderation_status
+            == IntelligenceQuestionModerationStatus.REJECTED
+        )
+    if track_id is not None:
+        filters.append(InterviewProcess.track_id == track_id)
+    if query:
+        pattern = f"%{query.strip()}%"
+        filters.append(
+            or_(
+                IntelligenceQuestion.question_text.ilike(pattern),
+                IntelligenceQuestion.category.ilike(pattern),
+                InterviewProcess.company_name.ilike(pattern),
+            )
+        )
+
+    joins = (
+        (IntelligenceInterview, IntelligenceInterview.id == IntelligenceQuestion.interview_id),
+        (InterviewProcessStage, InterviewProcessStage.id == IntelligenceInterview.stage_id),
+        (InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id),
+        (LearningTrack, LearningTrack.id == InterviewProcess.track_id),
+        (User, User.id == IntelligenceInterview.student_id),
+    )
+    count_statement = select(func.count(IntelligenceQuestion.id))
+    for model, condition in joins:
+        count_statement = count_statement.join(model, condition)
+    total = int(await session.scalar(count_statement.where(*filters)) or 0)
+
+    statement = select(
+        IntelligenceQuestion,
+        IntelligenceInterview,
+        InterviewProcessStage,
+        InterviewProcess,
+        LearningTrack,
+        User,
+    )
+    for model, condition in joins:
+        statement = statement.join(model, condition)
+    rows = (
+        await session.execute(
+            statement.where(*filters)
+            .order_by(IntelligenceQuestion.created_at.desc(), IntelligenceQuestion.id)
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+    return AdminQuestionModerationPage(
+        items=[_admin_question_summary(*row) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+async def get_admin_question_moderation(
+    session: AsyncSession, question_id: UUID
+) -> AdminQuestionModerationDetail:
+    row = (
+        await session.execute(
+            select(
+                IntelligenceQuestion,
+                IntelligenceInterview,
+                InterviewProcessStage,
+                InterviewProcess,
+                LearningTrack,
+                User,
+            )
+            .join(
+                IntelligenceInterview,
+                IntelligenceInterview.id == IntelligenceQuestion.interview_id,
+            )
+            .join(
+                InterviewProcessStage,
+                InterviewProcessStage.id == IntelligenceInterview.stage_id,
+            )
+            .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
+            .join(LearningTrack, LearningTrack.id == InterviewProcess.track_id)
+            .join(User, User.id == IntelligenceInterview.student_id)
+            .where(IntelligenceQuestion.id == question_id)
+        )
+    ).one_or_none()
+    if row is None:
+        api_error(404, "intelligence_question_not_found", "Question was not found")
+    question, interview, stage, process, track, student = row
+    answer = await session.scalar(
+        select(IntelligenceAnswer).where(IntelligenceAnswer.question_id == question.id)
+    )
+    suggested_answer = None
+    if answer is not None:
+        review = await session.scalar(
+            select(IntelligenceAnswerReview)
+            .where(IntelligenceAnswerReview.answer_id == answer.id)
+            .order_by(IntelligenceAnswerReview.created_at.desc())
+        )
+        suggested_answer = review.suggested_better_answer if review is not None else None
+    matched_card = await _matching_card(session, process.track_id, question.question_text)
+    summary = _admin_question_summary(question, interview, stage, process, track, student)
+    return AdminQuestionModerationDetail(
+        **summary.model_dump(),
+        candidate_answer=answer.answer_text if answer is not None else None,
+        suggested_answer=suggested_answer,
+        matched_card_id=matched_card.id if matched_card is not None else None,
+        matched_card_question=(
+            matched_card.question_markdown if matched_card is not None else None
+        ),
+        matched_card_asked_count=(
+            matched_card.asked_count if matched_card is not None else None
+        ),
+    )
+
+
+def _admin_question_summary(
+    question: IntelligenceQuestion,
+    interview: IntelligenceInterview,
+    stage: InterviewProcessStage,
+    process: InterviewProcess,
+    track: LearningTrack,
+    student: User,
+) -> AdminQuestionModerationSummary:
+    return AdminQuestionModerationSummary(
+        question_id=question.id,
+        interview_id=interview.id,
+        question_text=question.question_text,
+        category=question.category,
+        question_kind=question.question_kind,
+        difficulty=question.difficulty,
+        moderation_status=question.moderation_status,
+        company_name=process.company_name,
+        track_id=track.id,
+        track_slug=track.slug,
+        track_title=track.title,
+        student_name=" ".join(filter(None, (student.first_name, student.last_name))),
+        interviewed_at=stage.scheduled_at,
+    )
+
+
+async def _matching_card(
+    session: AsyncSession, track_id: UUID, question_text: str
+) -> InterviewCard | None:
+    deck = await session.scalar(
+        select(InterviewDeck)
+        .where(InterviewDeck.track_id == track_id, InterviewDeck.is_published.is_(True))
+        .order_by(InterviewDeck.position, InterviewDeck.created_at)
+    )
+    if deck is None:
+        return None
+    normalized = _normalize_card_question(question_text)
+    cards = await session.scalars(select(InterviewCard).where(InterviewCard.deck_id == deck.id))
+    return next(
+        (card for card in cards if _normalize_card_question(card.question_markdown) == normalized),
+        None,
+    )
+
+
+def _normalize_card_question(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).strip()
+    normalized = re.sub(r"^#{1,6}\s*", "", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).casefold().replace("ё", "е")
+    return normalized.rstrip(" ?!.,;:")
+
+
+def _merge_company_name(existing: str | None, company_name: str) -> str:
+    names = [item.strip() for item in re.split(r"[,;\n]", existing or "") if item.strip()]
+    if company_name.casefold() not in {item.casefold() for item in names}:
+        names.append(company_name)
+    return ", ".join(names)
 
 
 def _review_read(review: IntelligenceAnswerReview) -> IntelligenceReviewRead:

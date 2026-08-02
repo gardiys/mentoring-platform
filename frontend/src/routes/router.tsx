@@ -22,6 +22,8 @@ import { AdminInterviewDeckCreatePage } from "../pages/AdminInterviewDeckCreateP
 import { AdminInterviewDeckEditPage } from "../pages/AdminInterviewDeckEditPage";
 import { AdminInterviewCardEditPage } from "../pages/AdminInterviewCardEditPage";
 import { AdminInterviewDecksPage } from "../pages/AdminInterviewDecksPage";
+import { AdminInterviewQuestionModerationPage } from "../pages/AdminInterviewQuestionModerationPage";
+import { AdminInterviewQuestionModerationEditPage } from "../pages/AdminInterviewQuestionModerationEditPage";
 import { DevLoginPage } from "../pages/DevLoginPage";
 import { MentorStudentPage } from "../pages/MentorStudentPage";
 import { MentorStudentsPage } from "../pages/MentorStudentsPage";
@@ -172,6 +174,14 @@ export const router = createBrowserRouter([
           {
             path: "/admin/interviews",
             element: <AdminInterviewDecksPage />,
+          },
+          {
+            path: "/admin/interview-question-moderation",
+            element: <AdminInterviewQuestionModerationPage />,
+          },
+          {
+            path: "/admin/interview-question-moderation/:questionId",
+            element: <AdminInterviewQuestionModerationEditPage />,
           },
           {
             path: "/admin/interviews/new",

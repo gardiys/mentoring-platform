@@ -5,12 +5,10 @@ import {
   Card,
   Group,
   Radio,
-  Select,
   SimpleGrid,
   Stack,
   Text,
   Textarea,
-  TextInput,
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -85,45 +83,22 @@ function QuestionCard({
   const reviewMutation = useIntelligenceReviewAction();
   const moderationMutation = useIntelligenceQuestionModeration();
   const review = question.answer?.reviews.at(-1);
-  const [questionText, setQuestionText] = useState(question.question_text);
-  const [answerText, setAnswerText] = useState(
-    review?.suggested_better_answer || question.answer?.answer_text || "",
-  );
-  const [category, setCategory] = useState(question.category);
-  const [frequency, setFrequency] = useState<"frequent" | "occasional">(
-    "occasional",
-  );
   const canReview = reviewerRole !== "student";
-  const moderate = (
-    action: "recommend" | "approve" | "reject",
-    includeCard = false,
-  ) =>
+  const moderate = (action: "recommend" | "reject") =>
     moderationMutation.mutate(
       {
         interviewId,
         questionId: question.id,
-        payload: {
-          action,
-          ...(includeCard
-            ? {
-                question_markdown: questionText.trim(),
-                answer_markdown: answerText.trim(),
-                category: category.trim(),
-                frequency,
-              }
-            : {}),
-        },
+        payload: { action },
       },
       {
         onSuccess: () =>
           notifications.show({
             color: "green",
             message:
-              action === "approve"
-                ? "Вопрос добавлен в карточки"
-                : action === "recommend"
-                  ? "Вопрос рекомендован администратору"
-                  : "Вопрос отклонён",
+              action === "recommend"
+                ? "Вопрос рекомендован администратору"
+                : "Вопрос отклонён",
           }),
         onError: (error) =>
           notifications.show({ color: "red", message: error.message }),
@@ -241,70 +216,15 @@ function QuestionCard({
               </Group>
               {reviewerRole === "admin" &&
                 question.moderation_status !== "approved" && (
-                  <>
-                    <Textarea
-                      label="Вопрос"
-                      minRows={2}
-                      value={questionText}
-                      onChange={(event) =>
-                        setQuestionText(event.currentTarget.value)
-                      }
-                    />
-                    <Textarea
-                      label="Проверенный ответ для обратной стороны карточки"
-                      minRows={4}
-                      required
-                      value={answerText}
-                      onChange={(event) =>
-                        setAnswerText(event.currentTarget.value)
-                      }
-                    />
-                    <Group grow align="flex-end">
-                      <TextInput
-                        label="Тема"
-                        value={category}
-                        onChange={(event) =>
-                          setCategory(event.currentTarget.value)
-                        }
-                      />
-                      <Select
-                        label="Частота"
-                        data={[
-                          { value: "frequent", label: "Частый вопрос" },
-                          { value: "occasional", label: "Нечастый вопрос" },
-                        ]}
-                        value={frequency}
-                        onChange={(value) =>
-                          setFrequency(
-                            value === "frequent" ? "frequent" : "occasional",
-                          )
-                        }
-                      />
-                    </Group>
-                    <Group>
-                      <Button
-                        size="xs"
-                        loading={moderationMutation.isPending}
-                        disabled={
-                          !questionText.trim() ||
-                          !answerText.trim() ||
-                          !category.trim()
-                        }
-                        onClick={() => moderate("approve", true)}
-                      >
-                        Добавить в карточки
-                      </Button>
-                      <Button
-                        size="xs"
-                        color="gray"
-                        variant="light"
-                        loading={moderationMutation.isPending}
-                        onClick={() => moderate("reject")}
-                      >
-                        Отклонить
-                      </Button>
-                    </Group>
-                  </>
+                  <Button
+                    component={Link}
+                    to={`/admin/interview-question-moderation/${question.id}`}
+                    size="xs"
+                    w="fit-content"
+                    variant="light"
+                  >
+                    Открыть в очереди вопросов
+                  </Button>
                 )}
               {reviewerRole === "mentor" &&
                 question.moderation_status !== "approved" && (
@@ -362,9 +282,6 @@ export function InterviewIntelligencePage() {
   const canReview = me.data.role === "mentor" || me.data.role === "admin";
   const canDelete =
     me.data.role === "admin" || interview.student_id === me.data.id;
-  const hasUnmoderatedQuestions = interview.questions.some((question) =>
-    ["pending", "mentor_approved"].includes(question.moderation_status),
-  );
 
   const deleteInterview = () => {
     if (
@@ -730,10 +647,7 @@ export function InterviewIntelligencePage() {
                   <Button
                     variant="light"
                     loading={completeReview.isPending}
-                    disabled={
-                      interview.suggested_review_count > 0 ||
-                      hasUnmoderatedQuestions
-                    }
+                    disabled={interview.suggested_review_count > 0}
                     onClick={() => completeReview.mutate(interview.id)}
                   >
                     Завершить проверку
@@ -746,11 +660,6 @@ export function InterviewIntelligencePage() {
                   Сначала подтвердите или отклоните все AI-рекомендации.
                 </Text>
               )}
-            {!interview.reviewed_at && hasUnmoderatedQuestions && (
-              <Text size="sm" c="orange">
-                Сначала утвердите или отклоните все вопросы для общей базы.
-              </Text>
-            )}
             <Textarea
               label="Общий комментарий ученику"
               value={comment}

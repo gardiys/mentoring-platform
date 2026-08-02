@@ -150,6 +150,7 @@ class AdminInterviewCardRead(BaseModel):
     frequency: InterviewCardFrequency
     position: int
     is_published: bool
+    asked_count: int
     updated_at: datetime
 
 
@@ -182,6 +183,7 @@ class AdminInterviewCardSummary(BaseModel):
     frequency: InterviewCardFrequency
     position: int
     is_published: bool
+    asked_count: int
 
 
 class AdminInterviewCardPage(BaseModel):

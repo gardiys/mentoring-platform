@@ -83,6 +83,7 @@ class InterviewCard(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "interview_cards"
     __table_args__ = (
         CheckConstraint("position >= 0", name="position_non_negative"),
+        CheckConstraint("asked_count >= 0", name="asked_count_non_negative"),
         Index("ix_interview_cards_deck_position", "deck_id", "position"),
     )
 
@@ -108,8 +109,58 @@ class InterviewCard(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    asked_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
 
     deck = relationship("InterviewDeck", back_populates="cards")
+    occurrences = relationship(
+        "InterviewCardOccurrence",
+        back_populates="card",
+        cascade="all, delete-orphan",
+    )
+
+
+class InterviewCardOccurrence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "interview_card_occurrences"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_question_id",
+            name="uq_interview_card_occurrence_source_question",
+        ),
+        Index("ix_interview_card_occurrences_card_asked", "card_id", "asked_at"),
+        Index("ix_interview_card_occurrences_company", "company_id"),
+    )
+
+    card_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("interview_cards.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_question_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("intelligence_questions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    interview_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("intelligence_interviews.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    process_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("interview_processes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    company_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    company_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    asked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    card = relationship("InterviewCard", back_populates="occurrences")
 
 
 class InterviewCardProgress(Base):

@@ -7,7 +7,31 @@ export const intelligenceKeys = {
   list: (scope: string, status = "all") =>
     ["interviews", "intelligence", scope, status] as const,
   detail: (id: string) => ["interviews", "intelligence", id] as const,
+  moderation: (status: string, query: string, offset: number) =>
+    ["interviews", "intelligence", "moderation", status, query, offset] as const,
+  moderationDetail: (id: string) =>
+    ["interviews", "intelligence", "moderation", id] as const,
 };
+
+export function useAdminQuestionModeration(
+  status: "needs_review" | "mentor_approved" | "approved" | "rejected" | "all",
+  query: string,
+  offset: number,
+) {
+  return useQuery({
+    queryKey: intelligenceKeys.moderation(status, query, offset),
+    queryFn: () =>
+      api.adminQuestionModeration({ status, q: query, limit: 20, offset }),
+  });
+}
+
+export function useAdminQuestionModerationDetail(id: string) {
+  return useQuery({
+    queryKey: intelligenceKeys.moderationDetail(id),
+    queryFn: () => api.adminQuestionModerationDetail(id),
+    enabled: Boolean(id),
+  });
+}
 
 export function useIntelligenceInterviews(enabled = true) {
   return useQuery({
