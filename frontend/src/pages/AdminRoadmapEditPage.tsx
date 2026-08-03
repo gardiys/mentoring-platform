@@ -14,12 +14,13 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
   useAdminRoadmap,
   useUpdateAdminRoadmapSettings,
@@ -36,19 +37,23 @@ function RoadmapEditor({ roadmap }: { roadmap: AdminRoadmapOutline }) {
     position: roadmap.position,
     is_published: roadmap.is_published,
   });
+  const initial = useRef(form);
   const mutation = useUpdateAdminRoadmapSettings();
   const valid = form.title.trim().length > 0 && SLUG_PATTERN.test(form.slug);
+  useUnsavedChanges(JSON.stringify(form) !== JSON.stringify(initial.current));
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!valid || mutation.isPending) return;
     mutation.mutate(
       { id: roadmap.id, payload: form },
       {
-        onSuccess: () =>
+        onSuccess: () => {
+          initial.current = form;
           notifications.show({
             color: "green",
             message: "Настройки роадмапа сохранены",
-          }),
+          });
+        },
         onError: (error) =>
           notifications.show({ color: "red", message: error.message }),
       },
@@ -251,6 +256,9 @@ export function AdminRoadmapEditPage() {
   const { roadmapId = "" } = useParams();
   const query = useAdminRoadmap(roadmapId);
   if (query.isPending) return <LoadingState label="Загружаем структуру…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   return <RoadmapEditor key={query.data.id} roadmap={query.data} />;
 }

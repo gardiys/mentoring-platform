@@ -74,7 +74,12 @@ a {
   backdrop-filter: blur(18px);
 }
 
+.brand-header-inner {
+  box-sizing: border-box;
+}
+
 .brand-navbar {
+  padding-bottom: max(1rem, var(--tg-content-safe-area-inset-bottom, 0px));
   border-right: 1px solid var(--brand-border);
   background: color-mix(in srgb, var(--brand-sand) 72%, var(--brand-warm));
 }
@@ -106,6 +111,11 @@ a {
   font-weight: 600;
   letter-spacing: 0.13em;
   text-transform: uppercase;
+}
+
+.technical-label {
+  font-size: 0.74rem;
+  letter-spacing: 0.1em;
 }
 
 .brand-tagline,
@@ -192,9 +202,22 @@ a {
 
 .page-container {
   width: min(100%, 1180px);
-  min-height: calc(100vh - 76px);
+  min-height: calc(100vh - 76px - var(--tg-content-safe-area-inset-top, 0px));
   padding: clamp(1.25rem, 4vw, 3rem);
   margin: 0 auto;
+}
+
+.route-progress {
+  position: fixed;
+  z-index: 300;
+  top: calc(76px + var(--tg-content-safe-area-inset-top, 0px));
+  right: 0;
+  left: var(--app-shell-navbar-offset, 0px);
+}
+
+:where(a, button, [role="button"], input, textarea, select):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--brand-blue) 70%, white);
+  outline-offset: 2px;
 }
 
 .page-container > * {
@@ -347,7 +370,7 @@ a {
   object-fit: cover;
   justify-self: end;
   filter: drop-shadow(0 18px 28px rgb(25 53 95 / 25%));
-  border: 5px solid rgb(255 255 255 / 90%);
+  border: 1px solid rgb(255 255 255 / 28%);
   border-radius: 50%;
 }
 
@@ -440,6 +463,33 @@ a {
 
 .topic-row:hover {
   border-color: color-mix(in srgb, var(--brand-blue) 35%, transparent);
+}
+
+.topic-row-main,
+.roadmap-section-title,
+.min-width-zero,
+.file-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.roadmap-section-heading {
+  width: 100%;
+}
+
+.roadmap-section-meta,
+.file-actions {
+  flex: 0 0 auto;
+}
+
+.file-action-row {
+  align-items: flex-start;
+}
+
+.responsive-tabs {
+  width: max-content;
+  min-width: 100%;
+  flex-wrap: nowrap;
 }
 
 .student-card,
@@ -562,7 +612,8 @@ a {
 }
 
 .login-card {
-  width: calc(100vw - 2rem);
+  box-sizing: border-box;
+  width: 100%;
   max-width: 980px;
   overflow: hidden;
   background: var(--brand-warm);
@@ -572,6 +623,9 @@ a {
 
 .login-brand-panel {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
   min-width: 0;
   min-height: 520px;
   padding: clamp(1.5rem, 4vw, 3rem);
@@ -599,12 +653,15 @@ a {
 }
 
 .login-mascot {
-  position: absolute;
-  right: -0.75rem;
-  bottom: -4rem;
-  width: min(42%, 200px);
-  border: 6px solid white;
+  display: block;
+  align-self: flex-end;
+  width: min(45%, 190px);
+  height: auto;
+  margin-top: auto;
+  object-fit: cover;
+  border: 1px solid rgb(255 255 255 / 24%);
   border-radius: 50%;
+  box-shadow: 0 18px 44px rgb(7 23 43 / 28%);
 }
 
 .login-form-panel {
@@ -625,7 +682,7 @@ a {
 
 .not-found-mascot {
   width: 132px;
-  border: 5px solid white;
+  border: 1px solid rgb(25 53 95 / 12%);
   border-radius: 50%;
   box-shadow: 0 18px 50px rgb(25 53 95 / 18%);
 }
@@ -660,14 +717,55 @@ a {
 
 .onboarding-content {
   display: grid;
-  align-content: center;
+  grid-template-columns: minmax(0, 1fr) clamp(150px, 24vw, 220px);
+  gap: clamp(1.5rem, 5vw, 3rem);
+  align-items: center;
   min-height: 245px;
+}
+
+.onboarding-mascot {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid rgb(46 144 255 / 22%);
+  border-radius: 50%;
+  box-shadow: 0 18px 48px rgb(25 53 95 / 18%);
 }
 
 @media (max-width: 47.99em) {
   .page-container {
     padding: 1.15rem 1.15rem
       max(1.15rem, var(--tg-content-safe-area-inset-bottom, 0px));
+  }
+
+  .technical-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.075em;
+  }
+
+  .roadmap-section-heading,
+  .topic-row,
+  .file-action-row,
+  .responsive-card-header,
+  .upload-control-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .roadmap-section-meta {
+    align-self: flex-start;
+  }
+
+  .file-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .file-actions .mantine-Button-root,
+  .upload-control-row > .mantine-Button-root {
+    flex: 1 1 auto;
+    min-height: 2.75rem;
   }
 
   .brand-logo-copy {
@@ -696,9 +794,7 @@ a {
   }
 
   .login-mascot {
-    right: -0.75rem;
-    bottom: -3.5rem;
-    width: 135px;
+    width: 112px;
   }
 
   .page-heading + .mantine-Button-root {
@@ -711,5 +807,26 @@ a {
 
   .onboarding-card .brand-logo-copy {
     display: flex;
+  }
+
+  .onboarding-content {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: auto;
+  }
+
+  .onboarding-mascot {
+    width: 112px;
+    justify-self: end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

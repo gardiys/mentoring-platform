@@ -5,14 +5,23 @@ import {
   Burger,
   Group,
   NavLink,
+  Progress,
+  ScrollArea,
   Stack,
   Text,
   useComputedColorScheme,
   useMantineColorScheme,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
 import { useEffect } from "react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useNavigation,
+} from "react-router-dom";
 
 import { clearDevUserId } from "../features/auth/devAuth";
 import { useLogout, useMe } from "../features/auth/queries";
@@ -31,6 +40,7 @@ export function AppLayout() {
   const colorScheme = useComputedColorScheme("light");
   const location = useLocation();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const platform = usePlatform();
   const me = useMe();
   const logout = useLogout();
@@ -38,9 +48,19 @@ export function AppLayout() {
   const admin = me.data?.role === "admin";
 
   const handleLogout = async () => {
-    await logout.mutateAsync();
-    clearDevUserId();
-    navigate("/login", { replace: true });
+    try {
+      await logout.mutateAsync();
+      clearDevUserId();
+      navigate("/login", { replace: true });
+    } catch (error) {
+      notifications.show({
+        color: "red",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Не удалось завершить сессию на сервере",
+      });
+    }
   };
 
   useEffect(() => {
@@ -63,18 +83,27 @@ export function AppLayout() {
 
   return (
     <AppShell
-      header={{ height: 76 }}
+      header={{
+        height: "calc(76px + var(--tg-content-safe-area-inset-top, 0px))",
+      }}
       navbar={{ width: 272, breakpoint: "sm", collapsed: { mobile: !opened } }}
       padding={0}
     >
       <AppShell.Header className="brand-header">
-        <Group h="100%" px={{ base: "md", sm: "xl" }} justify="space-between">
+        <Group
+          h="100%"
+          px={{ base: "md", sm: "xl" }}
+          pt="var(--tg-content-safe-area-inset-top, 0px)"
+          justify="space-between"
+          className="brand-header-inner"
+        >
           <Group wrap="nowrap">
             <Burger
               opened={opened}
               onClick={toggle}
               hiddenFrom="sm"
               size="sm"
+              aria-label={opened ? "Закрыть меню" : "Открыть меню"}
             />
             <BrandLogo compact />
           </Group>
@@ -119,7 +148,7 @@ export function AppLayout() {
             Навигация
           </Text>
         </AppShell.Section>
-        <AppShell.Section grow>
+        <AppShell.Section grow component={ScrollArea} scrollbarSize={6}>
           <NavLink
             component={Link}
             to="/roadmaps"
@@ -147,7 +176,7 @@ export function AppLayout() {
             component={Link}
             to="/interviews"
             label="Собеседования"
-            description="Карточки и повторения"
+            description="Дневник, каталог и карточки"
             leftSection={<span className="nav-index">03</span>}
             className="brand-nav-link"
             active={location.pathname.startsWith("/interviews")}
@@ -270,9 +299,11 @@ export function AppLayout() {
           <div className="mentor-note">
             <Group wrap="nowrap" align="center">
               <img
-                src="/brand/geralt-avatar.png"
+                src="/brand/avatar-memes-small.png"
                 alt=""
                 className="mentor-note-avatar"
+                loading="lazy"
+                decoding="async"
               />
               <div>
                 <Badge color="brandYellow" c="brandNavy.9" mb={4}>
@@ -287,6 +318,15 @@ export function AppLayout() {
         </AppShell.Section>
       </AppShell.Navbar>
       <AppShell.Main>
+        {navigation.state !== "idle" && (
+          <Progress
+            value={100}
+            animated
+            size="xs"
+            className="route-progress"
+            aria-label="Загружаем раздел"
+          />
+        )}
         <main className="page-container">
           <Outlet />
         </main>

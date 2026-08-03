@@ -187,7 +187,7 @@ export function InterviewCatalogPage() {
       {query.isPending ? (
         <LoadingState label="Загружаем компании…" />
       ) : query.isError ? (
-        <ErrorState retry={() => void query.refetch()} />
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
       ) : query.data.items.length === 0 ? (
         <Card withBorder>
           <Text fw={600}>Компании не найдены</Text>

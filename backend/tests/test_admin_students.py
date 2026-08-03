@@ -171,10 +171,13 @@ async def test_admin_student_list_supports_search_access_filter_and_options(
     assert assigned_to_mentor.json()["items"][0]["id"] == str(seeded.student_id)
     assert without_mentor.json()["total"] == 1
     assert without_mentor.json()["items"][0]["id"] == created.json()["id"]
-    assert [mentor["id"] for mentor in without_mentor.json()["mentors"]] == [
+    mentor_options = {mentor["id"]: mentor for mentor in without_mentor.json()["mentors"]}
+    assert set(mentor_options) == {
         str(seeded.mentor_id),
         str(seeded.other_mentor_id),
-    ]
+        str(seeded.admin_id),
+    }
+    assert mentor_options[str(seeded.admin_id)]["role"] == "admin"
 
 
 async def test_admin_rejects_duplicate_student_identifiers(

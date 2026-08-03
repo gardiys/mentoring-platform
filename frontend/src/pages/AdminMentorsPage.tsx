@@ -59,6 +59,7 @@ function MentorCard({
   removePending: boolean;
 }) {
   const name = fullName(mentor.first_name, mentor.last_name);
+  const isAdmin = mentor.role === "admin";
   const [trackIds, setTrackIds] = useState(
     mentor.tracks.map((track) => track.id),
   );
@@ -86,7 +87,14 @@ function MentorCard({
     <Card withBorder>
       <Stack>
         <Group justify="space-between">
-          <Title order={2}>{name}</Title>
+          <Group gap="sm">
+            <Title order={2}>{name}</Title>
+            {isAdmin && (
+              <Badge color="brandYellow" c="brandNavy.9">
+                Администратор · ментор
+              </Badge>
+            )}
+          </Group>
           <Badge variant="light">{mentor.student_count} учеников</Badge>
         </Group>
         <Text size="sm">{mentor.email ?? "Email не указан"}</Text>
@@ -97,22 +105,42 @@ function MentorCard({
               ? `Telegram ID: ${mentor.telegram_id}`
               : "Telegram не указан"}
         </Text>
-        <MultiSelect
-          label="Направления ментора"
-          data={trackOptions}
-          value={trackIds}
-          onChange={setTrackIds}
-          searchable
-          required
-        />
-        <Button
-          variant="light"
-          disabled={trackIds.length === 0}
-          loading={updateDirections.isPending}
-          onClick={saveDirections}
-        >
-          Сохранить направления
-        </Button>
+        {isAdmin ? (
+          <Stack gap="xs">
+            <Text fw={600} size="sm">
+              Направления наставничества
+            </Text>
+            <Group gap="xs">
+              {mentor.tracks.map((track) => (
+                <Badge key={track.id} variant="light">
+                  {track.title}
+                </Badge>
+              ))}
+            </Group>
+            <Text size="xs" c="dimmed">
+              Администратор может брать учеников со всех доступных направлений.
+            </Text>
+          </Stack>
+        ) : (
+          <>
+            <MultiSelect
+              label="Направления ментора"
+              data={trackOptions}
+              value={trackIds}
+              onChange={setTrackIds}
+              searchable
+              required
+            />
+            <Button
+              variant="light"
+              disabled={trackIds.length === 0}
+              loading={updateDirections.isPending}
+              onClick={saveDirections}
+            >
+              Сохранить направления
+            </Button>
+          </>
+        )}
 
         {mentor.students.length > 0 && (
           <Stack gap="xs">
@@ -134,7 +162,7 @@ function MentorCard({
                         .filter((item) => item.id !== mentor.id)
                         .map((item) => ({
                           value: item.id,
-                          label: fullName(item.first_name, item.last_name),
+                          label: `${fullName(item.first_name, item.last_name)}${item.role === "admin" ? " · администратор" : ""}`,
                         }))}
                       value={targets[student.id] ?? null}
                       onChange={(value) =>
@@ -177,24 +205,33 @@ function MentorCard({
             ))}
           </Stack>
         )}
-        <Button
-          color="red"
-          variant="light"
-          disabled={mentor.student_count > 0}
-          title={
-            mentor.student_count > 0
-              ? "Сначала переназначьте учеников другому ментору"
-              : undefined
-          }
-          loading={removePending}
-          onClick={() => onRemove(mentor.id, name)}
-        >
-          Убрать из менторов
-        </Button>
-        {mentor.student_count > 0 && (
+        {isAdmin ? (
           <Text size="xs" c="dimmed">
-            Перед удалением роли переназначьте учеников.
+            Основная роль администратора сохраняется и не может быть снята из
+            этого раздела.
           </Text>
+        ) : (
+          <>
+            <Button
+              color="red"
+              variant="light"
+              disabled={mentor.student_count > 0}
+              title={
+                mentor.student_count > 0
+                  ? "Сначала переназначьте учеников другому ментору"
+                  : undefined
+              }
+              loading={removePending}
+              onClick={() => onRemove(mentor.id, name)}
+            >
+              Убрать из менторов
+            </Button>
+            {mentor.student_count > 0 && (
+              <Text size="xs" c="dimmed">
+                Перед удалением роли переназначьте учеников.
+              </Text>
+            )}
+          </>
         )}
       </Stack>
     </Card>
@@ -279,7 +316,7 @@ export function AdminMentorsPage() {
         <PageHeader
           eyebrow="Админ-панель · Команда"
           title="Менторы"
-          description="Добавляйте менторов, переводите учеников и контролируйте назначения."
+          description="Добавляйте менторов, назначайте ученикам администратора и контролируйте распределение."
         />
         <Button onClick={open}>+ Добавить нового ментора</Button>
       </Group>
@@ -325,6 +362,7 @@ export function AdminMentorsPage() {
         <LoadingState label="Загружаем менторов…" />
       ) : mentors.isError || options.isError ? (
         <ErrorState
+          error={mentors.error ?? options.error}
           retry={() => {
             void mentors.refetch();
             void options.refetch();

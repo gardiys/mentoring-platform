@@ -5,6 +5,7 @@ import {
   Card,
   FileInput,
   Group,
+  Progress,
   Select,
   SimpleGrid,
   Stack,
@@ -13,11 +14,13 @@ import {
   Textarea,
   TextInput,
   Title,
+  VisuallyHidden,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { ApiError } from "../api/client";
 import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
@@ -38,6 +41,8 @@ import type {
   InterviewProcessStageRead,
   InterviewStageType,
 } from "../types/api";
+import { AUDIO_MAX_BYTES, VIDEO_MAX_BYTES, mediaKind } from "../utils/media";
+import { openExternalResource } from "../utils/openExternalResource";
 
 const stageOptions = [
   { value: "screening", label: "Скрининг" },
@@ -52,8 +57,6 @@ const stageLabels = Object.fromEntries(
   stageOptions.map((option) => [option.value, option.label]),
 ) as Record<InterviewStageType, string>;
 
-const VIDEO_MAX_BYTES = 2 * 1024 * 1024 * 1024;
-const AUDIO_MAX_BYTES = 500 * 1024 * 1024;
 const OFFER_MAX_BYTES = 20 * 1024 * 1024;
 const ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
 
@@ -86,7 +89,8 @@ async function downloadFile(request: Promise<string>, filename: string) {
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = filename;
-    anchor.rel = "noopener";
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
     anchor.click();
   } catch (error) {
     notifications.show({
@@ -99,8 +103,7 @@ async function downloadFile(request: Promise<string>, filename: string) {
 
 async function openFile(request: Promise<string>) {
   try {
-    const url = await request;
-    window.open(url, "_blank", "noopener,noreferrer");
+    await openExternalResource(request);
   } catch (error) {
     notifications.show({
       color: "red",
@@ -120,12 +123,24 @@ function StageMedia({
   const [file, setFile] = useState<File | null>(null);
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const [isPlayerLoading, setIsPlayerLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const uploadController = useRef<AbortController | null>(null);
   const mutation = useUploadInterviewStageMedia();
   const analysisMutation = useStartInterviewStageAnalysis();
+  const storedMediaKind = stage.media
+    ? mediaKind(stage.media.content_type, stage.media.filename)
+    : null;
 
   useEffect(() => {
     setPlayerUrl(null);
   }, [stage.media?.filename, stage.media?.size]);
+
+  useEffect(
+    () => () => {
+      uploadController.current?.abort();
+    },
+    [],
+  );
 
   const togglePlayer = async () => {
     if (playerUrl) {
@@ -147,34 +162,54 @@ function StageMedia({
   };
 
   const upload = () => {
-    if (!file || !file.type.match(/^(audio|video)\//)) {
+    const selectedMediaKind = file ? mediaKind(file.type, file.name) : null;
+    if (!file || !selectedMediaKind) {
       notifications.show({
         color: "red",
         message: "Выберите аудио- или видеофайл",
       });
       return;
     }
-    const maxBytes = file.type.startsWith("video/")
-      ? VIDEO_MAX_BYTES
-      : AUDIO_MAX_BYTES;
+    const maxBytes =
+      selectedMediaKind === "video" ? VIDEO_MAX_BYTES : AUDIO_MAX_BYTES;
     if (file.size > maxBytes) {
       notifications.show({
         color: "red",
-        message: file.type.startsWith("video/")
-          ? "Видео должно быть не больше 2 ГБ"
-          : "Аудио должно быть не больше 500 МБ",
+        message:
+          selectedMediaKind === "video"
+            ? "Видео должно быть не больше 2 ГБ"
+            : "Аудио должно быть не больше 500 МБ",
       });
       return;
     }
+    const controller = new AbortController();
+    uploadController.current = controller;
+    setUploadProgress(0);
     mutation.mutate(
-      { processId, stageId: stage.id, file },
+      {
+        processId,
+        stageId: stage.id,
+        file,
+        signal: controller.signal,
+        onProgress: setUploadProgress,
+      },
       {
         onSuccess: () => {
           setFile(null);
           notifications.show({ color: "green", message: "Запись сохранена" });
         },
         onError: (error) =>
-          notifications.show({ color: "red", message: error.message }),
+          notifications.show({
+            color:
+              error instanceof ApiError && error.code === "request_aborted"
+                ? "yellow"
+                : "red",
+            message: error.message,
+          }),
+        onSettled: () => {
+          uploadController.current = null;
+          setUploadProgress(null);
+        },
       },
     );
   };
@@ -183,11 +218,11 @@ function StageMedia({
     <Stack gap="xs">
       {stage.media && (
         <>
-          <Group justify="space-between">
-            <Text size="sm">
+          <Group justify="space-between" className="file-action-row">
+            <Text size="sm" className="file-name">
               {stage.media.filename} · {formatSize(stage.media.size)}
             </Text>
-            <Group gap="xs">
+            <Group gap="xs" className="file-actions">
               <Button
                 size="xs"
                 variant="light"
@@ -196,7 +231,7 @@ function StageMedia({
               >
                 {playerUrl
                   ? "Скрыть запись"
-                  : stage.media.content_type.startsWith("video/")
+                  : storedMediaKind === "video"
                     ? "Посмотреть запись"
                     : "Прослушать запись"}
               </Button>
@@ -214,17 +249,25 @@ function StageMedia({
               </Button>
             </Group>
           </Group>
-          {playerUrl && stage.media.content_type.startsWith("video/") && (
+          {playerUrl && storedMediaKind === "video" && (
             <video
               controls
               preload="metadata"
               src={playerUrl}
+              onError={() => {
+                setPlayerUrl(null);
+                notifications.show({
+                  color: "yellow",
+                  message:
+                    "Не удалось воспроизвести видео. Нажмите «Посмотреть запись», чтобы повторить.",
+                });
+              }}
               style={{ width: "100%", maxHeight: 520, borderRadius: 12 }}
             >
               Ваш браузер не поддерживает воспроизведение видео.
             </video>
           )}
-          {playerUrl && stage.media.content_type.startsWith("audio/") && (
+          {playerUrl && storedMediaKind === "audio" && (
             <audio
               controls
               preload="metadata"
@@ -293,26 +336,52 @@ function StageMedia({
         </>
       )}
       {!stage.ai_analysis_requested_at && (
-        <Group align="flex-end">
-          <FileInput
-            flex={1}
-            label={stage.media ? "Заменить запись" : "Добавить запись"}
-            placeholder="Аудио или видео"
-            description="Видео до 2 ГБ, аудио до 500 МБ"
-            accept="audio/*,video/*"
-            value={file}
-            onChange={setFile}
-            clearable
-          />
-          <Button
-            variant="light"
-            disabled={!file}
-            loading={mutation.isPending}
-            onClick={upload}
-          >
-            Загрузить
-          </Button>
-        </Group>
+        <Stack gap="xs">
+          <Group align="flex-end" className="upload-control-row">
+            <FileInput
+              flex={1}
+              label={stage.media ? "Заменить запись" : "Добавить запись"}
+              placeholder="Аудио или видео"
+              description="Видео до 2 ГБ, аудио до 500 МБ"
+              accept="audio/*,video/*"
+              value={file}
+              onChange={setFile}
+              disabled={mutation.isPending}
+              clearable
+            />
+            <Button
+              variant="light"
+              disabled={!file}
+              loading={mutation.isPending}
+              onClick={upload}
+            >
+              Загрузить
+            </Button>
+          </Group>
+          {mutation.isPending && uploadProgress !== null && (
+            <Stack gap={6}>
+              <Group justify="space-between" wrap="nowrap">
+                <Text size="sm" fw={600} aria-hidden="true">
+                  Загружаем запись… {uploadProgress}%
+                </Text>
+                <VisuallyHidden role="status" aria-live="polite">
+                  {uploadProgress === 100
+                    ? "Загрузка завершена"
+                    : `Загружено ${Math.floor(uploadProgress / 25) * 25}%`}
+                </VisuallyHidden>
+                <Button
+                  size="compact-sm"
+                  variant="subtle"
+                  color="red"
+                  onClick={() => uploadController.current?.abort()}
+                >
+                  Отменить
+                </Button>
+              </Group>
+              <Progress value={uploadProgress} animated />
+            </Stack>
+          )}
+        </Stack>
       )}
     </Stack>
   );
@@ -369,11 +438,15 @@ function StageAttachments({
           attachment.content_type.startsWith("image/") ||
           attachment.content_type === "application/pdf";
         return (
-          <Group key={attachment.id} justify="space-between">
-            <Text size="sm">
+          <Group
+            key={attachment.id}
+            justify="space-between"
+            className="file-action-row"
+          >
+            <Text size="sm" className="file-name">
               {attachment.filename} · {formatSize(attachment.size)}
             </Text>
-            <Group gap="xs">
+            <Group gap="xs" className="file-actions">
               {canOpen && (
                 <Button
                   size="xs"
@@ -411,8 +484,13 @@ function StageAttachments({
                 size="xs"
                 color="red"
                 variant="subtle"
-                loading={deleteMutation.isPending}
-                onClick={() =>
+                loading={
+                  deleteMutation.isPending &&
+                  deleteMutation.variables?.attachmentId === attachment.id
+                }
+                onClick={() => {
+                  if (!window.confirm(`Удалить файл «${attachment.filename}»?`))
+                    return;
                   deleteMutation.mutate(
                     {
                       processId,
@@ -426,8 +504,8 @@ function StageAttachments({
                           message: error.message,
                         }),
                     },
-                  )
-                }
+                  );
+                }}
               >
                 Удалить
               </Button>
@@ -435,7 +513,7 @@ function StageAttachments({
           </Group>
         );
       })}
-      <Group align="flex-end">
+      <Group align="flex-end" className="upload-control-row">
         <FileInput
           flex={1}
           multiple
@@ -473,16 +551,22 @@ export function InterviewProcessPage() {
   const [closeReason, setCloseReason] = useState("");
   const [offerFile, setOfferFile] = useState<File | null>(null);
   const [recruiterUsernames, setRecruiterUsernames] = useState<string[]>([]);
+  const recruitersInitializedFor = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!query.data) return;
+    if (!query.data || recruitersInitializedFor.current === query.data.id)
+      return;
+    recruitersInitializedFor.current = query.data.id;
     setRecruiterUsernames(
       query.data.recruiter_telegram_usernames.map((username) => `@${username}`),
     );
   }, [query.data]);
 
   if (query.isPending) return <LoadingState label="Загружаем трек…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   const process = query.data;
 
   const addStage = (event: FormEvent<HTMLFormElement>) => {
@@ -604,11 +688,17 @@ export function InterviewProcessPage() {
         payload: { recruiter_telegram_usernames: recruiterUsernames },
       },
       {
-        onSuccess: () =>
+        onSuccess: (updatedProcess) => {
+          setRecruiterUsernames(
+            updatedProcess.recruiter_telegram_usernames.map(
+              (username) => `@${username}`,
+            ),
+          );
           notifications.show({
             color: "green",
             message: "Контакты рекрутеров сохранены",
-          }),
+          });
+        },
         onError: (error) =>
           notifications.show({ color: "red", message: error.message }),
       },

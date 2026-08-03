@@ -19,7 +19,10 @@ import { formatDays } from "../utils/formatDays";
 export function RoadmapsPage() {
   const query = useRoadmaps();
   if (query.isPending) return <LoadingState label="Загружаем роадмапы…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   return (
     <Stack gap="xl">
@@ -35,9 +38,10 @@ export function RoadmapsPage() {
           </Text>
         </div>
         <img
-          src="/brand/geralt-avatar.png"
+          src="/brand/avatar-onboarding.png"
           alt="Геральт"
           className="brand-hero-mascot"
+          decoding="async"
         />
       </Card>
       <PageHeader

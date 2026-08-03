@@ -82,26 +82,35 @@ import type {
   TopicDetail,
   User,
 } from "../types/api";
-import { apiRequest, resolveApiUrl, uploadPresignedPost } from "./client";
+import {
+  apiRequest,
+  resolveApiUrl,
+  uploadPresignedPost,
+  type UploadOptions,
+} from "./client";
+import { inferFileContentType } from "../utils/media";
 
 async function uploadInterviewFile(
   intentPath: string,
   completePath: string,
   file: File,
+  options?: UploadOptions,
 ): Promise<InterviewProcessDetail> {
   const payload = {
     filename: file.name,
-    content_type: file.type || "application/octet-stream",
+    content_type: inferFileContentType(file),
     size: file.size,
   };
   const intent = await apiRequest<InterviewUploadIntent>(intentPath, {
     method: "POST",
     body: JSON.stringify(payload),
+    signal: options?.signal,
   });
-  await uploadPresignedPost(intent, file);
+  await uploadPresignedPost(intent, file, options);
   return apiRequest<InterviewProcessDetail>(completePath, {
     method: "POST",
     body: JSON.stringify({ ...payload, storage_key: intent.storage_key }),
+    signal: options?.signal,
   });
 }
 
@@ -109,20 +118,23 @@ async function uploadMentorFile<T>(
   intentPath: string,
   completePath: string,
   file: File,
+  options?: UploadOptions,
 ): Promise<T> {
   const payload = {
     filename: file.name,
-    content_type: file.type || "application/octet-stream",
+    content_type: inferFileContentType(file),
     size: file.size,
   };
   const intent = await apiRequest<InterviewUploadIntent>(intentPath, {
     method: "POST",
     body: JSON.stringify(payload),
+    signal: options?.signal,
   });
-  await uploadPresignedPost(intent, file);
+  await uploadPresignedPost(intent, file, options);
   return apiRequest<T>(completePath, {
     method: "POST",
     body: JSON.stringify({ ...payload, storage_key: intent.storage_key }),
+    signal: options?.signal,
   });
 }
 
@@ -349,11 +361,17 @@ export const api = {
       `/api/v1/mentor/students/${studentId}/mock-interviews/${mockId}/feedback`,
       { method: "PATCH", body: JSON.stringify({ feedback }) },
     ),
-  uploadMockInterviewMedia: (studentId: string, mockId: string, file: File) =>
+  uploadMockInterviewMedia: (
+    studentId: string,
+    mockId: string,
+    file: File,
+    options?: UploadOptions,
+  ) =>
     uploadMentorFile<MockInterviewRead>(
       `/api/v1/mentor/students/${studentId}/mock-interviews/${mockId}/media/upload`,
       `/api/v1/mentor/students/${studentId}/mock-interviews/${mockId}/media/complete`,
       file,
+      options,
     ),
   openMockInterviewMedia: (studentId: string, mockId: string) =>
     apiRequest<InterviewDownloadUrl>(
@@ -705,11 +723,17 @@ export const api = {
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}`,
       { method: "PUT", body: JSON.stringify(payload) },
     ),
-  uploadInterviewStageMedia: (processId: string, stageId: string, file: File) =>
+  uploadInterviewStageMedia: (
+    processId: string,
+    stageId: string,
+    file: File,
+    options?: UploadOptions,
+  ) =>
     uploadInterviewFile(
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/media/upload`,
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/media/complete`,
       file,
+      options,
     ),
   downloadInterviewStageMedia: (processId: string, stageId: string) =>
     apiRequest<InterviewDownloadUrl>(

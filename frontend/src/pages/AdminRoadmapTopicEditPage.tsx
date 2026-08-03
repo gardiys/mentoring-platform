@@ -10,12 +10,13 @@ import {
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
   useAdminRoadmapTopic,
   useSaveAdminRoadmapTopic,
@@ -45,6 +46,10 @@ function TopicForm({
     estimated_minutes: topic?.estimated_minutes ?? null,
     is_published: topic?.is_published ?? false,
   });
+  const initial = useRef(form);
+  const allowNavigation = useUnsavedChanges(
+    JSON.stringify(form) !== JSON.stringify(initial.current),
+  );
   const valid =
     form.title.trim().length > 0 &&
     SLUG_PATTERN.test(form.slug) &&
@@ -57,6 +62,7 @@ function TopicForm({
       { roadmapId, sectionId, topicId: topic?.id, payload: form },
       {
         onSuccess: () => {
+          allowNavigation();
           notifications.show({
             color: "green",
             message: topic ? "Тема сохранена" : "Тема создана",
@@ -191,7 +197,10 @@ export function AdminRoadmapTopicEditPage() {
   const query = useAdminRoadmapTopic(roadmapId, sectionId, topicId);
   if (topicId && query.isPending)
     return <LoadingState label="Загружаем тему…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   return (
     <TopicForm
       key={topicId ?? "new"}

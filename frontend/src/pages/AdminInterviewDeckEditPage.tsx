@@ -17,12 +17,13 @@ import {
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
   useAdminInterviewCards,
   useAdminInterviewDeck,
@@ -42,6 +43,7 @@ function DeckEditor({ deck }: { deck: AdminInterviewDeckSummary }) {
     position: deck.position,
     is_published: deck.is_published,
   });
+  const initial = useRef(form);
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, 250);
   const [page, setPage] = useState(1);
@@ -49,6 +51,7 @@ function DeckEditor({ deck }: { deck: AdminInterviewDeckSummary }) {
   const cards = useAdminInterviewCards(deck.id, debouncedSearch, page);
   const mutation = useUpdateAdminInterviewDeckSettings();
   const valid = form.title.trim().length > 0 && SLUG_PATTERN.test(form.slug);
+  useUnsavedChanges(JSON.stringify(form) !== JSON.stringify(initial.current));
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -56,11 +59,13 @@ function DeckEditor({ deck }: { deck: AdminInterviewDeckSummary }) {
     mutation.mutate(
       { id: deck.id, payload: form },
       {
-        onSuccess: () =>
+        onSuccess: () => {
+          initial.current = form;
           notifications.show({
             color: "green",
             message: "Настройки колоды сохранены",
-          }),
+          });
+        },
         onError: (error) =>
           notifications.show({ color: "red", message: error.message }),
       },
@@ -194,7 +199,10 @@ function DeckEditor({ deck }: { deck: AdminInterviewDeckSummary }) {
           {cards.isPending ? (
             <LoadingState label="Загружаем вопросы…" />
           ) : cards.isError ? (
-            <ErrorState retry={() => void cards.refetch()} />
+            <ErrorState
+              error={cards.error}
+              retry={() => void cards.refetch()}
+            />
           ) : (
             <>
               <Table.ScrollContainer minWidth={760}>
@@ -268,6 +276,9 @@ export function AdminInterviewDeckEditPage() {
   const { deckId = "" } = useParams();
   const query = useAdminInterviewDeck(deckId);
   if (query.isPending) return <LoadingState label="Загружаем колоду…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   return <DeckEditor key={query.data.id} deck={query.data} />;
 }

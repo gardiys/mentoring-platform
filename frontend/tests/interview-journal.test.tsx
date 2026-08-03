@@ -395,6 +395,10 @@ it("прикрепляет аудиозапись к этапу", async () => {
     processDetail.id,
     processDetail.stages[0]!.id,
     file,
+    expect.objectContaining({
+      onProgress: expect.any(Function),
+      signal: expect.any(AbortSignal),
+    }),
   );
 });
 

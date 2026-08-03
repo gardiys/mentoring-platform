@@ -19,6 +19,7 @@ export function AdminStudentEditPage() {
   if (student.isError || options.isError) {
     return (
       <ErrorState
+        error={student.error ?? options.error}
         retry={() => {
           void student.refetch();
           void options.refetch();
@@ -28,7 +29,7 @@ export function AdminStudentEditPage() {
   }
   return (
     <AdminStudentForm
-      key={`${student.data.id}-${student.data.is_active}`}
+      key={student.data.id}
       student={student.data}
       options={options.data}
     />

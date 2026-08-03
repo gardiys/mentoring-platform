@@ -5,6 +5,8 @@ import {
   Card,
   FileInput,
   Group,
+  Progress,
+  ScrollArea,
   Select,
   SimpleGrid,
   Stack,
@@ -13,11 +15,13 @@ import {
   Textarea,
   TextInput,
   Title,
+  VisuallyHidden,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { ApiError } from "../api/client";
 import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
@@ -42,6 +46,8 @@ import type {
   StudentLearningStatus,
   StudentStrengthLevel,
 } from "../types/api";
+import { AUDIO_MAX_BYTES, VIDEO_MAX_BYTES, mediaKind } from "../utils/media";
+import { openExternalResource } from "../utils/openExternalResource";
 
 const statusOptions = [
   { value: "learning", label: "Учится" },
@@ -62,7 +68,7 @@ function formatDate(value: string | null): string {
 
 async function openUrl(request: Promise<string>) {
   try {
-    window.open(await request, "_blank", "noopener,noreferrer");
+    await openExternalResource(request);
   } catch (error) {
     notifications.show({
       color: "red",
@@ -82,12 +88,24 @@ function DocumentEditor({
   document?: MentorDocumentRead;
 }) {
   const [text, setText] = useState(document?.text_content ?? "");
+  const [savedText, setSavedText] = useState(document?.text_content ?? "");
   const [file, setFile] = useState<File | null>(null);
+  const initializedFor = useRef<string | null>(null);
   const save = useSetMentorDocumentText(studentId);
   const upload = useUploadMentorDocument(studentId);
   const title = kind === "resume" ? "Резюме" : "Легенда";
 
-  useEffect(() => setText(document?.text_content ?? ""), [document]);
+  useEffect(() => {
+    const editorKey = `${studentId}:${kind}`;
+    if (initializedFor.current === editorKey) return;
+    initializedFor.current = editorKey;
+    const initialText = document?.text_content ?? "";
+    setText(initialText);
+    setSavedText(initialText);
+  }, [document?.text_content, kind, studentId]);
+
+  const normalizedText = text.trim();
+  const textChanged = normalizedText !== savedText.trim();
 
   return (
     <Card withBorder>
@@ -113,19 +131,28 @@ function DocumentEditor({
           value={text}
           onChange={(event) => setText(event.currentTarget.value)}
         />
+        {textChanged && (
+          <Text size="xs" c="orange" role="status">
+            Есть несохранённые изменения
+          </Text>
+        )}
         <Button
           variant="light"
           loading={save.isPending}
-          disabled={!text.trim() && !document?.file}
+          disabled={!textChanged}
           onClick={() =>
             save.mutate(
-              { kind, text: text.trim() || null },
+              { kind, text: normalizedText || null },
               {
-                onSuccess: () =>
+                onSuccess: (updatedDocument) => {
+                  const updatedText = updatedDocument.text_content ?? "";
+                  setText(updatedText);
+                  setSavedText(updatedText);
                   notifications.show({
                     color: "green",
                     message: `${title} сохранено`,
-                  }),
+                  });
+                },
                 onError: (error) =>
                   notifications.show({ color: "red", message: error.message }),
               },
@@ -178,8 +205,70 @@ function MockInterviewCard({
 }) {
   const [feedback, setFeedback] = useState(mock.feedback ?? "");
   const [file, setFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const uploadController = useRef<AbortController | null>(null);
   const complete = useCompleteMockInterview(studentId);
   const upload = useUploadMockInterviewMedia(studentId);
+
+  useEffect(
+    () => () => {
+      uploadController.current?.abort();
+    },
+    [],
+  );
+
+  const uploadMedia = () => {
+    if (!file) return;
+    const kind = mediaKind(file.type, file.name);
+    if (!kind) {
+      notifications.show({
+        color: "red",
+        message: "Выберите корректный аудио- или видеофайл",
+      });
+      return;
+    }
+    const maxBytes = kind === "video" ? VIDEO_MAX_BYTES : AUDIO_MAX_BYTES;
+    if (file.size > maxBytes) {
+      notifications.show({
+        color: "red",
+        message:
+          kind === "video"
+            ? "Видео должно быть не больше 2 ГБ"
+            : "Аудио должно быть не больше 500 МБ",
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    uploadController.current = controller;
+    setUploadProgress(0);
+    upload.mutate(
+      {
+        mockId: mock.id,
+        file,
+        onProgress: setUploadProgress,
+        signal: controller.signal,
+      },
+      {
+        onSuccess: () => {
+          setFile(null);
+          notifications.show({ color: "green", message: "Запись загружена" });
+        },
+        onError: (error) =>
+          notifications.show({
+            color:
+              error instanceof ApiError && error.code === "request_aborted"
+                ? "yellow"
+                : "red",
+            message: error.message,
+          }),
+        onSettled: () => {
+          uploadController.current = null;
+          setUploadProgress(null);
+        },
+      },
+    );
+  };
 
   return (
     <Card withBorder>
@@ -233,41 +322,47 @@ function MockInterviewCard({
             Открыть запись: {mock.media.filename}
           </Button>
         )}
-        <Group align="flex-end">
+        <Group align="flex-end" className="upload-control-row">
           <FileInput
             label="Запись мок-собеседования"
+            description="Видео до 2 ГБ, аудио до 500 МБ"
             accept="audio/*,video/*"
             value={file}
             onChange={setFile}
+            disabled={upload.isPending}
             style={{ flex: 1 }}
           />
           <Button
             disabled={!file}
             loading={upload.isPending}
-            onClick={() => {
-              if (!file) return;
-              upload.mutate(
-                { mockId: mock.id, file },
-                {
-                  onSuccess: () => {
-                    setFile(null);
-                    notifications.show({
-                      color: "green",
-                      message: "Запись загружена",
-                    });
-                  },
-                  onError: (error) =>
-                    notifications.show({
-                      color: "red",
-                      message: error.message,
-                    }),
-                },
-              );
-            }}
+            onClick={uploadMedia}
           >
             Загрузить
           </Button>
         </Group>
+        {upload.isPending && uploadProgress !== null && (
+          <Stack gap={6}>
+            <Group justify="space-between" wrap="nowrap">
+              <Text size="sm" fw={600} aria-hidden="true">
+                Загружаем запись… {uploadProgress}%
+              </Text>
+              <VisuallyHidden role="status" aria-live="polite">
+                {uploadProgress === 100
+                  ? "Загрузка завершена"
+                  : `Загружено ${Math.floor(uploadProgress / 25) * 25}%`}
+              </VisuallyHidden>
+              <Button
+                size="compact-sm"
+                variant="subtle"
+                color="red"
+                onClick={() => uploadController.current?.abort()}
+              >
+                Отменить
+              </Button>
+            </Group>
+            <Progress value={uploadProgress} animated />
+          </Stack>
+        )}
       </Stack>
     </Card>
   );
@@ -295,7 +390,10 @@ export function MentorStudentPage() {
   }, [query.data]);
 
   if (query.isPending) return <LoadingState />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   const student = query.data;
 
   return (
@@ -382,17 +480,19 @@ export function MentorStudentPage() {
       </SimpleGrid>
 
       <Tabs defaultValue="progress" keepMounted={false}>
-        <Tabs.List>
-          <Tabs.Tab value="progress">Прогресс</Tabs.Tab>
-          <Tabs.Tab value="interviews">
-            Собеседования ({student.interviews.length})
-          </Tabs.Tab>
-          <Tabs.Tab value="mocks">
-            Моки ({student.mock_interviews.length})
-          </Tabs.Tab>
-          <Tabs.Tab value="documents">Резюме и легенда</Tabs.Tab>
-          <Tabs.Tab value="notes">Заметки ({student.notes.length})</Tabs.Tab>
-        </Tabs.List>
+        <ScrollArea type="auto" scrollbarSize={6} offsetScrollbars>
+          <Tabs.List className="responsive-tabs">
+            <Tabs.Tab value="progress">Прогресс</Tabs.Tab>
+            <Tabs.Tab value="interviews">
+              Собеседования ({student.interviews.length})
+            </Tabs.Tab>
+            <Tabs.Tab value="mocks">
+              Моки ({student.mock_interviews.length})
+            </Tabs.Tab>
+            <Tabs.Tab value="documents">Резюме и легенда</Tabs.Tab>
+            <Tabs.Tab value="notes">Заметки ({student.notes.length})</Tabs.Tab>
+          </Tabs.List>
+        </ScrollArea>
 
         <Tabs.Panel value="progress" pt="lg">
           <Stack gap="xl">
@@ -666,8 +766,19 @@ export function MentorStudentPage() {
                     size="xs"
                     color="red"
                     variant="subtle"
-                    loading={deleteNote.isPending}
-                    onClick={() => deleteNote.mutate(item.id)}
+                    loading={
+                      deleteNote.isPending && deleteNote.variables === item.id
+                    }
+                    onClick={() => {
+                      if (!window.confirm("Удалить приватную заметку?")) return;
+                      deleteNote.mutate(item.id, {
+                        onError: (error) =>
+                          notifications.show({
+                            color: "red",
+                            message: error.message,
+                          }),
+                      });
+                    }}
                   >
                     Удалить
                   </Button>

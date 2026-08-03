@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
+import type { UploadOptions } from "../../api/client";
 import type {
   InterviewProcessMutation,
   InterviewProcessOutcomeMutation,
@@ -8,6 +9,7 @@ import type {
   InterviewProcessStageMutation,
   InterviewProcessStatus,
 } from "../../types/api";
+import { interviewCatalogKeys } from "./catalogQueries";
 
 export const interviewJournalKeys = {
   all: ["interviews", "journal"] as const,
@@ -62,9 +64,10 @@ function useJournalMutation<TVariables, TData>(
   return useMutation({
     mutationFn,
     onSettled: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: interviewJournalKeys.all,
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: interviewJournalKeys.all }),
+        queryClient.invalidateQueries({ queryKey: interviewCatalogKeys.all }),
+      ]);
     },
   });
 }
@@ -131,11 +134,19 @@ export function useUploadInterviewStageMedia() {
       processId,
       stageId,
       file,
+      onProgress,
+      signal,
     }: {
       processId: string;
       stageId: string;
       file: File;
-    }) => api.uploadInterviewStageMedia(processId, stageId, file),
+      onProgress?: UploadOptions["onProgress"];
+      signal?: AbortSignal;
+    }) =>
+      api.uploadInterviewStageMedia(processId, stageId, file, {
+        onProgress,
+        signal,
+      }),
   );
 }
 
@@ -176,7 +187,17 @@ export function useMarkInterviewOffer() {
   return useJournalMutation(
     async ({ processId, file }: { processId: string; file?: File | null }) => {
       await api.setInterviewProcessOutcome(processId, { status: "offer" });
-      if (file) return api.uploadInterviewOffer(processId, file);
+      if (file) {
+        try {
+          return await api.uploadInterviewOffer(processId, file);
+        } catch (error) {
+          const reason = error instanceof Error ? ` ${error.message}` : "";
+          throw new Error(
+            `Оффер отмечен, но файл не загрузился.${reason} Повторите загрузку файла в открывшемся блоке оффера.`,
+            { cause: error },
+          );
+        }
+      }
       return api.interviewProcess(processId);
     },
   );

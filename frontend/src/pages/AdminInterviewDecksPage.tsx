@@ -18,7 +18,10 @@ import { useAdminInterviewDecks } from "../features/admin/interviewQueries";
 export function AdminInterviewDecksPage() {
   const query = useAdminInterviewDecks();
   if (query.isPending) return <LoadingState label="Загружаем колоды…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   return (
     <Stack gap="xl">

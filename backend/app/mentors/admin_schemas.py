@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.users.models import UserRole
+
 
 class AdminMentorMutation(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -22,6 +24,7 @@ class AdminMentorMutation(BaseModel):
 
 class AdminMentorListItem(BaseModel):
     id: UUID
+    role: UserRole
     telegram_id: int | None
     telegram_username: str | None
     first_name: str

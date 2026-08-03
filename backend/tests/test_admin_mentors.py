@@ -16,10 +16,53 @@ async def test_only_admin_can_manage_mentors(client: AsyncClient, seeded: Seeded
     assert {item["id"] for item in allowed.json()} == {
         str(seeded.mentor_id),
         str(seeded.other_mentor_id),
+        str(seeded.admin_id),
     }
     primary = next(item for item in allowed.json() if item["id"] == str(seeded.mentor_id))
     assert [track["slug"] for track in primary["tracks"]] == ["python"]
     assert [student["id"] for student in primary["students"]] == [str(seeded.student_id)]
+    admin = next(item for item in allowed.json() if item["id"] == str(seeded.admin_id))
+    assert admin["role"] == "admin"
+    assert [track["slug"] for track in admin["tracks"]] == ["python", "go"]
+
+
+async def test_admin_can_be_assigned_as_mentor_without_changing_primary_role(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    options = await client.get("/api/v1/admin/students/options", headers=auth(seeded.admin_id))
+    reassigned = await client.patch(
+        f"/api/v1/admin/mentors/students/{seeded.student_id}/mentor",
+        headers=auth(seeded.admin_id),
+        json={"mentor_id": str(seeded.admin_id)},
+    )
+    filtered = await client.get(
+        f"/api/v1/mentor/students?mentor_id={seeded.admin_id}",
+        headers=auth(seeded.admin_id),
+    )
+    remove_attempt = await client.delete(
+        f"/api/v1/admin/mentors/{seeded.admin_id}",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert options.status_code == 200
+    admin_option = next(
+        item for item in options.json()["mentors"] if item["id"] == str(seeded.admin_id)
+    )
+    assert admin_option["role"] == "admin"
+    assert reassigned.status_code == 204
+    assert filtered.status_code == 200
+    assert [item["id"] for item in filtered.json()["items"]] == [str(seeded.student_id)]
+    assert remove_attempt.status_code == 404
+
+    async with TestSession() as session:
+        admin = await session.get(User, seeded.admin_id)
+        relation = await session.scalar(
+            select(MentorStudent).where(MentorStudent.student_id == seeded.student_id)
+        )
+        assert admin is not None
+        assert admin.role is UserRole.ADMIN
+        assert relation is not None
+        assert relation.mentor_id == seeded.admin_id
 
 
 async def test_admin_creates_and_removes_unassigned_mentor(

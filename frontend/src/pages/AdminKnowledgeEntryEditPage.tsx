@@ -11,12 +11,13 @@ import {
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
   useAdminKnowledgeEntry,
   useSaveAdminKnowledgeEntry,
@@ -48,6 +49,10 @@ function EntryForm({
     position: entry?.position ?? 0,
     is_published: entry?.is_published ?? false,
   });
+  const initial = useRef(form);
+  const allowNavigation = useUnsavedChanges(
+    JSON.stringify(form) !== JSON.stringify(initial.current),
+  );
   const valid =
     form.title.trim().length > 0 &&
     SLUG_PATTERN.test(form.slug) &&
@@ -60,6 +65,7 @@ function EntryForm({
       { topicId, entryId: entry?.id, payload: form },
       {
         onSuccess: () => {
+          allowNavigation();
           notifications.show({
             color: "green",
             message: entry ? "Материал сохранён" : "Материал создан",
@@ -197,7 +203,10 @@ export function AdminKnowledgeEntryEditPage() {
   const query = useAdminKnowledgeEntry(topicId, entryId);
   if (entryId && query.isPending)
     return <LoadingState label="Загружаем материал…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   return (
     <EntryForm key={entryId ?? "new"} topicId={topicId} entry={query.data} />
   );

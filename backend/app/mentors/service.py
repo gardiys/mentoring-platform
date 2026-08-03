@@ -53,7 +53,7 @@ from app.roadmaps.queries import build_roadmap_detail, get_roadmap_model, list_r
 from app.roadmaps.schemas import RoadmapDetail
 from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack, LearningTrackEnrollment, LearningTrackRoadmap
-from app.users.models import User, UserRole
+from app.users.models import MENTOR_CAPABLE_ROLES, User, UserRole
 
 
 async def assigned_student(
@@ -299,7 +299,7 @@ async def list_students(
         list(
             await session.scalars(
                 select(User)
-                .where(User.role == UserRole.MENTOR)
+                .where(User.role.in_(MENTOR_CAPABLE_ROLES))
                 .order_by(User.first_name, User.last_name, User.id)
             )
         )
@@ -320,6 +320,7 @@ async def list_students(
         mentors=[
             MentorStudentMentorOption(
                 id=item.id,
+                role=item.role,
                 first_name=item.first_name,
                 last_name=item.last_name,
                 telegram_username=item.telegram_username,

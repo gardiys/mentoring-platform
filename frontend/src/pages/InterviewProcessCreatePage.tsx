@@ -12,7 +12,7 @@ import {
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../api/endpoints";
@@ -23,6 +23,7 @@ import {
   useInterviewDirections,
 } from "../features/interviews/journalQueries";
 import type { CompanyOption, InterviewProcessMutation } from "../types/api";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 
 interface AliasConfirmation {
   enteredName: string;
@@ -40,9 +41,7 @@ export function InterviewProcessCreatePage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(
     null,
   );
-  const [selectedCompanyName, setSelectedCompanyName] = useState<string | null>(
-    null,
-  );
+  const selectedCompanyName = useRef<string | null>(null);
   const [companyAlias, setCompanyAlias] = useState<string | null>(null);
   const [recruiterUsernames, setRecruiterUsernames] = useState<string[]>([]);
   const [aliasConfirmation, setAliasConfirmation] =
@@ -55,6 +54,9 @@ export function InterviewProcessCreatePage() {
   const mutation = useCreateInterviewProcess();
   const directions = useInterviewDirections();
   const navigate = useNavigate();
+  const allowNavigation = useUnsavedChanges(
+    Boolean(trackId || companyName.trim() || recruiterUsernames.length),
+  );
 
   const createTrack = (payload: Omit<InterviewProcessMutation, "track_id">) => {
     if (!trackId) return;
@@ -66,6 +68,7 @@ export function InterviewProcessCreatePage() {
       },
       {
         onSuccess: (process) => {
+          allowNavigation();
           notifications.show({ color: "green", message: "Трек создан" });
           navigate(`/interviews/journal/${process.id}`);
         },
@@ -86,7 +89,8 @@ export function InterviewProcessCreatePage() {
     ) {
       return;
     }
-    const selectedCompanyIsCurrent = companyName === selectedCompanyName;
+    const selectedCompanyIsCurrent =
+      companyName === selectedCompanyName.current;
     if (selectedCompanyIsCurrent) {
       createTrack({
         company_name: companyName.trim(),
@@ -158,7 +162,14 @@ export function InterviewProcessCreatePage() {
               placeholder="Яндекс"
               required
               value={companyName}
-              onChange={setCompanyName}
+              onChange={(value) => {
+                setCompanyName(value);
+                if (value !== selectedCompanyName.current) {
+                  setSelectedCompanyId(null);
+                  selectedCompanyName.current = null;
+                  setCompanyAlias(null);
+                }
+              }}
               onOptionSubmit={(value) => {
                 const selected = suggestions.data?.find(
                   (company) => company.name === value,
@@ -166,7 +177,7 @@ export function InterviewProcessCreatePage() {
                 if (!selected) return;
                 const enteredName = companyName.trim();
                 setSelectedCompanyId(selected.id);
-                setSelectedCompanyName(selected.name);
+                selectedCompanyName.current = selected.name;
                 setCompanyAlias(null);
                 if (
                   enteredName.localeCompare(selected.name, "ru", {

@@ -6,6 +6,7 @@ import { clearDevUserId, setDevUserId } from "../src/features/auth/devAuth";
 afterEach(() => {
   delete window.Telegram;
   clearDevUserId();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -79,4 +80,90 @@ it("загружает файл напрямую по подписанной S3 
   );
   expect(body.get("key")).toBe("pending/media/user/id");
   expect(body.get("file")).toBe(file);
+});
+
+it("преобразует сетевую ошибку API в понятную ошибку платформы", async () => {
+  vi.spyOn(globalThis, "fetch").mockRejectedValue(
+    new TypeError("Failed to fetch"),
+  );
+
+  await expect(apiRequest("/api/v1/me")).rejects.toMatchObject({
+    status: 0,
+    code: "network_error",
+    message:
+      "Не удалось связаться с сервером. Проверьте подключение и повторите попытку.",
+  });
+});
+
+it("показывает прогресс загрузки подписанной S3 POST-формы", async () => {
+  type Listener = (event: ProgressEvent) => void;
+  const listeners = new Map<string, Listener>();
+  const uploadListeners = new Map<string, Listener>();
+
+  class XMLHttpRequestMock {
+    status = 204;
+    upload = {
+      addEventListener: (name: string, listener: Listener) =>
+        uploadListeners.set(name, listener),
+    };
+    open = vi.fn();
+    addEventListener(name: string, listener: Listener) {
+      listeners.set(name, listener);
+    }
+    send = vi.fn(() => {
+      uploadListeners.get("progress")?.({
+        lengthComputable: true,
+        loaded: 5,
+        total: 10,
+      } as ProgressEvent);
+      listeners.get("load")?.({} as ProgressEvent);
+    });
+    abort = vi.fn(() => listeners.get("abort")?.({} as ProgressEvent));
+  }
+
+  vi.stubGlobal("XMLHttpRequest", XMLHttpRequestMock);
+  const onProgress = vi.fn();
+  const file = new File(["audio"], "interview.mp3", { type: "audio/mpeg" });
+
+  await uploadPresignedPost(
+    { upload_url: "https://s3.example.test/bucket", fields: {} },
+    file,
+    { onProgress },
+  );
+
+  expect(onProgress).toHaveBeenNthCalledWith(1, 50);
+  expect(onProgress).toHaveBeenLastCalledWith(100);
+});
+
+it("отменяет загрузку подписанной S3 POST-формы через AbortSignal", async () => {
+  type Listener = (event: ProgressEvent) => void;
+  const listeners = new Map<string, Listener>();
+
+  class XMLHttpRequestMock {
+    status = 0;
+    upload = { addEventListener: vi.fn() };
+    open = vi.fn();
+    send = vi.fn();
+    addEventListener(name: string, listener: Listener) {
+      listeners.set(name, listener);
+    }
+    abort = vi.fn(() => listeners.get("abort")?.({} as ProgressEvent));
+  }
+
+  vi.stubGlobal("XMLHttpRequest", XMLHttpRequestMock);
+  const controller = new AbortController();
+  const file = new File(["video"], "interview.mp4", { type: "video/mp4" });
+  const upload = uploadPresignedPost(
+    { upload_url: "https://s3.example.test/bucket", fields: {} },
+    file,
+    { signal: controller.signal },
+  );
+
+  controller.abort();
+
+  await expect(upload).rejects.toMatchObject({
+    status: 0,
+    code: "request_aborted",
+    message: "Загрузка отменена",
+  });
 });

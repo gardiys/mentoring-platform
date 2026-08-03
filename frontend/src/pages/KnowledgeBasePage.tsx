@@ -10,7 +10,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
@@ -30,6 +30,8 @@ export function KnowledgeBasePage() {
   const topics = useKnowledgeTopics();
   const search = useKnowledgeSearch(queryText);
 
+  useEffect(() => setInput(queryText), [queryText]);
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalized = input.trim();
@@ -37,7 +39,10 @@ export function KnowledgeBasePage() {
   };
 
   if (topics.isPending) return <LoadingState label="Загружаем базу знаний…" />;
-  if (topics.isError) return <ErrorState retry={() => void topics.refetch()} />;
+  if (topics.isError)
+    return (
+      <ErrorState error={topics.error} retry={() => void topics.refetch()} />
+    );
 
   return (
     <Stack gap="xl">
@@ -88,7 +93,12 @@ export function KnowledgeBasePage() {
             <Text className="technical-label">Запрос / {queryText}</Text>
           </Group>
           {search.isPending && <LoadingState label="Ищем по материалам…" />}
-          {search.isError && <ErrorState retry={() => void search.refetch()} />}
+          {search.isError && (
+            <ErrorState
+              error={search.error}
+              retry={() => void search.refetch()}
+            />
+          )}
           {search.data?.length === 0 && (
             <Text c="dimmed">По этому запросу ничего не найдено.</Text>
           )}

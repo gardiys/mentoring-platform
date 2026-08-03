@@ -16,20 +16,27 @@ from app.mentors.admin_schemas import (
 from app.mentors.models import MentorStudent, MentorTrackAssignment
 from app.tracks.models import LearningTrack, LearningTrackEnrollment
 from app.tracks.service import ensure_track_access
-from app.users.models import User, UserRole
+from app.users.models import MENTOR_CAPABLE_ROLES, User, UserRole
 
 
 async def _mentor_read(
     session: AsyncSession, user: User, student_count: int
 ) -> AdminMentorListItem:
-    tracks = list(
-        await session.scalars(
-            select(LearningTrack)
-            .join(MentorTrackAssignment, MentorTrackAssignment.track_id == LearningTrack.id)
-            .where(MentorTrackAssignment.mentor_id == user.id)
-            .order_by(LearningTrack.position, LearningTrack.title)
+    if user.role is UserRole.ADMIN:
+        tracks = list(
+            await session.scalars(
+                select(LearningTrack).order_by(LearningTrack.position, LearningTrack.title)
+            )
         )
-    )
+    else:
+        tracks = list(
+            await session.scalars(
+                select(LearningTrack)
+                .join(MentorTrackAssignment, MentorTrackAssignment.track_id == LearningTrack.id)
+                .where(MentorTrackAssignment.mentor_id == user.id)
+                .order_by(LearningTrack.position, LearningTrack.title)
+            )
+        )
     students = list(
         await session.scalars(
             select(User)
@@ -40,6 +47,7 @@ async def _mentor_read(
     )
     return AdminMentorListItem(
         id=user.id,
+        role=user.role,
         telegram_id=user.telegram_id,
         telegram_username=user.telegram_username,
         first_name=user.first_name,
@@ -68,7 +76,7 @@ async def list_admin_mentors(session: AsyncSession) -> list[AdminMentorListItem]
         await session.execute(
             select(User, func.count(MentorStudent.student_id))
             .outerjoin(MentorStudent, MentorStudent.mentor_id == User.id)
-            .where(User.role == UserRole.MENTOR)
+            .where(User.role.in_(MENTOR_CAPABLE_ROLES))
             .group_by(User.id)
             .order_by(User.first_name, User.last_name, User.id)
         )
@@ -228,7 +236,7 @@ async def reassign_student(session: AsyncSession, student_id: UUID, mentor_id: U
     mentor = await session.get(User, mentor_id)
     if student is None or student.role is not UserRole.STUDENT:
         api_error(404, "student_not_found", "Student was not found")
-    if mentor is None or mentor.role is not UserRole.MENTOR:
+    if mentor is None or mentor.role not in MENTOR_CAPABLE_ROLES:
         api_error(422, "invalid_student_mentor", "Selected mentor does not exist")
     student_track_ids = set(
         await session.scalars(
@@ -237,13 +245,16 @@ async def reassign_student(session: AsyncSession, student_id: UUID, mentor_id: U
             )
         )
     )
-    mentor_track_ids = set(
-        await session.scalars(
-            select(MentorTrackAssignment.track_id).where(
-                MentorTrackAssignment.mentor_id == mentor.id
+    if mentor.role is UserRole.ADMIN:
+        mentor_track_ids = student_track_ids
+    else:
+        mentor_track_ids = set(
+            await session.scalars(
+                select(MentorTrackAssignment.track_id).where(
+                    MentorTrackAssignment.mentor_id == mentor.id
+                )
             )
         )
-    )
     if not student_track_ids.issubset(mentor_track_ids):
         api_error(
             422,

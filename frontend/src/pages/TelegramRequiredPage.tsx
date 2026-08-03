@@ -55,9 +55,10 @@ export function TelegramRequiredPage() {
               </Text>
             </Stack>
             <img
-              src="/brand/geralt-avatar.png"
+              src="/brand/avatar-public.png"
               alt="Геральт"
               className="login-mascot"
+              decoding="async"
             />
           </div>
           <div className="login-form-panel">

@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/client";
 import { api } from "../src/api/endpoints";
 import { ProtectedLayout } from "../src/components/ProtectedLayout";
+import { RoleGuard } from "../src/components/RoleGuard";
 import { renderPage } from "./render";
 
 const browserUser = {
@@ -90,4 +91,52 @@ it("объясняет ученику, что администратор при�
 
   expect(await screen.findByText("Доступ закрыт")).toBeInTheDocument();
   expect(screen.getByText(/Свяжитесь с ментором/)).toBeInTheDocument();
+});
+
+it("не пускает ученика в административный раздел", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(browserUser);
+
+  renderPage(
+    <RoleGuard roles={["admin"]} />,
+    "/admin",
+    "/admin",
+    <div>Секретная админка</div>,
+  );
+
+  expect(await screen.findByText("Раздел недоступен")).toBeInTheDocument();
+  expect(screen.queryByText("Секретная админка")).not.toBeInTheDocument();
+});
+
+it("пускает ментора в менторский раздел, но не в административный", async () => {
+  vi.spyOn(api, "me").mockResolvedValue({ ...browserUser, role: "mentor" });
+
+  const mentorView = renderPage(
+    <RoleGuard roles={["mentor", "admin"]} />,
+    "/mentor",
+    "/mentor",
+    <div>Мои ученики</div>,
+  );
+  expect(await screen.findByText("Мои ученики")).toBeInTheDocument();
+  mentorView.unmount();
+
+  renderPage(
+    <RoleGuard roles={["admin"]} />,
+    "/admin",
+    "/admin",
+    <div>Секретная админка</div>,
+  );
+  expect(await screen.findByText("Раздел недоступен")).toBeInTheDocument();
+});
+
+it("пускает администратора в административный раздел", async () => {
+  vi.spyOn(api, "me").mockResolvedValue({ ...browserUser, role: "admin" });
+
+  renderPage(
+    <RoleGuard roles={["admin"]} />,
+    "/admin",
+    "/admin",
+    <div>Секретная админка</div>,
+  );
+
+  expect(await screen.findByText("Секретная админка")).toBeInTheDocument();
 });

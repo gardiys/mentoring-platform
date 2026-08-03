@@ -3,14 +3,18 @@ import {
   Button,
   Card,
   Group,
+  Pagination,
   Progress,
   SimpleGrid,
   Stack,
   Text,
   Title,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
+import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
@@ -22,8 +26,7 @@ import {
   useMyMentorDocuments,
   useMyMockInterviews,
 } from "../features/mentor/queries";
-import { api } from "../api/endpoints";
-import { notifications } from "@mantine/notifications";
+import { openExternalResource } from "../utils/openExternalResource";
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("ru-RU", {
@@ -35,6 +38,7 @@ function formatDate(value: string) {
 }
 
 export function InterviewsPage() {
+  const [analysisPage, setAnalysisPage] = useState(1);
   const me = useMe();
   const isStudent = me.data?.role === "student";
   const isAdmin = me.data?.role === "admin";
@@ -44,7 +48,7 @@ export function InterviewsPage() {
   const processes = useInterviewProcesses("all", canOwnJournal);
   const mocks = useMyMockInterviews(isStudent);
   const documents = useMyMentorDocuments(isStudent);
-  const intelligence = useIntelligenceInterviews(isStudent);
+  const intelligence = useIntelligenceInterviews(isStudent, analysisPage);
   if (
     me.isPending ||
     query.isPending ||
@@ -55,11 +59,13 @@ export function InterviewsPage() {
   if (me.isError || query.isError || (canOwnJournal && processes.isError)) {
     return (
       <ErrorState
+        error={me.error ?? query.error ?? processes.error}
         retry={() => {
           void query.refetch();
           void processes.refetch();
           void mocks.refetch();
           void documents.refetch();
+          void intelligence.refetch();
         }}
       />
     );
@@ -93,7 +99,14 @@ export function InterviewsPage() {
               + Добавить собеседование
             </Button>
           </Group>
-          {(intelligence.data?.items.length ?? 0) === 0 ? (
+          {intelligence.isPending ? (
+            <LoadingState label="Загружаем AI-разборы…" />
+          ) : intelligence.isError ? (
+            <ErrorState
+              error={intelligence.error}
+              retry={() => void intelligence.refetch()}
+            />
+          ) : intelligence.data.items.length === 0 ? (
             <Card withBorder>
               <Text fw={600}>Разборов пока нет</Text>
               <Text size="sm" c="dimmed">
@@ -102,7 +115,7 @@ export function InterviewsPage() {
             </Card>
           ) : (
             <SimpleGrid cols={{ base: 1, md: 2 }}>
-              {intelligence.data?.items.map((interview) => (
+              {intelligence.data.items.map((interview) => (
                 <Card key={interview.id} withBorder>
                   <Stack h="100%">
                     <Group justify="space-between">
@@ -131,6 +144,19 @@ export function InterviewsPage() {
               ))}
             </SimpleGrid>
           )}
+          {intelligence.data &&
+            intelligence.data.total > intelligence.data.limit && (
+              <Pagination
+                value={analysisPage}
+                onChange={setAnalysisPage}
+                total={Math.ceil(
+                  intelligence.data.total / intelligence.data.limit,
+                )}
+                disabled={intelligence.isPlaceholderData}
+                withEdges
+                mx="auto"
+              />
+            )}
         </Stack>
       )}
 
@@ -244,6 +270,15 @@ export function InterviewsPage() {
             </Card>
           )}
 
+          {isStudent && mocks.isPending && (
+            <LoadingState label="Загружаем мок-собеседования…" />
+          )}
+          {isStudent && mocks.isError && (
+            <ErrorState
+              error={mocks.error}
+              retry={() => void mocks.refetch()}
+            />
+          )}
           {isStudent && (mocks.data?.length ?? 0) > 0 && (
             <Stack gap="sm">
               <div>
@@ -291,20 +326,17 @@ export function InterviewsPage() {
                       <Button
                         variant="light"
                         onClick={() =>
-                          void api
-                            .openMyMockInterviewMedia(mock.id)
-                            .then((url) =>
-                              window.open(url, "_blank", "noopener,noreferrer"),
-                            )
-                            .catch((error: unknown) =>
-                              notifications.show({
-                                color: "red",
-                                message:
-                                  error instanceof Error
-                                    ? error.message
-                                    : "Не удалось открыть запись",
-                              }),
-                            )
+                          void openExternalResource(
+                            api.openMyMockInterviewMedia(mock.id),
+                          ).catch((error: unknown) =>
+                            notifications.show({
+                              color: "red",
+                              message:
+                                error instanceof Error
+                                  ? error.message
+                                  : "Не удалось открыть запись",
+                            }),
+                          )
                         }
                       >
                         Открыть запись
@@ -316,6 +348,15 @@ export function InterviewsPage() {
             </Stack>
           )}
 
+          {isStudent && documents.isPending && (
+            <LoadingState label="Загружаем материалы ментора…" />
+          )}
+          {isStudent && documents.isError && (
+            <ErrorState
+              error={documents.error}
+              retry={() => void documents.refetch()}
+            />
+          )}
           {isStudent && (documents.data?.length ?? 0) > 0 && (
             <Stack gap="sm">
               <div>
@@ -338,15 +379,17 @@ export function InterviewsPage() {
                         <Button
                           variant="light"
                           onClick={() =>
-                            void api
-                              .openMyMentorDocument(document.id)
-                              .then((url) =>
-                                window.open(
-                                  url,
-                                  "_blank",
-                                  "noopener,noreferrer",
-                                ),
-                              )
+                            void openExternalResource(
+                              api.openMyMentorDocument(document.id),
+                            ).catch((error: unknown) =>
+                              notifications.show({
+                                color: "red",
+                                message:
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Не удалось открыть файл",
+                              }),
+                            )
                           }
                         >
                           Открыть {document.file.filename}

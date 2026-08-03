@@ -132,8 +132,11 @@ async def test_mentor_student_list_supports_pagination_direction_and_multiple_st
     assert without_mentor.json()["total"] == 1
     assert without_mentor.json()["items"][0]["id"] == str(unassigned_id)
     assert without_mentor.json()["can_filter_by_mentor"] is True
-    assert [item["id"] for item in without_mentor.json()["mentors"]] == [
+    mentor_options = {item["id"]: item for item in without_mentor.json()["mentors"]}
+    assert set(mentor_options) == {
         str(seeded.mentor_id),
         str(seeded.other_mentor_id),
-    ]
+        str(seeded.admin_id),
+    }
+    assert mentor_options[str(seeded.admin_id)]["role"] == "admin"
     assert forbidden_filter.status_code == 403

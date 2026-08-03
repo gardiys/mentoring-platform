@@ -44,7 +44,10 @@ export function RoadmapPage() {
   const startMutation = useStartRoadmap(roadmapSlug);
   const [startedOn, setStartedOn] = useState(currentLocalDate);
   if (query.isPending) return <LoadingState />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   return (
     <Stack gap="xl">
@@ -118,10 +121,20 @@ export function RoadmapPage() {
           return (
             <Accordion.Item key={section.id} value={section.id}>
               <Accordion.Control>
-                <Group justify="space-between" wrap="nowrap" pr="md">
-                  <Text fw={600}>{section.title}</Text>
+                <Group
+                  justify="space-between"
+                  pr="md"
+                  className="roadmap-section-heading"
+                >
+                  <Text fw={600} className="roadmap-section-title">
+                    {section.title}
+                  </Text>
                   {section.duration_days && (
-                    <Group gap="xs" wrap="nowrap">
+                    <Group
+                      gap="xs"
+                      wrap="nowrap"
+                      className="roadmap-section-meta"
+                    >
                       <Badge color={overdue ? "red" : "brandBlue"}>
                         {section.duration_days} дн.
                       </Badge>
@@ -143,10 +156,9 @@ export function RoadmapPage() {
                     <Group
                       key={topic.id}
                       justify="space-between"
-                      wrap="nowrap"
                       className="topic-row"
                     >
-                      <div>
+                      <div className="topic-row-main">
                         <Anchor
                           component={Link}
                           to={`/topics/${topic.id}`}

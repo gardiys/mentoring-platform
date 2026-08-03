@@ -10,6 +10,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Link, useParams } from "react-router-dom";
@@ -54,6 +55,7 @@ export function InterviewStudyPage() {
   if (query.isError || topics.isError) {
     return (
       <ErrorState
+        error={query.error ?? topics.error}
         retry={() => {
           void query.refetch();
           void topics.refetch();
@@ -72,6 +74,8 @@ export function InterviewStudyPage() {
       { cardId: card.id, rating },
       {
         onSuccess: () => setRevealedCardId(null),
+        onError: (error) =>
+          notifications.show({ color: "red", message: error.message }),
       },
     );
   };

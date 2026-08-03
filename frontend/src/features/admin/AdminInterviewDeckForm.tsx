@@ -15,10 +15,11 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../../components/PageHeader";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import type {
   AdminInterviewCardMutation,
   AdminInterviewDeckMutation,
@@ -85,6 +86,7 @@ export function AdminInterviewDeckForm({ deck }: Props) {
   const [form, setForm] = useState<AdminInterviewDeckMutation>(
     deck ? toMutation(deck) : emptyDeck,
   );
+  const initial = useRef(form);
   const tracks = useAdminTracks();
   const createMutation = useCreateAdminInterviewDeck();
   const updateMutation = useUpdateAdminInterviewDeck();
@@ -104,6 +106,9 @@ export function AdminInterviewDeckForm({ deck }: Props) {
         card.question_markdown.trim().length > 0 &&
         card.answer_markdown.trim().length > 0,
     );
+  const allowNavigation = useUnsavedChanges(
+    JSON.stringify(form) !== JSON.stringify(initial.current),
+  );
 
   const updateCard = (
     index: number,
@@ -138,6 +143,7 @@ export function AdminInterviewDeckForm({ deck }: Props) {
     if (!valid || pending) return;
     const handlers = {
       onSuccess: () => {
+        allowNavigation();
         notifications.show({
           color: "green",
           message: editing ? "Колода обновлена" : "Колода создана",

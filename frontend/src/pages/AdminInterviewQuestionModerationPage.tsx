@@ -20,11 +20,7 @@ import { PageHeader } from "../components/PageHeader";
 import { useAdminQuestionModeration } from "../features/interviews/intelligenceQueries";
 
 type QueueStatus =
-  | "needs_review"
-  | "mentor_approved"
-  | "approved"
-  | "rejected"
-  | "all";
+  "needs_review" | "mentor_approved" | "approved" | "rejected" | "all";
 
 const statusLabels = {
   pending: "Ожидает проверки",
@@ -43,7 +39,9 @@ export function AdminInterviewQuestionModerationPage() {
 
   if (query.isPending) return <LoadingState label="Загружаем вопросы…" />;
   if (query.isError)
-    return <ErrorState retry={() => void query.refetch()} />;
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   const pages = Math.max(1, Math.ceil(query.data.total / query.data.limit));
   return (
@@ -84,56 +82,60 @@ export function AdminInterviewQuestionModerationPage() {
           <Text c="dimmed">В этой очереди пока нет вопросов.</Text>
         </Card>
       ) : (
-        <Card withBorder p={0} style={{ overflowX: "auto" }}>
-          <Table verticalSpacing="sm" horizontalSpacing="md">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Вопрос</Table.Th>
-                <Table.Th>Направление</Table.Th>
-                <Table.Th>Компания</Table.Th>
-                <Table.Th>Статус</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {query.data.items.map((item) => (
-                <Table.Tr key={item.question_id}>
-                  <Table.Td miw={360}>
-                    <Text fw={600}>{item.question_text}</Text>
-                    <Text size="xs" c="dimmed">
-                      {item.category} · {item.student_name} ·{" "}
-                      {new Date(item.interviewed_at).toLocaleDateString("ru-RU")}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>{item.track_title}</Table.Td>
-                  <Table.Td>{item.company_name}</Table.Td>
-                  <Table.Td>
-                    <Badge
-                      color={
-                        item.moderation_status === "approved"
-                          ? "green"
-                          : item.moderation_status === "rejected"
-                            ? "gray"
-                            : "yellow"
-                      }
-                    >
-                      {statusLabels[item.moderation_status]}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Button
-                      component={Link}
-                      to={`/admin/interview-question-moderation/${item.question_id}`}
-                      size="xs"
-                      variant="light"
-                    >
-                      Открыть
-                    </Button>
-                  </Table.Td>
+        <Card withBorder p={0}>
+          <Table.ScrollContainer minWidth={850}>
+            <Table verticalSpacing="sm" horizontalSpacing="md">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Вопрос</Table.Th>
+                  <Table.Th>Направление</Table.Th>
+                  <Table.Th>Компания</Table.Th>
+                  <Table.Th>Статус</Table.Th>
+                  <Table.Th />
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {query.data.items.map((item) => (
+                  <Table.Tr key={item.question_id}>
+                    <Table.Td miw={360}>
+                      <Text fw={600}>{item.question_text}</Text>
+                      <Text size="xs" c="dimmed">
+                        {item.category} · {item.student_name} ·{" "}
+                        {new Date(item.interviewed_at).toLocaleDateString(
+                          "ru-RU",
+                        )}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>{item.track_title}</Table.Td>
+                    <Table.Td>{item.company_name}</Table.Td>
+                    <Table.Td>
+                      <Badge
+                        color={
+                          item.moderation_status === "approved"
+                            ? "green"
+                            : item.moderation_status === "rejected"
+                              ? "gray"
+                              : "yellow"
+                        }
+                      >
+                        {statusLabels[item.moderation_status]}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Button
+                        component={Link}
+                        to={`/admin/interview-question-moderation/${item.question_id}`}
+                        size="xs"
+                        variant="light"
+                      >
+                        Открыть
+                      </Button>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         </Card>
       )}
       {pages > 1 && (

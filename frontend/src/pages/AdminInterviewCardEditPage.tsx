@@ -13,12 +13,13 @@ import {
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
   useAdminInterviewCard,
   useSaveAdminInterviewCard,
@@ -51,6 +52,10 @@ function CardForm({
     position: card?.position ?? 0,
     is_published: card?.is_published ?? false,
   });
+  const initial = useRef(form);
+  const allowNavigation = useUnsavedChanges(
+    JSON.stringify(form) !== JSON.stringify(initial.current),
+  );
   const valid =
     SLUG_PATTERN.test(form.slug) &&
     (form.category ?? "").trim().length > 0 &&
@@ -65,6 +70,7 @@ function CardForm({
       { deckId, cardId: card?.id, payload: form },
       {
         onSuccess: () => {
+          allowNavigation();
           notifications.show({
             color: "green",
             message: card ? "Карточка сохранена" : "Карточка создана",
@@ -227,6 +233,9 @@ export function AdminInterviewCardEditPage() {
   const query = useAdminInterviewCard(deckId, cardId);
   if (cardId && query.isPending)
     return <LoadingState label="Загружаем карточку…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   return <CardForm key={cardId ?? "new"} deckId={deckId} card={query.data} />;
 }

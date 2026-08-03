@@ -91,7 +91,7 @@ export function AdminStudentsPage() {
                 { value: "unassigned", label: "Без ментора" },
                 ...(query.data?.mentors ?? []).map((mentor) => ({
                   value: mentor.id,
-                  label: studentName(mentor.first_name, mentor.last_name),
+                  label: `${studentName(mentor.first_name, mentor.last_name)}${mentor.role === "admin" ? " · администратор" : ""}`,
                 })),
               ]}
             />
@@ -100,7 +100,10 @@ export function AdminStudentsPage() {
           {query.isPending ? (
             <LoadingState label="Загружаем учеников…" />
           ) : query.isError ? (
-            <ErrorState retry={() => void query.refetch()} />
+            <ErrorState
+              error={query.error}
+              retry={() => void query.refetch()}
+            />
           ) : (
             <>
               <Table.ScrollContainer minWidth={900}>
@@ -155,10 +158,10 @@ export function AdminStudentsPage() {
                         <Table.Td>
                           {student.mentor ? (
                             <Text size="sm" fw={500}>
-                              {studentName(
+                              {`${studentName(
                                 student.mentor.first_name,
                                 student.mentor.last_name,
-                              )}
+                              )}${student.mentor.role === "admin" ? " · администратор" : ""}`}
                             </Text>
                           ) : (
                             <Text size="sm" c="dimmed">

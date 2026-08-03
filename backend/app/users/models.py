@@ -15,6 +15,9 @@ class UserRole(StrEnum):
     ADMIN = "admin"
 
 
+MENTOR_CAPABLE_ROLES = (UserRole.MENTOR, UserRole.ADMIN)
+
+
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "users"
     email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True, nullable=True)

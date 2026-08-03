@@ -15,12 +15,13 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
   useAdminKnowledgeTopic,
   useUpdateAdminKnowledgeTopicSettings,
@@ -39,23 +40,27 @@ function TopicEditor({ topic }: { topic: AdminKnowledgeTopicOutline }) {
     is_published: topic.is_published,
     track_ids: topic.track_ids,
   });
+  const initial = useRef(form);
   const options = useAdminStudentOptions();
   const mutation = useUpdateAdminKnowledgeTopicSettings();
   const valid =
     form.title.trim().length > 0 &&
     SLUG_PATTERN.test(form.slug) &&
     form.track_ids.length > 0;
+  useUnsavedChanges(JSON.stringify(form) !== JSON.stringify(initial.current));
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!valid || mutation.isPending) return;
     mutation.mutate(
       { id: topic.id, payload: form },
       {
-        onSuccess: () =>
+        onSuccess: () => {
+          initial.current = form;
           notifications.show({
             color: "green",
             message: "Настройки темы сохранены",
-          }),
+          });
+        },
         onError: (error) =>
           notifications.show({ color: "red", message: error.message }),
       },
@@ -240,6 +245,9 @@ export function AdminKnowledgeTopicEditPage() {
   const { topicId = "" } = useParams();
   const query = useAdminKnowledgeTopic(topicId);
   if (query.isPending) return <LoadingState label="Загружаем материалы…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   return <TopicEditor key={query.data.id} topic={query.data} />;
 }

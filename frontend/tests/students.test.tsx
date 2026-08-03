@@ -14,9 +14,18 @@ import { renderPage } from "./render";
 
 const mentor = {
   id: "10000000-0000-4000-8000-000000000001",
+  role: "mentor" as const,
   first_name: "Антон",
   last_name: "Менторов",
   telegram_username: "mentor",
+};
+
+const adminMentor = {
+  id: "10000000-0000-4000-8000-000000000002",
+  role: "admin" as const,
+  first_name: "Администратор",
+  last_name: null,
+  telegram_username: "admin",
 };
 
 const student: AdminStudentDetail = {
@@ -44,7 +53,7 @@ const student: AdminStudentDetail = {
 };
 
 const options: AdminStudentOptions = {
-  mentors: [mentor],
+  mentors: [mentor, adminMentor],
   tracks: [
     {
       id: student.tracks[0]!.id,
@@ -82,7 +91,7 @@ it("показывает данные, треки и статус ученика
   expect(screen.getAllByLabelText("Ментор")[0]).toBeInTheDocument();
 });
 
-it("создаёт ученика с выбранным треком", async () => {
+it("создаёт ученика с выбранным треком и администратором-ментором", async () => {
   const create = vi
     .spyOn(api, "createAdminStudent")
     .mockReturnValue(new Promise(() => undefined));
@@ -93,7 +102,7 @@ it("создаёт ученика с выбранным треком", async () 
   await userEvent.type(screen.getByLabelText("Email"), "maria@example.com");
   await userEvent.type(screen.getByLabelText(/Telegram ID/), "777000111");
   await userEvent.click(screen.getByRole("textbox", { name: /^Ментор/ }));
-  await userEvent.click(screen.getByText("Антон Менторов"));
+  await userEvent.click(screen.getByText("Администратор · администратор"));
   await userEvent.click(screen.getByRole("checkbox", { name: /Go/ }));
   await userEvent.click(
     screen.getByRole("button", { name: "Добавить ученика" }),
@@ -105,7 +114,7 @@ it("создаёт ученика с выбранным треком", async () 
     last_name: "Петрова",
     email: "maria@example.com",
     learning_start_date: expect.any(String),
-    mentor_id: mentor.id,
+    mentor_id: adminMentor.id,
     track_ids: [options.tracks[1]!.id],
   });
 });

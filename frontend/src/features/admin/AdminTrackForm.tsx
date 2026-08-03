@@ -16,10 +16,11 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../../components/PageHeader";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import type {
   AdminTrackMutation,
   AdminTrackOptions,
@@ -62,6 +63,7 @@ export function AdminTrackForm({ options, track }: Props) {
   const [form, setForm] = useState<AdminTrackMutation>(
     track ? trackPayload(track) : emptyTrack,
   );
+  const initial = useRef(form);
   const createMutation = useCreateAdminTrack();
   const updateMutation = useUpdateAdminTrack();
   const accessMutation = useSetAdminTrackAccess();
@@ -72,6 +74,9 @@ export function AdminTrackForm({ options, track }: Props) {
   const roadmapIds = form.roadmap_ids ?? [];
   const assignedStudents = new Set(track?.student_ids ?? []);
   const valid = form.title.trim().length > 0 && SLUG_PATTERN.test(form.slug);
+  const allowNavigation = useUnsavedChanges(
+    JSON.stringify(form) !== JSON.stringify(initial.current),
+  );
 
   const toggleRoadmap = (roadmapId: string, checked: boolean) => {
     setForm((current) => ({
@@ -87,6 +92,7 @@ export function AdminTrackForm({ options, track }: Props) {
     if (!valid || pending) return;
     const handlers = {
       onSuccess: () => {
+        allowNavigation();
         notifications.show({
           color: "green",
           message: editing ? "Трек обновлён" : "Трек создан",

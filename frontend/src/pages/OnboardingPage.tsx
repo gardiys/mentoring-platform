@@ -71,13 +71,21 @@ export function OnboardingPage() {
             size={6}
           />
           <div className="onboarding-content">
-            <Text className="brand-eyebrow" mb="md">
-              {step.eyebrow}
-            </Text>
-            <Title order={1}>{step.title}</Title>
-            <Text size="lg" c="dimmed" mt="md" maw={640}>
-              {step.description}
-            </Text>
+            <div>
+              <Text className="brand-eyebrow" mb="md">
+                {step.eyebrow}
+              </Text>
+              <Title order={1}>{step.title}</Title>
+              <Text size="lg" c="dimmed" mt="md" maw={640}>
+                {step.description}
+              </Text>
+            </div>
+            <img
+              src="/brand/avatar-onboarding.png"
+              alt=""
+              className="onboarding-mascot"
+              decoding="async"
+            />
           </div>
           {mutation.isError && (
             <Text c="red" role="alert">

@@ -9,12 +9,13 @@ import {
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
   useAdminRoadmapSection,
   useSaveAdminRoadmapSection,
@@ -36,6 +37,10 @@ function SectionForm({
     position: section?.position ?? 0,
     duration_days: section?.duration_days ?? null,
   });
+  const initial = useRef(form);
+  const allowNavigation = useUnsavedChanges(
+    JSON.stringify(form) !== JSON.stringify(initial.current),
+  );
   const back = `/admin/roadmaps/${roadmapId}/edit`;
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -44,6 +49,7 @@ function SectionForm({
       { roadmapId, sectionId: section?.id, payload: form },
       {
         onSuccess: () => {
+          allowNavigation();
           notifications.show({
             color: "green",
             message: section ? "Раздел сохранён" : "Раздел создан",
@@ -137,7 +143,10 @@ export function AdminRoadmapSectionEditPage() {
   const query = useAdminRoadmapSection(roadmapId, sectionId);
   if (sectionId && query.isPending)
     return <LoadingState label="Загружаем раздел…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   return (
     <SectionForm
       key={sectionId ?? "new"}

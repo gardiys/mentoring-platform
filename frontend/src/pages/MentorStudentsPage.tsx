@@ -66,7 +66,10 @@ export function MentorStudentsPage() {
   );
 
   if (query.isPending) return <LoadingState label="Загружаем учеников…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   return (
     <Stack gap="xl">
@@ -118,7 +121,7 @@ export function MentorStudentsPage() {
               { value: "unassigned", label: "Без ментора" },
               ...query.data.mentors.map((mentor) => ({
                 value: mentor.id,
-                label: personName(mentor.first_name, mentor.last_name),
+                label: `${personName(mentor.first_name, mentor.last_name)}${mentor.role === "admin" ? " · администратор" : ""}`,
               })),
             ]}
             w={{ base: "100%", sm: 260 }}

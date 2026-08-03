@@ -18,7 +18,10 @@ import { useAdminRoadmaps } from "../features/admin/queries";
 export function AdminRoadmapsPage() {
   const query = useAdminRoadmaps();
   if (query.isPending) return <LoadingState label="Загружаем роадмапы…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   return (
     <Stack gap="xl">

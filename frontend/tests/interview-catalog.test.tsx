@@ -185,6 +185,10 @@ it("показывает треки, запись, файлы и отправл�
     const player = document.querySelector("video[controls]");
     expect(player).not.toBeNull();
     expect(player).toHaveAttribute(
+      "src",
+      "https://s3.example.test/interview.mp4?inline=true",
+    );
+    expect(player).toHaveAttribute(
       "controlslist",
       "nodownload noremoteplayback",
     );

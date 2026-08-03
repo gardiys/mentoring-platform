@@ -24,6 +24,8 @@ import type {
   InterviewProcessStageRead,
   InterviewStageType,
 } from "../types/api";
+import { mediaKind } from "../utils/media";
+import { openExternalResource } from "../utils/openExternalResource";
 
 const stageLabels: Record<InterviewStageType, string> = {
   screening: "Скрининг",
@@ -49,6 +51,9 @@ function MentorStage({
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
   const mutation = useCreateMentorInterviewFeedback(studentId, processId);
+  const storedMediaKind = stage.media
+    ? mediaKind(stage.media.content_type, stage.media.filename)
+    : null;
 
   const openMedia = async () => {
     if (mediaUrl) {
@@ -99,11 +104,11 @@ function MentorStage({
             >
               {mediaUrl
                 ? "Скрыть запись"
-                : stage.media.content_type.startsWith("video/")
+                : storedMediaKind === "video"
                   ? "Посмотреть запись"
                   : "Прослушать запись"}
             </Button>
-            {mediaUrl && stage.media.content_type.startsWith("video/") && (
+            {mediaUrl && storedMediaKind === "video" && (
               <video
                 controls
                 controlsList="nodownload noremoteplayback"
@@ -115,7 +120,7 @@ function MentorStage({
                 style={{ width: "100%", maxHeight: 600, borderRadius: 12 }}
               />
             )}
-            {mediaUrl && stage.media.content_type.startsWith("audio/") && (
+            {mediaUrl && storedMediaKind === "audio" && (
               <audio
                 controls
                 controlsList="nodownload noremoteplayback"
@@ -128,22 +133,34 @@ function MentorStage({
           </Stack>
         )}
         {stage.attachments.map((attachment) => (
-          <Group key={attachment.id} justify="space-between">
-            <Text size="sm">{attachment.filename}</Text>
+          <Group
+            key={attachment.id}
+            justify="space-between"
+            className="file-action-row"
+          >
+            <Text size="sm" className="file-name">
+              {attachment.filename}
+            </Text>
             <Button
               size="xs"
               variant="subtle"
               onClick={() =>
-                void api
-                  .openMentorInterviewAttachment(
+                void openExternalResource(
+                  api.openMentorInterviewAttachment(
                     studentId,
                     processId,
                     stage.id,
                     attachment.id,
-                  )
-                  .then((url) =>
-                    window.open(url, "_blank", "noopener,noreferrer"),
-                  )
+                  ),
+                ).catch((error: unknown) =>
+                  notifications.show({
+                    color: "red",
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Не удалось открыть файл",
+                  }),
+                )
               }
             >
               Открыть
@@ -165,11 +182,11 @@ function MentorStage({
                         boxShadow: "inset 3px 0 var(--mantine-color-violet-6)",
                       }
                     : comment.is_mentor_feedback
-                    ? {
-                        borderColor: "var(--mantine-color-blue-6)",
-                        boxShadow: "inset 3px 0 var(--mantine-color-blue-6)",
-                      }
-                    : undefined
+                      ? {
+                          borderColor: "var(--mantine-color-blue-6)",
+                          boxShadow: "inset 3px 0 var(--mantine-color-blue-6)",
+                        }
+                      : undefined
                 }
               >
                 <Text style={{ whiteSpace: "pre-wrap" }}>{comment.body}</Text>
@@ -221,7 +238,10 @@ export function MentorInterviewPage() {
   const { studentId = "", processId = "" } = useParams();
   const query = useMentorInterview(studentId, processId);
   if (query.isPending) return <LoadingState />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   const { process, feedback } = query.data;
 
   return (
@@ -271,20 +291,17 @@ export function MentorInterviewPage() {
               variant="light"
               w="fit-content"
               onClick={() =>
-                void api
-                  .openMentorInterviewOffer(studentId, processId)
-                  .then((url) =>
-                    window.open(url, "_blank", "noopener,noreferrer"),
-                  )
-                  .catch((error: unknown) =>
-                    notifications.show({
-                      color: "red",
-                      message:
-                        error instanceof Error
-                          ? error.message
-                          : "Не удалось открыть файл оффера",
-                    }),
-                  )
+                void openExternalResource(
+                  api.openMentorInterviewOffer(studentId, processId),
+                ).catch((error: unknown) =>
+                  notifications.show({
+                    color: "red",
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : "Не удалось открыть файл оффера",
+                  }),
+                )
               }
             >
               Открыть файл оффера · {process.offer.filename}

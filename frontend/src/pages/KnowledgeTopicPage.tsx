@@ -37,7 +37,10 @@ export function KnowledgeTopicPage() {
   const { topicSlug = "" } = useParams();
   const query = useKnowledgeTopic(topicSlug);
   if (query.isPending) return <LoadingState />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   return (
     <Stack gap="xl">

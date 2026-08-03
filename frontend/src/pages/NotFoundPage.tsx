@@ -6,9 +6,10 @@ export function NotFoundPage() {
     <Center mih="100vh" className="not-found-page">
       <Stack align="center" ta="center">
         <img
-          src="/brand/geralt-avatar.png"
+          src="/brand/avatar-memes.png"
           alt="Геральт"
           className="not-found-mascot"
+          decoding="async"
         />
         <Text className="brand-eyebrow">Ошибка навигации</Text>
         <Title>404 — тут ничего нет</Title>

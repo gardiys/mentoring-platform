@@ -27,7 +27,10 @@ export function TopicPage() {
   const mutation = useUpdateProgress(topicId, query.data?.roadmap.slug ?? "");
 
   if (query.isPending) return <LoadingState />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   const changeStatus = (status: ProgressStatus) => {
     mutation.mutate(status, {

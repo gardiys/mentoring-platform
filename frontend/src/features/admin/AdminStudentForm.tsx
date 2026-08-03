@@ -15,12 +15,14 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../../components/PageHeader";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import type {
   AdminStudentDetail,
+  AdminStudentMentorRead,
   AdminStudentMutation,
   AdminStudentOptions,
 } from "../../types/api";
@@ -58,10 +60,16 @@ function initialForm(student?: AdminStudentDetail): StudentFormState {
   };
 }
 
+function mentorOptionLabel(mentor: AdminStudentMentorRead) {
+  const name = [mentor.first_name, mentor.last_name].filter(Boolean).join(" ");
+  return mentor.role === "admin" ? `${name} · администратор` : name;
+}
+
 export function AdminStudentForm({ options, student }: Props) {
   const [form, setForm] = useState<StudentFormState>(() =>
     initialForm(student),
   );
+  const initial = useRef(form);
   const createMutation = useCreateAdminStudent();
   const updateMutation = useUpdateAdminStudent();
   const accessMutation = useSetAdminStudentAccess();
@@ -76,6 +84,9 @@ export function AdminStudentForm({ options, student }: Props) {
     form.first_name.trim().length > 0 &&
     Boolean(form.learning_start_date) &&
     Boolean(form.mentor_id);
+  const allowNavigation = useUnsavedChanges(
+    JSON.stringify(form) !== JSON.stringify(initial.current),
+  );
 
   const toggleTrack = (trackId: string, checked: boolean) => {
     setForm((current) => ({
@@ -98,6 +109,7 @@ export function AdminStudentForm({ options, student }: Props) {
     };
     const handlers = {
       onSuccess: () => {
+        allowNavigation();
         notifications.show({
           color: "green",
           message: editing ? "Данные ученика обновлены" : "Ученик добавлен",
@@ -150,6 +162,7 @@ export function AdminStudentForm({ options, student }: Props) {
     }
     promoteMutation.mutate(student.id, {
       onSuccess: () => {
+        allowNavigation();
         notifications.show({
           color: "green",
           message: "Ученик переведён в менторы",
@@ -277,9 +290,7 @@ export function AdminStudentForm({ options, student }: Props) {
               }
               data={options.mentors.map((mentor) => ({
                 value: mentor.id,
-                label: [mentor.first_name, mentor.last_name]
-                  .filter(Boolean)
-                  .join(" "),
+                label: mentorOptionLabel(mentor),
               }))}
             />
             <TextInput

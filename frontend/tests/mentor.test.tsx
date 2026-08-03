@@ -36,9 +36,17 @@ it("MentorStudentsPage отображает учеников", async () => {
     mentors: [
       {
         id: "mentor-1",
+        role: "mentor",
         first_name: "Антон",
         last_name: "Менторов",
         telegram_username: "mentor",
+      },
+      {
+        id: "admin-1",
+        role: "admin",
+        first_name: "Администратор",
+        last_name: null,
+        telegram_username: "admin",
       },
     ],
     can_filter_by_mentor: true,
@@ -48,6 +56,10 @@ it("MentorStudentsPage отображает учеников", async () => {
   expect(screen.getAllByLabelText("Направление")[0]).toBeInTheDocument();
   expect(screen.getAllByLabelText("Текущий статус")[0]).toBeInTheDocument();
   expect(screen.getAllByLabelText("Ментор")[0]).toBeInTheDocument();
+  await userEvent.click(screen.getAllByLabelText("Ментор")[0]!);
+  expect(
+    await screen.findByText("Администратор · администратор"),
+  ).toBeInTheDocument();
 });
 
 it.each([

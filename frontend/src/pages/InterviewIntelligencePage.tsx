@@ -31,23 +31,16 @@ import {
   useRetryIntelligenceInterview,
   useSelectIntelligenceCandidate,
 } from "../features/interviews/intelligenceQueries";
+import {
+  intelligenceDifficultyLabels,
+  intelligenceQuestionKindLabels,
+  intelligenceStatusLabels,
+} from "../features/interviews/intelligencePresentation";
 import type {
   IntelligenceAssessment,
-  IntelligenceProcessingStatus,
   IntelligenceQuestion,
 } from "../types/api";
-
-const statusLabels: Record<IntelligenceProcessingStatus, string> = {
-  draft: "Ожидает загрузки",
-  uploaded: "Файл загружен",
-  transcription_submitted: "Отправлено в распознавание",
-  transcribing: "Распознаём речь",
-  transcript_ready: "Расшифровка готова",
-  awaiting_candidate_speaker: "Нужно выбрать кандидата",
-  analyzing: "Анализируем ответы",
-  ready: "Разбор готов",
-  failed: "Ошибка обработки",
-};
+import { mediaKind } from "../utils/media";
 
 const assessmentLabels: Record<IntelligenceAssessment, string> = {
   correct: "Верно",
@@ -58,12 +51,9 @@ const assessmentLabels: Record<IntelligenceAssessment, string> = {
   unable_to_assess: "Недостаточно данных",
 };
 
-const questionKindLabels = {
-  technical: "Технический",
-  hr: "HR",
-  organizational: "Организационный",
-  other: "Иное",
-} as const;
+function notifyMutationError(error: Error) {
+  notifications.show({ color: "red", message: error.message });
+}
 
 function timestamp(milliseconds: number | null) {
   if (milliseconds === null) return "—";
@@ -84,7 +74,12 @@ function QuestionCard({
   const moderationMutation = useIntelligenceQuestionModeration();
   const review = question.answer?.reviews.at(-1);
   const canReview = reviewerRole !== "student";
-  const moderate = (action: "recommend" | "reject") =>
+  const moderate = (action: "recommend" | "reject") => {
+    if (
+      action === "reject" &&
+      !window.confirm("Отклонить добавление этого вопроса в общую базу?")
+    )
+      return;
     moderationMutation.mutate(
       {
         interviewId,
@@ -104,6 +99,7 @@ function QuestionCard({
           notifications.show({ color: "red", message: error.message }),
       },
     );
+  };
   return (
     <Card withBorder id={`question-${question.id}`}>
       <Stack>
@@ -115,10 +111,14 @@ function QuestionCard({
             <Title order={3}>{question.question_text}</Title>
           </div>
           <Group gap="xs">
-            <Badge color={question.question_kind === "technical" ? "blue" : "gray"}>
-              {questionKindLabels[question.question_kind]}
+            <Badge
+              color={question.question_kind === "technical" ? "blue" : "gray"}
+            >
+              {intelligenceQuestionKindLabels[question.question_kind]}
             </Badge>
-            <Badge variant="outline">{question.difficulty}</Badge>
+            <Badge variant="outline">
+              {intelligenceDifficultyLabels[question.difficulty]}
+            </Badge>
             {question.is_low_confidence && (
               <Badge color="yellow">Проверьте текст</Badge>
             )}
@@ -162,11 +162,14 @@ function QuestionCard({
                       size="xs"
                       loading={reviewMutation.isPending}
                       onClick={() =>
-                        reviewMutation.mutate({
-                          interviewId,
-                          reviewId: review.id,
-                          action: "approve",
-                        })
+                        reviewMutation.mutate(
+                          {
+                            interviewId,
+                            reviewId: review.id,
+                            action: "approve",
+                          },
+                          { onError: notifyMutationError },
+                        )
                       }
                     >
                       Подтвердить
@@ -176,13 +179,18 @@ function QuestionCard({
                       color="gray"
                       variant="light"
                       loading={reviewMutation.isPending}
-                      onClick={() =>
-                        reviewMutation.mutate({
-                          interviewId,
-                          reviewId: review.id,
-                          action: "reject",
-                        })
-                      }
+                      onClick={() => {
+                        if (!window.confirm("Отклонить AI-рекомендацию?"))
+                          return;
+                        reviewMutation.mutate(
+                          {
+                            interviewId,
+                            reviewId: review.id,
+                            action: "reject",
+                          },
+                          { onError: notifyMutationError },
+                        );
+                      }}
                     >
                       Отклонить
                     </Button>
@@ -227,7 +235,7 @@ function QuestionCard({
                   </Button>
                 )}
               {reviewerRole === "mentor" &&
-                question.moderation_status !== "approved" && (
+                question.moderation_status === "pending" && (
                   <Group>
                     <Button
                       size="xs"
@@ -272,12 +280,24 @@ export function InterviewIntelligencePage() {
     url: string;
     content_type: string;
   } | null>(null);
+  const [isMediaLoading, setIsMediaLoading] = useState(false);
   const mediaRef = useRef<HTMLMediaElement>(null);
+  const intelligenceMediaKind = media
+    ? mediaKind(media.content_type, query.data?.media_filename)
+    : null;
 
   if (query.isPending || me.isPending)
     return <LoadingState label="Загружаем разбор…" />;
   if (query.isError || me.isError)
-    return <ErrorState retry={() => void query.refetch()} />;
+    return (
+      <ErrorState
+        error={query.error ?? me.error}
+        retry={() => {
+          void query.refetch();
+          void me.refetch();
+        }}
+      />
+    );
   const interview = query.data;
   const canReview = me.data.role === "mentor" || me.data.role === "admin";
   const canDelete =
@@ -295,10 +315,16 @@ export function InterviewIntelligencePage() {
         navigate(canReview ? "/mentor/interview-reviews" : "/interviews", {
           replace: true,
         }),
+      onError: notifyMutationError,
     });
   };
 
   const openMedia = async () => {
+    if (media) {
+      setMedia(null);
+      return;
+    }
+    setIsMediaLoading(true);
     try {
       setMedia(await api.intelligenceMedia(interview.id));
     } catch (error) {
@@ -307,7 +333,18 @@ export function InterviewIntelligencePage() {
         message:
           error instanceof Error ? error.message : "Не удалось открыть запись",
       });
+    } finally {
+      setIsMediaLoading(false);
     }
+  };
+
+  const handleMediaError = () => {
+    setMedia(null);
+    notifications.show({
+      color: "yellow",
+      message:
+        "Не удалось воспроизвести запись. Откройте её снова, чтобы обновить ссылку.",
+    });
   };
 
   return (
@@ -324,7 +361,7 @@ export function InterviewIntelligencePage() {
             mt="xs"
             color={interview.processing_status === "failed" ? "red" : "blue"}
           >
-            {statusLabels[interview.processing_status]}
+            {intelligenceStatusLabels[interview.processing_status]}
           </Badge>
         </Card>
         <Card withBorder>
@@ -348,7 +385,9 @@ export function InterviewIntelligencePage() {
             <Button
               w="fit-content"
               loading={retry.isPending}
-              onClick={() => retry.mutate(interview.id)}
+              onClick={() =>
+                retry.mutate(interview.id, { onError: notifyMutationError })
+              }
             >
               Повторить этап
             </Button>
@@ -366,29 +405,39 @@ export function InterviewIntelligencePage() {
                   {interview.media_filename}
                 </Text>
               </div>
-              {!media && (
-                <Button variant="light" onClick={() => void openMedia()}>
-                  Открыть запись
-                </Button>
-              )}
+              <Button
+                variant="light"
+                loading={isMediaLoading}
+                onClick={() => void openMedia()}
+              >
+                {media ? "Скрыть запись" : "Открыть запись"}
+              </Button>
             </Group>
-            {media?.content_type.startsWith("video/") && (
+            {media && intelligenceMediaKind === "video" && (
               <video
                 ref={mediaRef as React.RefObject<HTMLVideoElement>}
                 controls
                 controlsList="nodownload noremoteplayback"
                 src={media.url}
+                onError={handleMediaError}
                 style={{ width: "100%", maxHeight: 640, borderRadius: 12 }}
               />
             )}
-            {media?.content_type.startsWith("audio/") && (
+            {media && intelligenceMediaKind === "audio" && (
               <audio
                 ref={mediaRef}
                 controls
                 controlsList="nodownload noremoteplayback"
                 src={media.url}
+                onError={handleMediaError}
                 style={{ width: "100%" }}
               />
+            )}
+            {media && !intelligenceMediaKind && (
+              <Alert color="yellow" title="Формат записи не распознан">
+                Не удалось определить, это аудио или видео. Проверьте имя и
+                формат исходного файла.
+              </Alert>
             )}
           </Stack>
         </Card>
@@ -435,10 +484,13 @@ export function InterviewIntelligencePage() {
               disabled={!candidateId}
               loading={selectCandidate.isPending}
               onClick={() =>
-                selectCandidate.mutate({
-                  interviewId: interview.id,
-                  speakerId: candidateId,
-                })
+                selectCandidate.mutate(
+                  {
+                    interviewId: interview.id,
+                    speakerId: candidateId,
+                  },
+                  { onError: notifyMutationError },
+                )
               }
             >
               Продолжить анализ
@@ -579,15 +631,19 @@ export function InterviewIntelligencePage() {
           <Alert color="blue" title="Для этого разбора ещё нет общего резюме">
             <Stack gap="sm">
               <Text>
-                Это мог быть разбор, созданный до добавления оценки коммуникации.
-                Запустите формирование вручную — транскрипция повторно отправится
-                в сервис анализа.
+                Это мог быть разбор, созданный до добавления оценки
+                коммуникации. Запустите формирование вручную — транскрипция
+                повторно отправится в сервис анализа.
               </Text>
               <Button
                 w="fit-content"
                 variant="light"
                 loading={generateOverview.isPending}
-                onClick={() => generateOverview.mutate(interview.id)}
+                onClick={() =>
+                  generateOverview.mutate(interview.id, {
+                    onError: notifyMutationError,
+                  })
+                }
               >
                 Сформировать резюме и soft skills
               </Button>
@@ -648,18 +704,21 @@ export function InterviewIntelligencePage() {
                     variant="light"
                     loading={completeReview.isPending}
                     disabled={interview.suggested_review_count > 0}
-                    onClick={() => completeReview.mutate(interview.id)}
+                    onClick={() =>
+                      completeReview.mutate(interview.id, {
+                        onError: notifyMutationError,
+                      })
+                    }
                   >
                     Завершить проверку
                   </Button>
                 )}
             </Group>
-            {!interview.reviewed_at &&
-              interview.suggested_review_count > 0 && (
-                <Text size="sm" c="orange">
-                  Сначала подтвердите или отклоните все AI-рекомендации.
-                </Text>
-              )}
+            {!interview.reviewed_at && interview.suggested_review_count > 0 && (
+              <Text size="sm" c="orange">
+                Сначала подтвердите или отклоните все AI-рекомендации.
+              </Text>
+            )}
             <Textarea
               label="Общий комментарий ученику"
               value={comment}
@@ -672,7 +731,10 @@ export function InterviewIntelligencePage() {
               onClick={() =>
                 addComment.mutate(
                   { interviewId: interview.id, text: comment.trim() },
-                  { onSuccess: () => setComment("") },
+                  {
+                    onSuccess: () => setComment(""),
+                    onError: notifyMutationError,
+                  },
                 )
               }
             >

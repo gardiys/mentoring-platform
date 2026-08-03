@@ -17,10 +17,15 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
   useAdminQuestionModerationDetail,
   useIntelligenceQuestionModeration,
 } from "../features/interviews/intelligenceQueries";
+import {
+  intelligenceDifficultyLabels,
+  intelligenceQuestionKindLabels,
+} from "../features/interviews/intelligencePresentation";
 import type { AdminQuestionModerationDetail } from "../types/api";
 
 function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
@@ -34,8 +39,21 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
   const [frequency, setFrequency] = useState<"frequent" | "occasional">(
     "occasional",
   );
+  const allowNavigation = useUnsavedChanges(
+    question !== item.question_text ||
+      answer !== (item.suggested_answer || item.candidate_answer || "") ||
+      category !== item.category ||
+      frequency !== "occasional",
+  );
 
-  const submit = (action: "approve" | "reject") =>
+  const submit = (action: "approve" | "reject") => {
+    if (
+      action === "reject" &&
+      !window.confirm(
+        "Отклонить вопрос? Он не будет добавлен в общую базу карточек.",
+      )
+    )
+      return;
     moderation.mutate(
       {
         interviewId: item.interview_id,
@@ -53,6 +71,7 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
       },
       {
         onSuccess: () => {
+          allowNavigation();
           notifications.show({
             color: "green",
             message:
@@ -66,6 +85,7 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
           notifications.show({ color: "red", message: error.message }),
       },
     );
+  };
 
   return (
     <Stack gap="xl">
@@ -88,9 +108,9 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
           <Stack gap="xs">
             <Text>{item.matched_card_question}</Text>
             <Text size="sm">
-              Уже зафиксировано появлений: {item.matched_card_asked_count}. После
-              подтверждения новая карточка не создастся — добавится компания и
-              увеличится счётчик.
+              Уже зафиксировано появлений: {item.matched_card_asked_count}.
+              После подтверждения новая карточка не создастся — добавится
+              компания и увеличится счётчик.
             </Text>
           </Stack>
         </Alert>
@@ -98,8 +118,10 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
       <Card withBorder>
         <Stack>
           <Group>
-            <Badge>{item.question_kind}</Badge>
-            <Badge variant="outline">{item.difficulty}</Badge>
+            <Badge>{intelligenceQuestionKindLabels[item.question_kind]}</Badge>
+            <Badge variant="outline">
+              {intelligenceDifficultyLabels[item.difficulty]}
+            </Badge>
           </Group>
           <Textarea
             label="Вопрос"
@@ -171,6 +193,8 @@ export function AdminInterviewQuestionModerationEditPage() {
   const query = useAdminQuestionModerationDetail(questionId);
   if (query.isPending) return <LoadingState label="Загружаем вопрос…" />;
   if (query.isError)
-    return <ErrorState retry={() => void query.refetch()} />;
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   return <ModerationForm key={query.data.question_id} item={query.data} />;
 }

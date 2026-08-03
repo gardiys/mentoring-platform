@@ -41,6 +41,7 @@ export type AdminStudentMutation = Omit<
 export type AdminStudentTrackRead = Schemas["AdminStudentTrackRead"];
 export interface AdminStudentMentorRead {
   id: string;
+  role: Schemas["UserRole"];
   first_name: string;
   last_name: string | null;
   telegram_username: string | null;
@@ -203,6 +204,7 @@ export interface MentorStudentDirectionOption {
 
 export interface MentorStudentMentorOption {
   id: string;
+  role: Schemas["UserRole"];
   first_name: string;
   last_name: string | null;
   telegram_username: string | null;
@@ -356,8 +358,7 @@ export interface AdminQuestionModerationSummary {
   interviewed_at: string;
 }
 
-export interface AdminQuestionModerationDetail
-  extends AdminQuestionModerationSummary {
+export interface AdminQuestionModerationDetail extends AdminQuestionModerationSummary {
   candidate_answer: string | null;
   suggested_answer: string | null;
   matched_card_id: string | null;

@@ -1,207 +1,382 @@
+import type { ComponentType } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 
 import { AppLayout } from "../components/AppLayout";
+import { LoadingState } from "../components/LoadingState";
 import { ProtectedLayout } from "../components/ProtectedLayout";
-import { AdminRoadmapCreatePage } from "../pages/AdminRoadmapCreatePage";
-import { AdminRoadmapEditPage } from "../pages/AdminRoadmapEditPage";
-import { AdminRoadmapSectionEditPage } from "../pages/AdminRoadmapSectionEditPage";
-import { AdminRoadmapTopicEditPage } from "../pages/AdminRoadmapTopicEditPage";
-import { AdminRoadmapsPage } from "../pages/AdminRoadmapsPage";
-import { AdminTrackCreatePage } from "../pages/AdminTrackCreatePage";
-import { AdminTrackEditPage } from "../pages/AdminTrackEditPage";
-import { AdminTracksPage } from "../pages/AdminTracksPage";
-import { AdminStudentCreatePage } from "../pages/AdminStudentCreatePage";
-import { AdminStudentEditPage } from "../pages/AdminStudentEditPage";
-import { AdminStudentsPage } from "../pages/AdminStudentsPage";
-import { AdminMentorsPage } from "../pages/AdminMentorsPage";
-import { AdminKnowledgeTopicCreatePage } from "../pages/AdminKnowledgeTopicCreatePage";
-import { AdminKnowledgeTopicEditPage } from "../pages/AdminKnowledgeTopicEditPage";
-import { AdminKnowledgeEntryEditPage } from "../pages/AdminKnowledgeEntryEditPage";
-import { AdminKnowledgeTopicsPage } from "../pages/AdminKnowledgeTopicsPage";
-import { AdminInterviewDeckCreatePage } from "../pages/AdminInterviewDeckCreatePage";
-import { AdminInterviewDeckEditPage } from "../pages/AdminInterviewDeckEditPage";
-import { AdminInterviewCardEditPage } from "../pages/AdminInterviewCardEditPage";
-import { AdminInterviewDecksPage } from "../pages/AdminInterviewDecksPage";
-import { AdminInterviewQuestionModerationPage } from "../pages/AdminInterviewQuestionModerationPage";
-import { AdminInterviewQuestionModerationEditPage } from "../pages/AdminInterviewQuestionModerationEditPage";
-import { DevLoginPage } from "../pages/DevLoginPage";
-import { MentorStudentPage } from "../pages/MentorStudentPage";
-import { MentorStudentsPage } from "../pages/MentorStudentsPage";
-import { MentorInterviewPage } from "../pages/MentorInterviewPage";
-import { KnowledgeBasePage } from "../pages/KnowledgeBasePage";
-import { KnowledgeEntryPage } from "../pages/KnowledgeEntryPage";
-import { KnowledgeTopicPage } from "../pages/KnowledgeTopicPage";
-import { InterviewsPage } from "../pages/InterviewsPage";
-import { InterviewStudyPage } from "../pages/InterviewStudyPage";
-import { InterviewProcessCreatePage } from "../pages/InterviewProcessCreatePage";
-import { InterviewProcessPage } from "../pages/InterviewProcessPage";
-import { InterviewCatalogPage } from "../pages/InterviewCatalogPage";
-import { InterviewCatalogCompanyPage } from "../pages/InterviewCatalogCompanyPage";
-import { InterviewIntelligencePage } from "../pages/InterviewIntelligencePage";
-import { MentorInterviewIntelligencePage } from "../pages/MentorInterviewIntelligencePage";
-import { NotFoundPage } from "../pages/NotFoundPage";
-import { OnboardingPage } from "../pages/OnboardingPage";
-import { RoadmapPage } from "../pages/RoadmapPage";
-import { RoadmapsPage } from "../pages/RoadmapsPage";
-import { TopicPage } from "../pages/TopicPage";
-import { TelegramRequiredPage } from "../pages/TelegramRequiredPage";
+import { RoleGuard } from "../components/RoleGuard";
+import { RouteErrorBoundary } from "../components/RouteErrorBoundary";
+
+function lazyPage<TModule>(
+  loader: () => Promise<TModule>,
+  exportName: keyof TModule,
+) {
+  return async () => {
+    const module = await loader();
+    return { Component: module[exportName] as ComponentType };
+  };
+}
+
+const studentRoutes = [
+  {
+    path: "/roadmaps",
+    lazy: lazyPage(() => import("../pages/RoadmapsPage"), "RoadmapsPage"),
+  },
+  {
+    path: "/roadmaps/:roadmapSlug",
+    lazy: lazyPage(() => import("../pages/RoadmapPage"), "RoadmapPage"),
+  },
+  {
+    path: "/topics/:topicId",
+    lazy: lazyPage(() => import("../pages/TopicPage"), "TopicPage"),
+  },
+  {
+    path: "/knowledge",
+    lazy: lazyPage(
+      () => import("../pages/KnowledgeBasePage"),
+      "KnowledgeBasePage",
+    ),
+  },
+  {
+    path: "/knowledge/topics/:topicSlug",
+    lazy: lazyPage(
+      () => import("../pages/KnowledgeTopicPage"),
+      "KnowledgeTopicPage",
+    ),
+  },
+  {
+    path: "/knowledge/entries/:entrySlug",
+    lazy: lazyPage(
+      () => import("../pages/KnowledgeEntryPage"),
+      "KnowledgeEntryPage",
+    ),
+  },
+  {
+    path: "/interviews",
+    lazy: lazyPage(() => import("../pages/InterviewsPage"), "InterviewsPage"),
+  },
+  {
+    path: "/interviews/catalog",
+    lazy: lazyPage(
+      () => import("../pages/InterviewCatalogPage"),
+      "InterviewCatalogPage",
+    ),
+  },
+  {
+    path: "/interviews/catalog/:companyId",
+    lazy: lazyPage(
+      () => import("../pages/InterviewCatalogCompanyPage"),
+      "InterviewCatalogCompanyPage",
+    ),
+  },
+  {
+    path: "/interviews/journal/new",
+    lazy: lazyPage(
+      () => import("../pages/InterviewProcessCreatePage"),
+      "InterviewProcessCreatePage",
+    ),
+  },
+  {
+    path: "/interviews/journal/:processId",
+    lazy: lazyPage(
+      () => import("../pages/InterviewProcessPage"),
+      "InterviewProcessPage",
+    ),
+  },
+  {
+    path: "/interviews/analysis/:interviewId",
+    lazy: lazyPage(
+      () => import("../pages/InterviewIntelligencePage"),
+      "InterviewIntelligencePage",
+    ),
+  },
+  {
+    path: "/interviews/:deckSlug",
+    lazy: lazyPage(
+      () => import("../pages/InterviewStudyPage"),
+      "InterviewStudyPage",
+    ),
+  },
+];
+
+const mentorRoutes = [
+  {
+    path: "/mentor/students",
+    lazy: lazyPage(
+      () => import("../pages/MentorStudentsPage"),
+      "MentorStudentsPage",
+    ),
+  },
+  {
+    path: "/mentor/interview-reviews",
+    lazy: lazyPage(
+      () => import("../pages/MentorInterviewIntelligencePage"),
+      "MentorInterviewIntelligencePage",
+    ),
+  },
+  {
+    path: "/mentor/interview-reviews/:interviewId",
+    lazy: lazyPage(
+      () => import("../pages/InterviewIntelligencePage"),
+      "InterviewIntelligencePage",
+    ),
+  },
+  {
+    path: "/mentor/students/:studentId",
+    lazy: lazyPage(
+      () => import("../pages/MentorStudentPage"),
+      "MentorStudentPage",
+    ),
+  },
+  {
+    path: "/mentor/students/:studentId/interviews/:processId",
+    lazy: lazyPage(
+      () => import("../pages/MentorInterviewPage"),
+      "MentorInterviewPage",
+    ),
+  },
+];
+
+const adminRoutes = [
+  {
+    path: "/admin/roadmaps",
+    lazy: lazyPage(
+      () => import("../pages/AdminRoadmapsPage"),
+      "AdminRoadmapsPage",
+    ),
+  },
+  {
+    path: "/admin/roadmaps/new",
+    lazy: lazyPage(
+      () => import("../pages/AdminRoadmapCreatePage"),
+      "AdminRoadmapCreatePage",
+    ),
+  },
+  {
+    path: "/admin/roadmaps/:roadmapId/edit",
+    lazy: lazyPage(
+      () => import("../pages/AdminRoadmapEditPage"),
+      "AdminRoadmapEditPage",
+    ),
+  },
+  {
+    path: "/admin/roadmaps/:roadmapId/sections/:sectionId/edit",
+    lazy: lazyPage(
+      () => import("../pages/AdminRoadmapSectionEditPage"),
+      "AdminRoadmapSectionEditPage",
+    ),
+  },
+  {
+    path: "/admin/roadmaps/:roadmapId/sections/new",
+    lazy: lazyPage(
+      () => import("../pages/AdminRoadmapSectionEditPage"),
+      "AdminRoadmapSectionEditPage",
+    ),
+  },
+  {
+    path: "/admin/roadmaps/:roadmapId/sections/:sectionId/topics/new",
+    lazy: lazyPage(
+      () => import("../pages/AdminRoadmapTopicEditPage"),
+      "AdminRoadmapTopicEditPage",
+    ),
+  },
+  {
+    path: "/admin/roadmaps/:roadmapId/sections/:sectionId/topics/:topicId/edit",
+    lazy: lazyPage(
+      () => import("../pages/AdminRoadmapTopicEditPage"),
+      "AdminRoadmapTopicEditPage",
+    ),
+  },
+  {
+    path: "/admin/tracks",
+    lazy: lazyPage(() => import("../pages/AdminTracksPage"), "AdminTracksPage"),
+  },
+  {
+    path: "/admin/tracks/new",
+    lazy: lazyPage(
+      () => import("../pages/AdminTrackCreatePage"),
+      "AdminTrackCreatePage",
+    ),
+  },
+  {
+    path: "/admin/tracks/:trackId/edit",
+    lazy: lazyPage(
+      () => import("../pages/AdminTrackEditPage"),
+      "AdminTrackEditPage",
+    ),
+  },
+  {
+    path: "/admin/students",
+    lazy: lazyPage(
+      () => import("../pages/AdminStudentsPage"),
+      "AdminStudentsPage",
+    ),
+  },
+  {
+    path: "/admin/mentors",
+    lazy: lazyPage(
+      () => import("../pages/AdminMentorsPage"),
+      "AdminMentorsPage",
+    ),
+  },
+  {
+    path: "/admin/students/new",
+    lazy: lazyPage(
+      () => import("../pages/AdminStudentCreatePage"),
+      "AdminStudentCreatePage",
+    ),
+  },
+  {
+    path: "/admin/students/:studentId/edit",
+    lazy: lazyPage(
+      () => import("../pages/AdminStudentEditPage"),
+      "AdminStudentEditPage",
+    ),
+  },
+  {
+    path: "/admin/knowledge",
+    lazy: lazyPage(
+      () => import("../pages/AdminKnowledgeTopicsPage"),
+      "AdminKnowledgeTopicsPage",
+    ),
+  },
+  {
+    path: "/admin/knowledge/new",
+    lazy: lazyPage(
+      () => import("../pages/AdminKnowledgeTopicCreatePage"),
+      "AdminKnowledgeTopicCreatePage",
+    ),
+  },
+  {
+    path: "/admin/knowledge/:topicId/edit",
+    lazy: lazyPage(
+      () => import("../pages/AdminKnowledgeTopicEditPage"),
+      "AdminKnowledgeTopicEditPage",
+    ),
+  },
+  {
+    path: "/admin/knowledge/:topicId/entries/new",
+    lazy: lazyPage(
+      () => import("../pages/AdminKnowledgeEntryEditPage"),
+      "AdminKnowledgeEntryEditPage",
+    ),
+  },
+  {
+    path: "/admin/knowledge/:topicId/entries/:entryId/edit",
+    lazy: lazyPage(
+      () => import("../pages/AdminKnowledgeEntryEditPage"),
+      "AdminKnowledgeEntryEditPage",
+    ),
+  },
+  {
+    path: "/admin/interviews",
+    lazy: lazyPage(
+      () => import("../pages/AdminInterviewDecksPage"),
+      "AdminInterviewDecksPage",
+    ),
+  },
+  {
+    path: "/admin/interview-question-moderation",
+    lazy: lazyPage(
+      () => import("../pages/AdminInterviewQuestionModerationPage"),
+      "AdminInterviewQuestionModerationPage",
+    ),
+  },
+  {
+    path: "/admin/interview-question-moderation/:questionId",
+    lazy: lazyPage(
+      () => import("../pages/AdminInterviewQuestionModerationEditPage"),
+      "AdminInterviewQuestionModerationEditPage",
+    ),
+  },
+  {
+    path: "/admin/interviews/new",
+    lazy: lazyPage(
+      () => import("../pages/AdminInterviewDeckCreatePage"),
+      "AdminInterviewDeckCreatePage",
+    ),
+  },
+  {
+    path: "/admin/interviews/:deckId/edit",
+    lazy: lazyPage(
+      () => import("../pages/AdminInterviewDeckEditPage"),
+      "AdminInterviewDeckEditPage",
+    ),
+  },
+  {
+    path: "/admin/interviews/:deckId/cards/new",
+    lazy: lazyPage(
+      () => import("../pages/AdminInterviewCardEditPage"),
+      "AdminInterviewCardEditPage",
+    ),
+  },
+  {
+    path: "/admin/interviews/:deckId/cards/:cardId/edit",
+    lazy: lazyPage(
+      () => import("../pages/AdminInterviewCardEditPage"),
+      "AdminInterviewCardEditPage",
+    ),
+  },
+];
 
 export const router = createBrowserRouter([
   {
-    path: "/dev-login",
-    element: import.meta.env.DEV ? (
-      <DevLoginPage />
-    ) : (
-      <Navigate to="/login" replace />
-    ),
-  },
-  { path: "/login", element: <TelegramRequiredPage /> },
-  { path: "/telegram-required", element: <Navigate to="/login" replace /> },
-  {
-    element: <ProtectedLayout />,
+    ErrorBoundary: RouteErrorBoundary,
+    HydrateFallback: () => <LoadingState label="Загружаем платформу…" />,
     children: [
-      { path: "/onboarding", element: <OnboardingPage /> },
       {
-        element: <AppLayout />,
+        path: "/dev-login",
+        ...(import.meta.env.DEV
+          ? {
+              lazy: lazyPage(
+                () => import("../pages/DevLoginPage"),
+                "DevLoginPage",
+              ),
+            }
+          : { element: <Navigate to="/login" replace /> }),
+      },
+      {
+        path: "/login",
+        lazy: lazyPage(
+          () => import("../pages/TelegramRequiredPage"),
+          "TelegramRequiredPage",
+        ),
+      },
+      {
+        path: "/telegram-required",
+        element: <Navigate to="/login" replace />,
+      },
+      {
+        element: <ProtectedLayout />,
         children: [
-          { path: "/", element: <Navigate to="/roadmaps" replace /> },
-          { path: "/roadmaps", element: <RoadmapsPage /> },
-          { path: "/roadmaps/:roadmapSlug", element: <RoadmapPage /> },
-          { path: "/topics/:topicId", element: <TopicPage /> },
-          { path: "/knowledge", element: <KnowledgeBasePage /> },
           {
-            path: "/knowledge/topics/:topicSlug",
-            element: <KnowledgeTopicPage />,
+            path: "/onboarding",
+            lazy: lazyPage(
+              () => import("../pages/OnboardingPage"),
+              "OnboardingPage",
+            ),
           },
           {
-            path: "/knowledge/entries/:entrySlug",
-            element: <KnowledgeEntryPage />,
-          },
-          { path: "/interviews", element: <InterviewsPage /> },
-          { path: "/interviews/catalog", element: <InterviewCatalogPage /> },
-          {
-            path: "/interviews/catalog/:companyId",
-            element: <InterviewCatalogCompanyPage />,
-          },
-          {
-            path: "/interviews/journal/new",
-            element: <InterviewProcessCreatePage />,
-          },
-          {
-            path: "/interviews/journal/:processId",
-            element: <InterviewProcessPage />,
-          },
-          {
-            path: "/interviews/analysis/:interviewId",
-            element: <InterviewIntelligencePage />,
-          },
-          {
-            path: "/interviews/:deckSlug",
-            element: <InterviewStudyPage />,
-          },
-          { path: "/mentor/students", element: <MentorStudentsPage /> },
-          {
-            path: "/mentor/interview-reviews",
-            element: <MentorInterviewIntelligencePage />,
-          },
-          {
-            path: "/mentor/interview-reviews/:interviewId",
-            element: <InterviewIntelligencePage />,
-          },
-          {
-            path: "/mentor/students/:studentId",
-            element: <MentorStudentPage />,
-          },
-          {
-            path: "/mentor/students/:studentId/interviews/:processId",
-            element: <MentorInterviewPage />,
-          },
-          { path: "/admin/roadmaps", element: <AdminRoadmapsPage /> },
-          { path: "/admin/roadmaps/new", element: <AdminRoadmapCreatePage /> },
-          {
-            path: "/admin/roadmaps/:roadmapId/edit",
-            element: <AdminRoadmapEditPage />,
-          },
-          {
-            path: "/admin/roadmaps/:roadmapId/sections/:sectionId/edit",
-            element: <AdminRoadmapSectionEditPage />,
-          },
-          {
-            path: "/admin/roadmaps/:roadmapId/sections/new",
-            element: <AdminRoadmapSectionEditPage />,
-          },
-          {
-            path: "/admin/roadmaps/:roadmapId/sections/:sectionId/topics/new",
-            element: <AdminRoadmapTopicEditPage />,
-          },
-          {
-            path: "/admin/roadmaps/:roadmapId/sections/:sectionId/topics/:topicId/edit",
-            element: <AdminRoadmapTopicEditPage />,
-          },
-          { path: "/admin/tracks", element: <AdminTracksPage /> },
-          { path: "/admin/tracks/new", element: <AdminTrackCreatePage /> },
-          {
-            path: "/admin/tracks/:trackId/edit",
-            element: <AdminTrackEditPage />,
-          },
-          { path: "/admin/students", element: <AdminStudentsPage /> },
-          { path: "/admin/mentors", element: <AdminMentorsPage /> },
-          {
-            path: "/admin/students/new",
-            element: <AdminStudentCreatePage />,
-          },
-          {
-            path: "/admin/students/:studentId/edit",
-            element: <AdminStudentEditPage />,
-          },
-          { path: "/admin/knowledge", element: <AdminKnowledgeTopicsPage /> },
-          {
-            path: "/admin/knowledge/new",
-            element: <AdminKnowledgeTopicCreatePage />,
-          },
-          {
-            path: "/admin/knowledge/:topicId/edit",
-            element: <AdminKnowledgeTopicEditPage />,
-          },
-          {
-            path: "/admin/knowledge/:topicId/entries/new",
-            element: <AdminKnowledgeEntryEditPage />,
-          },
-          {
-            path: "/admin/knowledge/:topicId/entries/:entryId/edit",
-            element: <AdminKnowledgeEntryEditPage />,
-          },
-          {
-            path: "/admin/interviews",
-            element: <AdminInterviewDecksPage />,
-          },
-          {
-            path: "/admin/interview-question-moderation",
-            element: <AdminInterviewQuestionModerationPage />,
-          },
-          {
-            path: "/admin/interview-question-moderation/:questionId",
-            element: <AdminInterviewQuestionModerationEditPage />,
-          },
-          {
-            path: "/admin/interviews/new",
-            element: <AdminInterviewDeckCreatePage />,
-          },
-          {
-            path: "/admin/interviews/:deckId/edit",
-            element: <AdminInterviewDeckEditPage />,
-          },
-          {
-            path: "/admin/interviews/:deckId/cards/new",
-            element: <AdminInterviewCardEditPage />,
-          },
-          {
-            path: "/admin/interviews/:deckId/cards/:cardId/edit",
-            element: <AdminInterviewCardEditPage />,
+            element: <AppLayout />,
+            children: [
+              { path: "/", element: <Navigate to="/roadmaps" replace /> },
+              ...studentRoutes,
+              {
+                element: <RoleGuard roles={["mentor", "admin"]} />,
+                children: mentorRoutes,
+              },
+              {
+                element: <RoleGuard roles={["admin"]} />,
+                children: adminRoutes,
+              },
+            ],
           },
         ],
       },
+      {
+        path: "*",
+        lazy: lazyPage(() => import("../pages/NotFoundPage"), "NotFoundPage"),
+      },
     ],
   },
-  { path: "*", element: <NotFoundPage /> },
 ]);

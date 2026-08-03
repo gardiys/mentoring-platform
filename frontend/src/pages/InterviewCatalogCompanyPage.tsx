@@ -29,6 +29,8 @@ import type {
   InterviewCatalogStageRead,
   InterviewStageType,
 } from "../types/api";
+import { mediaKind } from "../utils/media";
+import { openExternalResource } from "../utils/openExternalResource";
 
 const stageLabels: Record<InterviewStageType, string> = {
   screening: "Скрининг",
@@ -67,7 +69,8 @@ async function downloadFile(request: Promise<string>, filename: string) {
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = filename;
-    anchor.rel = "noopener";
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
     anchor.click();
   } catch (error) {
     notifications.show({
@@ -80,7 +83,7 @@ async function downloadFile(request: Promise<string>, filename: string) {
 
 async function openFile(request: Promise<string>) {
   try {
-    window.open(await request, "_blank", "noopener,noreferrer");
+    await openExternalResource(request);
   } catch (error) {
     notifications.show({
       color: "red",
@@ -102,6 +105,9 @@ function CatalogStage({
   const [comment, setComment] = useState("");
   const commentMutation = useCreateInterviewCatalogComment(companyId);
   const deleteMutation = useDeleteInterviewCatalogComment(companyId);
+  const storedMediaKind = stage.media
+    ? mediaKind(stage.media.content_type, stage.media.filename)
+    : null;
 
   const togglePlayer = async () => {
     if (playerUrl) {
@@ -110,8 +116,7 @@ function CatalogStage({
     }
     setPlayerLoading(true);
     try {
-      const url = await api.interviewCatalogStageMedia(stage.id);
-      setPlayerUrl(`${url}?playback=${Date.now()}`);
+      setPlayerUrl(await api.interviewCatalogStageMedia(stage.id));
     } catch (error) {
       notifications.show({
         color: "red",
@@ -163,11 +168,11 @@ function CatalogStage({
 
         {stage.media && (
           <Stack gap="xs">
-            <Group justify="space-between">
-              <Text fw={600} size="sm">
+            <Group justify="space-between" className="file-action-row">
+              <Text fw={600} size="sm" className="file-name">
                 Запись: {stage.media.filename} · {formatSize(stage.media.size)}
               </Text>
-              <Group gap="xs">
+              <Group gap="xs" className="file-actions">
                 <Button
                   size="xs"
                   variant="light"
@@ -176,13 +181,13 @@ function CatalogStage({
                 >
                   {playerUrl
                     ? "Скрыть"
-                    : stage.media.content_type.startsWith("video/")
+                    : storedMediaKind === "video"
                       ? "Посмотреть"
                       : "Прослушать"}
                 </Button>
               </Group>
             </Group>
-            {playerUrl && stage.media.content_type.startsWith("video/") && (
+            {playerUrl && storedMediaKind === "video" && (
               <div
                 style={{
                   position: "relative",
@@ -234,7 +239,7 @@ function CatalogStage({
                 </Text>
               </div>
             )}
-            {playerUrl && stage.media.content_type.startsWith("audio/") && (
+            {playerUrl && storedMediaKind === "audio" && (
               <audio
                 controls
                 controlsList="nodownload noremoteplayback"
@@ -253,8 +258,9 @@ function CatalogStage({
               />
             )}
             <Text size="xs" c="dimmed">
-              Запись доступна только во встроенном плеере. Прямая ссылка на
-              хранилище и скачивание отключены.
+              Штатное скачивание отключено: запись открывается по временной
+              ссылке только во встроенном плеере. Полностью исключить
+              копирование воспроизводимого медиа средствами браузера невозможно.
             </Text>
           </Stack>
         )}
@@ -269,11 +275,15 @@ function CatalogStage({
                 attachment.content_type.startsWith("image/") ||
                 attachment.content_type === "application/pdf";
               return (
-                <Group key={attachment.id} justify="space-between">
-                  <Text size="sm">
+                <Group
+                  key={attachment.id}
+                  justify="space-between"
+                  className="file-action-row"
+                >
+                  <Text size="sm" className="file-name">
                     {attachment.filename} · {formatSize(attachment.size)}
                   </Text>
-                  <Group gap="xs">
+                  <Group gap="xs" className="file-actions">
                     {canOpen && (
                       <Button
                         size="xs"
@@ -332,11 +342,11 @@ function CatalogStage({
                         boxShadow: "inset 3px 0 var(--mantine-color-violet-6)",
                       }
                     : item.is_mentor_feedback
-                    ? {
-                        borderColor: "var(--mantine-color-blue-6)",
-                        boxShadow: "inset 3px 0 var(--mantine-color-blue-6)",
-                      }
-                    : undefined
+                      ? {
+                          borderColor: "var(--mantine-color-blue-6)",
+                          boxShadow: "inset 3px 0 var(--mantine-color-blue-6)",
+                        }
+                      : undefined
                 }
               >
                 <Group justify="space-between" align="flex-start">
@@ -366,16 +376,20 @@ function CatalogStage({
                       size="compact-xs"
                       color="red"
                       variant="subtle"
-                      loading={deleteMutation.isPending}
-                      onClick={() =>
+                      loading={
+                        deleteMutation.isPending &&
+                        deleteMutation.variables === item.id
+                      }
+                      onClick={() => {
+                        if (!window.confirm("Удалить ваш комментарий?")) return;
                         deleteMutation.mutate(item.id, {
                           onError: (error) =>
                             notifications.show({
                               color: "red",
                               message: error.message,
                             }),
-                        })
-                      }
+                        });
+                      }}
                     >
                       Удалить
                     </Button>
@@ -416,7 +430,10 @@ export function InterviewCatalogCompanyPage() {
   const query = useInterviewCatalogCompany(companyId, filters);
 
   if (query.isPending) return <LoadingState label="Загружаем собеседования…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
   const company = query.data;
 
   return (

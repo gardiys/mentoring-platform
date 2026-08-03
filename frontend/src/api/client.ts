@@ -23,6 +23,20 @@ export class ApiError extends Error {
   }
 }
 
+export interface UploadOptions {
+  onProgress?: (percent: number) => void;
+  signal?: AbortSignal;
+}
+
+function networkError(message: string, error?: unknown): ApiError {
+  const aborted = error instanceof DOMException && error.name === "AbortError";
+  return new ApiError(
+    0,
+    aborted ? "request_aborted" : "network_error",
+    aborted ? "Загрузка отменена" : message,
+  );
+}
+
 function isErrorDetail(value: unknown): value is { detail: ErrorDetail } {
   if (typeof value !== "object" || value === null || !("detail" in value))
     return false;
@@ -59,11 +73,19 @@ export async function apiRequest<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+  } catch (error) {
+    throw networkError(
+      "Не удалось связаться с сервером. Проверьте подключение и повторите попытку.",
+      error,
+    );
+  }
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     if (isErrorDetail(payload)) {
@@ -85,13 +107,26 @@ export async function apiRequest<T>(
 export async function uploadPresignedPost(
   intent: { upload_url: string; fields: Record<string, string> },
   file: File,
+  options?: UploadOptions,
 ): Promise<void> {
   const body = new FormData();
   Object.entries(intent.fields).forEach(([key, value]) =>
     body.append(key, value),
   );
   body.append("file", file);
-  const response = await fetch(intent.upload_url, { method: "POST", body });
+  if (options?.onProgress || options?.signal) {
+    return uploadPresignedPostWithProgress(intent.upload_url, body, options);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(intent.upload_url, { method: "POST", body });
+  } catch (error) {
+    throw networkError(
+      "Не удалось загрузить файл в хранилище. Проверьте подключение и повторите попытку.",
+      error,
+    );
+  }
   if (!response.ok) {
     throw new ApiError(
       response.status,
@@ -99,4 +134,69 @@ export async function uploadPresignedPost(
       "Не удалось загрузить файл в хранилище",
     );
   }
+}
+
+function uploadPresignedPostWithProgress(
+  url: string,
+  body: FormData,
+  options: UploadOptions,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    const abort = () => request.abort();
+    const cleanup = () => options.signal?.removeEventListener("abort", abort);
+
+    request.open("POST", url);
+    request.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable || event.total <= 0) return;
+      options.onProgress?.(
+        Math.min(100, Math.round((event.loaded / event.total) * 100)),
+      );
+    });
+    request.addEventListener("load", () => {
+      cleanup();
+      if (request.status >= 200 && request.status < 300) {
+        options.onProgress?.(100);
+        resolve();
+        return;
+      }
+      reject(
+        new ApiError(
+          request.status,
+          "interview_s3_upload_failed",
+          "Не удалось загрузить файл в хранилище",
+        ),
+      );
+    });
+    request.addEventListener("error", () => {
+      cleanup();
+      reject(
+        networkError(
+          "Не удалось загрузить файл в хранилище. Проверьте подключение и повторите попытку.",
+        ),
+      );
+    });
+    request.addEventListener("abort", () => {
+      cleanup();
+      reject(new ApiError(0, "request_aborted", "Загрузка отменена"));
+    });
+
+    if (options.signal?.aborted) {
+      cleanup();
+      reject(new ApiError(0, "request_aborted", "Загрузка отменена"));
+      return;
+    }
+    options.signal?.addEventListener("abort", abort, { once: true });
+    try {
+      request.send(body);
+    } catch (error) {
+      cleanup();
+      reject(
+        networkError(
+          "Не удалось загрузить файл в хранилище. Проверьте подключение и повторите попытку.",
+          error,
+        ),
+      );
+    }
+  });
 }

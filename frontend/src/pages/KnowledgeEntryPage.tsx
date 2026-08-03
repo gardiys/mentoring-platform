@@ -19,7 +19,10 @@ export function KnowledgeEntryPage() {
   const { entrySlug = "" } = useParams();
   const query = useKnowledgeEntry(entrySlug);
   if (query.isPending) return <LoadingState />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   return (
     <Stack gap="xl">

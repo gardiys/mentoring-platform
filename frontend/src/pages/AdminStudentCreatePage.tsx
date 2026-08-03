@@ -9,7 +9,9 @@ export function AdminStudentCreatePage() {
     return <LoadingState label="Готовим форму ученика…" />;
   }
   if (options.isError) {
-    return <ErrorState retry={() => void options.refetch()} />;
+    return (
+      <ErrorState error={options.error} retry={() => void options.refetch()} />
+    );
   }
   return <AdminStudentForm options={options.data} />;
 }

@@ -16,10 +16,11 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../../components/PageHeader";
+import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import type {
   AdminKnowledgeEntryMutation,
   AdminKnowledgeTopicMutation,
@@ -93,6 +94,7 @@ export function AdminKnowledgeTopicForm({ topic }: Props) {
   const [form, setForm] = useState<AdminKnowledgeTopicMutation>(
     topic ? toMutation(topic) : emptyTopic,
   );
+  const initial = useRef(form);
   const createMutation = useCreateAdminKnowledgeTopic();
   const updateMutation = useUpdateAdminKnowledgeTopic();
   const navigate = useNavigate();
@@ -111,6 +113,9 @@ export function AdminKnowledgeTopicForm({ topic }: Props) {
         SLUG_PATTERN.test(entry.slug) &&
         entry.content_markdown.trim().length > 0,
     );
+  const allowNavigation = useUnsavedChanges(
+    JSON.stringify(form) !== JSON.stringify(initial.current),
+  );
 
   const updateEntry = (
     index: number,
@@ -148,6 +153,7 @@ export function AdminKnowledgeTopicForm({ topic }: Props) {
     if (!valid || pending) return;
     const handlers = {
       onSuccess: () => {
+        allowNavigation();
         notifications.show({
           color: "green",
           message: editing ? "Тема базы знаний обновлена" : "Тема создана",

@@ -137,8 +137,21 @@ export function useCompleteMockInterview(studentId: string) {
 export function useUploadMockInterviewMedia(studentId: string) {
   return useStudentMutation(
     studentId,
-    ({ mockId, file }: { mockId: string; file: File }) =>
-      api.uploadMockInterviewMedia(studentId, mockId, file),
+    ({
+      mockId,
+      file,
+      onProgress,
+      signal,
+    }: {
+      mockId: string;
+      file: File;
+      onProgress?: (percent: number) => void;
+      signal?: AbortSignal;
+    }) =>
+      api.uploadMockInterviewMedia(studentId, mockId, file, {
+        onProgress,
+        signal,
+      }),
   );
 }
 

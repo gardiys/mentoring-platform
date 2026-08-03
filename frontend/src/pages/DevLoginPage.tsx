@@ -17,7 +17,6 @@ import {
   getDevUserId,
   setDevUserId,
 } from "../features/auth/devAuth";
-import { meQueryKey } from "../features/auth/queries";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -29,8 +28,8 @@ export function DevLoginPage() {
   const valid = UUID_PATTERN.test(value.trim());
 
   const login = (id: string) => {
+    queryClient.clear();
     setDevUserId(id);
-    queryClient.removeQueries({ queryKey: meQueryKey });
     navigate("/roadmaps");
   };
 
@@ -48,9 +47,10 @@ export function DevLoginPage() {
               </Text>
             </Stack>
             <img
-              src="/brand/geralt-avatar.png"
+              src="/brand/avatar-public.png"
               alt="Геральт"
               className="login-mascot"
+              decoding="async"
             />
           </div>
           <div className="login-form-panel">
@@ -113,7 +113,7 @@ export function DevLoginPage() {
                 variant="subtle"
                 onClick={() => {
                   clearDevUserId();
-                  queryClient.removeQueries({ queryKey: meQueryKey });
+                  queryClient.clear();
                   setValue("");
                 }}
               >

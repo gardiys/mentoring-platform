@@ -18,7 +18,10 @@ import { useAdminKnowledgeTopics } from "../features/admin/knowledgeQueries";
 export function AdminKnowledgeTopicsPage() {
   const query = useAdminKnowledgeTopics();
   if (query.isPending) return <LoadingState label="Загружаем базу знаний…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   return (
     <Stack gap="xl">

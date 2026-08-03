@@ -16,6 +16,7 @@ from app.mentors.models import (
     StudentStrengthLevel,
 )
 from app.roadmaps.schemas import RoadmapDetail
+from app.users.models import UserRole
 
 
 class StudentRoadmapSummary(BaseModel):
@@ -65,6 +66,7 @@ class MentorStudentDirectionOption(BaseModel):
 
 class MentorStudentMentorOption(BaseModel):
     id: UUID
+    role: UserRole
     first_name: str
     last_name: str | None
     telegram_username: str | None

@@ -13,7 +13,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -27,6 +27,7 @@ import type {
   AdminTopicUpdate,
 } from "../types/api";
 import { PageHeader } from "../components/PageHeader";
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -98,12 +99,16 @@ export function AdminRoadmapCreatePage({
   const [form, setForm] = useState<AdminRoadmapUpdate>(
     initialValue ?? initialRoadmap,
   );
+  const initial = useRef(form);
   const createMutation = useCreateAdminRoadmap();
   const updateMutation = useUpdateAdminRoadmap();
   const navigate = useNavigate();
   const editing = roadmapId !== undefined;
   const isPending = createMutation.isPending || updateMutation.isPending;
   const mutationError = createMutation.error ?? updateMutation.error;
+  const allowNavigation = useUnsavedChanges(
+    JSON.stringify(form) !== JSON.stringify(initial.current),
+  );
 
   const updateSection = (
     sectionIndex: number,
@@ -184,6 +189,7 @@ export function AdminRoadmapCreatePage({
     if (!valid || isPending) return;
     const callbacks = {
       onSuccess: () => {
+        allowNavigation();
         notifications.show({
           color: "green",
           message: editing ? "Роадмап обновлён" : "Роадмап создан",

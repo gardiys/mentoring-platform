@@ -8,6 +8,8 @@ export function AdminTrackCreatePage() {
   if (options.isPending)
     return <LoadingState label="Готовим конструктор трека…" />;
   if (options.isError)
-    return <ErrorState retry={() => void options.refetch()} />;
+    return (
+      <ErrorState error={options.error} retry={() => void options.refetch()} />
+    );
   return <AdminTrackForm options={options.data} />;
 }

@@ -2701,6 +2701,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            role: components["schemas"]["UserRole"];
             /** Telegram Id */
             telegram_id: number | null;
             /** Telegram Username */
@@ -3172,6 +3173,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            role: components["schemas"]["UserRole"];
             /** First Name */
             first_name: string;
             /** Last Name */
@@ -4833,6 +4835,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            role: components["schemas"]["UserRole"];
             /** First Name */
             first_name: string;
             /** Last Name */

@@ -22,7 +22,7 @@ from app.students.schemas import (
 from app.tracks.models import LearningTrack, LearningTrackEnrollment
 from app.tracks.service import ensure_track_access
 from app.users.learning import learning_start_datetime
-from app.users.models import User, UserRole
+from app.users.models import MENTOR_CAPABLE_ROLES, User, UserRole
 
 
 async def get_student_model(session: AsyncSession, student_id: UUID, *, lock: bool = False) -> User:
@@ -94,6 +94,7 @@ async def _student_mentors(
     return {
         student_id: AdminStudentMentorRead(
             id=mentor.id,
+            role=mentor.role,
             first_name=mentor.first_name,
             last_name=mentor.last_name,
             telegram_username=mentor.telegram_username,
@@ -106,13 +107,14 @@ async def _available_mentors(session: AsyncSession) -> list[AdminStudentMentorRe
     mentors = list(
         await session.scalars(
             select(User)
-            .where(User.role == UserRole.MENTOR)
+            .where(User.role.in_(MENTOR_CAPABLE_ROLES))
             .order_by(User.first_name, User.last_name, User.id)
         )
     )
     return [
         AdminStudentMentorRead(
             id=mentor.id,
+            role=mentor.role,
             first_name=mentor.first_name,
             last_name=mentor.last_name,
             telegram_username=mentor.telegram_username,
@@ -262,7 +264,7 @@ async def _validate_student_payload(
             api_error(422, "invalid_student_tracks", "One or more tracks do not exist")
     if payload.mentor_id is not None:
         mentor = await session.get(User, payload.mentor_id)
-        if mentor is None or mentor.role not in {UserRole.MENTOR, UserRole.ADMIN}:
+        if mentor is None or mentor.role not in MENTOR_CAPABLE_ROLES:
             api_error(422, "invalid_student_mentor", "Selected mentor does not exist")
 
 

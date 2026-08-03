@@ -10,7 +10,7 @@ export function BrandLogo({ compact = false }: { compact?: boolean }) {
     >
       <Group gap="sm" wrap="nowrap">
         <Avatar
-          src="/brand/geralt-avatar.png"
+          src="/brand/avatar-public-small.png"
           alt="Геральт"
           size={compact ? 40 : 48}
         />

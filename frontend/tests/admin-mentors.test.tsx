@@ -11,6 +11,7 @@ it("показывает менторов и защищает ментора с 
   vi.spyOn(api, "adminMentors").mockResolvedValue([
     {
       id: "10000000-0000-4000-8000-000000000001",
+      role: "mentor",
       telegram_id: 100500,
       telegram_username: "mentor",
       first_name: "Антон",
@@ -33,6 +34,26 @@ it("показывает менторов и защищает ментора с 
           telegram_username: "ivan",
         },
       ],
+      created_at: "2026-08-01T00:00:00Z",
+    },
+    {
+      id: "10000000-0000-4000-8000-000000000002",
+      role: "admin",
+      telegram_id: 100501,
+      telegram_username: "admin",
+      first_name: "Администратор",
+      last_name: null,
+      email: "admin@example.com",
+      is_active: true,
+      student_count: 0,
+      tracks: [
+        {
+          id: "30000000-0000-4000-8000-000000000001",
+          slug: "python",
+          title: "Python",
+        },
+      ],
+      students: [],
       created_at: "2026-08-01T00:00:00Z",
     },
   ]);
@@ -61,4 +82,13 @@ it("показывает менторов и защищает ментора с 
   expect(
     screen.getByText("Перед удалением роли переназначьте учеников."),
   ).toBeInTheDocument();
+  expect(screen.getByText("Администратор · ментор")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Основная роль администратора сохраняется и не может быть снята из этого раздела.",
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getAllByRole("button", { name: "Убрать из менторов" }),
+  ).toHaveLength(1);
 });

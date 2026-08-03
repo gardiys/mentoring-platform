@@ -15,6 +15,7 @@ export function AdminTrackEditPage() {
   if (track.isError || options.isError) {
     return (
       <ErrorState
+        error={track.error ?? options.error}
         retry={() => {
           void track.refetch();
           void options.refetch();

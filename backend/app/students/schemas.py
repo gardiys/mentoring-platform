@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.users.models import UserRole
+
 
 class AdminStudentMutation(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -33,6 +35,7 @@ class AdminStudentTrackRead(BaseModel):
 
 class AdminStudentMentorRead(BaseModel):
     id: UUID
+    role: UserRole
     first_name: str
     last_name: str | None
     telegram_username: str | None

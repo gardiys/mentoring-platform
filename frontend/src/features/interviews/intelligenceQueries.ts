@@ -6,8 +6,8 @@ import type { IntelligenceInterviewDetail } from "../../types/api";
 
 export const intelligenceKeys = {
   all: ["interviews", "intelligence"] as const,
-  list: (scope: string, status = "all") =>
-    ["interviews", "intelligence", scope, status] as const,
+  list: (scope: string, status = "all", page = 1) =>
+    ["interviews", "intelligence", scope, status, page] as const,
   detail: (id: string) => ["interviews", "intelligence", id] as const,
   processing: (id: string) =>
     ["interviews", "intelligence", id, "processing"] as const,
@@ -44,20 +44,47 @@ export function useAdminQuestionModerationDetail(id: string) {
   });
 }
 
-export function useIntelligenceInterviews(enabled = true) {
+export function useIntelligenceInterviews(enabled = true, page = 1) {
   return useQuery({
-    queryKey: intelligenceKeys.list("own"),
-    queryFn: () => api.intelligenceInterviews(),
+    queryKey: intelligenceKeys.list("own", "all", page),
+    queryFn: () =>
+      api.intelligenceInterviews({ limit: 6, offset: (page - 1) * 6 }),
     enabled,
+    placeholderData: (previous) => previous,
+    refetchInterval: (query) =>
+      query.state.data?.items.some(
+        (item) =>
+          !["ready", "failed", "awaiting_candidate_speaker"].includes(
+            item.processing_status,
+          ),
+      )
+        ? 5_000
+        : false,
   });
 }
 
 export function useMentorIntelligenceInterviews(
   status: "needs_review" | "reviewed" | "processing" | "all",
+  page = 1,
 ) {
   return useQuery({
-    queryKey: intelligenceKeys.list("mentor", status),
-    queryFn: () => api.mentorIntelligenceInterviews(status),
+    queryKey: intelligenceKeys.list("mentor", status, page),
+    queryFn: () =>
+      api.mentorIntelligenceInterviews(status, {
+        limit: 10,
+        offset: (page - 1) * 10,
+      }),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] === status ? previous : undefined,
+    refetchInterval: (query) =>
+      query.state.data?.items.some(
+        (item) =>
+          !["ready", "failed", "awaiting_candidate_speaker"].includes(
+            item.processing_status,
+          ),
+      )
+        ? 5_000
+        : 15_000,
   });
 }
 

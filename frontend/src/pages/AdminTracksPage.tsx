@@ -18,7 +18,10 @@ import { useAdminTracks } from "../features/admin/queries";
 export function AdminTracksPage() {
   const query = useAdminTracks();
   if (query.isPending) return <LoadingState label="Загружаем треки…" />;
-  if (query.isError) return <ErrorState retry={() => void query.refetch()} />;
+  if (query.isError)
+    return (
+      <ErrorState error={query.error} retry={() => void query.refetch()} />
+    );
 
   return (
     <Stack gap="xl">

@@ -14,7 +14,7 @@ from app.auth.web_session import BROWSER_SESSION_COOKIE, SignedPayloadError, rea
 from app.core.config import get_settings
 from app.core.errors import api_error, forbidden, unauthorized
 from app.db.session import get_db_session
-from app.users.models import User, UserRole
+from app.users.models import MENTOR_CAPABLE_ROLES, User, UserRole
 
 settings = get_settings()
 
@@ -102,7 +102,7 @@ async def get_current_user(
 async def require_mentor(
     user: Annotated[User, Depends(get_current_user)],
 ) -> User:
-    if user.role not in {UserRole.MENTOR, UserRole.ADMIN}:
+    if user.role not in MENTOR_CAPABLE_ROLES:
         forbidden("Mentor access is required")
     return user
 
