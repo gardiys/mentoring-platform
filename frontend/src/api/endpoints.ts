@@ -63,6 +63,7 @@ import type {
   InterviewCatalogFilters,
   IntelligenceInterviewDetail,
   IntelligenceInterviewPage,
+  IntelligenceProcessing,
   IntelligenceReview,
   CompanyOption,
   MentorDocumentKind,
@@ -136,7 +137,8 @@ export const api = {
     ),
   adminQuestionModeration: (
     options: {
-      status?: "needs_review" | "mentor_approved" | "approved" | "rejected" | "all";
+      status?:
+        "needs_review" | "mentor_approved" | "approved" | "rejected" | "all";
       q?: string;
       limit?: number;
       offset?: number;
@@ -158,6 +160,8 @@ export const api = {
     ),
   intelligenceInterview: (id: string) =>
     apiRequest<IntelligenceInterviewDetail>(`/api/v1/interviews/${id}`),
+  intelligenceInterviewProcessing: (id: string) =>
+    apiRequest<IntelligenceProcessing>(`/api/v1/interviews/${id}/processing`),
   startInterviewStageAnalysis: (processId: string, stageId: string) =>
     apiRequest<IntelligenceInterviewDetail>(
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/ai-analysis`,

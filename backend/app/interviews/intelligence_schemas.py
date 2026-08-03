@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -277,6 +278,49 @@ class AdminQuestionModerationPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class IntelligenceOperationsFailureCodeRead(BaseModel):
+    code: str
+    count: int
+
+
+class IntelligenceOperationsQueueRead(BaseModel):
+    available: bool
+    transcription_depth: int | None = None
+    openai_depth: int | None = None
+
+
+class IntelligenceOperationsWorkerRead(BaseModel):
+    status: Literal["healthy", "unhealthy", "unknown"] = "unknown"
+    heartbeat: str | None = None
+    heartbeat_ttl_seconds: int | None = None
+
+
+class IntelligenceOperationsWorkersRead(BaseModel):
+    transcription: IntelligenceOperationsWorkerRead = Field(
+        default_factory=IntelligenceOperationsWorkerRead
+    )
+    openai: IntelligenceOperationsWorkerRead = Field(
+        default_factory=IntelligenceOperationsWorkerRead
+    )
+
+
+class AdminIntelligenceOperationsRead(BaseModel):
+    generated_at: datetime
+    total: int
+    by_status: dict[IntelligenceProcessingStatus, int]
+    active: int
+    failed: int
+    ready: int
+    oldest_active_at: datetime | None
+    oldest_active_age_seconds: int | None
+    launches_today: int
+    failure_codes_24h: list[IntelligenceOperationsFailureCodeRead]
+    queues: IntelligenceOperationsQueueRead
+    workers: IntelligenceOperationsWorkersRead = Field(
+        default_factory=IntelligenceOperationsWorkersRead
+    )
 
 
 class IntelligenceReviewQueueFilter(BaseModel):

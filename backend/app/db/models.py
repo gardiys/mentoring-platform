@@ -1,6 +1,7 @@
 """Import all models so SQLAlchemy and Alembic discover their metadata."""
 
 from app.interviews.intelligence_models import (
+    IntelligenceAIAdmission,
     IntelligenceAIUsage,
     IntelligenceAnswer,
     IntelligenceAnswerReview,
@@ -92,6 +93,7 @@ __all__ = [
     "InterviewStageComment",
     "InterviewTopicSelection",
     "IntelligenceAIUsage",
+    "IntelligenceAIAdmission",
     "IntelligenceAnswer",
     "IntelligenceAnswerReview",
     "IntelligenceAssessment",

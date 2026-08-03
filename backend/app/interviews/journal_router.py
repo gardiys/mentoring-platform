@@ -50,7 +50,12 @@ from app.interviews.schemas import (
     InterviewUploadIntent,
     InterviewUploadRequest,
 )
-from app.interviews.uploads import InterviewUploadStore, StoredUpload
+from app.interviews.uploads import (
+    SAFE_ATTACHMENT_CONTENT_TYPES,
+    SAFE_OFFER_CONTENT_TYPES,
+    InterviewUploadStore,
+    StoredUpload,
+)
 
 router = APIRouter(prefix="/interviews/journal", tags=["interview-journal"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
@@ -327,7 +332,7 @@ async def journal_create_stage_attachment_upload(
         filename=payload.filename,
         content_type=payload.content_type,
         size=payload.size,
-        allowed_content_types=("image", "text", "application"),
+        allowed_content_types=SAFE_ATTACHMENT_CONTENT_TYPES,
         max_bytes=settings.interview_attachment_max_bytes,
     )
     return _upload_intent_read(intent)
@@ -352,7 +357,7 @@ async def journal_complete_stage_attachment_upload(
         filename=payload.filename,
         content_type=payload.content_type,
         expected_size=payload.size,
-        allowed_content_types=("image", "text", "application"),
+        allowed_content_types=SAFE_ATTACHMENT_CONTENT_TYPES,
         max_bytes=settings.interview_attachment_max_bytes,
     )
     try:
@@ -429,7 +434,7 @@ async def journal_create_offer_upload(
         filename=payload.filename,
         content_type=payload.content_type,
         size=payload.size,
-        allowed_content_types=("application/pdf", "image"),
+        allowed_content_types=SAFE_OFFER_CONTENT_TYPES,
         max_bytes=settings.interview_offer_max_bytes,
     )
     return _upload_intent_read(intent)
@@ -453,7 +458,7 @@ async def journal_complete_offer_upload(
         filename=payload.filename,
         content_type=payload.content_type,
         expected_size=payload.size,
-        allowed_content_types=("application/pdf", "image"),
+        allowed_content_types=SAFE_OFFER_CONTENT_TYPES,
         max_bytes=settings.interview_offer_max_bytes,
     )
     try:

@@ -1,14 +1,25 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
+import type { IntelligenceInterviewDetail } from "../../types/api";
 
 export const intelligenceKeys = {
   all: ["interviews", "intelligence"] as const,
   list: (scope: string, status = "all") =>
     ["interviews", "intelligence", scope, status] as const,
   detail: (id: string) => ["interviews", "intelligence", id] as const,
+  processing: (id: string) =>
+    ["interviews", "intelligence", id, "processing"] as const,
   moderation: (status: string, query: string, offset: number) =>
-    ["interviews", "intelligence", "moderation", status, query, offset] as const,
+    [
+      "interviews",
+      "intelligence",
+      "moderation",
+      status,
+      query,
+      offset,
+    ] as const,
   moderationDetail: (id: string) =>
     ["interviews", "intelligence", "moderation", id] as const,
 };
@@ -51,18 +62,65 @@ export function useMentorIntelligenceInterviews(
 }
 
 export function useIntelligenceInterview(id: string) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const detail = useQuery({
     queryKey: intelligenceKeys.detail(id),
     queryFn: () => api.intelligenceInterview(id),
     enabled: Boolean(id),
+  });
+  const status = detail.data?.processing_status;
+  const shouldPoll = Boolean(
+    status &&
+    !["ready", "failed", "awaiting_candidate_speaker"].includes(status),
+  );
+  const processing = useQuery({
+    queryKey: intelligenceKeys.processing(id),
+    queryFn: () => api.intelligenceInterviewProcessing(id),
+    enabled: Boolean(id) && shouldPoll,
     refetchInterval: (query) => {
-      const status = query.state.data?.processing_status;
-      return status &&
-        !["ready", "failed", "awaiting_candidate_speaker"].includes(status)
+      const processingStatus = query.state.data?.status;
+      return processingStatus &&
+        !["ready", "failed", "awaiting_candidate_speaker"].includes(
+          processingStatus,
+        )
         ? 3_000
         : false;
     },
   });
+
+  useEffect(() => {
+    const progress = processing.data;
+    if (!progress || processing.dataUpdatedAt < detail.dataUpdatedAt) return;
+    queryClient.setQueryData<IntelligenceInterviewDetail>(
+      intelligenceKeys.detail(id),
+      (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          processing_status: progress.status,
+          processing: progress,
+        };
+      },
+    );
+    if (
+      ["ready", "failed", "awaiting_candidate_speaker"].includes(
+        progress.status,
+      )
+    ) {
+      void queryClient.invalidateQueries({
+        queryKey: intelligenceKeys.detail(id),
+        exact: true,
+      });
+    }
+  }, [
+    detail.dataUpdatedAt,
+    id,
+    processing.data,
+    processing.dataUpdatedAt,
+    queryClient,
+  ]);
+
+  return detail;
 }
 
 function useIntelligenceMutation<TVariables, TData>(

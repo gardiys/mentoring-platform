@@ -334,6 +334,9 @@ class OpenAIInterviewAIProvider:
         self.extraction_model = extraction_model
         self.analysis_model = settings.openai_analysis_model
         self.light_review_model = settings.openai_light_review_model or extraction_model
+        self.extraction_max_output_tokens = settings.openai_extraction_max_output_tokens
+        self.review_max_output_tokens = settings.openai_review_max_output_tokens
+        self.summary_max_output_tokens = settings.openai_summary_max_output_tokens
         http_client = httpx.AsyncClient(
             proxy=(
                 settings.openai_proxy_url.get_secret_value()
@@ -358,6 +361,7 @@ class OpenAIInterviewAIProvider:
                     {"role": "user", "content": transcript},
                 ],
                 text_format=ExtractionOutput,
+                max_output_tokens=self.extraction_max_output_tokens,
             )
             parsed = response.output_parsed
             if parsed is None:
@@ -394,6 +398,7 @@ class OpenAIInterviewAIProvider:
                     {"role": "user", "content": request},
                 ],
                 text_format=ReviewOutput,
+                max_output_tokens=self.review_max_output_tokens,
             )
             parsed = response.output_parsed
             if parsed is None:
@@ -417,6 +422,7 @@ class OpenAIInterviewAIProvider:
                     {"role": "user", "content": transcript},
                 ],
                 text_format=InterviewSummaryOutput,
+                max_output_tokens=self.summary_max_output_tokens,
             )
             parsed = response.output_parsed
             if parsed is None:
@@ -434,9 +440,7 @@ class OpenAIInterviewAIProvider:
     async def close(self) -> None:
         await self.client.close()
 
-    def _review_route(
-        self, question_kind: IntelligenceQuestionKind
-    ) -> tuple[str, str]:
+    def _review_route(self, question_kind: IntelligenceQuestionKind) -> tuple[str, str]:
         if question_kind is IntelligenceQuestionKind.TECHNICAL:
             return self.analysis_model, TECHNICAL_REVIEW_PROMPT
         return self.light_review_model, LIGHT_REVIEW_PROMPT
@@ -533,17 +537,28 @@ def build_transcript(utterances: list[tuple[str, int, int, str]]) -> str:
 
 
 def transcript_chunks(
-    transcript_blocks: list[str], *, size: int = 70, overlap: int = 10
+    transcript_blocks: list[str],
+    *,
+    size: int = 70,
+    overlap: int = 10,
+    max_chars: int = 60_000,
 ) -> list[str]:
     if size <= overlap:
         raise ValueError("Transcript chunk size must be greater than overlap")
+    if max_chars <= 0:
+        raise ValueError("Transcript chunk character limit must be positive")
     chunks: list[str] = []
     start = 0
     while start < len(transcript_blocks):
-        chunks.append("\n\n".join(transcript_blocks[start : start + size]))
-        if start + size >= len(transcript_blocks):
+        end = min(start + size, len(transcript_blocks))
+        chunk = "\n\n".join(transcript_blocks[start:end])
+        while end > start + 1 and len(chunk) > max_chars:
+            end -= 1
+            chunk = "\n\n".join(transcript_blocks[start:end])
+        chunks.append(chunk[:max_chars])
+        if end >= len(transcript_blocks):
             break
-        start += size - overlap
+        start = max(start + 1, end - overlap)
     return chunks
 
 

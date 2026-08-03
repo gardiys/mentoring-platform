@@ -172,7 +172,11 @@ async def _merge_companies(session: AsyncSession, target: Company, source: Compa
 
 
 async def remember_company_alias(
-    session: AsyncSession, company: Company, raw_alias: str
+    session: AsyncSession,
+    company: Company,
+    raw_alias: str,
+    *,
+    allow_company_merge: bool = False,
 ) -> Company:
     alias_name = normalize_company_name(raw_alias)
     alias_key = company_search_key(alias_name)
@@ -186,6 +190,13 @@ async def remember_company_alias(
         if existing_alias.company_id != company.id:
             source = await session.get(Company, existing_alias.company_id)
             if source is not None:
+                if not allow_company_merge:
+                    api_error(
+                        409,
+                        "company_alias_conflict",
+                        "This name already belongs to another company. "
+                        "An administrator must review the merge",
+                    )
                 await _merge_companies(session, company, source)
         return company
 
@@ -193,6 +204,13 @@ async def remember_company_alias(
         select(Company).where(Company.normalized_name == alias_key)
     )
     if existing_company is not None and existing_company.id != company.id:
+        if not allow_company_merge:
+            api_error(
+                409,
+                "company_alias_conflict",
+                "This name already belongs to another company. "
+                "An administrator must review the merge",
+            )
         await _merge_companies(session, company, existing_company)
         return company
 
@@ -221,6 +239,7 @@ async def resolve_company(
     *,
     company_id: UUID | None = None,
     raw_alias: str | None = None,
+    allow_company_merge: bool = False,
 ) -> Company:
     if company_id is None:
         return await get_or_create_company(session, raw_name)
@@ -228,7 +247,12 @@ async def resolve_company(
     company = await session.get(Company, company_id)
     if company is None:
         api_error(422, "invalid_company", "The selected company no longer exists")
-    return await remember_company_alias(session, company, raw_alias or raw_name)
+    return await remember_company_alias(
+        session,
+        company,
+        raw_alias or raw_name,
+        allow_company_merge=allow_company_merge,
+    )
 
 
 def _match_rank(

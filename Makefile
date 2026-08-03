@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 PROD_COMPOSE := docker compose -f infra/docker-compose.prod.yml --env-file .env.production
 first_name ?= Администратор
 
-.PHONY: install up down backend frontend worker migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara ensure-test-db prod-init prod-volume-check prod-config prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend worker worker-ai migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara ensure-test-db prod-init prod-volume-check prod-config prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -21,13 +21,16 @@ frontend:
 	cd frontend && pnpm dev
 
 worker:
-	cd backend && poetry run arq app.interviews.intelligence_jobs.WorkerSettings
+	cd backend && poetry run arq app.interviews.intelligence_jobs.TranscriptionWorkerSettings
+
+worker-ai:
+	cd backend && poetry run arq app.interviews.intelligence_jobs.AIWorkerSettings
 
 check-nexara:
 	cd backend && poetry run python -m app.check_nexara
 
 prod-check-nexara:
-	$(PROD_COMPOSE) run --rm --no-deps backend python -m app.check_nexara
+	$(PROD_COMPOSE) run --rm --no-deps intelligence-worker python -m app.check_nexara
 
 migrate:
 	cd backend && poetry run alembic upgrade head
@@ -66,15 +69,22 @@ api-generate:
 
 prod-init:
 	docker volume create mentoring-platform-production_postgres_data >/dev/null
+	docker volume create mentoring-platform-production_redis_data >/dev/null
 
 prod-volume-check:
 	docker volume inspect mentoring-platform-production_postgres_data >/dev/null
+	docker volume inspect mentoring-platform-production_redis_data >/dev/null
 
 prod-config:
 	$(PROD_COMPOSE) config --quiet
 
 prod-up: prod-volume-check prod-config
-	$(PROD_COMPOSE) up --build -d
+	$(PROD_COMPOSE) build migrate backend intelligence-worker intelligence-ai-worker frontend
+	$(PROD_COMPOSE) up -d --wait --wait-timeout 120 postgres redis
+	$(PROD_COMPOSE) run --rm migrate
+	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 180 backend intelligence-worker intelligence-ai-worker frontend
+	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 60 caddy
+	$(PROD_COMPOSE) ps
 
 prod-down:
 	$(PROD_COMPOSE) down

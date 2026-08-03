@@ -37,6 +37,7 @@ from app.interviews.intelligence_service import (
     get_admin_question_moderation,
     get_intelligence_interview,
     intelligence_detail,
+    intelligence_processing,
     list_admin_question_moderation,
     list_intelligence_interviews,
     moderate_intelligence_question,
@@ -64,9 +65,9 @@ logger = logging.getLogger(__name__)
 async def admin_question_moderation_queue(
     session: Session,
     _admin: AdminUser,
-    queue_status: Literal[
-        "needs_review", "mentor_approved", "approved", "rejected", "all"
-    ] = Query(default="needs_review", alias="status"),
+    queue_status: Literal["needs_review", "mentor_approved", "approved", "rejected", "all"] = Query(
+        default="needs_review", alias="status"
+    ),
     track_id: Annotated[UUID | None, Query()] = None,
     q: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=20, ge=1, le=100),
@@ -120,7 +121,7 @@ async def interviews(
 async def interview_processing(
     interview_id: UUID, session: Session, current_user: CurrentUser
 ) -> IntelligenceProcessingRead:
-    return (await intelligence_detail(session, current_user, interview_id)).processing
+    return await intelligence_processing(session, current_user, interview_id)
 
 
 @router.get("/{interview_id}/speakers", response_model=list[IntelligenceSpeakerRead])

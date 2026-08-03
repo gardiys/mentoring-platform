@@ -7,6 +7,7 @@ from app.interviews.intelligence_ai import (
     TECHNICAL_REVIEW_PROMPT,
     OpenAIInterviewAIProvider,
     ReviewOutput,
+    transcript_chunks,
 )
 from app.interviews.intelligence_jobs import _retry_delay, _will_retry
 from app.interviews.intelligence_models import IntelligenceQuestionKind
@@ -82,3 +83,12 @@ def test_review_output_uses_only_closed_json_objects() -> None:
                 assert_closed(nested)
 
     assert_closed(schema)
+
+
+def test_transcript_chunks_enforce_a_character_budget_and_keep_progressing() -> None:
+    blocks = ["a" * 60, "b" * 60, "c" * 60]
+
+    chunks = transcript_chunks(blocks, size=3, overlap=1, max_chars=100)
+
+    assert chunks == ["a" * 60, "b" * 60, "c" * 60]
+    assert all(len(chunk) <= 100 for chunk in chunks)

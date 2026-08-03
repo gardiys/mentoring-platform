@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import logging
+import shutil
+import stat
 import subprocess
 import tempfile
+import threading
+import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
-from typing import Any, NoReturn
+from typing import Any, BinaryIO, NoReturn
 from urllib.parse import quote, unquote, urlsplit
 from uuid import UUID, uuid4
 
@@ -23,6 +29,34 @@ EXTERNAL_STORAGE_KEY_PREFIX = "external:"
 LEGACY_INTERVIEW_MEDIA_PREFIX = "https://s3.firstvds.ru:443/interviews/"
 LEGACY_S3_ENDPOINT_URL = "https://s3.firstvds.ru"
 LEGACY_S3_REGION = "default"
+SAFE_RASTER_IMAGE_CONTENT_TYPES = (
+    "image/avif",
+    "image/bmp",
+    "image/gif",
+    "image/jpeg",
+    "image/png",
+    "image/tiff",
+    "image/webp",
+)
+SAFE_ATTACHMENT_CONTENT_TYPES = (
+    "application/msword",
+    "application/pdf",
+    "application/rtf",
+    "application/vnd.ms-excel",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.oasis.opendocument.presentation",
+    "application/vnd.oasis.opendocument.spreadsheet",
+    "application/vnd.oasis.opendocument.text",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/csv",
+    "text/markdown",
+    "text/plain",
+    "text/rtf",
+    *SAFE_RASTER_IMAGE_CONTENT_TYPES,
+)
+SAFE_OFFER_CONTENT_TYPES = ("application/pdf", *SAFE_RASTER_IMAGE_CONTENT_TYPES)
 logger = logging.getLogger(__name__)
 
 
@@ -63,6 +97,107 @@ class InterviewStorageReadError(RuntimeError):
     """A private interview object could not be staged for external processing."""
 
 
+class LegacyTranscodeCapacityError(RuntimeError):
+    """Legacy audio cannot safely enter the bounded local transcode staging area."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class _BoundedFileWriter:
+    def __init__(self, target: BinaryIO, *, maximum_bytes: int) -> None:
+        self._target = target
+        self._maximum_bytes = maximum_bytes
+        self._written_bytes = 0
+
+    def write(self, content: bytes) -> int:
+        if self._written_bytes + len(content) > self._maximum_bytes:
+            raise LegacyTranscodeCapacityError("legacy_source_too_large")
+        written = self._target.write(content)
+        self._written_bytes += written
+        return written
+
+
+class _LegacyTranscodeGuard:
+    """Bound concurrent conversions across threads and backend worker processes."""
+
+    def __init__(
+        self,
+        *,
+        max_concurrency: int,
+        min_free_bytes: int,
+        max_reserved_bytes: int,
+    ) -> None:
+        self._max_concurrency = max_concurrency
+        self._semaphore = threading.BoundedSemaphore(max_concurrency)
+        self._reservation_lock = threading.Lock()
+        self._min_free_bytes = min_free_bytes
+        self._max_reserved_bytes = max_reserved_bytes
+        self._reserved_bytes = 0
+
+    @contextmanager
+    def reserve(self, root: Path, *, expected_bytes: int) -> Iterator[None]:
+        if expected_bytes <= 0:
+            raise ValueError("expected_bytes must be positive")
+        if not self._semaphore.acquire(blocking=False):
+            raise LegacyTranscodeCapacityError("legacy_transcode_busy")
+
+        slot: BinaryIO | None = None
+        reserved = False
+        try:
+            try:
+                root.mkdir(parents=True, exist_ok=True)
+                slot = self._acquire_process_slot(root)
+            except OSError as error:
+                raise LegacyTranscodeCapacityError(
+                    "legacy_transcode_directory_unavailable"
+                ) from error
+            if slot is None:
+                raise LegacyTranscodeCapacityError("legacy_transcode_busy")
+
+            with self._reservation_lock:
+                try:
+                    free_bytes = shutil.disk_usage(root).free
+                except OSError as error:
+                    raise LegacyTranscodeCapacityError(
+                        "legacy_transcode_directory_unavailable"
+                    ) from error
+                available_bytes = max(0, free_bytes - self._reserved_bytes)
+                if (
+                    expected_bytes > self._max_reserved_bytes
+                    or available_bytes < expected_bytes + self._min_free_bytes
+                ):
+                    raise LegacyTranscodeCapacityError("legacy_transcode_disk_capacity")
+                self._reserved_bytes += expected_bytes
+                reserved = True
+            yield
+        finally:
+            if reserved:
+                with self._reservation_lock:
+                    self._reserved_bytes -= expected_bytes
+            if slot is not None:
+                try:
+                    fcntl.flock(slot.fileno(), fcntl.LOCK_UN)
+                finally:
+                    slot.close()
+            self._semaphore.release()
+
+    def _acquire_process_slot(self, root: Path) -> BinaryIO | None:
+        for slot_number in range(self._max_concurrency):
+            slot = (root / f".legacy-transcode-{slot_number}.lock").open("a+b")
+            try:
+                fcntl.flock(slot.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                slot.close()
+                continue
+            except OSError:
+                slot.close()
+                raise
+            return slot
+        return None
+
+
 class InterviewUploadStore:
     def __init__(self, settings: Settings) -> None:
         self.bucket = settings.s3_bucket
@@ -93,6 +228,19 @@ class InterviewUploadStore:
             endpoint_url=LEGACY_S3_ENDPOINT_URL,
             config=self._client_config(LEGACY_S3_ENDPOINT_URL),
             **(credentials | {"region_name": LEGACY_S3_REGION}),
+        )
+        self._legacy_transcode_root = Path(settings.interview_legacy_transcode_directory)
+        self._legacy_transcode_cleanup_age_seconds = (
+            settings.interview_legacy_transcode_cleanup_age_seconds
+        )
+        self._legacy_transcode_timeout_seconds = (
+            settings.interview_legacy_transcode_timeout_seconds
+        )
+        self._legacy_transcode_max_file_bytes = settings.interview_audio_max_bytes
+        self._legacy_transcode_guard = _LegacyTranscodeGuard(
+            max_concurrency=settings.interview_legacy_transcode_max_concurrency,
+            min_free_bytes=settings.interview_legacy_transcode_min_free_bytes,
+            max_reserved_bytes=settings.interview_legacy_transcode_max_reserved_bytes,
         )
 
     def create_upload_intent(
@@ -129,7 +277,7 @@ class InterviewUploadStore:
                 Fields={"Content-Type": clean_content_type},
                 Conditions=[
                     {"Content-Type": clean_content_type},
-                    ["content-length-range", 1, max_bytes],
+                    ["content-length-range", 1, size],
                 ],
                 ExpiresIn=self.expires_in,
             )
@@ -324,7 +472,11 @@ class InterviewUploadStore:
         total_size = self._object_total_size(response, upload.size)
         if len(header) >= 12 and header[4:8] == b"ftyp":
             if b"alac" in header:
-                return self._transcode_legacy_alac(upload, external_location)
+                return self._transcode_legacy_alac(
+                    upload,
+                    external_location,
+                    source_size=total_size,
+                )
             return replace(
                 upload,
                 filename=f"{Path(upload.filename).stem}.m4a",
@@ -337,6 +489,8 @@ class InterviewUploadStore:
         self,
         upload: StoredUpload,
         external_location: tuple[str, str],
+        *,
+        source_size: int,
     ) -> StoredUpload:
         source_bucket, source_key = external_location
         digest = hashlib.sha256(upload.storage_key.encode("utf-8")).hexdigest()
@@ -358,59 +512,198 @@ class InterviewUploadStore:
                 size=int(existing.get("ContentLength", 0)),
             )
 
-        with tempfile.TemporaryDirectory(prefix="interview-audio-") as directory:
-            source_path = Path(directory) / "source.m4a"
-            target_path = Path(directory) / "recording.mp3"
-            with source_path.open("wb") as source:
-                self.legacy_client.download_fileobj(
-                    Bucket=source_bucket,
-                    Key=source_key,
-                    Fileobj=source,
+        maximum_file_bytes = self._legacy_transcode_max_file_bytes
+        if source_size <= 0 or source_size > maximum_file_bytes:
+            api_error(
+                503,
+                "interview_audio_transcoding_capacity_unavailable",
+                "Interview audio is too large to prepare safely",
+            )
+        expected_disk_bytes = source_size + maximum_file_bytes
+        try:
+            with self._legacy_transcode_guard.reserve(
+                self._legacy_transcode_root,
+                expected_bytes=expected_disk_bytes,
+            ):
+                self._cleanup_stale_legacy_transcodes()
+                return self._perform_legacy_alac_transcode(
+                    upload=upload,
+                    source_bucket=source_bucket,
+                    source_key=source_key,
+                    converted_key=converted_key,
+                    source_size=source_size,
                 )
+        except LegacyTranscodeCapacityError as error:
+            logger.warning(
+                "Legacy interview audio transcoding rejected reason=%s",
+                error.reason,
+            )
+            if error.reason == "legacy_transcode_busy":
+                api_error(
+                    503,
+                    "interview_audio_transcoding_busy",
+                    "Interview audio preparation is busy; retry later",
+                )
+            api_error(
+                503,
+                "interview_audio_transcoding_capacity_unavailable",
+                "Interview audio cannot be prepared with the available disk capacity",
+            )
+
+    def _perform_legacy_alac_transcode(
+        self,
+        *,
+        upload: StoredUpload,
+        source_bucket: str,
+        source_key: str,
+        converted_key: str,
+        source_size: int,
+    ) -> StoredUpload:
+        try:
+            directory = Path(
+                tempfile.mkdtemp(prefix="legacy-alac-", dir=self._legacy_transcode_root)
+            )
+        except OSError as error:
+            raise LegacyTranscodeCapacityError(
+                "legacy_transcode_directory_unavailable"
+            ) from error
+        source_path = directory / "source.m4a"
+        target_path = directory / "recording.mp3"
+        try:
             try:
+                with source_path.open("wb") as source:
+                    self.legacy_client.download_fileobj(
+                        Bucket=source_bucket,
+                        Key=source_key,
+                        Fileobj=_BoundedFileWriter(
+                            source,
+                            maximum_bytes=self._legacy_transcode_max_file_bytes,
+                        ),
+                    )
+                source_stat = source_path.lstat()
+                if (
+                    not stat.S_ISREG(source_stat.st_mode)
+                    or source_stat.st_size != source_size
+                ):
+                    raise OSError("Legacy source size does not match storage metadata")
+            except LegacyTranscodeCapacityError:
+                raise
+            except (BotoCoreError, ClientError, OSError) as error:
+                logger.error("Legacy interview audio download failed: %s", error)
+                api_error(
+                    503,
+                    "interview_audio_transcoding_failed",
+                    "Interview audio could not be read for browser preparation",
+                )
+
+            try:
+                ffmpeg_binary = shutil.which("ffmpeg")
+                if ffmpeg_binary is None:
+                    raise FileNotFoundError("ffmpeg")
                 subprocess.run(
                     [
-                        "ffmpeg",
+                        ffmpeg_binary,
                         "-hide_banner",
                         "-loglevel",
                         "error",
+                        "-nostdin",
                         "-y",
+                        "-protocol_whitelist",
+                        "file",
                         "-i",
                         str(source_path),
                         "-map",
                         "0:a:0",
                         "-vn",
+                        "-map_metadata",
+                        "-1",
+                        "-map_chapters",
+                        "-1",
                         "-codec:a",
                         "libmp3lame",
+                        "-threads",
+                        "1",
                         "-q:a",
                         "3",
+                        "-fs",
+                        str(self._legacy_transcode_max_file_bytes),
                         str(target_path),
                     ],
                     check=True,
-                    capture_output=True,
-                    timeout=600,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=self._legacy_transcode_timeout_seconds,
+                    env={
+                        "LANG": "C.UTF-8",
+                        "LC_ALL": "C.UTF-8",
+                        "PATH": str(Path(ffmpeg_binary).parent),
+                    },
                 )
-            except (FileNotFoundError, subprocess.SubprocessError) as error:
+            except (FileNotFoundError, OSError, subprocess.SubprocessError) as error:
                 logger.error("Legacy interview audio transcoding failed: %s", error)
                 api_error(
                     503,
                     "interview_audio_transcoding_failed",
                     "Interview audio could not be prepared for this browser",
                 )
-            size = target_path.stat().st_size
-            with target_path.open("rb") as target:
-                self.client.upload_fileobj(
-                    Fileobj=target,
-                    Bucket=self.bucket,
-                    Key=converted_key,
-                    ExtraArgs={"ContentType": "audio/mpeg"},
+            try:
+                target_stat = target_path.lstat()
+                if (
+                    not stat.S_ISREG(target_stat.st_mode)
+                    or target_stat.st_size <= 0
+                    or target_stat.st_size > self._legacy_transcode_max_file_bytes
+                ):
+                    raise OSError("Legacy transcode produced an invalid output file")
+                size = target_stat.st_size
+                with target_path.open("rb") as target:
+                    self.client.upload_fileobj(
+                        Fileobj=target,
+                        Bucket=self.bucket,
+                        Key=converted_key,
+                        ExtraArgs={"ContentType": "audio/mpeg"},
+                    )
+            except (BotoCoreError, ClientError, OSError) as error:
+                logger.error("Legacy interview audio upload failed: %s", error)
+                api_error(
+                    503,
+                    "interview_audio_transcoding_failed",
+                    "Prepared interview audio could not be saved",
                 )
-        return StoredUpload(
-            storage_key=converted_key,
-            filename=f"{Path(upload.filename).stem}.mp3",
-            content_type="audio/mpeg",
-            size=size,
-        )
+            return StoredUpload(
+                storage_key=converted_key,
+                filename=f"{Path(upload.filename).stem}.mp3",
+                content_type="audio/mpeg",
+                size=size,
+            )
+        finally:
+            try:
+                shutil.rmtree(directory)
+            except OSError as error:
+                logger.warning(
+                    "Could not clean legacy interview transcode directory path=%s error=%s",
+                    directory,
+                    error,
+                )
+
+    def _cleanup_stale_legacy_transcodes(self) -> None:
+        cutoff = time.time() - self._legacy_transcode_cleanup_age_seconds
+        try:
+            entries = tuple(self._legacy_transcode_root.iterdir())
+        except OSError as error:
+            raise LegacyTranscodeCapacityError(
+                "legacy_transcode_directory_unavailable"
+            ) from error
+        for entry in entries:
+            if not entry.name.startswith("legacy-alac-"):
+                continue
+            try:
+                entry_stat = entry.stat(follow_symlinks=False)
+                if not stat.S_ISDIR(entry_stat.st_mode) or entry_stat.st_mtime > cutoff:
+                    continue
+                shutil.rmtree(entry)
+            except OSError:
+                logger.warning("Could not clean stale legacy transcode path=%s", entry)
 
     async def delete(self, storage_key: str | None) -> None:
         if storage_key is None:
@@ -427,7 +720,8 @@ class InterviewUploadStore:
     @staticmethod
     def _content_type_allowed(content_type: str, allowed_content_types: tuple[str, ...]) -> bool:
         return any(
-            content_type == allowed or content_type.startswith(f"{allowed}/")
+            content_type == allowed
+            or ("/" not in allowed and content_type.startswith(f"{allowed}/"))
             for allowed in allowed_content_types
         )
 

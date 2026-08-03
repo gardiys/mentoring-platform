@@ -181,6 +181,39 @@ class IntelligenceInterview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class IntelligenceAIAdmission(UUIDPrimaryKeyMixin, Base):
+    """Durable record of a user-triggered operation that can incur AI cost."""
+
+    __tablename__ = "intelligence_ai_admissions"
+    __table_args__ = (
+        Index(
+            "ix_intelligence_ai_admissions_requester_requested",
+            "requester_user_id",
+            "requested_at",
+        ),
+        Index(
+            "ix_intelligence_ai_admissions_interview",
+            "interview_id",
+            "requested_at",
+        ),
+    )
+
+    requester_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interview_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("intelligence_interviews.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    operation: Mapped[str] = mapped_column(String(40), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class IntelligenceSpeaker(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "intelligence_speakers"
     __table_args__ = (

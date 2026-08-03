@@ -3,16 +3,19 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.interviews.companies import resolve_company
 from app.interviews.intelligence_models import (
+    IntelligenceAIAdmission,
     IntelligenceAnswer,
     IntelligenceAnswerReview,
     IntelligenceAttemptStage,
@@ -66,6 +69,22 @@ from app.tracks.models import LearningTrack
 from app.users.models import User, UserRole
 
 settings = get_settings()
+AI_ADMISSION_LOCK_KEY = 4_128_771_003
+TRANSCRIPTION_RESUBMIT_ERROR_CODES = frozenset(
+    {"TRANSCRIPTION_RESULT_EXPIRED", "TRANSCRIPTION_TIMEOUT"}
+)
+
+GLOBAL_AI_WORKLOAD_STATUSES = (
+    IntelligenceProcessingStatus.UPLOADED,
+    IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED,
+    IntelligenceProcessingStatus.TRANSCRIBING,
+    IntelligenceProcessingStatus.TRANSCRIPT_READY,
+    IntelligenceProcessingStatus.ANALYZING,
+)
+USER_IN_PROGRESS_AI_STATUSES = (
+    *GLOBAL_AI_WORKLOAD_STATUSES,
+    IntelligenceProcessingStatus.AWAITING_CANDIDATE_SPEAKER,
+)
 
 
 TYPE_TO_STAGE = {
@@ -88,12 +107,126 @@ STAGE_TO_TYPE = {
 }
 
 
+def _quota_day_bounds(now: datetime) -> tuple[datetime, datetime]:
+    timezone = ZoneInfo(settings.interview_ai_quota_timezone)
+    local_date = now.astimezone(timezone).date()
+    next_local_date = local_date + timedelta(days=1)
+    start = datetime.combine(local_date, time.min, tzinfo=timezone)
+    end = datetime.combine(next_local_date, time.min, tzinfo=timezone)
+    return start.astimezone(UTC), end.astimezone(UTC)
+
+
+async def _ensure_ai_analysis_capacity(
+    session: AsyncSession,
+    user: User,
+    *,
+    now: datetime,
+) -> None:
+    if not settings.interview_ai_enabled:
+        api_error(
+            503,
+            "interview_ai_analysis_disabled",
+            "AI analysis is temporarily unavailable",
+        )
+
+    # Admission is a very short transaction, so one PostgreSQL advisory lock
+    # makes both the global and per-user limits exact even for simultaneous
+    # requests targeting different interview stages.
+    await session.scalar(select(func.pg_advisory_xact_lock(AI_ADMISSION_LOCK_KEY)))
+
+    global_active = int(
+        await session.scalar(
+            select(func.count(IntelligenceInterview.id)).where(
+                IntelligenceInterview.processing_status.in_(GLOBAL_AI_WORKLOAD_STATUSES)
+            )
+        )
+        or 0
+    )
+    if global_active >= settings.interview_ai_global_active_limit:
+        api_error(
+            429,
+            "interview_ai_capacity_reached",
+            "AI processing is at capacity. Try again later",
+        )
+
+    if user.role is UserRole.ADMIN:
+        return
+
+    latest_requester = (
+        select(IntelligenceAIAdmission.requester_user_id)
+        .where(IntelligenceAIAdmission.interview_id == IntelligenceInterview.id)
+        .order_by(
+            IntelligenceAIAdmission.requested_at.desc(),
+            IntelligenceAIAdmission.id.desc(),
+        )
+        .limit(1)
+        .correlate(IntelligenceInterview)
+        .scalar_subquery()
+    )
+    user_active = int(
+        await session.scalar(
+            select(func.count(IntelligenceInterview.id)).where(
+                latest_requester == user.id,
+                IntelligenceInterview.processing_status.in_(USER_IN_PROGRESS_AI_STATUSES),
+            )
+        )
+        or 0
+    )
+    if user_active >= settings.interview_ai_max_active_per_user:
+        api_error(
+            429,
+            "interview_ai_active_limit_reached",
+            "Finish the current AI analysis before starting another one",
+        )
+
+    day_start, day_end = _quota_day_bounds(now)
+    launched_today = int(
+        await session.scalar(
+            select(func.count(IntelligenceAIAdmission.id))
+            .where(
+                IntelligenceAIAdmission.requester_user_id == user.id,
+                IntelligenceAIAdmission.requested_at >= day_start,
+                IntelligenceAIAdmission.requested_at < day_end,
+            )
+        )
+        or 0
+    )
+    if launched_today >= settings.interview_ai_daily_limit:
+        api_error(
+            429,
+            "interview_ai_daily_limit_reached",
+            (
+                f"The daily limit of {settings.interview_ai_daily_limit} AI analyses "
+                "has been reached. It resets at midnight Moscow time"
+            ),
+        )
+
+
+def _record_ai_admission(
+    session: AsyncSession,
+    user: User,
+    interview: IntelligenceInterview,
+    *,
+    operation: str,
+    now: datetime,
+) -> None:
+    session.add(
+        IntelligenceAIAdmission(
+            requester_user_id=user.id,
+            interview_id=interview.id,
+            operation=operation,
+            requested_at=now,
+        )
+    )
+
+
 async def start_stage_ai_analysis(
     session: AsyncSession,
     user: User,
     process_id: UUID,
     stage_id: UUID,
 ) -> IntelligenceInterview:
+    now = datetime.now(UTC)
     stage = await session.scalar(
         select(InterviewProcessStage)
         .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
@@ -124,6 +257,7 @@ async def start_stage_ai_analysis(
             "interview_ai_analysis_already_requested",
             "AI analysis can only be requested once for an interview",
         )
+    await _ensure_ai_analysis_capacity(session, user, now=now)
     process = await session.get(InterviewProcess, process_id)
     assert process is not None
     interview = IntelligenceInterview(
@@ -132,8 +266,10 @@ async def start_stage_ai_analysis(
         interview_type=STAGE_TO_TYPE[stage.stage_type],
         processing_status=IntelligenceProcessingStatus.UPLOADED,
     )
-    stage.ai_analysis_requested_at = datetime.now(UTC)
+    stage.ai_analysis_requested_at = now
     session.add(interview)
+    await session.flush()
+    _record_ai_admission(session, user, interview, operation="analysis", now=now)
     await session.commit()
     await session.refresh(interview)
     return interview
@@ -222,17 +358,42 @@ async def prepare_processing_retry(
     interview = await get_intelligence_interview(session, user, interview_id, lock=True)
     if interview.processing_status is not IntelligenceProcessingStatus.FAILED:
         api_error(409, "interview_retry_not_available", "Interview processing has not failed")
+    now = datetime.now(UTC)
+    await _ensure_ai_analysis_capacity(session, user, now=now)
     failed_stage = interview.failed_stage
+    error_code = interview.processing_error_code
     if failed_stage in {
         IntelligenceAttemptStage.NORMALIZE,
         IntelligenceAttemptStage.TRANSCRIPTION_SUBMIT,
-        IntelligenceAttemptStage.TRANSCRIPTION_POLL,
-        IntelligenceAttemptStage.TRANSCRIPTION_PARSE,
     }:
         interview.transcription_provider_job_id = None
         interview.transcription_provider_payload = None
         interview.processing_status = IntelligenceProcessingStatus.UPLOADED
         job_name = "submit_transcription"
+    elif failed_stage is IntelligenceAttemptStage.TRANSCRIPTION_POLL:
+        if (
+            interview.transcription_provider_job_id
+            and error_code not in TRANSCRIPTION_RESUBMIT_ERROR_CODES
+        ):
+            interview.processing_status = IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED
+            job_name = "poll_transcription"
+        else:
+            interview.transcription_provider_job_id = None
+            interview.transcription_provider_payload = None
+            interview.processing_status = IntelligenceProcessingStatus.UPLOADED
+            job_name = "submit_transcription"
+    elif failed_stage is IntelligenceAttemptStage.TRANSCRIPTION_PARSE:
+        if (
+            interview.transcription_provider_job_id
+            and error_code not in TRANSCRIPTION_RESUBMIT_ERROR_CODES
+        ):
+            interview.processing_status = IntelligenceProcessingStatus.TRANSCRIPT_READY
+            job_name = "process_transcription_result"
+        else:
+            interview.transcription_provider_job_id = None
+            interview.transcription_provider_payload = None
+            interview.processing_status = IntelligenceProcessingStatus.UPLOADED
+            job_name = "submit_transcription"
     elif failed_stage is IntelligenceAttemptStage.AI_EXTRACT:
         interview.processing_status = IntelligenceProcessingStatus.ANALYZING
         job_name = "extract_interview_structure"
@@ -244,6 +405,7 @@ async def prepare_processing_retry(
     interview.processing_error_code = None
     interview.processing_error_message = None
     interview.failed_stage = None
+    _record_ai_admission(session, user, interview, operation="retry", now=now)
     await session.commit()
     return interview, job_name
 
@@ -560,12 +722,86 @@ async def intelligence_detail(
     )
 
 
+async def intelligence_processing(
+    session: AsyncSession, user: User, interview_id: UUID
+) -> IntelligenceProcessingRead:
+    """Return polling data without loading transcript or question bodies."""
+    interview = await get_intelligence_interview(session, user, interview_id)
+    transcribed = (
+        select(IntelligenceUtterance.id)
+        .where(IntelligenceUtterance.interview_id == interview.id)
+        .exists()
+    )
+    question_count = (
+        select(func.count(IntelligenceQuestion.id))
+        .where(IntelligenceQuestion.interview_id == interview.id)
+        .scalar_subquery()
+    )
+    review_count = (
+        select(func.count(IntelligenceAnswerReview.id))
+        .join(IntelligenceAnswer, IntelligenceAnswer.id == IntelligenceAnswerReview.answer_id)
+        .join(IntelligenceQuestion, IntelligenceQuestion.id == IntelligenceAnswer.question_id)
+        .where(IntelligenceQuestion.interview_id == interview.id)
+        .scalar_subquery()
+    )
+    rows = (
+        await session.execute(
+            select(
+                IntelligenceProcessingAttempt,
+                transcribed.label("transcribed"),
+                question_count.label("questions_found"),
+                review_count.label("reviews_completed"),
+            )
+            .select_from(IntelligenceInterview)
+            .outerjoin(
+                IntelligenceProcessingAttempt,
+                IntelligenceProcessingAttempt.interview_id == IntelligenceInterview.id,
+            )
+            .where(IntelligenceInterview.id == interview.id)
+            .order_by(IntelligenceProcessingAttempt.started_at)
+        )
+    ).all()
+    # The interview row guarantees one result even before the first attempt exists.
+    first = rows[0]
+    attempts = [row[0] for row in rows if row[0] is not None]
+    return IntelligenceProcessingRead(
+        status=interview.processing_status,
+        failed_stage=interview.failed_stage,
+        error_code=interview.processing_error_code,
+        error_message=interview.processing_error_message,
+        transcribed=bool(first.transcribed),
+        candidate_selected=interview.candidate_speaker_id is not None,
+        questions_found=int(first.questions_found or 0),
+        reviews_completed=int(first.reviews_completed or 0),
+        attempts=[
+            IntelligenceProcessingAttemptRead(
+                id=attempt.id,
+                stage=attempt.stage,
+                status=attempt.status,
+                attempt_number=attempt.attempt_number,
+                provider=attempt.provider,
+                error_code=attempt.error_code,
+                error_message=attempt.error_message,
+                started_at=attempt.started_at,
+                finished_at=attempt.finished_at,
+            )
+            for attempt in attempts
+        ],
+    )
+
+
 async def select_candidate_speaker(
     session: AsyncSession, user: User, interview_id: UUID, speaker_id: UUID
 ) -> IntelligenceInterview:
     interview = await get_intelligence_interview(
         session, user, interview_id, owner_only=True, lock=True
     )
+    if interview.processing_status is not IntelligenceProcessingStatus.AWAITING_CANDIDATE_SPEAKER:
+        api_error(
+            409,
+            "candidate_speaker_selection_not_available",
+            "Candidate speaker can only be selected once after transcription",
+        )
     speaker = await session.scalar(
         select(IntelligenceSpeaker).where(
             IntelligenceSpeaker.id == speaker_id,
@@ -729,6 +965,12 @@ async def prepare_interview_overview_generation(
     interview = await get_intelligence_interview(session, reviewer, interview_id, lock=True)
     if interview.processing_status is not IntelligenceProcessingStatus.READY:
         api_error(409, "intelligence_summary_not_ready", "Interview analysis is not ready")
+    if interview.ai_summary_payload is not None:
+        api_error(
+            409,
+            "intelligence_summary_already_exists",
+            "Interview summary has already been generated",
+        )
     has_transcript = await session.scalar(
         select(IntelligenceUtterance.id)
         .where(IntelligenceUtterance.interview_id == interview.id)
@@ -740,6 +982,8 @@ async def prepare_interview_overview_generation(
             "intelligence_summary_unavailable",
             "Transcript and candidate speaker are required",
         )
+    now = datetime.now(UTC)
+    await _ensure_ai_analysis_capacity(session, reviewer, now=now)
     interview.ai_summary_payload = None
     interview.ai_summary_model = None
     interview.ai_summary_prompt_version = None
@@ -747,6 +991,7 @@ async def prepare_interview_overview_generation(
     interview.failed_stage = None
     interview.processing_error_code = None
     interview.processing_error_message = None
+    _record_ai_admission(session, reviewer, interview, operation="overview", now=now)
     await session.commit()
     return interview
 
@@ -949,7 +1194,7 @@ async def list_admin_question_moderation(
     limit: int,
     offset: int,
 ) -> AdminQuestionModerationPage:
-    filters = []
+    filters: list[ColumnElement[bool]] = []
     if status == "needs_review":
         filters.append(
             IntelligenceQuestion.moderation_status.in_(
@@ -966,13 +1211,11 @@ async def list_admin_question_moderation(
         )
     elif status == "approved":
         filters.append(
-            IntelligenceQuestion.moderation_status
-            == IntelligenceQuestionModerationStatus.APPROVED
+            IntelligenceQuestion.moderation_status == IntelligenceQuestionModerationStatus.APPROVED
         )
     elif status == "rejected":
         filters.append(
-            IntelligenceQuestion.moderation_status
-            == IntelligenceQuestionModerationStatus.REJECTED
+            IntelligenceQuestion.moderation_status == IntelligenceQuestionModerationStatus.REJECTED
         )
     if track_id is not None:
         filters.append(InterviewProcess.track_id == track_id)
@@ -1075,9 +1318,7 @@ async def get_admin_question_moderation(
         matched_card_question=(
             matched_card.question_markdown if matched_card is not None else None
         ),
-        matched_card_asked_count=(
-            matched_card.asked_count if matched_card is not None else None
-        ),
+        matched_card_asked_count=(matched_card.asked_count if matched_card is not None else None),
     )
 
 
@@ -1165,6 +1406,14 @@ def safe_processing_message(code: str) -> str:
         "TRANSCRIPTION_TIMEOUT": "Сервис транскрибации не ответил вовремя.",
         "TRANSCRIPTION_PROVIDER_ERROR": "Не удалось обработать запись в сервисе транскрибации.",
         "TRANSCRIPTION_INVALID_RESPONSE": "Сервис транскрибации вернул некорректный результат.",
+        "STAGING_CAPACITY_EXCEEDED": "Недостаточно временного места для обработки записи.",
+        "MEDIA_PROBE_UNAVAILABLE": "Проверка формата записи временно недоступна.",
+        "MEDIA_PROBE_TIMEOUT": "Проверка формата записи не завершилась вовремя.",
+        "INVALID_MEDIA_FILE": "Файл не является корректной аудио- или видеозаписью.",
+        "MEDIA_CONTENT_TYPE_MISMATCH": "Фактический формат записи не совпадает с указанным.",
+        "UNSUPPORTED_MEDIA_TYPE": "Формат записи не поддерживается.",
+        "UNSUPPORTED_MEDIA_CODEC": "Кодек записи не поддерживается.",
+        "MEDIA_DURATION_EXCEEDED": "Запись превышает допустимую продолжительность.",
         "OPENAI_PROXY_ERROR": "Не удалось подключиться к сервису анализа.",
         "OPENAI_AUTH_ERROR": "Сервис анализа временно недоступен.",
         "OPENAI_QUOTA_EXCEEDED": "Квота сервиса анализа исчерпана. Обратитесь к администратору.",

@@ -274,7 +274,7 @@ async def test_company_directory_normalizes_and_ranks_existing_names(
     assert punctuation_insensitive.json()[0]["name"] == "Тбанк"
 
 
-async def test_company_directory_learns_alias_and_merges_an_existing_duplicate(
+async def test_only_admin_can_merge_companies_when_learning_an_existing_alias(
     client: AsyncClient, seeded: SeededData
 ) -> None:
     canonical_process = await create_process(client, seeded, "Wildberries")
@@ -285,9 +285,24 @@ async def test_company_directory_learns_alias_and_merges_an_existing_duplicate(
     )
     canonical_id = canonical.json()[0]["id"]
 
-    linked = await client.post(
+    student_merge = await client.post(
         "/api/v1/interviews/journal/tracks",
         headers=auth(seeded.student_id),
+        json={
+            "company_name": "Wildberries",
+            "track_id": str(seeded.python_track_id),
+            "company_id": canonical_id,
+            "company_alias": "WB",
+        },
+    )
+    duplicate_before_admin_merge = await client.get(
+        f"/api/v1/interviews/journal/tracks/{duplicate_process['id']}",
+        headers=auth(seeded.student_id),
+    )
+
+    linked = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.admin_id),
         json={
             "company_name": "Wildberries",
             "track_id": str(seeded.python_track_id),
@@ -304,6 +319,9 @@ async def test_company_directory_learns_alias_and_merges_an_existing_duplicate(
         headers=auth(seeded.student_id),
     )
 
+    assert student_merge.status_code == 409
+    assert student_merge.json()["detail"]["code"] == "company_alias_conflict"
+    assert duplicate_before_admin_merge.json()["company_name"] == "WB"
     assert linked.status_code == 201
     assert linked.json()["company_name"] == "Wildberries"
     assert alias_search.json()[0]["name"] == "Wildberries"
@@ -598,8 +616,8 @@ async def test_video_upload_is_limited_to_two_gibibytes(
         f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}/attachments/upload",
         headers=auth(seeded.student_id),
         json={
-            "filename": "archive.zip",
-            "content_type": "application/zip",
+            "filename": "notes.txt",
+            "content_type": "text/plain",
             "size": 50 * 1024 * 1024 + 1,
         },
     )

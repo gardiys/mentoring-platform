@@ -59,7 +59,13 @@ curl https://platform.example.com/health
 curl https://platform.example.com/ready
 ```
 
-При `make prod-up` frontend собирается в production-режиме, миграции Alembic выполняются отдельным одноразовым контейнером, и только после них запускается API. `make seed` в production выполнять не нужно: учебные данные Python импортируются миграциями, а ученики поступают из платёжного бота.
+`make prod-up` выполняет deployment последовательно: сначала собирает образы, затем поднимает
+PostgreSQL и Redis, запускает Alembic отдельным одноразовым контейнером и только после успешной
+миграции принудительно пересоздаёт backend, оба AI worker, frontend и Caddy. Поэтому одного запуска
+достаточно и новые переменные окружения гарантированно попадают в контейнеры. Frontend собирается
+в production-режиме; HTML и SPA-маршруты отдаются с `Cache-Control: no-store`, а хешированные
+assets продолжают кэшироваться как immutable. `make seed` в production выполнять не нужно:
+учебные данные Python импортируются миграциями, а ученики поступают из платёжного бота.
 
 После первого запуска назначьте свой Telegram-аккаунт администратором:
 
@@ -79,7 +85,12 @@ make prod-backup   # PostgreSQL dump в локальный каталог backup
 make prod-down     # остановка без удаления volume с данными
 ```
 
-Production-база хранится во внешнем Docker volume `mentoring-platform-production_postgres_data`, который `docker compose down -v` не удаляет. Имя совпадает с именем volume из предыдущей production-конфигурации, поэтому при обновлении существующая база подключается без копирования данных. `make prod-init` создаёт volume при первом развёртывании на новом сервере. Обычный `make prod-up` только проверяет его наличие и завершится с ошибкой, если volume неожиданно пропал, вместо запуска платформы с незаметно созданной пустой базой.
+Production-база и персистентная Redis-очередь хранятся во внешних Docker volumes
+`mentoring-platform-production_postgres_data` и `mentoring-platform-production_redis_data`,
+которые `docker compose down -v` не удаляет. Имена совпадают с именами volumes из предыдущей
+production-конфигурации, поэтому при обновлении существующие данные подключаются без копирования.
+`make prod-init` создаёт оба volume при первом развёртывании на новом сервере. Обычный
+`make prod-up` проверяет их наличие и завершится с ошибкой, если один из них неожиданно пропал.
 
 External volume защищает от случайного удаления через Compose, но пользователь с доступом к Docker всё ещё может удалить его явной командой `docker volume rm` или очисткой всех неиспользуемых volumes. Не выполняйте такие команды на production-сервере. Резервные копии из `backups/` нужно дополнительно выгружать за пределы сервера. Записи собеседований и офферы находятся во внешнем S3, поэтому для них отдельно включите versioning/backup-политику у провайдера объектного хранилища.
 
@@ -327,11 +338,18 @@ TRANSCRIPTION_PROVIDER=fake
 INTERVIEW_AI_PROVIDER=fake
 ```
 
-`docker compose` запускает Redis и `intelligence-worker` автоматически. При запуске без Compose worker можно поднять отдельно командой `make worker`. Fake-провайдеры намеренно запрещены при `APP_ENV=production`.
+`docker compose` запускает Redis, отдельный worker транскрибации и отдельный OpenAI worker
+автоматически. Без Compose запустите в разных терминалах `make worker` и `make worker-ai`.
+Очереди имеют независимые лимиты `TRANSCRIPTION_MAX_CONCURRENCY` и
+`OPENAI_MAX_CONCURRENCY`. Fake-провайдеры намеренно запрещены при `APP_ENV=production`.
 
 ### Nexara
 
-Production-адаптер использует официальный асинхронный Python SDK `nexara`. Он передаёт Nexara короткоживущую подписанную S3-ссылку, создаёт фоновую задачу с `task="diarize"`, опрашивает её по `job_id` и немедленно сохраняет сегменты, спикеров и временные метки в PostgreSQL. Это важно: готовый результат Nexara хранится 12 часов. Лимит платформы 2 GiB для видео укладывается в опубликованный Nexara лимит 3 ГБ.
+Production-адаптер использует официальный асинхронный Python SDK `nexara`. Worker скачивает
+private S3-объект во временный bounded staging, проверяет реальный контейнер, кодек и длительность
+через `ffprobe`, загружает файл в Nexara, затем гарантированно очищает временный каталог. После
+этого он опрашивает задачу по `job_id` и сохраняет сегменты, спикеров и временные метки в
+PostgreSQL. Готовый результат Nexara нужно забрать до истечения срока хранения у провайдера.
 
 ```dotenv
 TRANSCRIPTION_PROVIDER=nexara
@@ -339,8 +357,11 @@ NEXARA_API_KEY=nx-...
 NEXARA_BASE_URL=https://api.nexara.ru/v1
 NEXARA_MODEL=whisper-1
 NEXARA_TIMEOUT_SECONDS=600
-NEXARA_MAX_RETRIES=2
+NEXARA_MAX_RETRIES=0
 ```
+
+Повторы Nexara, как и OpenAI, выполняет ARQ worker с наблюдаемой попыткой и jitter;
+встроенные повторы SDK отключены, чтобы не создавать вложенные волны запросов.
 
 Проверить ключ без платной транскрибации можно запросом баланса:
 
@@ -351,15 +372,38 @@ make check-nexara
 Команда выводит только результат подключения и модель — API key и баланс не печатаются. Nexara вызывается напрямую и не использует Amsterdam proxy.
 Для `.env.production` используйте `make prod-check-nexara`.
 
-Для настоящей Nexara при локальном MinIO внешний сервис должен получить доступ к
-записи. Поднимите временный HTTPS tunnel к `localhost:9000` и задайте его URL в
-`NEXARA_MEDIA_PUBLIC_ENDPOINT_URL`. Без этой настройки worker использует внутренний
-адрес `http://minio:9000`, подходящий только для fake-провайдера.
+Nexara получает файл от worker, поэтому HTTPS tunnel к локальному MinIO не нужен. Если в `.env`
+настроено отдельное S3, override `infra/docker-compose.external-s3.yml` переключает backend и
+worker на `S3_*` из `.env`. Обычный dev-compose использует MinIO, чтобы локальный запуск случайно
+не изменил production bucket.
 
-Если в `.env` уже настроено отдельное публичное S3, tunnel не нужен. Подключите
-явный override `infra/docker-compose.external-s3.yml`: он переключает только backend
-и intelligence-worker на `S3_*` из `.env`. Обычный dev-compose продолжает использовать
-MinIO по умолчанию, чтобы локальный запуск случайно не изменил production bucket.
+### Legacy ALAC аудио
+
+Импортированные `.mp3`, внутри которых фактически лежит ALAC/M4A, один раз конвертируются
+в MP3 и кэшируются в основном S3. `ffmpeg` запускается без environment приложения, с запретом
+сетевых протоколов, одним CPU thread, timeout и лимитом размера output. Образ содержит закреплённые
+по digest `ffmpeg` и `ffprobe`.
+
+В production временные source и output нельзя класть в `/tmp`: у backend это маленький tmpfs.
+Production Compose уже подключает обычный disk-backed named volume только к backend:
+
+```yaml
+services:
+  backend:
+    environment:
+      INTERVIEW_LEGACY_TRANSCODE_DIRECTORY: /var/lib/mentoring/interview-legacy-transcode
+    volumes:
+      - interview_legacy_transcode:/var/lib/mentoring/interview-legacy-transcode
+
+volumes:
+  interview_legacy_transcode:
+```
+
+Конкурентность ограничена как внутри процесса, так и между uvicorn workers через lock-файлы. Перед
+запуском проверяются byte budget и свободное место. Обычный и аварийный cleanup удаляет только
+каталоги `legacy-alac-*`. При занятом slot, нехватке диска или I/O error API возвращает предсказуемый
+`503` вместо зависания или заполнения tmpfs. Лимиты задаются переменными
+`INTERVIEW_LEGACY_TRANSCODE_*` из `.env.production.example`.
 
 ### OpenAI и Amsterdam egress
 
@@ -377,6 +421,10 @@ OPENAI_ANALYSIS_MODEL=...
 OPENAI_LIGHT_REVIEW_MODEL=...
 OPENAI_PROXY_URL=http://10.8.0.1:3128
 OPENAI_MAX_RETRIES=0
+OPENAI_MAX_CONCURRENCY=4
+OPENAI_EXTRACTION_MAX_OUTPUT_TOKENS=8000
+OPENAI_REVIEW_MAX_OUTPUT_TOKENS=4000
+OPENAI_SUMMARY_MAX_OUTPUT_TOKENS=4000
 ```
 
 `OPENAI_EXTRACTION_MODEL` должна быть дешёвой моделью: она одновременно извлекает и
@@ -387,6 +435,13 @@ OPENAI_MAX_RETRIES=0
 Если `OPENAI_PROXY_URL` пуст, SDK подключается напрямую. Если URL задан, proxy передаётся только в централизованный `httpx.AsyncClient`; бизнес-логика и Nexara о нём не знают.
 Повторы OpenAI-запросов выполняет worker с экспоненциальной задержкой и сохраняет каждую
 попытку в базе, поэтому встроенные повторы SDK по умолчанию отключены.
+
+Ученики и менторы могут запускать не более трёх платных AI-операций за календарный день по Москве
+и не более одной одновременно. Долговечный журнал учитывает первичный анализ, ручной retry и
+ручную генерацию резюме; удаление зависшего разбора не обнуляет квоту. Администратор не имеет
+персональной дневной квоты; глобальный safety cap применяется ко всем ролям. Оперативно остановить
+новые запуски можно через `INTERVIEW_AI_ENABLED=false`. Состояние pipeline, очередей и heartbeat
+обоих worker доступно администратору в `GET /api/v1/admin/interviews/ai-operations`.
 
 ```text
 RU Application Server

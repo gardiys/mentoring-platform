@@ -1,23 +1,47 @@
+import asyncio
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import event, func, select
 
-from app.interviews import intelligence_jobs, intelligence_router, journal_router
+from app.interviews import (
+    intelligence_jobs,
+    intelligence_router,
+    intelligence_service,
+    journal_router,
+)
 from app.interviews.intelligence_ai import FakeInterviewAIProvider
 from app.interviews.intelligence_models import (
+    IntelligenceAIAdmission,
     IntelligenceAIUsage,
     IntelligenceAnswer,
+    IntelligenceAnswerReview,
+    IntelligenceAssessment,
+    IntelligenceAttemptStage,
+    IntelligenceAttemptStatus,
+    IntelligenceDifficulty,
     IntelligenceInterview,
+    IntelligenceProcessingAttempt,
     IntelligenceProcessingStatus,
     IntelligenceQuestion,
     IntelligenceQuestionKind,
+    IntelligenceReviewSource,
+    IntelligenceReviewStatus,
     IntelligenceSpeaker,
+    IntelligenceSpeakerRole,
+    IntelligenceUtterance,
 )
-from app.interviews.intelligence_providers import FakeTranscriptionProvider
+from app.interviews.intelligence_providers import (
+    FakeTranscriptionProvider,
+    TranscriptionJob,
+    TranscriptionJobState,
+)
 from app.interviews.intelligence_service import select_candidate_speaker
+from app.interviews.media_guardrails import MediaProbe, MediaStreamProbe, StagingGuard
 from app.interviews.models import (
     InterviewCard,
     InterviewCardOccurrence,
@@ -28,7 +52,7 @@ from app.interviews.models import (
 )
 from app.tracks.models import LearningTrackEnrollment
 from app.users.models import User, UserRole
-from tests.conftest import SeededData, TestSession, auth
+from tests.conftest import SeededData, TestSession, auth, test_engine
 
 
 class RecordingRedis:
@@ -46,27 +70,54 @@ class StubUploadStore:
         return "https://storage.example/recording.mp3?signed=redacted"
 
 
+class StagedUploadStore(StubUploadStore):
+    async def download_to_path(self, upload: object, destination: Path) -> None:
+        del upload
+        destination.write_bytes(b"x" * 1_024)
+
+
+class FileUploadTranscriptionProvider(FakeTranscriptionProvider):
+    requires_file_upload = True
+
+    def __init__(self) -> None:
+        self.submitted_path: Path | None = None
+
+    async def submit(self, **kwargs: Any) -> TranscriptionJob:
+        file_path = kwargs.get("file_path")
+        assert isinstance(file_path, Path)
+        assert file_path.exists()
+        self.submitted_path = file_path
+        return TranscriptionJob(
+            provider_job_id="guarded-media",
+            status=TranscriptionJobState.QUEUED,
+        )
+
+
 async def create_analysis_from_journal(
     client: AsyncClient,
     seeded: SeededData,
     monkeypatch: pytest.MonkeyPatch,
     *,
     company_name: str = "Nexara",
+    owner_id: UUID | None = None,
+    track_id: UUID | None = None,
 ) -> tuple[Any, UUID, UUID]:
     async def fake_enqueue(_: UUID) -> None:
         return None
 
     monkeypatch.setattr(journal_router, "_enqueue_ai_analysis", fake_enqueue)
+    selected_owner_id = owner_id or seeded.student_id
+    selected_track_id = track_id or seeded.python_track_id
     process_response = await client.post(
         "/api/v1/interviews/journal/tracks",
-        headers=auth(seeded.student_id),
-        json={"company_name": company_name, "track_id": str(seeded.python_track_id)},
+        headers=auth(selected_owner_id),
+        json={"company_name": company_name, "track_id": str(selected_track_id)},
     )
     assert process_response.status_code == 201, process_response.text
     process_id = UUID(process_response.json()["id"])
     stage_response = await client.post(
         f"/api/v1/interviews/journal/tracks/{process_id}/stages",
-        headers=auth(seeded.student_id),
+        headers=auth(selected_owner_id),
         json={
             "stage_type": "technical_interview",
             "scheduled_at": "2026-08-02T10:00:00Z",
@@ -84,9 +135,17 @@ async def create_analysis_from_journal(
         await session.commit()
     created = await client.post(
         f"/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}/ai-analysis",
-        headers=auth(seeded.student_id),
+        headers=auth(selected_owner_id),
     )
     return created, process_id, stage_id
+
+
+async def mark_analysis_finished(interview_id: UUID) -> None:
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        interview.processing_status = IntelligenceProcessingStatus.READY
+        await session.commit()
 
 
 @pytest.mark.asyncio
@@ -123,6 +182,492 @@ async def test_student_creates_and_roles_only_see_authorized_interview(
     )
     assert duplicate.status_code == 409
     assert duplicate.json()["detail"]["code"] == "interview_ai_analysis_already_requested"
+
+
+@pytest.mark.asyncio
+async def test_processing_poll_is_authorized_lightweight_and_returns_progress(
+    client: AsyncClient, seeded: SeededData, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    created, _, _ = await create_analysis_from_journal(client, seeded, monkeypatch)
+    interview_id = UUID(created.json()["id"])
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        speaker = IntelligenceSpeaker(
+            interview_id=interview.id,
+            provider_speaker_key="candidate",
+            role=IntelligenceSpeakerRole.CANDIDATE,
+        )
+        session.add(speaker)
+        await session.flush()
+        utterance = IntelligenceUtterance(
+            interview_id=interview.id,
+            speaker_id=speaker.id,
+            sequence_number=0,
+            start_ms=0,
+            end_ms=1_000,
+            text="A transcript body that the poll endpoint must not load",
+        )
+        session.add(utterance)
+        await session.flush()
+        question = IntelligenceQuestion(
+            interview_id=interview.id,
+            sequence_number=0,
+            question_text="A question body that the poll endpoint must not load",
+            question_start_ms=0,
+            question_end_ms=500,
+            answer_start_ms=500,
+            answer_end_ms=1_000,
+            question_utterance_ids=[utterance.id],
+            answer_utterance_ids=[utterance.id],
+            category="Python",
+            question_kind=IntelligenceQuestionKind.TECHNICAL,
+            difficulty=IntelligenceDifficulty.MIDDLE,
+            confidence=0.95,
+        )
+        session.add(question)
+        await session.flush()
+        answer = IntelligenceAnswer(
+            question_id=question.id,
+            student_id=seeded.student_id,
+            answer_text="An answer body that the poll endpoint must not load",
+        )
+        session.add(answer)
+        await session.flush()
+        session.add_all(
+            [
+                IntelligenceAnswerReview(
+                    answer_id=answer.id,
+                    source=IntelligenceReviewSource.AI,
+                    status=IntelligenceReviewStatus.SUGGESTED,
+                    assessment=IntelligenceAssessment.CORRECT,
+                    summary="A review body that the poll endpoint must not load",
+                ),
+                IntelligenceProcessingAttempt(
+                    interview_id=interview.id,
+                    stage=IntelligenceAttemptStage.AI_EXTRACT,
+                    status=IntelligenceAttemptStatus.COMPLETED,
+                    attempt_number=1,
+                    provider="fake",
+                ),
+            ]
+        )
+        interview.candidate_speaker_id = speaker.id
+        interview.processing_status = IntelligenceProcessingStatus.ANALYZING
+        await session.commit()
+
+    statements: list[str] = []
+
+    def record_statement(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: object,
+    ) -> None:
+        statements.append(statement.lower())
+
+    event.listen(test_engine.sync_engine, "before_cursor_execute", record_statement)
+    try:
+        response = await client.get(
+            f"/api/v1/interviews/{interview_id}/processing",
+            headers=auth(seeded.student_id),
+        )
+    finally:
+        event.remove(test_engine.sync_engine, "before_cursor_execute", record_statement)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "status": "analyzing",
+        "failed_stage": None,
+        "error_code": None,
+        "error_message": None,
+        "transcribed": True,
+        "candidate_selected": True,
+        "questions_found": 1,
+        "reviews_completed": 1,
+        "attempts": [
+            {
+                "id": response.json()["attempts"][0]["id"],
+                "stage": "ai_extract",
+                "status": "completed",
+                "attempt_number": 1,
+                "provider": "fake",
+                "error_code": None,
+                "error_message": None,
+                "started_at": response.json()["attempts"][0]["started_at"],
+                "finished_at": None,
+            }
+        ],
+    }
+    # Authentication plus two service queries: access, then counters/attempts.
+    assert len(statements) <= 3
+    assert not any("intelligence_utterances.text" in statement for statement in statements)
+    assert not any("intelligence_questions.question_text" in statement for statement in statements)
+    assert not any("intelligence_answers.answer_text" in statement for statement in statements)
+
+    unrelated = await client.get(
+        f"/api/v1/interviews/{interview_id}/processing",
+        headers=auth(seeded.other_mentor_id),
+    )
+    admin = await client.get(
+        f"/api/v1/interviews/{interview_id}/processing",
+        headers=auth(seeded.admin_id),
+    )
+    assert unrelated.status_code == 404
+    assert admin.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_student_and_mentor_are_limited_to_three_ai_analysis_launches_per_day(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for owner_id, prefix in (
+        (seeded.student_id, "Student quota"),
+        (seeded.mentor_id, "Mentor quota"),
+    ):
+        created_ids: list[UUID] = []
+        for sequence in range(3):
+            created, _, _ = await create_analysis_from_journal(
+                client,
+                seeded,
+                monkeypatch,
+                company_name=f"{prefix} {sequence}",
+                owner_id=owner_id,
+            )
+            assert created.status_code == 201, created.text
+            interview_id = UUID(created.json()["id"])
+            created_ids.append(interview_id)
+            await mark_analysis_finished(interview_id)
+
+        limited, _, limited_stage_id = await create_analysis_from_journal(
+            client,
+            seeded,
+            monkeypatch,
+            company_name=f"{prefix} limited",
+            owner_id=owner_id,
+        )
+
+        assert limited.status_code == 429
+        assert limited.json()["detail"]["code"] == "interview_ai_daily_limit_reached"
+        async with TestSession() as session:
+            stage = await session.get(InterviewProcessStage, limited_stage_id)
+            assert stage is not None
+            assert stage.ai_analysis_requested_at is None
+            persisted = int(
+                await session.scalar(
+                    select(func.count(IntelligenceInterview.id)).where(
+                        IntelligenceInterview.student_id == owner_id
+                    )
+                )
+                or 0
+            )
+            assert persisted == len(created_ids)
+
+
+@pytest.mark.asyncio
+async def test_manual_retry_consumes_the_requesters_daily_ai_quota(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(intelligence_service.settings, "interview_ai_daily_limit", 2)
+    created, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Retry quota"
+    )
+    interview_id = UUID(created.json()["id"])
+
+    async def fake_enqueue(_function: str, _interview_id: UUID) -> None:
+        return None
+
+    monkeypatch.setattr(intelligence_router, "_enqueue", fake_enqueue)
+    for attempt in range(2):
+        async with TestSession() as session:
+            interview = await session.get(IntelligenceInterview, interview_id)
+            assert interview is not None
+            interview.processing_status = IntelligenceProcessingStatus.FAILED
+            interview.failed_stage = IntelligenceAttemptStage.AI_EXTRACT
+            interview.processing_error_code = "OPENAI_RATE_LIMIT"
+            await session.commit()
+
+        response = await client.post(
+            f"/api/v1/interviews/{interview_id}/retry",
+            headers=auth(seeded.student_id),
+        )
+        if attempt == 0:
+            assert response.status_code == 200, response.text
+        else:
+            assert response.status_code == 429
+            assert response.json()["detail"]["code"] == "interview_ai_daily_limit_reached"
+
+    async with TestSession() as session:
+        admissions = int(
+            await session.scalar(
+                select(func.count(IntelligenceAIAdmission.id)).where(
+                    IntelligenceAIAdmission.requester_user_id == seeded.student_id
+                )
+            )
+            or 0
+        )
+    assert admissions == 2
+
+
+@pytest.mark.asyncio
+async def test_mentor_overview_generation_is_quotad_and_cannot_replace_a_summary(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(intelligence_service.settings, "interview_ai_daily_limit", 1)
+    created, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Overview quota"
+    )
+    interview_id = UUID(created.json()["id"])
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        speaker = IntelligenceSpeaker(
+            interview_id=interview.id,
+            provider_speaker_key="candidate",
+            role=IntelligenceSpeakerRole.CANDIDATE,
+        )
+        session.add(speaker)
+        await session.flush()
+        session.add(
+            IntelligenceUtterance(
+                interview_id=interview.id,
+                speaker_id=speaker.id,
+                sequence_number=1,
+                start_ms=0,
+                end_ms=1_000,
+                text="Candidate answer",
+            )
+        )
+        interview.candidate_speaker_id = speaker.id
+        interview.processing_status = IntelligenceProcessingStatus.READY
+        await session.commit()
+
+    async def fake_enqueue(_function: str, _interview_id: UUID) -> None:
+        return None
+
+    monkeypatch.setattr(intelligence_router, "_enqueue", fake_enqueue)
+    first = await client.post(
+        f"/api/v1/mentor/interviews/{interview_id}/generate-overview",
+        headers=auth(seeded.mentor_id),
+    )
+    assert first.status_code == 200, first.text
+
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        interview.processing_status = IntelligenceProcessingStatus.READY
+        await session.commit()
+    limited = await client.post(
+        f"/api/v1/mentor/interviews/{interview_id}/generate-overview",
+        headers=auth(seeded.mentor_id),
+    )
+    assert limited.status_code == 429
+    assert limited.json()["detail"]["code"] == "interview_ai_daily_limit_reached"
+
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        interview.ai_summary_payload = {"overall_summary": "Already generated"}
+        await session.commit()
+    duplicate = await client.post(
+        f"/api/v1/mentor/interviews/{interview_id}/generate-overview",
+        headers=auth(seeded.mentor_id),
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["code"] == "intelligence_summary_already_exists"
+
+
+@pytest.mark.asyncio
+async def test_admin_ai_analysis_launches_do_not_have_a_personal_quota(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for sequence in range(5):
+        created, _, _ = await create_analysis_from_journal(
+            client,
+            seeded,
+            monkeypatch,
+            company_name=f"Admin unlimited {sequence}",
+            owner_id=seeded.admin_id,
+        )
+        assert created.status_code == 201, created.text
+
+
+@pytest.mark.asyncio
+async def test_user_can_only_have_one_active_ai_analysis(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Active analysis"
+    )
+    second, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Second active analysis"
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 429
+    assert second.json()["detail"]["code"] == "interview_ai_active_limit_reached"
+
+
+@pytest.mark.asyncio
+async def test_waiting_for_speaker_blocks_only_its_owner_not_global_worker_capacity(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(intelligence_service.settings, "interview_ai_global_active_limit", 1)
+    first, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Waiting for speaker"
+    )
+    interview_id = UUID(first.json()["id"])
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        interview.processing_status = IntelligenceProcessingStatus.AWAITING_CANDIDATE_SPEAKER
+        await session.commit()
+
+    same_owner, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Same owner still blocked"
+    )
+    other_owner, _, _ = await create_analysis_from_journal(
+        client,
+        seeded,
+        monkeypatch,
+        company_name="Worker capacity remains free",
+        owner_id=seeded.mentor_id,
+    )
+
+    assert same_owner.status_code == 429
+    assert same_owner.json()["detail"]["code"] == "interview_ai_active_limit_reached"
+    assert other_owner.status_code == 201, other_owner.text
+
+
+@pytest.mark.asyncio
+async def test_daily_ai_quota_is_atomic_for_simultaneous_requests(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_enqueue(_: UUID) -> None:
+        return None
+
+    monkeypatch.setattr(journal_router, "_enqueue_ai_analysis", fake_enqueue)
+    monkeypatch.setattr(
+        intelligence_service.settings,
+        "interview_ai_max_active_per_user",
+        10,
+    )
+    prepared: list[tuple[UUID, UUID]] = []
+    for sequence in range(4):
+        process_response = await client.post(
+            "/api/v1/interviews/journal/tracks",
+            headers=auth(seeded.student_id),
+            json={
+                "company_name": f"Concurrent quota {sequence}",
+                "track_id": str(seeded.python_track_id),
+            },
+        )
+        process_id = UUID(process_response.json()["id"])
+        stage_response = await client.post(
+            f"/api/v1/interviews/journal/tracks/{process_id}/stages",
+            headers=auth(seeded.student_id),
+            json={
+                "stage_type": "technical_interview",
+                "scheduled_at": "2026-08-02T10:00:00Z",
+            },
+        )
+        stage_id = UUID(stage_response.json()["stages"][0]["id"])
+        async with TestSession() as session:
+            stage = await session.get(InterviewProcessStage, stage_id)
+            assert stage is not None
+            stage.media_storage_key = f"interview-media/student/{sequence}"
+            stage.media_filename = f"recording-{sequence}.mp3"
+            stage.media_content_type = "audio/mpeg"
+            stage.media_size = 1_024
+            await session.commit()
+        prepared.append((process_id, stage_id))
+
+    responses = await asyncio.gather(
+        *(
+            client.post(
+                f"/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}/ai-analysis",
+                headers=auth(seeded.student_id),
+            )
+            for process_id, stage_id in prepared
+        )
+    )
+
+    assert sorted(response.status_code for response in responses) == [201, 201, 201, 429]
+    rejected = next(response for response in responses if response.status_code == 429)
+    assert rejected.json()["detail"]["code"] == "interview_ai_daily_limit_reached"
+
+
+@pytest.mark.asyncio
+async def test_previous_quota_day_does_not_count_towards_today(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for sequence in range(3):
+        created, _, stage_id = await create_analysis_from_journal(
+            client,
+            seeded,
+            monkeypatch,
+            company_name=f"Previous day {sequence}",
+        )
+        assert created.status_code == 201
+        await mark_analysis_finished(UUID(created.json()["id"]))
+        async with TestSession() as session:
+            stage = await session.get(InterviewProcessStage, stage_id)
+            assert stage is not None
+            stage.ai_analysis_requested_at = datetime.now(UTC) - timedelta(days=1)
+            admission = await session.scalar(
+                select(IntelligenceAIAdmission).where(
+                    IntelligenceAIAdmission.interview_id == UUID(created.json()["id"])
+                )
+            )
+            assert admission is not None
+            admission.requested_at = datetime.now(UTC) - timedelta(days=1)
+            await session.commit()
+
+    today, _, _ = await create_analysis_from_journal(
+        client,
+        seeded,
+        monkeypatch,
+        company_name="Today is available",
+    )
+    assert today.status_code == 201, today.text
+
+
+@pytest.mark.asyncio
+async def test_ai_kill_switch_blocks_all_roles(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(intelligence_service.settings, "interview_ai_enabled", False)
+
+    blocked, _, _ = await create_analysis_from_journal(
+        client,
+        seeded,
+        monkeypatch,
+        company_name="Disabled AI",
+        owner_id=seeded.admin_id,
+    )
+
+    assert blocked.status_code == 503
+    assert blocked.json()["detail"]["code"] == "interview_ai_analysis_disabled"
 
 
 @pytest.mark.asyncio
@@ -205,6 +750,16 @@ async def test_fake_processing_pipeline_reaches_ready(
         assert candidate is not None and student is not None
         await select_candidate_speaker(session, student, interview_id, candidate.id)
 
+    duplicate_candidate = await client.put(
+        f"/api/v1/interviews/{interview_id}/candidate-speaker",
+        headers=auth(seeded.student_id),
+        json={"speaker_id": str(candidate.id)},
+    )
+    assert duplicate_candidate.status_code == 409
+    assert (
+        duplicate_candidate.json()["detail"]["code"] == "candidate_speaker_selection_not_available"
+    )
+
     await intelligence_jobs.extract_interview_structure(context, str(interview_id))
     await intelligence_jobs.generate_answer_reviews(context, str(interview_id))
 
@@ -277,9 +832,7 @@ async def test_fake_processing_pipeline_reaches_ready(
         session.add(existing_card)
         missed_question_id = UUID(detail["questions"][-1]["id"])
         missed_answer = await session.scalar(
-            select(IntelligenceAnswer).where(
-                IntelligenceAnswer.question_id == missed_question_id
-            )
+            select(IntelligenceAnswer).where(IntelligenceAnswer.question_id == missed_question_id)
         )
         assert missed_answer is not None
         missed_answer.answer_text = ""
@@ -390,10 +943,9 @@ async def test_fake_processing_pipeline_reaches_ready(
                 "action": "approve",
                 "question_markdown": question["question_text"],
                 "answer_markdown": (
-                        review["suggested_better_answer"]
-                        if review and review["suggested_better_answer"]
-                        else question["answer"]["answer_text"]
-                        or "Проверенный ответ администратора"
+                    review["suggested_better_answer"]
+                    if review and review["suggested_better_answer"]
+                    else question["answer"]["answer_text"] or "Проверенный ответ администратора"
                 ),
                 "category": question["category"],
                 "frequency": "occasional",
@@ -463,6 +1015,163 @@ async def test_fake_processing_pipeline_reaches_ready(
 
 
 @pytest.mark.asyncio
+async def test_file_upload_is_probed_and_staging_is_cleaned_before_transcription(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    created, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Guarded media"
+    )
+    interview_id = UUID(created.json()["id"])
+    provider = FileUploadTranscriptionProvider()
+
+    async def fake_probe(*_args: object, **_kwargs: object) -> MediaProbe:
+        return MediaProbe(
+            format_names=("mp3",),
+            duration_seconds=42,
+            streams=(MediaStreamProbe(kind="audio", codec="mp3", duration_seconds=42),),
+        )
+
+    monkeypatch.setattr(intelligence_jobs, "async_session_factory", TestSession)
+    monkeypatch.setattr(intelligence_jobs, "probe_media_async", fake_probe)
+    monkeypatch.setattr(
+        intelligence_jobs.settings,
+        "interview_staging_directory",
+        str(tmp_path),
+    )
+    context: dict[str, Any] = {
+        "redis": RecordingRedis(),
+        "transcription_provider": provider,
+        "upload_store": StagedUploadStore(),
+        "media_staging_guard": StagingGuard(max_concurrency=1, min_free_bytes=0),
+    }
+
+    await intelligence_jobs.submit_transcription(context, str(interview_id))
+
+    assert provider.submitted_path is not None
+    assert not provider.submitted_path.exists()
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        assert interview.duration_ms == 42_000
+    assert interview.processing_status is IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED
+
+
+@pytest.mark.parametrize(
+    ("failed_stage", "expected_job", "expected_status"),
+    [
+        (
+            IntelligenceAttemptStage.TRANSCRIPTION_POLL,
+            "poll_transcription",
+            IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED,
+        ),
+        (
+            IntelligenceAttemptStage.TRANSCRIPTION_PARSE,
+            "process_transcription_result",
+            IntelligenceProcessingStatus.TRANSCRIPT_READY,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_transcription_retry_reuses_the_existing_paid_provider_job(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    failed_stage: IntelligenceAttemptStage,
+    expected_job: str,
+    expected_status: IntelligenceProcessingStatus,
+) -> None:
+    created, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name=f"Retry {failed_stage.value}"
+    )
+    interview_id = UUID(created.json()["id"])
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        interview.processing_status = IntelligenceProcessingStatus.FAILED
+        interview.failed_stage = failed_stage
+        interview.transcription_provider_job_id = "already-paid-provider-job"
+        interview.transcription_provider_payload = {"status": "processing"}
+        await session.commit()
+
+    enqueued: list[tuple[str, UUID]] = []
+
+    async def fake_enqueue(function: str, queued_interview_id: UUID) -> None:
+        enqueued.append((function, queued_interview_id))
+
+    monkeypatch.setattr(intelligence_router, "_enqueue", fake_enqueue)
+    retried = await client.post(
+        f"/api/v1/interviews/{interview_id}/retry",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["processing_status"] == expected_status.value
+    assert enqueued == [(expected_job, interview_id)]
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        assert interview.transcription_provider_job_id == "already-paid-provider-job"
+        assert interview.transcription_provider_payload == {"status": "processing"}
+
+
+@pytest.mark.parametrize(
+    "failed_stage",
+    [
+        IntelligenceAttemptStage.TRANSCRIPTION_POLL,
+        IntelligenceAttemptStage.TRANSCRIPTION_PARSE,
+    ],
+)
+@pytest.mark.parametrize(
+    "error_code",
+    ["TRANSCRIPTION_RESULT_EXPIRED", "TRANSCRIPTION_TIMEOUT"],
+)
+@pytest.mark.asyncio
+async def test_transcription_retry_resubmits_when_provider_job_cannot_be_resumed(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    failed_stage: IntelligenceAttemptStage,
+    error_code: str,
+) -> None:
+    created, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name=f"Expired {failed_stage.value}"
+    )
+    interview_id = UUID(created.json()["id"])
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        interview.processing_status = IntelligenceProcessingStatus.FAILED
+        interview.failed_stage = failed_stage
+        interview.processing_error_code = error_code
+        interview.transcription_provider_job_id = "expired-provider-job"
+        interview.transcription_provider_payload = {"status": "complete"}
+        await session.commit()
+
+    enqueued: list[tuple[str, UUID]] = []
+
+    async def fake_enqueue(function: str, queued_interview_id: UUID) -> None:
+        enqueued.append((function, queued_interview_id))
+
+    monkeypatch.setattr(intelligence_router, "_enqueue", fake_enqueue)
+    retried = await client.post(
+        f"/api/v1/interviews/{interview_id}/retry",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["processing_status"] == "uploaded"
+    assert enqueued == [("submit_transcription", interview_id)]
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview is not None
+        assert interview.transcription_provider_job_id is None
+        assert interview.transcription_provider_payload is None
+
+
+@pytest.mark.asyncio
 async def test_admin_can_delete_stuck_intelligence_interview(
     client: AsyncClient, seeded: SeededData, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -481,10 +1190,16 @@ async def test_admin_can_delete_stuck_intelligence_interview(
     )
 
     assert deleted.status_code == 204, deleted.text
-    missing = await client.get(
-        f"/api/v1/interviews/{interview_id}", headers=auth(seeded.admin_id)
-    )
+    missing = await client.get(f"/api/v1/interviews/{interview_id}", headers=auth(seeded.admin_id))
     assert missing.status_code == 404
+    async with TestSession() as session:
+        admission = await session.scalar(
+            select(IntelligenceAIAdmission).where(
+                IntelligenceAIAdmission.requester_user_id == seeded.student_id
+            )
+        )
+        assert admission is not None
+        assert admission.interview_id is None
     journal = await client.get(
         f"/api/v1/interviews/journal/tracks/{process_id}",
         headers=auth(seeded.student_id),

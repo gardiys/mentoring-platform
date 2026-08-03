@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import logging
-import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
 
-from arq import Retry
+from arq import Retry, cron
+from arq import func as arq_func
 from arq.connections import RedisSettings
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,7 +53,20 @@ from app.interviews.intelligence_providers import (
     TranscriptionResult,
     build_transcription_provider,
 )
+from app.interviews.intelligence_queue import (
+    OPENAI_QUEUE_NAME,
+    TRANSCRIPTION_QUEUE_NAME,
+    enqueue_intelligence_job,
+)
 from app.interviews.intelligence_service import safe_processing_message
+from app.interviews.media_guardrails import (
+    MediaGuardrailError,
+    StagingCapacityError,
+    StagingGuard,
+    cleanup_stale_staging_directories,
+    probe_media_async,
+    stage_media_file,
+)
 from app.interviews.models import InterviewProcessStage, InterviewStageComment
 from app.interviews.uploads import (
     InterviewStorageReadError,
@@ -62,17 +77,108 @@ from app.interviews.uploads import (
 logger = logging.getLogger(__name__)
 settings = get_settings()
 MAX_JOB_TRIES = 4
+DEFAULT_TRANSCRIPTION_POLL_DEADLINE_SECONDS = 6 * 60 * 60
+TRANSCRIPTION_POLL_INTERVAL_SECONDS = 60
+POLL_MAX_TRIES = 10_000
+RECONCILIATION_MINUTES = set(range(0, 60, 5))
+WORKER_HEALTH_CHECK_INTERVAL_SECONDS = 30
 
 
 async def startup(ctx: dict[str, Any]) -> None:
     ctx["transcription_provider"] = build_transcription_provider(settings)
     ctx["ai_provider"] = build_ai_provider(settings)
     ctx["upload_store"] = InterviewUploadStore(settings)
+    _configure_media_staging(ctx)
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
     await _transcription(ctx).close()
     await _ai(ctx).close()
+
+
+async def transcription_startup(ctx: dict[str, Any]) -> None:
+    ctx["transcription_provider"] = build_transcription_provider(settings)
+    ctx["upload_store"] = InterviewUploadStore(settings)
+    _configure_media_staging(ctx)
+
+
+async def transcription_shutdown(ctx: dict[str, Any]) -> None:
+    await _transcription(ctx).close()
+
+
+async def ai_startup(ctx: dict[str, Any]) -> None:
+    ctx["ai_provider"] = build_ai_provider(settings)
+
+
+async def ai_shutdown(ctx: dict[str, Any]) -> None:
+    await _ai(ctx).close()
+
+
+async def reconcile_intelligence_jobs(ctx: dict[str, Any]) -> None:
+    """Re-enqueue recoverable DB states after a worker/Redis interruption."""
+    completed_extraction = (
+        select(IntelligenceProcessingAttempt.id)
+        .where(
+            IntelligenceProcessingAttempt.interview_id == IntelligenceInterview.id,
+            IntelligenceProcessingAttempt.stage == IntelligenceAttemptStage.AI_EXTRACT,
+            IntelligenceProcessingAttempt.status == IntelligenceAttemptStatus.COMPLETED,
+        )
+        .exists()
+    )
+    recoverable_statuses = (
+        IntelligenceProcessingStatus.UPLOADED,
+        IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED,
+        IntelligenceProcessingStatus.TRANSCRIBING,
+        IntelligenceProcessingStatus.TRANSCRIPT_READY,
+        IntelligenceProcessingStatus.ANALYZING,
+    )
+    async with async_session_factory() as session:
+        rows = (
+            await session.execute(
+                select(
+                    IntelligenceInterview.id,
+                    IntelligenceInterview.processing_status,
+                    IntelligenceInterview.candidate_speaker_id,
+                    completed_extraction.label("completed_extraction"),
+                )
+                .where(IntelligenceInterview.processing_status.in_(recoverable_statuses))
+                .order_by(IntelligenceInterview.updated_at, IntelligenceInterview.id)
+            )
+        ).all()
+
+    scheduled = 0
+    for interview_id, status, candidate_speaker_id, extraction_completed in rows:
+        function = _recovery_job_name(
+            status,
+            candidate_speaker_selected=candidate_speaker_id is not None,
+            extraction_completed=bool(extraction_completed),
+        )
+        if function is None:
+            continue
+        await _enqueue(ctx, function, str(interview_id))
+        scheduled += 1
+    if scheduled:
+        logger.info("Reconciled interview processing jobs count=%s", scheduled)
+
+
+def _recovery_job_name(
+    status: IntelligenceProcessingStatus,
+    *,
+    candidate_speaker_selected: bool,
+    extraction_completed: bool,
+) -> str | None:
+    if status is IntelligenceProcessingStatus.UPLOADED:
+        return "submit_transcription"
+    if status in {
+        IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED,
+        IntelligenceProcessingStatus.TRANSCRIBING,
+    }:
+        return "poll_transcription"
+    if status is IntelligenceProcessingStatus.TRANSCRIPT_READY:
+        return "process_transcription_result"
+    if status is IntelligenceProcessingStatus.ANALYZING and candidate_speaker_selected:
+        return "generate_answer_reviews" if extraction_completed else "extract_interview_structure"
+    return None
 
 
 async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
@@ -83,10 +189,11 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
             IntelligenceProcessingStatus.AWAITING_CANDIDATE_SPEAKER,
             IntelligenceProcessingStatus.ANALYZING,
             IntelligenceProcessingStatus.READY,
+            IntelligenceProcessingStatus.FAILED,
         }:
             return
         if interview.transcription_provider_job_id:
-            await ctx["redis"].enqueue_job("poll_transcription", interview_id)
+            await _enqueue(ctx, "poll_transcription", interview_id)
             return
         stage = await session.get(InterviewProcessStage, interview.stage_id)
         if (
@@ -118,10 +225,22 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
         try:
             provider = _transcription(ctx)
             if provider.requires_file_upload:
-                suffix = Path(upload.filename).suffix[:20]
-                with tempfile.TemporaryDirectory(prefix="interview-nexara-") as temp_dir:
-                    file_path = Path(temp_dir) / f"recording{suffix}"
-                    await _store(ctx).download_to_path(upload, file_path)
+                async with stage_media_file(
+                    _staging_guard(ctx),
+                    filename=upload.filename,
+                    maximum_bytes=upload.size,
+                    expected_bytes=upload.size,
+                    download=partial(_store(ctx).download_to_path, upload),
+                    staging_root=_staging_root(),
+                ) as file_path:
+                    probe = await probe_media_async(
+                        file_path,
+                        declared_content_type=upload.content_type,
+                        max_duration_seconds=settings.interview_media_max_duration_seconds,
+                        max_file_bytes=upload.size,
+                        timeout_seconds=settings.interview_media_probe_timeout_seconds,
+                    )
+                    interview.duration_ms = round(probe.duration_seconds * 1_000)
                     job = await provider.submit(
                         file_url=None,
                         file_path=file_path,
@@ -137,6 +256,36 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
                     diarization=True,
                     timestamps=True,
                 )
+        except StagingCapacityError as error:
+            provider_error = TranscriptionProviderError(
+                "STAGING_CAPACITY_EXCEEDED",
+                (
+                    f"Interview staging capacity is unavailable: {error.reason}; "
+                    f"required={error.required_bytes}; available={error.available_bytes}"
+                ),
+                retryable=True,
+            )
+            will_retry = _will_retry(ctx, provider_error.retryable)
+            await _provider_failure(
+                session, interview, attempt, provider_error, retryable=will_retry
+            )
+            if will_retry:
+                raise Retry(defer=_retry_delay(ctx, 60)) from error
+            return
+        except MediaGuardrailError as error:
+            retryable = error.code in {"media_probe_timeout", "media_probe_unavailable"}
+            provider_error = TranscriptionProviderError(
+                error.code.upper(),
+                str(error),
+                retryable=retryable,
+            )
+            will_retry = _will_retry(ctx, provider_error.retryable)
+            await _provider_failure(
+                session, interview, attempt, provider_error, retryable=will_retry
+            )
+            if will_retry:
+                raise Retry(defer=_retry_delay(ctx, 60)) from error
+            return
         except InterviewStorageReadError as error:
             provider_error = TranscriptionProviderError(
                 "STORAGE_ERROR",
@@ -163,7 +312,7 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
         attempt.external_request_id = job.provider_job_id
         _complete_attempt(attempt)
         await session.commit()
-    await ctx["redis"].enqueue_job("poll_transcription", interview_id, _defer_by=30)
+    await _enqueue(ctx, "poll_transcription", interview_id, defer_seconds=30)
 
 
 async def poll_transcription(ctx: dict[str, Any], interview_id: str) -> None:
@@ -174,11 +323,21 @@ async def poll_transcription(ctx: dict[str, Any], interview_id: str) -> None:
             IntelligenceProcessingStatus.AWAITING_CANDIDATE_SPEAKER,
             IntelligenceProcessingStatus.ANALYZING,
             IntelligenceProcessingStatus.READY,
+            IntelligenceProcessingStatus.FAILED,
         }:
             return
         provider_job_id = interview.transcription_provider_job_id
         if not provider_job_id:
-            await ctx["redis"].enqueue_job("submit_transcription", interview_id)
+            await _enqueue(ctx, "submit_transcription", interview_id)
+            return
+        deadline_at = await _transcription_poll_deadline_at(session, interview)
+        if _deadline_reached(deadline_at):
+            await _fail(
+                session,
+                interview,
+                IntelligenceAttemptStage.TRANSCRIPTION_POLL,
+                "TRANSCRIPTION_TIMEOUT",
+            )
             return
         attempt = await _start_attempt(
             session,
@@ -189,27 +348,60 @@ async def poll_transcription(ctx: dict[str, Any], interview_id: str) -> None:
         try:
             job = await _transcription(ctx).get_status(provider_job_id)
         except TranscriptionProviderError as error:
-            will_retry = _will_retry(ctx, error.retryable)
+            if _deadline_reached(deadline_at):
+                await _record_failure(
+                    session,
+                    interview,
+                    attempt,
+                    "TRANSCRIPTION_TIMEOUT",
+                    safe_processing_message("TRANSCRIPTION_TIMEOUT"),
+                    False,
+                )
+                return
+            will_retry = error.retryable
             await _provider_failure(session, interview, attempt, error, retryable=will_retry)
             if will_retry:
-                raise Retry(defer=_retry_delay(ctx, 120)) from error
+                raise Retry(
+                    defer=_bounded_poll_delay(deadline_at, _retry_delay(ctx, 120))
+                ) from error
             return
         interview.transcription_provider_payload = job.raw_payload
         if job.status in {TranscriptionJobState.QUEUED, TranscriptionJobState.PROCESSING}:
+            if _deadline_reached(deadline_at):
+                await _record_failure(
+                    session,
+                    interview,
+                    attempt,
+                    "TRANSCRIPTION_TIMEOUT",
+                    safe_processing_message("TRANSCRIPTION_TIMEOUT"),
+                    False,
+                )
+                return
             interview.processing_status = IntelligenceProcessingStatus.TRANSCRIBING
             _complete_attempt(attempt)
             await session.commit()
-            await ctx["redis"].enqueue_job("poll_transcription", interview_id, _defer_by=60)
-            return
+            raise Retry(
+                defer=_bounded_poll_delay(
+                    deadline_at,
+                    TRANSCRIPTION_POLL_INTERVAL_SECONDS,
+                )
+            )
         _complete_attempt(attempt)
         await session.commit()
-    await ctx["redis"].enqueue_job("process_transcription_result", interview_id)
+    await _enqueue(ctx, "process_transcription_result", interview_id)
 
 
 async def process_transcription_result(ctx: dict[str, Any], interview_id: str) -> None:
     parsed_id = UUID(interview_id)
     async with async_session_factory() as session:
         interview = await _interview(session, parsed_id, lock=True)
+        if interview.processing_status in {
+            IntelligenceProcessingStatus.AWAITING_CANDIDATE_SPEAKER,
+            IntelligenceProcessingStatus.ANALYZING,
+            IntelligenceProcessingStatus.READY,
+            IntelligenceProcessingStatus.FAILED,
+        }:
+            return
         existing = await session.scalar(
             select(func.count(IntelligenceUtterance.id)).where(
                 IntelligenceUtterance.interview_id == interview.id
@@ -220,7 +412,7 @@ async def process_transcription_result(ctx: dict[str, Any], interview_id: str) -
             await session.commit()
             return
         if not interview.transcription_provider_job_id:
-            await ctx["redis"].enqueue_job("submit_transcription", interview_id)
+            await _enqueue(ctx, "submit_transcription", interview_id)
             return
         attempt = await _start_attempt(
             session,
@@ -259,6 +451,11 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
     parsed_id = UUID(interview_id)
     async with async_session_factory() as session:
         interview = await _interview(session, parsed_id, lock=True)
+        if interview.processing_status in {
+            IntelligenceProcessingStatus.READY,
+            IntelligenceProcessingStatus.FAILED,
+        }:
+            return
         if interview.candidate_speaker_id is None:
             return
         existing_questions = await session.scalar(
@@ -267,7 +464,7 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
             )
         )
         if existing_questions:
-            await ctx["redis"].enqueue_job("generate_answer_reviews", interview_id)
+            await _enqueue(ctx, "generate_answer_reviews", interview_id)
             return
         attempt = await _start_attempt(
             session,
@@ -378,13 +575,18 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
         interview.processing_status = IntelligenceProcessingStatus.ANALYZING
         _complete_attempt(attempt)
         await session.commit()
-    await ctx["redis"].enqueue_job("generate_answer_reviews", interview_id)
+    await _enqueue(ctx, "generate_answer_reviews", interview_id)
 
 
 async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> None:
     parsed_id = UUID(interview_id)
     async with async_session_factory() as session:
         interview = await _interview(session, parsed_id, lock=True)
+        if interview.processing_status in {
+            IntelligenceProcessingStatus.READY,
+            IntelligenceProcessingStatus.FAILED,
+        }:
+            return
         attempt = await _start_attempt(
             session,
             interview.id,
@@ -409,9 +611,7 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
         speakers = {
             speaker.id: speaker
             for speaker in await session.scalars(
-                select(IntelligenceSpeaker).where(
-                    IntelligenceSpeaker.interview_id == interview.id
-                )
+                select(IntelligenceSpeaker).where(IntelligenceSpeaker.interview_id == interview.id)
             )
         }
         summary_usages = []
@@ -451,16 +651,11 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                         assessment=review.assessment,
                         score=review.score,
                         summary=review.summary,
-                        strengths=[
-                            item.model_dump(mode="json") for item in review.strengths
-                        ],
-                        problems=[
-                            item.model_dump(mode="json") for item in review.problems
-                        ],
+                        strengths=[item.model_dump(mode="json") for item in review.strengths],
+                        problems=[item.model_dump(mode="json") for item in review.problems],
                         missing_points=review.missing_points,
                         incorrect_statements=[
-                            item.model_dump(mode="json")
-                            for item in review.incorrect_statements
+                            item.model_dump(mode="json") for item in review.incorrect_statements
                         ],
                         suggested_better_answer=review.suggested_better_answer,
                         model_name=result.usage.model,
@@ -579,9 +774,7 @@ def _neighbor_context(
     return "\n\n".join(blocks)
 
 
-async def _upsert_ai_stage_comment(
-    session: AsyncSession, interview: IntelligenceInterview
-) -> None:
+async def _upsert_ai_stage_comment(session: AsyncSession, interview: IntelligenceInterview) -> None:
     overview = interview.ai_summary_payload or {}
     parts = ["AI-разбор собеседования"]
     overall_summary = str(overview.get("overall_summary") or "").strip()
@@ -679,6 +872,52 @@ async def _save_transcript(
         )
 
 
+async def _transcription_poll_deadline_at(
+    session: AsyncSession,
+    interview: IntelligenceInterview,
+) -> datetime:
+    submitted_at = await session.scalar(
+        select(func.max(IntelligenceProcessingAttempt.started_at)).where(
+            IntelligenceProcessingAttempt.interview_id == interview.id,
+            IntelligenceProcessingAttempt.stage == IntelligenceAttemptStage.TRANSCRIPTION_SUBMIT,
+            IntelligenceProcessingAttempt.status == IntelligenceAttemptStatus.COMPLETED,
+        )
+    )
+    started_at = submitted_at or interview.created_at
+    return _as_utc(started_at) + timedelta(seconds=_transcription_poll_deadline_seconds())
+
+
+def _transcription_poll_deadline_seconds() -> int:
+    configured = getattr(
+        settings,
+        "transcription_poll_deadline_seconds",
+        DEFAULT_TRANSCRIPTION_POLL_DEADLINE_SECONDS,
+    )
+    return max(int(configured), 1)
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _deadline_reached(deadline_at: datetime, *, now: datetime | None = None) -> bool:
+    current = _as_utc(now or datetime.now(UTC))
+    return current >= _as_utc(deadline_at)
+
+
+def _bounded_poll_delay(
+    deadline_at: datetime,
+    requested_seconds: int,
+    *,
+    now: datetime | None = None,
+) -> int:
+    current = _as_utc(now or datetime.now(UTC))
+    remaining_seconds = int((_as_utc(deadline_at) - current).total_seconds())
+    return max(1, min(requested_seconds, remaining_seconds))
+
+
 async def _start_attempt(
     session: AsyncSession,
     interview_id: UUID,
@@ -743,7 +982,16 @@ def _will_retry(ctx: dict[str, Any], retryable: bool) -> bool:
 
 def _retry_delay(ctx: dict[str, Any], base_seconds: int) -> int:
     job_try = max(int(ctx.get("job_try", 1)), 1)
-    return int(min(base_seconds * (2 ** (job_try - 1)), 600))
+    capped_delay = int(min(base_seconds * (2 ** (job_try - 1)), 600))
+    job_id = ctx.get("job_id")
+    if not job_id:
+        return capped_delay
+    digest = hashlib.blake2s(
+        f"{job_id}:{job_try}".encode(),
+        digest_size=8,
+    ).digest()
+    jitter_fraction = int.from_bytes(digest) / ((1 << 64) - 1)
+    return max(1, int(capped_delay * (0.5 + jitter_fraction / 2)))
 
 
 def _merge_interview_summaries(
@@ -882,17 +1130,100 @@ def _store(ctx: dict[str, Any]) -> InterviewUploadStore:
     return cast(InterviewUploadStore, ctx["upload_store"])
 
 
+def _staging_root() -> Path:
+    return Path(settings.interview_staging_directory)
+
+
+def _configure_media_staging(ctx: dict[str, Any]) -> None:
+    root = _staging_root()
+    removed = cleanup_stale_staging_directories(
+        root,
+        older_than_seconds=settings.interview_staging_cleanup_age_seconds,
+    )
+    if removed:
+        logger.info("Removed stale interview staging directories count=%s", removed)
+    ctx["media_staging_guard"] = StagingGuard(
+        max_concurrency=settings.interview_staging_max_concurrency,
+        min_free_bytes=settings.interview_staging_min_free_bytes,
+        max_reserved_bytes=settings.interview_staging_max_reserved_bytes,
+    )
+
+
+def _staging_guard(ctx: dict[str, Any]) -> StagingGuard:
+    return cast(StagingGuard, ctx["media_staging_guard"])
+
+
+async def _enqueue(
+    ctx: dict[str, Any],
+    function: str,
+    interview_id: str,
+    *,
+    defer_seconds: int | float | None = None,
+) -> str:
+    return await enqueue_intelligence_job(
+        function,
+        interview_id,
+        defer_seconds=defer_seconds,
+        redis=ctx["redis"],
+    )
+
+
 class WorkerSettings:
     functions = [
         submit_transcription,
-        poll_transcription,
+        arq_func(poll_transcription, max_tries=POLL_MAX_TRIES),
         process_transcription_result,
         extract_interview_structure,
         generate_answer_reviews,
+    ]
+    cron_jobs = [
+        cron(
+            reconcile_intelligence_jobs,
+            minute=RECONCILIATION_MINUTES,
+            run_at_startup=True,
+            max_tries=1,
+            keep_result=0,
+        )
     ]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     max_jobs = max(settings.transcription_max_concurrency, settings.openai_max_concurrency)
-    job_timeout = 600
+    job_timeout = max(
+        settings.transcription_job_timeout_seconds,
+        settings.openai_job_timeout_seconds,
+    )
     max_tries = MAX_JOB_TRIES
+    keep_result = 0
+
+
+class TranscriptionWorkerSettings:
+    functions = [
+        submit_transcription,
+        arq_func(poll_transcription, max_tries=POLL_MAX_TRIES),
+        process_transcription_result,
+    ]
+    cron_jobs = WorkerSettings.cron_jobs
+    on_startup = transcription_startup
+    on_shutdown = transcription_shutdown
+    redis_settings = RedisSettings.from_dsn(settings.redis_url)
+    queue_name = TRANSCRIPTION_QUEUE_NAME
+    max_jobs = settings.transcription_max_concurrency
+    job_timeout = settings.transcription_job_timeout_seconds
+    max_tries = MAX_JOB_TRIES
+    keep_result = 0
+    health_check_interval = WORKER_HEALTH_CHECK_INTERVAL_SECONDS
+
+
+class AIWorkerSettings:
+    functions = [extract_interview_structure, generate_answer_reviews]
+    cron_jobs: list[Any] = []
+    on_startup = ai_startup
+    on_shutdown = ai_shutdown
+    redis_settings = RedisSettings.from_dsn(settings.redis_url)
+    queue_name = OPENAI_QUEUE_NAME
+    max_jobs = settings.openai_max_concurrency
+    job_timeout = settings.openai_job_timeout_seconds
+    max_tries = MAX_JOB_TRIES
+    keep_result = 0
+    health_check_interval = WORKER_HEALTH_CHECK_INTERVAL_SECONDS
