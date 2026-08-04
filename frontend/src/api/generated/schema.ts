@@ -639,6 +639,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/uploads/multipart/abort": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Abort Private Multipart Upload */
+        post: operations["abort_private_multipart_upload_api_v1_uploads_multipart_abort_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/interviews/decks": {
         parameters: {
             query?: never;
@@ -1121,6 +1138,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/interviews/ai-operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Ai Operations */
+        get: operations["admin_ai_operations_api_v1_admin_interviews_ai_operations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/topics": {
         parameters: {
             query?: never;
@@ -1290,6 +1324,91 @@ export interface paths {
         put: operations["admin_update_knowledge_topic_api_v1_admin_knowledge_topics__topic_id__put"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge/entries/{entry_slug}/media/{media_id}/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Knowledge Media Playback */
+        get: operations["knowledge_media_playback_api_v1_knowledge_entries__entry_slug__media__media_id__playback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge/entries/{entry_slug}/media/{media_id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Knowledge Media */
+        get: operations["stream_knowledge_media_api_v1_knowledge_entries__entry_slug__media__media_id__stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry_id}/media/upload-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Knowledge Media Upload Url */
+        post: operations["admin_knowledge_media_upload_url_api_v1_admin_knowledge_topics__topic_id__entries__entry_id__media_upload_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry_id}/media/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Finalize Knowledge Media */
+        post: operations["admin_finalize_knowledge_media_api_v1_admin_knowledge_topics__topic_id__entries__entry_id__media_finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry_id}/media/{media_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Admin Delete Knowledge Media */
+        delete: operations["admin_delete_knowledge_media_api_v1_admin_knowledge_topics__topic_id__entries__entry_id__media__media_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1841,6 +1960,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/mentors/{mentor_id}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Update Mentor Profile */
+        patch: operations["admin_update_mentor_profile_api_v1_admin_mentors__mentor_id__profile_patch"];
+        trace?: never;
+    };
     "/api/v1/admin/mentors/{student_id}/promote": {
         parameters: {
             query?: never;
@@ -2050,6 +2186,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/topics/{topic_id}/media/{media_id}/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Roadmap Media Playback */
+        get: operations["roadmap_media_playback_api_v1_topics__topic_id__media__media_id__playback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/topics/{topic_id}/media/{media_id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Roadmap Media */
+        get: operations["stream_roadmap_media_api_v1_topics__topic_id__media__media_id__stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/roadmaps/{roadmap_id}/sections/{section_id}/topics/{topic_id}/media/upload-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Roadmap Media Upload Url */
+        post: operations["admin_roadmap_media_upload_url_api_v1_admin_roadmaps__roadmap_id__sections__section_id__topics__topic_id__media_upload_url_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/roadmaps/{roadmap_id}/sections/{section_id}/topics/{topic_id}/media/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Finalize Roadmap Media */
+        post: operations["admin_finalize_roadmap_media_api_v1_admin_roadmaps__roadmap_id__sections__section_id__topics__topic_id__media_finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/roadmaps/{roadmap_id}/sections/{section_id}/topics/{topic_id}/media/{media_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Admin Delete Roadmap Media */
+        delete: operations["admin_delete_roadmap_media_api_v1_admin_roadmaps__roadmap_id__sections__section_id__topics__topic_id__media__media_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/tracks": {
         parameters: {
             query?: never;
@@ -2191,10 +2412,236 @@ export interface paths {
         patch: operations["admin_set_student_access_api_v1_admin_students__student_id__access_patch"];
         trace?: never;
     };
+    "/api/v1/mentor/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Profile */
+        get: operations["mentor_profile_api_v1_mentor_profile_get"];
+        /** Mentor Update Profile */
+        put: operations["mentor_update_profile_api_v1_mentor_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/profile/weekly-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Create Weekly Call */
+        post: operations["mentor_create_weekly_call_api_v1_mentor_profile_weekly_calls_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/profile/weekly-calls/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mentor Update Weekly Call */
+        put: operations["mentor_update_weekly_call_api_v1_mentor_profile_weekly_calls__event_id__put"];
+        post?: never;
+        /** Mentor Delete Weekly Call */
+        delete: operations["mentor_delete_weekly_call_api_v1_mentor_profile_weekly_calls__event_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/profile/weekly-calls/{event_id}/reschedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mentor Reschedule Weekly Call */
+        put: operations["mentor_reschedule_weekly_call_api_v1_mentor_profile_weekly_calls__event_id__reschedule_put"];
+        post?: never;
+        /** Mentor Cancel Weekly Call Reschedule */
+        delete: operations["mentor_cancel_weekly_call_reschedule_api_v1_mentor_profile_weekly_calls__event_id__reschedule_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/profile/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Create Activity */
+        post: operations["mentor_create_activity_api_v1_mentor_profile_activities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/profile/activities/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mentor Update Activity */
+        put: operations["mentor_update_activity_api_v1_mentor_profile_activities__event_id__put"];
+        post?: never;
+        /** Mentor Delete Activity */
+        delete: operations["mentor_delete_activity_api_v1_mentor_profile_activities__event_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/mentor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Student My Mentor */
+        get: operations["student_my_mentor_api_v1_me_mentor_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/schedule/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Schedule Events */
+        get: operations["admin_schedule_events_api_v1_admin_schedule_events_get"];
+        put?: never;
+        /** Admin Create Schedule Event */
+        post: operations["admin_create_schedule_event_api_v1_admin_schedule_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/schedule/events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Schedule Event */
+        get: operations["admin_schedule_event_api_v1_admin_schedule_events__event_id__get"];
+        /** Admin Update Schedule Event */
+        put: operations["admin_update_schedule_event_api_v1_admin_schedule_events__event_id__put"];
+        post?: never;
+        /** Admin Delete Schedule Event */
+        delete: operations["admin_delete_schedule_event_api_v1_admin_schedule_events__event_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/useful-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Useful Links */
+        get: operations["admin_useful_links_api_v1_admin_useful_links_get"];
+        put?: never;
+        /** Admin Create Useful Link */
+        post: operations["admin_create_useful_link_api_v1_admin_useful_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/useful-links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Admin Update Useful Link */
+        put: operations["admin_update_useful_link_api_v1_admin_useful_links__link_id__put"];
+        post?: never;
+        /** Admin Delete Useful Link */
+        delete: operations["admin_delete_useful_link_api_v1_admin_useful_links__link_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdminIntelligenceOperationsRead */
+        AdminIntelligenceOperationsRead: {
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Total */
+            total: number;
+            /** By Status */
+            by_status: {
+                [key: string]: number;
+            };
+            /** Active */
+            active: number;
+            /** Failed */
+            failed: number;
+            /** Ready */
+            ready: number;
+            /** Oldest Active At */
+            oldest_active_at: string | null;
+            /** Oldest Active Age Seconds */
+            oldest_active_age_seconds: number | null;
+            /** Launches Today */
+            launches_today: number;
+            /** Failure Codes 24H */
+            failure_codes_24h: components["schemas"]["IntelligenceOperationsFailureCodeRead"][];
+            queues: components["schemas"]["IntelligenceOperationsQueueRead"];
+            workers?: components["schemas"]["IntelligenceOperationsWorkersRead"];
+        };
         /** AdminInterviewCardMutation */
         AdminInterviewCardMutation: {
             /** Id */
@@ -2517,6 +2964,8 @@ export interface components {
             position: number;
             /** Is Published */
             is_published: boolean;
+            /** Media */
+            media: components["schemas"]["ProtectedContentMediaRead"][];
             /**
              * Updated At
              * Format: date-time
@@ -2741,6 +3190,17 @@ export interface components {
             /** Track Ids */
             track_ids: string[];
         };
+        /** AdminMentorProfileMutation */
+        AdminMentorProfileMutation: {
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Telegram Username */
+            telegram_username?: string | null;
+        };
         /** AdminMentorStudentRead */
         AdminMentorStudentRead: {
             /**
@@ -2766,6 +3226,18 @@ export interface components {
             slug: string;
             /** Title */
             title: string;
+        };
+        /** AdminQuestionModerationDeckOption */
+        AdminQuestionModerationDeckOption: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Categories */
+            categories: string[];
         };
         /** AdminQuestionModerationDetail */
         AdminQuestionModerationDetail: {
@@ -2810,10 +3282,16 @@ export interface components {
             suggested_answer: string | null;
             /** Matched Card Id */
             matched_card_id: string | null;
+            /** Matched Card Deck Id */
+            matched_card_deck_id: string | null;
+            /** Matched Card Category */
+            matched_card_category: string | null;
             /** Matched Card Question */
             matched_card_question: string | null;
             /** Matched Card Asked Count */
             matched_card_asked_count: number | null;
+            /** Deck Options */
+            deck_options: components["schemas"]["AdminQuestionModerationDeckOption"][];
         };
         /** AdminQuestionModerationPage */
         AdminQuestionModerationPage: {
@@ -2999,6 +3477,40 @@ export interface components {
             /** Sections */
             sections: components["schemas"]["AdminSectionUpdate"][];
         };
+        /** AdminScheduleEventMutation */
+        AdminScheduleEventMutation: {
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            kind: components["schemas"]["ScheduleEventKind"];
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /** Meeting Url */
+            meeting_url?: string | null;
+            /** Weekday */
+            weekday?: number | null;
+            /** Starts At Time */
+            starts_at_time?: string | null;
+            /** Timezone */
+            timezone?: string | null;
+            /** Starts At */
+            starts_at?: string | null;
+        };
+        /** AdminScheduleEventPageRead */
+        AdminScheduleEventPageRead: {
+            /** Items */
+            items: components["schemas"]["ScheduleEventRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
         /** AdminSectionCreate */
         AdminSectionCreate: {
             /** Title */
@@ -3100,6 +3612,8 @@ export interface components {
             id: string;
             /** Telegram Id */
             telegram_id: number | null;
+            /** Telegram Username */
+            telegram_username: string | null;
             /** First Name */
             first_name: string;
             /** Last Name */
@@ -3108,6 +3622,7 @@ export interface components {
             email: string | null;
             /** Is Active */
             is_active: boolean;
+            learning_status: components["schemas"]["StudentLearningStatus"];
             /**
              * Created At
              * Format: date-time
@@ -3137,6 +3652,8 @@ export interface components {
             id: string;
             /** Telegram Id */
             telegram_id: number | null;
+            /** Telegram Username */
+            telegram_username: string | null;
             /** First Name */
             first_name: string;
             /** Last Name */
@@ -3145,6 +3662,7 @@ export interface components {
             email: string | null;
             /** Is Active */
             is_active: boolean;
+            learning_status: components["schemas"]["StudentLearningStatus"];
             /**
              * Created At
              * Format: date-time
@@ -3185,6 +3703,8 @@ export interface components {
         AdminStudentMutation: {
             /** Telegram Id */
             telegram_id: number;
+            /** Telegram Username */
+            telegram_username?: string | null;
             /** First Name */
             first_name: string;
             /** Last Name */
@@ -3217,6 +3737,8 @@ export interface components {
             offset: number;
             /** Mentors */
             mentors?: components["schemas"]["AdminStudentMentorRead"][];
+            /** Tracks */
+            tracks?: components["schemas"]["AdminStudentTrackOption"][];
         };
         /** AdminStudentTrackOption */
         AdminStudentTrackOption: {
@@ -3295,6 +3817,8 @@ export interface components {
             estimated_minutes: number | null;
             /** Is Published */
             is_published: boolean;
+            /** Media */
+            media: components["schemas"]["ProtectedContentMediaRead"][];
         };
         /** AdminTopicSummary */
         AdminTopicSummary: {
@@ -3430,6 +3954,128 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /** ContentMediaCompletedMultipartPart */
+        ContentMediaCompletedMultipartPart: {
+            /** Part Number */
+            part_number: number;
+            /** Etag */
+            etag: string;
+        };
+        /**
+         * ContentMediaKind
+         * @enum {string}
+         */
+        ContentMediaKind: "audio" | "video";
+        /** ContentMediaMultipartUploadIntent */
+        ContentMediaMultipartUploadIntent: {
+            /**
+             * Upload Protocol
+             * @constant
+             */
+            upload_protocol: "multipart-v1";
+            /** Upload Id */
+            upload_id: string;
+            /** Upload Token */
+            upload_token: string;
+            /** Abort Url */
+            abort_url: string;
+            /** Storage Key */
+            storage_key: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
+            /** Part Size */
+            part_size: number;
+            /** Part Count */
+            part_count: number;
+            /** Parts */
+            parts: components["schemas"]["ContentMediaMultipartUploadPartIntent"][];
+            /** Expires In */
+            expires_in: number;
+        };
+        /** ContentMediaMultipartUploadPartIntent */
+        ContentMediaMultipartUploadPartIntent: {
+            /** Part Number */
+            part_number: number;
+            /** Upload Url */
+            upload_url: string;
+            /** Headers */
+            headers: {
+                [key: string]: string;
+            };
+        };
+        /** ContentMediaPlayback */
+        ContentMediaPlayback: {
+            /** Url */
+            url: string;
+            /** Expires In */
+            expires_in: number;
+        };
+        /** ContentMediaUploadFinalize */
+        ContentMediaUploadFinalize: {
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
+            /** @default legacy-post */
+            upload_protocol: components["schemas"]["ContentMediaUploadProtocol"];
+            /** Storage Key */
+            storage_key: string;
+            /** Upload Id */
+            upload_id?: string | null;
+            /** Upload Token */
+            upload_token?: string | null;
+            /** Parts */
+            parts?: components["schemas"]["ContentMediaCompletedMultipartPart"][];
+            /** Title */
+            title?: string | null;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+        };
+        /** ContentMediaUploadIntent */
+        ContentMediaUploadIntent: {
+            /** Upload Url */
+            upload_url: string;
+            /** Fields */
+            fields: {
+                [key: string]: string;
+            };
+            /** Storage Key */
+            storage_key: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
+            /** Expires In */
+            expires_in: number;
+        };
+        ContentMediaUploadIntentResponse: components["schemas"]["ContentMediaUploadIntent"] | components["schemas"]["ContentMediaMultipartUploadIntent"];
+        /**
+         * ContentMediaUploadProtocol
+         * @enum {string}
+         */
+        ContentMediaUploadProtocol: "legacy-post" | "multipart-v1";
+        /** ContentMediaUploadRequest */
+        ContentMediaUploadRequest: {
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
+            /** @default legacy-post */
+            upload_protocol: components["schemas"]["ContentMediaUploadProtocol"];
         };
         /** GrantedRoadmapRead */
         GrantedRoadmapRead: {
@@ -3744,6 +4390,40 @@ export interface components {
              */
             updated_at: string;
         };
+        /** IntelligenceOperationsFailureCodeRead */
+        IntelligenceOperationsFailureCodeRead: {
+            /** Code */
+            code: string;
+            /** Count */
+            count: number;
+        };
+        /** IntelligenceOperationsQueueRead */
+        IntelligenceOperationsQueueRead: {
+            /** Available */
+            available: boolean;
+            /** Transcription Depth */
+            transcription_depth?: number | null;
+            /** Openai Depth */
+            openai_depth?: number | null;
+        };
+        /** IntelligenceOperationsWorkerRead */
+        IntelligenceOperationsWorkerRead: {
+            /**
+             * Status
+             * @default unknown
+             * @enum {string}
+             */
+            status: "healthy" | "unhealthy" | "unknown";
+            /** Heartbeat */
+            heartbeat?: string | null;
+            /** Heartbeat Ttl Seconds */
+            heartbeat_ttl_seconds?: number | null;
+        };
+        /** IntelligenceOperationsWorkersRead */
+        IntelligenceOperationsWorkersRead: {
+            transcription?: components["schemas"]["IntelligenceOperationsWorkerRead"];
+            openai?: components["schemas"]["IntelligenceOperationsWorkerRead"];
+        };
         /** IntelligenceProcessingAttemptRead */
         IntelligenceProcessingAttemptRead: {
             /**
@@ -3806,8 +4486,15 @@ export interface components {
             question_markdown?: string | null;
             /** Answer Markdown */
             answer_markdown?: string | null;
+            /** Deck Id */
+            deck_id?: string | null;
             /** Category */
             category?: string | null;
+            /**
+             * Create Category
+             * @default false
+             */
+            create_category: boolean;
             /** @default occasional */
             frequency: components["schemas"]["InterviewCardFrequency"];
         };
@@ -4180,6 +4867,13 @@ export interface components {
             /** Stages */
             stages: components["schemas"]["InterviewCatalogStageRead"][];
         };
+        /** InterviewCompletedMultipartPart */
+        InterviewCompletedMultipartPart: {
+            /** Part Number */
+            part_number: number;
+            /** Etag */
+            etag: string;
+        };
         /** InterviewDeckListItem */
         InterviewDeckListItem: {
             /**
@@ -4239,6 +4933,56 @@ export interface components {
         InterviewDownloadUrl: {
             /** Url */
             url: string;
+        };
+        /** InterviewMultipartUploadAbort */
+        InterviewMultipartUploadAbort: {
+            /** Storage Key */
+            storage_key: string;
+            /** Upload Id */
+            upload_id: string;
+            /** Upload Token */
+            upload_token: string;
+        };
+        /** InterviewMultipartUploadIntent */
+        InterviewMultipartUploadIntent: {
+            /**
+             * Upload Protocol
+             * @constant
+             */
+            upload_protocol: "multipart-v1";
+            /** Upload Id */
+            upload_id: string;
+            /** Upload Token */
+            upload_token: string;
+            /** Abort Url */
+            abort_url: string;
+            /** Storage Key */
+            storage_key: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
+            /** Part Size */
+            part_size: number;
+            /** Part Count */
+            part_count: number;
+            /** Parts */
+            parts: components["schemas"]["InterviewMultipartUploadPartIntent"][];
+            /** Expires In */
+            expires_in: number;
+        };
+        /** InterviewMultipartUploadPartIntent */
+        InterviewMultipartUploadPartIntent: {
+            /** Part Number */
+            part_number: number;
+            /** Upload Url */
+            upload_url: string;
+            /** Headers */
+            headers: {
+                [key: string]: string;
+            };
         };
         /** InterviewProcessDetail */
         InterviewProcessDetail: {
@@ -4503,6 +5247,14 @@ export interface components {
             content_type: string;
             /** Size */
             size: number;
+            /** @default legacy-post */
+            upload_protocol: components["schemas"]["InterviewUploadProtocol"];
+            /** Upload Id */
+            upload_id?: string | null;
+            /** Upload Token */
+            upload_token?: string | null;
+            /** Parts */
+            parts?: components["schemas"]["InterviewCompletedMultipartPart"][];
         };
         /** InterviewUploadIntent */
         InterviewUploadIntent: {
@@ -4523,6 +5275,12 @@ export interface components {
             /** Expires In */
             expires_in: number;
         };
+        InterviewUploadIntentResponse: components["schemas"]["InterviewUploadIntent"] | components["schemas"]["InterviewMultipartUploadIntent"];
+        /**
+         * InterviewUploadProtocol
+         * @enum {string}
+         */
+        InterviewUploadProtocol: "legacy-post" | "multipart-v1";
         /** InterviewUploadRequest */
         InterviewUploadRequest: {
             /** Filename */
@@ -4531,6 +5289,8 @@ export interface components {
             content_type: string;
             /** Size */
             size: number;
+            /** @default legacy-post */
+            upload_protocol: components["schemas"]["InterviewUploadProtocol"];
         };
         /** KnowledgeEntryDetail */
         KnowledgeEntryDetail: {
@@ -4549,6 +5309,8 @@ export interface components {
             /** Content Markdown */
             content_markdown: string;
             topic: components["schemas"]["KnowledgeTopicContext"];
+            /** Media */
+            media: components["schemas"]["ProtectedContentMediaRead"][];
             /**
              * Updated At
              * Format: date-time
@@ -4719,6 +5481,25 @@ export interface components {
             /** Comments */
             comments: components["schemas"]["InterviewCatalogCommentRead"][];
         };
+        /** MentorMeetingMutation */
+        MentorMeetingMutation: {
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /** Meeting Url */
+            meeting_url?: string | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+        };
         /** MentorNoteMutation */
         MentorNoteMutation: {
             /** Body */
@@ -4748,6 +5529,33 @@ export interface components {
              */
             updated_at: string;
         };
+        /** MentorProfileMutation */
+        MentorProfileMutation: {
+            /** Consultation Url */
+            consultation_url?: string | null;
+            /** Group Calendar Url */
+            group_calendar_url?: string | null;
+        };
+        /** MentorProfileRead */
+        MentorProfileRead: {
+            /**
+             * Mentor Id
+             * Format: uuid
+             */
+            mentor_id: string;
+            /** Consultation Url */
+            consultation_url: string | null;
+            /** Group Calendar Url */
+            group_calendar_url: string | null;
+            /** Tracks */
+            tracks: components["schemas"]["ScheduleTrackRead"][];
+            /** Weekly Calls */
+            weekly_calls: components["schemas"]["ScheduleEventRead"][];
+            /** One Off Activities */
+            one_off_activities: components["schemas"]["ScheduleEventRead"][];
+            /** Updated At */
+            updated_at: string | null;
+        };
         /** MentorStudentDetail */
         MentorStudentDetail: {
             /**
@@ -4763,6 +5571,8 @@ export interface components {
             email: string | null;
             /** Telegram Username */
             telegram_username: string | null;
+            /** Is Active */
+            is_active: boolean;
             learning_status: components["schemas"]["StudentLearningStatus"];
             strength_level: components["schemas"]["StudentStrengthLevel"] | null;
             /** Roadmaps */
@@ -4813,6 +5623,8 @@ export interface components {
             email: string | null;
             /** Telegram Username */
             telegram_username: string | null;
+            /** Is Active */
+            is_active: boolean;
             learning_status: components["schemas"]["StudentLearningStatus"];
             strength_level: components["schemas"]["StudentStrengthLevel"] | null;
             /** Roadmaps */
@@ -4867,6 +5679,43 @@ export interface components {
         MentorStudentStateMutation: {
             learning_status: components["schemas"]["StudentLearningStatus"];
             strength_level?: components["schemas"]["StudentStrengthLevel"] | null;
+        };
+        /** MentorWeeklyCallMutation */
+        MentorWeeklyCallMutation: {
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            /**
+             * Title
+             * @default Групповой созвон
+             */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /** Weekday */
+            weekday: number;
+            /** Starts At Time */
+            starts_at_time?: string | null;
+            /**
+             * Timezone
+             * @default Europe/Moscow
+             */
+            timezone: string;
+            /**
+             * Meeting Url
+             * Format: uri
+             */
+            meeting_url: string;
+        };
+        /** MentorWeeklyCallRescheduleMutation */
+        MentorWeeklyCallRescheduleMutation: {
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
         };
         /** MockInterviewFeedbackMutation */
         MockInterviewFeedbackMutation: {
@@ -4928,6 +5777,75 @@ export interface components {
          * @enum {string}
          */
         MockInterviewStatus: "planned" | "completed";
+        /** MyMentorDashboardRead */
+        MyMentorDashboardRead: {
+            mentor: components["schemas"]["MyMentorPublicRead"] | null;
+            /** Schedule */
+            schedule: components["schemas"]["ScheduleEventRead"][];
+            /** Useful Links */
+            useful_links: components["schemas"]["PinnedResourceLinkRead"][];
+        };
+        /** MyMentorPublicRead */
+        MyMentorPublicRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string | null;
+            /** Telegram Username */
+            telegram_username: string | null;
+            /** Consultation Url */
+            consultation_url: string | null;
+            /** Group Calendar Url */
+            group_calendar_url: string | null;
+        };
+        /** PinnedResourceLinkMutation */
+        PinnedResourceLinkMutation: {
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Url
+             * Format: uri
+             */
+            url: string;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+        };
+        /** PinnedResourceLinkRead */
+        PinnedResourceLinkRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string | null;
+            /** Url */
+            url: string;
+            /** Position */
+            position: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /**
          * ProgressStatus
          * @enum {string}
@@ -4951,6 +5869,30 @@ export interface components {
         ProgressUpdateResponse: {
             topic_progress: components["schemas"]["TopicProgressRead"];
             roadmap_progress: components["schemas"]["ProgressSummary"];
+        };
+        /** ProtectedContentMediaRead */
+        ProtectedContentMediaRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["ContentMediaKind"];
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size */
+            size: number;
+            /** Title */
+            title: string | null;
+            /** Position */
+            position: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** ProvisionTelegramStudentRequest */
         ProvisionTelegramStudentRequest: {
@@ -5043,6 +5985,77 @@ export interface components {
             /** Started On */
             started_on?: string | null;
         };
+        /**
+         * ScheduleEventKind
+         * @enum {string}
+         */
+        ScheduleEventKind: "weekly_call" | "meeting";
+        /** ScheduleEventRead */
+        ScheduleEventRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            track: components["schemas"]["ScheduleTrackRead"];
+            /** Mentor Id */
+            mentor_id: string | null;
+            source: components["schemas"]["ScheduleEventSource"];
+            /** Source Name */
+            source_name: string;
+            kind: components["schemas"]["ScheduleEventKind"];
+            /** Title */
+            title: string;
+            /** Description */
+            description: string | null;
+            /** Meeting Url */
+            meeting_url: string | null;
+            /** Weekday */
+            weekday: number | null;
+            /** Starts At Time */
+            starts_at_time: string | null;
+            /** Timezone */
+            timezone: string | null;
+            /** Starts At */
+            starts_at: string | null;
+            /** Regular Next Occurrence At */
+            regular_next_occurrence_at: string | null;
+            /** Next Occurrence At */
+            next_occurrence_at: string | null;
+            /** Is Rescheduled */
+            is_rescheduled: boolean;
+            /** Rescheduled From */
+            rescheduled_from: string | null;
+            /** Rescheduled To */
+            rescheduled_to: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ScheduleEventSource
+         * @enum {string}
+         */
+        ScheduleEventSource: "mentor" | "platform";
+        /** ScheduleTrackRead */
+        ScheduleTrackRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Slug */
+            slug: string;
+            /** Title */
+            title: string;
+        };
         /** SectionRead */
         SectionRead: {
             /**
@@ -5127,6 +6140,8 @@ export interface components {
             content_markdown: string;
             /** Estimated Minutes */
             estimated_minutes: number | null;
+            /** Media */
+            media: components["schemas"]["ProtectedContentMediaRead"][];
             roadmap: components["schemas"]["TopicContext"];
             section: components["schemas"]["TopicContext"];
             status: components["schemas"]["ProgressStatus"];
@@ -6358,7 +7373,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InterviewUploadIntent"];
+                    "application/json": components["schemas"]["InterviewUploadIntentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6514,7 +7529,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InterviewUploadIntent"];
+                    "application/json": components["schemas"]["InterviewUploadIntentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6671,7 +7686,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InterviewUploadIntent"];
+                    "application/json": components["schemas"]["InterviewUploadIntentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6776,6 +7791,42 @@ export interface operations {
             };
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    abort_private_multipart_upload_api_v1_uploads_multipart_abort_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewMultipartUploadAbort"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             204: {
@@ -8071,6 +9122,40 @@ export interface operations {
             };
         };
     };
+    admin_ai_operations_api_v1_admin_interviews_ai_operations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminIntelligenceOperationsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     knowledge_topics_api_v1_knowledge_topics_get: {
         parameters: {
             query?: never;
@@ -8590,6 +9675,193 @@ export interface operations {
             };
         };
     };
+    knowledge_media_playback_api_v1_knowledge_entries__entry_slug__media__media_id__playback_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                entry_slug: string;
+                media_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentMediaPlayback"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_knowledge_media_api_v1_knowledge_entries__entry_slug__media__media_id__stream_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_slug: string;
+                media_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_knowledge_media_upload_url_api_v1_admin_knowledge_topics__topic_id__entries__entry_id__media_upload_url_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                topic_id: string;
+                entry_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContentMediaUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentMediaUploadIntentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_finalize_knowledge_media_api_v1_admin_knowledge_topics__topic_id__entries__entry_id__media_finalize_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                topic_id: string;
+                entry_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContentMediaUploadFinalize"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedContentMediaRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_knowledge_media_api_v1_admin_knowledge_topics__topic_id__entries__entry_id__media__media_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                topic_id: string;
+                entry_id: string;
+                media_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     me_api_v1_me_get: {
         parameters: {
             query?: never;
@@ -8851,6 +10123,7 @@ export interface operations {
                 track_id?: string | null;
                 mentor_id?: string | null;
                 without_mentor?: boolean;
+                is_active?: boolean | null;
                 learning_status?: components["schemas"]["StudentLearningStatus"][] | null;
                 limit?: number;
                 offset?: number;
@@ -9146,7 +10419,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InterviewUploadIntent"];
+                    "application/json": components["schemas"]["InterviewUploadIntentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9348,7 +10621,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InterviewUploadIntent"];
+                    "application/json": components["schemas"]["InterviewUploadIntentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9868,6 +11141,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminMentorCandidate"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_mentor_profile_api_v1_admin_mentors__mentor_id__profile_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                mentor_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminMentorProfileMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorListItem"];
                 };
             };
             /** @description Validation Error */
@@ -10526,6 +11839,196 @@ export interface operations {
             };
         };
     };
+    roadmap_media_playback_api_v1_topics__topic_id__media__media_id__playback_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                topic_id: string;
+                media_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentMediaPlayback"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_roadmap_media_api_v1_topics__topic_id__media__media_id__stream_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                topic_id: string;
+                media_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_roadmap_media_upload_url_api_v1_admin_roadmaps__roadmap_id__sections__section_id__topics__topic_id__media_upload_url_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                roadmap_id: string;
+                section_id: string;
+                topic_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContentMediaUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentMediaUploadIntentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_finalize_roadmap_media_api_v1_admin_roadmaps__roadmap_id__sections__section_id__topics__topic_id__media_finalize_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                roadmap_id: string;
+                section_id: string;
+                topic_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContentMediaUploadFinalize"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedContentMediaRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_roadmap_media_api_v1_admin_roadmaps__roadmap_id__sections__section_id__topics__topic_id__media__media_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                roadmap_id: string;
+                section_id: string;
+                topic_id: string;
+                media_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_tracks_api_v1_admin_tracks_get: {
         parameters: {
             query?: never;
@@ -10784,7 +12287,11 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
-                access?: "all" | "active" | "blocked";
+                track_id?: string | null;
+                learning_status?: components["schemas"]["StudentLearningStatus"][] | null;
+                is_active?: boolean | null;
+                /** @deprecated */
+                access?: ("all" | "active" | "blocked") | null;
                 mentor_id?: string | null;
                 without_mentor?: boolean;
                 limit?: number;
@@ -10997,6 +12504,743 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AdminStudentDetail"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_profile_api_v1_mentor_profile_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorProfileRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_update_profile_api_v1_mentor_profile_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorProfileMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorProfileRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_create_weekly_call_api_v1_mentor_profile_weekly_calls_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorWeeklyCallMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_update_weekly_call_api_v1_mentor_profile_weekly_calls__event_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorWeeklyCallMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_delete_weekly_call_api_v1_mentor_profile_weekly_calls__event_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_reschedule_weekly_call_api_v1_mentor_profile_weekly_calls__event_id__reschedule_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorWeeklyCallRescheduleMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_cancel_weekly_call_reschedule_api_v1_mentor_profile_weekly_calls__event_id__reschedule_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_create_activity_api_v1_mentor_profile_activities_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorMeetingMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_update_activity_api_v1_mentor_profile_activities__event_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorMeetingMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_delete_activity_api_v1_mentor_profile_activities__event_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    student_my_mentor_api_v1_me_mentor_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyMentorDashboardRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_schedule_events_api_v1_admin_schedule_events_get: {
+        parameters: {
+            query?: {
+                track_id?: string | null;
+                kind?: components["schemas"]["ScheduleEventKind"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminScheduleEventPageRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_schedule_event_api_v1_admin_schedule_events_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminScheduleEventMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_schedule_event_api_v1_admin_schedule_events__event_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_schedule_event_api_v1_admin_schedule_events__event_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminScheduleEventMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_schedule_event_api_v1_admin_schedule_events__event_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_useful_links_api_v1_admin_useful_links_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinnedResourceLinkRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_useful_link_api_v1_admin_useful_links_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinnedResourceLinkMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinnedResourceLinkRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_useful_link_api_v1_admin_useful_links__link_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                link_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PinnedResourceLinkMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinnedResourceLinkRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_useful_link_api_v1_admin_useful_links__link_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                link_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

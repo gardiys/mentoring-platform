@@ -397,6 +397,7 @@ it("прикрепляет аудиозапись к этапу", async () => {
     file,
     expect.objectContaining({
       onProgress: expect.any(Function),
+      onStatus: expect.any(Function),
       signal: expect.any(AbortSignal),
     }),
   );
@@ -498,6 +499,52 @@ it("добавляет несколько файлов к описанию со�
     processDetail.id,
     processDetail.stages[0]!.id,
     diagram,
+    expect.objectContaining({
+      onProgress: expect.any(Function),
+      onStatus: expect.any(Function),
+      signal: expect.any(AbortSignal),
+    }),
+  );
+});
+
+it("после частичной ошибки не загружает успешные вложения повторно", async () => {
+  vi.spyOn(api, "interviewProcess").mockResolvedValue(processDetail);
+  const upload = vi
+    .spyOn(api, "uploadInterviewStageAttachment")
+    .mockResolvedValueOnce(processDetail)
+    .mockRejectedValueOnce(new Error("storage unavailable"))
+    .mockResolvedValue(processDetail);
+  renderPage(
+    <InterviewProcessPage />,
+    `/interviews/journal/${processDetail.id}`,
+    "/interviews/journal/:processId",
+  );
+  await screen.findByText("Дополнительные материалы");
+
+  const attachmentInput = document.querySelector<HTMLInputElement>(
+    'input[type="file"][multiple]',
+  );
+  expect(attachmentInput).not.toBeNull();
+  const diagram = new File(["image"], "diagram.png", { type: "image/png" });
+  const notes = new File(["notes"], "notes.txt", { type: "text/plain" });
+  await userEvent.upload(attachmentInput!, [diagram, notes]);
+  await userEvent.click(
+    screen.getByRole("button", { name: "Загрузить файлы" }),
+  );
+  await waitFor(() => expect(upload).toHaveBeenCalledTimes(2));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Загрузить файлы" }),
+    ).toBeEnabled(),
+  );
+
+  await userEvent.click(
+    screen.getByRole("button", { name: "Загрузить файлы" }),
+  );
+  await waitFor(() => expect(upload).toHaveBeenCalledTimes(3));
+  expect(upload.mock.calls[2]?.[2]).toBe(notes);
+  expect(upload.mock.calls.filter((call) => call[2] === diagram)).toHaveLength(
+    1,
   );
 });
 
@@ -526,7 +573,15 @@ it("фиксирует оффер с PDF-файлом", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Отметить оффер" }));
 
   await waitFor(() =>
-    expect(upload).toHaveBeenCalledWith(processDetail.id, offer),
+    expect(upload).toHaveBeenCalledWith(
+      processDetail.id,
+      offer,
+      expect.objectContaining({
+        onProgress: expect.any(Function),
+        onStatus: expect.any(Function),
+        signal: expect.any(AbortSignal),
+      }),
+    ),
   );
 });
 

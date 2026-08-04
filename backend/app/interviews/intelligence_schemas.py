@@ -228,7 +228,9 @@ class IntelligenceQuestionModerationMutation(BaseModel):
     action: str = Field(pattern="^(recommend|approve|reject)$")
     question_markdown: str | None = Field(default=None, min_length=1)
     answer_markdown: str | None = Field(default=None, min_length=1)
+    deck_id: UUID | None = None
     category: str | None = Field(default=None, min_length=1, max_length=240)
+    create_category: bool = False
     frequency: InterviewCardFrequency = InterviewCardFrequency.OCCASIONAL
 
 
@@ -265,12 +267,21 @@ class AdminQuestionModerationSummary(BaseModel):
     interviewed_at: datetime
 
 
+class AdminQuestionModerationDeckOption(BaseModel):
+    id: UUID
+    title: str
+    categories: list[str]
+
+
 class AdminQuestionModerationDetail(AdminQuestionModerationSummary):
     candidate_answer: str | None
     suggested_answer: str | None
     matched_card_id: UUID | None
+    matched_card_deck_id: UUID | None
+    matched_card_category: str | None
     matched_card_question: str | None
     matched_card_asked_count: int | None
+    deck_options: list[AdminQuestionModerationDeckOption]
 
 
 class AdminQuestionModerationPage(BaseModel):

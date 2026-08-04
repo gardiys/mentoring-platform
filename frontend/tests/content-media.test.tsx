@@ -14,6 +14,7 @@ import type {
   ProtectedContentMediaRead,
   TopicDetail,
 } from "../src/types/api";
+import { CONTENT_VIDEO_MAX_BYTES, VIDEO_MAX_BYTES } from "../src/utils/media";
 import { renderPage } from "./render";
 
 const media: ProtectedContentMediaRead = {
@@ -53,6 +54,7 @@ const adminTopic: AdminTopicRead = {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -98,6 +100,7 @@ it("загружает media через intent, presigned POST и finalize", asy
     filename: "audio.mp3",
     content_type: "audio/mpeg",
     size: 5,
+    upload_protocol: "multipart-v1",
   });
   expect(fetchMock.mock.calls[1]?.[0]).toBe("https://s3.example.test/private");
   const s3Body = fetchMock.mock.calls[1]?.[1]?.body as FormData;
@@ -114,6 +117,235 @@ it("загружает media через intent, presigned POST и finalize", asy
     title: "Лекция",
     position: 4,
   });
+});
+
+it("завершает multipart media с ETag и показывает фазу финализации", async () => {
+  type Listener = (event: ProgressEvent) => void;
+  const uploaded = { ...media, kind: "video" as const };
+  const fetchMock = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          upload_protocol: "multipart-v1",
+          upload_id: "upload-id",
+          upload_token: "upload-token",
+          storage_key: "knowledge-media/admin/object",
+          filename: "lesson.mp4",
+          content_type: "video/mp4",
+          size: 5,
+          part_size: 5,
+          part_count: 1,
+          parts: [
+            {
+              part_number: 1,
+              upload_url: "https://s3.example.test/part-1",
+              headers: {},
+            },
+          ],
+          expires_in: 21_600,
+          abort_url: "/api/v1/uploads/multipart/abort",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(uploaded), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+  class XMLHttpRequestMock {
+    status = 200;
+    private listeners = new Map<string, Listener>();
+    private uploadListeners = new Map<string, Listener>();
+    upload = {
+      addEventListener: (name: string, listener: Listener) =>
+        this.uploadListeners.set(name, listener),
+    };
+    open = vi.fn();
+    setRequestHeader = vi.fn();
+    getResponseHeader = vi.fn((name: string) =>
+      name === "ETag" ? '"part-etag"' : null,
+    );
+    addEventListener(name: string, listener: Listener) {
+      this.listeners.set(name, listener);
+    }
+    send = vi.fn((body: Blob) => {
+      this.uploadListeners.get("progress")?.({
+        lengthComputable: true,
+        loaded: body.size,
+        total: body.size,
+      } as ProgressEvent);
+      this.listeners.get("load")?.({} as ProgressEvent);
+    });
+    abort = vi.fn(() => this.listeners.get("abort")?.({} as ProgressEvent));
+  }
+  vi.stubGlobal("XMLHttpRequest", XMLHttpRequestMock);
+  const onStatus = vi.fn();
+  const file = new File(["video"], "lesson.mp4", { type: "video/mp4" });
+
+  await api.uploadAdminKnowledgeMedia(
+    "topic-id",
+    "entry-id",
+    file,
+    { title: "Лекция", position: 2 },
+    { onStatus },
+  );
+
+  expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+    filename: "lesson.mp4",
+    content_type: "video/mp4",
+    size: 5,
+    upload_protocol: "multipart-v1",
+  });
+  expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+    filename: "lesson.mp4",
+    content_type: "video/mp4",
+    size: 5,
+    title: "Лекция",
+    position: 2,
+    storage_key: "knowledge-media/admin/object",
+    upload_protocol: "multipart-v1",
+    upload_id: "upload-id",
+    upload_token: "upload-token",
+    parts: [{ part_number: 1, etag: '"part-etag"' }],
+  });
+  expect(onStatus.mock.calls.map(([status]) => status.phase)).toEqual(
+    expect.arrayContaining(["preparing", "uploading", "finalizing"]),
+  );
+});
+
+it("отменяет multipart-сессию в backend при отмене загрузки", async () => {
+  const intent = {
+    upload_protocol: "multipart-v1",
+    upload_id: "upload-id",
+    upload_token: "upload-token",
+    storage_key: "knowledge-media/admin/object",
+    filename: "lesson.mp4",
+    content_type: "video/mp4",
+    size: 5,
+    part_size: 5,
+    part_count: 1,
+    parts: [
+      {
+        part_number: 1,
+        upload_url: "https://s3.example.test/part-1",
+        headers: {},
+      },
+    ],
+    expires_in: 21_600,
+    abort_url: "/api/v1/uploads/multipart/abort",
+  };
+  const fetchMock = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(intent), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(new Response(null, { status: 204 }));
+  const controller = new AbortController();
+  const file = new File(["video"], "lesson.mp4", { type: "video/mp4" });
+  const upload = api.uploadAdminKnowledgeMedia(
+    "topic-id",
+    "entry-id",
+    file,
+    { title: null, position: 0 },
+    { signal: controller.signal },
+  );
+
+  controller.abort();
+
+  await expect(upload).rejects.toMatchObject({ code: "request_aborted" });
+  expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
+    "/api/v1/uploads/multipart/abort",
+  );
+  expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+    upload_id: "upload-id",
+    upload_token: "upload-token",
+    storage_key: "knowledge-media/admin/object",
+  });
+});
+
+it("повторяет только финализацию после 503, не загружая части заново", async () => {
+  type Listener = (event: ProgressEvent) => void;
+  vi.useFakeTimers();
+  const uploaded = { ...media, kind: "video" as const };
+  const intent = {
+    upload_protocol: "multipart-v1",
+    upload_id: "upload-id",
+    upload_token: "upload-token",
+    storage_key: "knowledge-media/admin/object",
+    filename: "lesson.mp4",
+    content_type: "video/mp4",
+    size: 5,
+    part_size: 5,
+    part_count: 1,
+    parts: [
+      {
+        part_number: 1,
+        upload_url: "https://s3.example.test/part-1",
+        headers: {},
+      },
+    ],
+    expires_in: 21_600,
+    abort_url: "/api/v1/uploads/multipart/abort",
+  };
+  const fetchMock = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(intent), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
+    .mockResolvedValueOnce(new Response(null, { status: 503 }))
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify(uploaded), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  let partUploads = 0;
+
+  class XMLHttpRequestMock {
+    status = 200;
+    private listeners = new Map<string, Listener>();
+    upload = { addEventListener: vi.fn() };
+    open = vi.fn();
+    setRequestHeader = vi.fn();
+    getResponseHeader = vi.fn(() => '"part-etag"');
+    addEventListener(name: string, listener: Listener) {
+      this.listeners.set(name, listener);
+    }
+    send = vi.fn(() => {
+      partUploads += 1;
+      queueMicrotask(() => this.listeners.get("load")?.({} as ProgressEvent));
+    });
+    abort = vi.fn(() => this.listeners.get("abort")?.({} as ProgressEvent));
+  }
+  vi.stubGlobal("XMLHttpRequest", XMLHttpRequestMock);
+  const file = new File(["video"], "lesson.mp4", { type: "video/mp4" });
+  const upload = api.uploadAdminKnowledgeMedia("topic-id", "entry-id", file, {
+    title: null,
+    position: 0,
+  });
+
+  await vi.runAllTimersAsync();
+  await expect(upload).resolves.toEqual(uploaded);
+  expect(partUploads).toBe(1);
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(
+    fetchMock.mock.calls.some(([url]) =>
+      String(url).includes("/multipart/abort"),
+    ),
+  ).toBe(false);
+  expect(fetchMock.mock.calls[1]?.[1]?.body).toBe(
+    fetchMock.mock.calls[2]?.[1]?.body,
+  );
 });
 
 it("администратор видит, загружает и удаляет вложения статьи", async () => {
@@ -153,12 +385,55 @@ it("администратор видит, загружает и удаляет 
     { title: "Лекция asyncio", position: 4 },
     expect.objectContaining({
       onProgress: expect.any(Function),
+      onStatus: expect.any(Function),
       signal: expect.any(AbortSignal),
     }),
   );
 
   await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
   expect(remove).toHaveBeenCalledWith("topic-id", adminEntry.id, media.id);
+});
+
+it("разрешает учебное видео больше 2 ГБ в пределах нового лимита 5 ГБ", async () => {
+  vi.spyOn(api, "adminKnowledgeEntry").mockResolvedValue({
+    ...adminEntry,
+    media: [],
+  });
+  const upload = vi
+    .spyOn(api, "uploadAdminKnowledgeMedia")
+    .mockReturnValue(new Promise(() => undefined));
+  renderPage(
+    <AdminKnowledgeEntryEditPage />,
+    `/admin/knowledge/topic-id/entries/${adminEntry.id}/edit`,
+    "/admin/knowledge/:topicId/entries/:entryId/edit",
+  );
+
+  expect(
+    await screen.findByText(/Видео — до 5 ГБ, аудио — до 500 МБ/),
+  ).toBeInTheDocument();
+  const fileInput =
+    document.querySelector<HTMLInputElement>('input[type="file"]');
+  expect(fileInput).not.toBeNull();
+  const file = new File(["video"], "long-lesson.mp4", { type: "video/mp4" });
+  Object.defineProperty(file, "size", { value: VIDEO_MAX_BYTES + 1 });
+  expect(file.size).toBeLessThanOrEqual(CONTENT_VIDEO_MAX_BYTES);
+
+  await userEvent.upload(fileInput!, file);
+  await userEvent.click(
+    screen.getByRole("button", { name: "Загрузить медиа" }),
+  );
+
+  expect(upload).toHaveBeenCalledWith(
+    "topic-id",
+    adminEntry.id,
+    file,
+    { title: null, position: 0 },
+    expect.objectContaining({
+      onProgress: expect.any(Function),
+      onStatus: expect.any(Function),
+      signal: expect.any(AbortSignal),
+    }),
+  );
 });
 
 it("не отправляет неподдерживаемый или пустой media-файл", async () => {
@@ -193,6 +468,18 @@ it("не отправляет неподдерживаемый или пусто
     fileInput!,
     new File([], "empty.mp4", { type: "video/mp4" }),
   );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Загрузить медиа" }),
+  );
+  expect(upload).not.toHaveBeenCalled();
+
+  const oversizedVideo = new File(["video"], "too-large.mp4", {
+    type: "video/mp4",
+  });
+  Object.defineProperty(oversizedVideo, "size", {
+    value: CONTENT_VIDEO_MAX_BYTES + 1,
+  });
+  await userEvent.upload(fileInput!, oversizedVideo);
   await userEvent.click(
     screen.getByRole("button", { name: "Загрузить медиа" }),
   );

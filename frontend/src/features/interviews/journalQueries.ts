@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
-import type { UploadOptions } from "../../api/client";
+import { ApiError, type UploadOptions } from "../../api/client";
 import type {
   InterviewProcessMutation,
   InterviewProcessOutcomeMutation,
   InterviewProcessRecruitersMutation,
+  InterviewProcessDetail,
   InterviewProcessStageMutation,
   InterviewProcessStatus,
 } from "../../types/api";
@@ -63,13 +64,31 @@ function useJournalMutation<TVariables, TData>(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
-    onSettled: async () => {
-      await Promise.all([
+    onSuccess: (data) => {
+      if (isInterviewProcessDetail(data)) {
+        queryClient.setQueryData(interviewJournalKeys.detail(data.id), data);
+      }
+    },
+    onSettled: () => {
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: interviewJournalKeys.all }),
         queryClient.invalidateQueries({ queryKey: interviewCatalogKeys.all }),
       ]);
     },
   });
+}
+
+function isInterviewProcessDetail(
+  value: unknown,
+): value is InterviewProcessDetail {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    "stages" in value &&
+    Array.isArray(value.stages)
+  );
 }
 
 export function useCreateInterviewProcess() {
@@ -135,16 +154,19 @@ export function useUploadInterviewStageMedia() {
       stageId,
       file,
       onProgress,
+      onStatus,
       signal,
     }: {
       processId: string;
       stageId: string;
       file: File;
       onProgress?: UploadOptions["onProgress"];
+      onStatus?: UploadOptions["onStatus"];
       signal?: AbortSignal;
     }) =>
       api.uploadInterviewStageMedia(processId, stageId, file, {
         onProgress,
+        onStatus,
         signal,
       }),
   );
@@ -156,15 +178,67 @@ export function useUploadInterviewStageAttachments() {
       processId,
       stageId,
       files,
+      options,
+      onFileComplete,
+      onFileStart,
     }: {
       processId: string;
       stageId: string;
       files: File[];
+      options?: UploadOptions;
+      onFileComplete?: (file: File) => void;
+      onFileStart?: (file: File, index: number, total: number) => void;
     }) => {
-      for (const file of files) {
-        await api.uploadInterviewStageAttachment(processId, stageId, file);
+      const totalBytes = files.reduce((total, file) => total + file.size, 0);
+      let completedBytes = 0;
+      let result = null;
+      for (const [index, file] of files.entries()) {
+        onFileStart?.(file, index, files.length);
+        result = await api.uploadInterviewStageAttachment(
+          processId,
+          stageId,
+          file,
+          {
+            signal: options?.signal,
+            onProgress: (percent) => {
+              const overallPercent =
+                totalBytes > 0
+                  ? Math.round(
+                      ((completedBytes + (file.size * percent) / 100) /
+                        totalBytes) *
+                        100,
+                    )
+                  : 0;
+              options?.onProgress?.(overallPercent);
+            },
+            onStatus: (status) => {
+              const uploadedBytes = Math.min(
+                totalBytes,
+                completedBytes + status.uploadedBytes,
+              );
+              options?.onStatus?.({
+                ...status,
+                percent:
+                  totalBytes > 0
+                    ? Math.round((uploadedBytes / totalBytes) * 100)
+                    : 0,
+                uploadedBytes,
+                totalBytes,
+                etaSeconds:
+                  status.bytesPerSecond && status.bytesPerSecond > 0
+                    ? Math.max(
+                        0,
+                        (totalBytes - uploadedBytes) / status.bytesPerSecond,
+                      )
+                    : null,
+              });
+            },
+          },
+        );
+        onFileComplete?.(file);
+        completedBytes += file.size;
       }
-      return api.interviewProcess(processId);
+      return result ?? api.interviewProcess(processId);
     },
   );
 }
@@ -185,17 +259,26 @@ export function useDeleteInterviewStageAttachment() {
 
 export function useMarkInterviewOffer() {
   return useJournalMutation(
-    async ({ processId, file }: { processId: string; file?: File | null }) => {
+    async ({
+      processId,
+      file,
+      options,
+    }: {
+      processId: string;
+      file?: File | null;
+      options?: UploadOptions;
+    }) => {
       await api.setInterviewProcessOutcome(processId, { status: "offer" });
       if (file) {
         try {
-          return await api.uploadInterviewOffer(processId, file);
+          return await api.uploadInterviewOffer(processId, file, options);
         } catch (error) {
           const reason = error instanceof Error ? ` ${error.message}` : "";
-          throw new Error(
-            `Оффер отмечен, но файл не загрузился.${reason} Повторите загрузку файла в открывшемся блоке оффера.`,
-            { cause: error },
-          );
+          const message = `Оффер отмечен, но файл не загрузился.${reason} Повторите загрузку файла в открывшемся блоке оффера.`;
+          if (error instanceof ApiError) {
+            throw new ApiError(error.status, error.code, message);
+          }
+          throw new Error(message, { cause: error });
         }
       }
       return api.interviewProcess(processId);

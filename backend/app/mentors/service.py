@@ -5,6 +5,7 @@ from typing import cast
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
@@ -786,7 +787,18 @@ async def set_document_file(
     document.filename = upload.filename
     document.content_type = upload.content_type
     document.size = upload.size
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        existing = await get_document(session, mentor, student_id, kind, lock=True)
+        if existing is not None and existing.storage_key == upload.storage_key:
+            return _document_read(existing), upload.storage_key
+        api_error(
+            409,
+            "mentor_document_conflict",
+            "The mentor document was changed by another request",
+        )
     await session.refresh(document)
     return _document_read(document), previous_key
 

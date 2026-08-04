@@ -135,12 +135,8 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
     fake_store = FakePrivateMediaStore()
     monkeypatch.setattr(media_router, "store", fake_store)
     topic_id, entry_id, entry_slug = await create_knowledge_entry(client, seeded)
-    upload_path = (
-        f"/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry_id}/media/upload-url"
-    )
-    finalize_path = (
-        f"/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry_id}/media/finalize"
-    )
+    upload_path = f"/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry_id}/media/upload-url"
+    finalize_path = f"/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry_id}/media/finalize"
     upload_payload = {
         "filename": "lesson.mp4",
         "content_type": "video/mp4",
@@ -157,10 +153,19 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
         headers=auth(seeded.admin_id),
         json={**upload_payload, "filename": "notes.pdf", "content_type": "application/pdf"},
     )
+    larger_than_interview_limit = await client.post(
+        upload_path,
+        headers=auth(seeded.admin_id),
+        json={
+            **upload_payload,
+            "filename": "long-lesson.mp4",
+            "size": media_router.settings.interview_video_max_bytes + 1,
+        },
+    )
     too_large = await client.post(
         upload_path,
         headers=auth(seeded.admin_id),
-        json={**upload_payload, "size": media_router.settings.interview_video_max_bytes + 1},
+        json={**upload_payload, "size": media_router.settings.content_video_max_bytes + 1},
     )
     intent = await client.post(
         upload_path,
@@ -171,12 +176,15 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
     assert student_upload.status_code == 403
     assert invalid_type.status_code == 415
     assert invalid_type.json()["detail"]["code"] == "unsupported_content_media_type"
+    assert (
+        media_router.settings.content_video_max_bytes
+        > media_router.settings.interview_video_max_bytes
+    )
+    assert larger_than_interview_limit.status_code == 200
     assert too_large.status_code == 413
     assert too_large.json()["detail"]["code"] == "content_media_too_large"
     assert intent.status_code == 200, intent.text
-    assert intent.json()["storage_key"].startswith(
-        f"pending/knowledge-media/{seeded.admin_id}/"
-    )
+    assert intent.json()["storage_key"].startswith(f"pending/knowledge-media/{seeded.admin_id}/")
 
     foreign_finalize = await client.post(
         finalize_path,
@@ -265,8 +273,7 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
     assert playback.status_code == 200, playback.text
     assert playback.json()["url"].startswith("/api/v1/")
     assert (
-        playback.json()["expires_in"]
-        == media_router.settings.interview_stream_ticket_ttl_seconds
+        playback.json()["expires_in"] == media_router.settings.interview_stream_ticket_ttl_seconds
     )
     assert "s3.example.test" not in playback.json()["url"]
     assert "httponly" in playback.headers["set-cookie"].lower()
@@ -292,10 +299,7 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
         json=bulk_payload,
     )
     assert protected_bulk_removal.status_code == 409
-    assert (
-        protected_bulk_removal.json()["detail"]["code"]
-        == "knowledge_entry_has_media"
-    )
+    assert protected_bulk_removal.json()["detail"]["code"] == "knowledge_entry_has_media"
 
     student_delete = await client.delete(
         f"/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry_id}/media/{media_id}",
@@ -336,8 +340,7 @@ async def test_roadmap_media_private_upload_and_track_scoped_playback(
     section_id = roadmap.json()["sections"][0]["id"]
     topic_id = str(seeded.topic_ids[0])
     base_path = (
-        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}/sections/{section_id}"
-        f"/topics/{topic_id}/media"
+        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}/sections/{section_id}/topics/{topic_id}/media"
     )
     upload_payload = {
         "filename": "lesson.mp3",
@@ -352,6 +355,24 @@ async def test_roadmap_media_private_upload_and_track_scoped_playback(
         ),
         headers=auth(seeded.admin_id),
         json=upload_payload,
+    )
+    larger_than_interview_limit = await client.post(
+        f"{base_path}/upload-url",
+        headers=auth(seeded.admin_id),
+        json={
+            "filename": "long-roadmap-lesson.mp4",
+            "content_type": "video/mp4",
+            "size": media_router.settings.interview_video_max_bytes + 1,
+        },
+    )
+    too_large_video = await client.post(
+        f"{base_path}/upload-url",
+        headers=auth(seeded.admin_id),
+        json={
+            "filename": "too-large-roadmap-lesson.mp4",
+            "content_type": "video/mp4",
+            "size": media_router.settings.content_video_max_bytes + 1,
+        },
     )
     intent = await client.post(
         f"{base_path}/upload-url",
@@ -370,6 +391,9 @@ async def test_roadmap_media_private_upload_and_track_scoped_playback(
     )
 
     assert wrong_hierarchy.status_code == 404
+    assert larger_than_interview_limit.status_code == 200
+    assert too_large_video.status_code == 413
+    assert too_large_video.json()["detail"]["code"] == "content_media_too_large"
     assert intent.status_code == 200, intent.text
     assert finalized.status_code == 201, finalized.text
     media_id = finalized.json()["id"]

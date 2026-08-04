@@ -56,7 +56,6 @@ import type {
   InterviewProcessStageMutation,
   InterviewProcessStatus,
   InterviewProcessSummary,
-  InterviewUploadIntent,
   InterviewDownloadUrl,
   InterviewCatalogCommentMutation,
   InterviewCatalogCommentRead,
@@ -70,7 +69,6 @@ import type {
   IntelligenceReview,
   CompanyOption,
   ContentMediaPlayback,
-  ContentMediaUploadIntent,
   ContentMediaUploadMetadata,
   MentorDocumentKind,
   MentorDocumentRead,
@@ -99,71 +97,25 @@ import type {
   User,
 } from "../types/api";
 import {
+  ApiError,
+  abortMultipartUpload,
   apiRequest,
+  isMultipartUploadIntent,
   resolveApiUrl,
-  uploadPresignedPost,
+  uploadStatus,
+  uploadStorageIntent,
+  type StorageUploadIntent,
   type UploadOptions,
 } from "./client";
 import { inferFileContentType } from "../utils/media";
 
-async function uploadInterviewFile(
+const FINALIZE_RETRIES = 3;
+
+async function uploadFile<T>(
   intentPath: string,
   completePath: string,
   file: File,
-  options?: UploadOptions,
-): Promise<InterviewProcessDetail> {
-  const payload = {
-    filename: file.name,
-    content_type: inferFileContentType(file),
-    size: file.size,
-  };
-  const intent = await apiRequest<InterviewUploadIntent>(intentPath, {
-    method: "POST",
-    body: JSON.stringify(payload),
-    signal: options?.signal,
-  });
-  await uploadPresignedPost(intent, file, options);
-  return apiRequest<InterviewProcessDetail>(completePath, {
-    method: "POST",
-    body: JSON.stringify({ ...payload, storage_key: intent.storage_key }),
-    signal: options?.signal,
-  });
-}
-
-async function uploadProtectedContentMedia(
-  intentPath: string,
-  finalizePath: string,
-  file: File,
-  metadata: ContentMediaUploadMetadata,
-  options?: UploadOptions,
-): Promise<ProtectedContentMediaRead> {
-  const payload = {
-    filename: file.name,
-    content_type: inferFileContentType(file),
-    size: file.size,
-  };
-  const intent = await apiRequest<ContentMediaUploadIntent>(intentPath, {
-    method: "POST",
-    body: JSON.stringify(payload),
-    signal: options?.signal,
-  });
-  await uploadPresignedPost(intent, file, options);
-  return apiRequest<ProtectedContentMediaRead>(finalizePath, {
-    method: "POST",
-    body: JSON.stringify({
-      ...payload,
-      storage_key: intent.storage_key,
-      title: metadata.title,
-      position: metadata.position,
-    }),
-    signal: options?.signal,
-  });
-}
-
-async function uploadMentorFile<T>(
-  intentPath: string,
-  completePath: string,
-  file: File,
+  completeMetadata: Record<string, unknown>,
   options?: UploadOptions,
 ): Promise<T> {
   const payload = {
@@ -171,16 +123,85 @@ async function uploadMentorFile<T>(
     content_type: inferFileContentType(file),
     size: file.size,
   };
-  const intent = await apiRequest<InterviewUploadIntent>(intentPath, {
-    method: "POST",
-    body: JSON.stringify(payload),
-    signal: options?.signal,
-  });
-  await uploadPresignedPost(intent, file, options);
-  return apiRequest<T>(completePath, {
-    method: "POST",
-    body: JSON.stringify({ ...payload, storage_key: intent.storage_key }),
-    signal: options?.signal,
+  let intent: StorageUploadIntent | null = null;
+  try {
+    uploadStatus("preparing", file, options);
+    intent = await apiRequest<StorageUploadIntent>(intentPath, {
+      method: "POST",
+      body: JSON.stringify({ ...payload, upload_protocol: "multipart-v1" }),
+      signal: options?.signal,
+    });
+    const multipartCompletion = await uploadStorageIntent(
+      intent,
+      file,
+      options,
+    );
+    uploadStatus("finalizing", file, options);
+    const completeBody = JSON.stringify({
+      ...payload,
+      ...completeMetadata,
+      storage_key: intent.storage_key,
+      ...(multipartCompletion ?? {}),
+    });
+    return await finalizeUpload<T>(completePath, completeBody, options?.signal);
+  } catch (error) {
+    if (intent && isMultipartUploadIntent(intent)) {
+      void abortMultipartUpload(intent).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+async function finalizeUpload<T>(
+  path: string,
+  body: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  for (let retry = 0; retry <= FINALIZE_RETRIES; retry += 1) {
+    try {
+      return await apiRequest<T>(path, { method: "POST", body, signal });
+    } catch (error) {
+      if (
+        retry >= FINALIZE_RETRIES ||
+        !isRetryableFinalizeError(error) ||
+        signal?.aborted
+      ) {
+        throw error;
+      }
+      await finalizeRetryDelay(500 * 2 ** retry, signal);
+    }
+  }
+  throw new ApiError(0, "upload_finalize_failed", "Не удалось сохранить файл");
+}
+
+function isRetryableFinalizeError(error: unknown) {
+  return (
+    error instanceof ApiError &&
+    error.code !== "request_aborted" &&
+    (error.status === 0 ||
+      error.status === 408 ||
+      error.status === 425 ||
+      error.status === 429 ||
+      error.status >= 500)
+  );
+}
+
+function finalizeRetryDelay(milliseconds: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    const abort = () => {
+      window.clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      reject(new ApiError(0, "request_aborted", "Загрузка отменена"));
+    };
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
   });
 }
 
@@ -276,7 +297,9 @@ export const api = {
       action: "recommend" | "approve" | "reject";
       question_markdown?: string;
       answer_markdown?: string;
+      deck_id?: string;
       category?: string;
+      create_category?: boolean;
       frequency?: "frequent" | "occasional";
     },
   ) =>
@@ -446,11 +469,14 @@ export const api = {
     studentId: string,
     kind: MentorDocumentKind,
     file: File,
+    options?: UploadOptions,
   ) =>
-    uploadMentorFile<MentorDocumentRead>(
+    uploadFile<MentorDocumentRead>(
       `/api/v1/mentor/students/${studentId}/documents/${kind}/upload`,
       `/api/v1/mentor/students/${studentId}/documents/${kind}/complete`,
       file,
+      {},
+      options,
     ),
   openMentorDocument: (studentId: string, kind: MentorDocumentKind) =>
     apiRequest<InterviewDownloadUrl>(
@@ -479,10 +505,11 @@ export const api = {
     file: File,
     options?: UploadOptions,
   ) =>
-    uploadMentorFile<MockInterviewRead>(
+    uploadFile<MockInterviewRead>(
       `/api/v1/mentor/students/${studentId}/mock-interviews/${mockId}/media/upload`,
       `/api/v1/mentor/students/${studentId}/mock-interviews/${mockId}/media/complete`,
       file,
+      {},
       options,
     ),
   openMockInterviewMedia: (studentId: string, mockId: string) =>
@@ -736,11 +763,11 @@ export const api = {
     metadata: ContentMediaUploadMetadata,
     options?: UploadOptions,
   ) =>
-    uploadProtectedContentMedia(
+    uploadFile<ProtectedContentMediaRead>(
       `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}/topics/${topicId}/media/upload-url`,
       `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}/topics/${topicId}/media/finalize`,
       file,
-      metadata,
+      { title: metadata.title, position: metadata.position },
       options,
     ),
   deleteAdminRoadmapTopicMedia: (
@@ -848,11 +875,11 @@ export const api = {
     metadata: ContentMediaUploadMetadata,
     options?: UploadOptions,
   ) =>
-    uploadProtectedContentMedia(
+    uploadFile<ProtectedContentMediaRead>(
       `/api/v1/admin/knowledge/topics/${topicId}/entries/${entryId}/media/upload-url`,
       `/api/v1/admin/knowledge/topics/${topicId}/entries/${entryId}/media/finalize`,
       file,
-      metadata,
+      { title: metadata.title, position: metadata.position },
       options,
     ),
   deleteAdminKnowledgeMedia: (
@@ -965,10 +992,11 @@ export const api = {
     file: File,
     options?: UploadOptions,
   ) =>
-    uploadInterviewFile(
+    uploadFile<InterviewProcessDetail>(
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/media/upload`,
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/media/complete`,
       file,
+      {},
       options,
     ),
   downloadInterviewStageMedia: (processId: string, stageId: string) =>
@@ -988,11 +1016,14 @@ export const api = {
     processId: string,
     stageId: string,
     file: File,
+    options?: UploadOptions,
   ) =>
-    uploadInterviewFile(
+    uploadFile<InterviewProcessDetail>(
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/attachments/upload`,
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/attachments/complete`,
       file,
+      {},
+      options,
     ),
   downloadInterviewStageAttachment: (
     processId: string,
@@ -1019,11 +1050,17 @@ export const api = {
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/attachments/${attachmentId}`,
       { method: "DELETE" },
     ),
-  uploadInterviewOffer: (processId: string, file: File) =>
-    uploadInterviewFile(
+  uploadInterviewOffer: (
+    processId: string,
+    file: File,
+    options?: UploadOptions,
+  ) =>
+    uploadFile<InterviewProcessDetail>(
       `/api/v1/interviews/journal/tracks/${processId}/offer/upload`,
       `/api/v1/interviews/journal/tracks/${processId}/offer/complete`,
       file,
+      {},
+      options,
     ),
   downloadInterviewOffer: (processId: string) =>
     apiRequest<InterviewDownloadUrl>(

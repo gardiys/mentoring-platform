@@ -94,7 +94,102 @@ production-конфигурации, поэтому при обновлении 
 
 External volume защищает от случайного удаления через Compose, но пользователь с доступом к Docker всё ещё может удалить его явной командой `docker volume rm` или очисткой всех неиспользуемых volumes. Не выполняйте такие команды на production-сервере. Резервные копии из `backups/` нужно дополнительно выгружать за пределы сервера. Записи собеседований и офферы находятся во внешнем S3, поэтому для них отдельно включите versioning/backup-политику у провайдера объектного хранилища.
 
-Для production нужен приватный S3-совместимый bucket. Укажите `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` и endpoint провайдера в `.env.production`. Для AWS S3 оба endpoint оставьте пустыми. Bucket должен разрешать CORS-запросы `POST` и `GET` с `https://<DOMAIN>`; публичный anonymous-доступ включать нельзя. Для префикса `pending/` настройте lifecycle-удаление через один день, чтобы прерванные загрузки не занимали место.
+Для production нужен приватный S3-совместимый bucket. Укажите `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` и endpoint провайдера в `.env.production`. Для AWS S3 оба endpoint оставьте пустыми. Публичный anonymous-доступ включать нельзя.
+
+Загрузка из браузера идёт напрямую в S3, поэтому bucket CORS должен разрешать origin `https://<DOMAIN>`, методы `GET`, `HEAD`, `POST` и `PUT`, заголовки `*`, а также открывать response header `ETag`. `PUT` и доступный браузеру `ETag` обязательны для загрузки отдельных multipart-частей. AWS CLI-совместимый шаблон находится в `infra/s3-cors.production.json.example`, XML-вариант для панели провайдера — в `infra/s3-cors.production.xml.example`. Перед применением замените пример origin точным значением `https://DOMAIN` из `.env.production`. Если у платформы несколько frontend-origin, перечислите каждый отдельным `AllowedOrigin`, не используйте `*` для production.
+
+В lifecycle production-bucket настройте две независимые очистки: удаление завершённых временных объектов с префиксом `pending/` через один день и `AbortIncompleteMultipartUpload` с `DaysAfterInitiation=1` для всего bucket. Вторая политика удаляет только брошенные части и не должна содержать глобальный `Expiration`, иначе через сутки будут удаляться опубликованные материалы. Готовая стандартная S3-конфигурация находится в `infra/s3-lifecycle.production.json.example`.
+
+Runtime credentials платформы должны позволять операции `CreateMultipartUpload`, `UploadPart`, `CompleteMultipartUpload`, `AbortMultipartUpload`, `ListMultipartUploads`, `HeadObject`, `GetObject` и `DeleteObject`. Для AWS IAM это обычно объектные действия `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:AbortMultipartUpload` и bucket-действие `s3:ListBucketMultipartUploads` только для нужного bucket. Права чтения и изменения CORS/lifecycle нужны deployment-учётке, но не обязаны выдаваться runtime-контейнерам. Названия разрешений у S3-совместимого провайдера могут отличаться.
+
+Перед изменением сохраните существующие конфигурации. `put-bucket-cors` и `put-bucket-lifecycle-configuration` заменяют конфигурацию bucket целиком, а не добавляют правила. Если ответы `get-*` уже содержат правила, объедините их с шаблонами вручную и применяйте объединённые JSON-файлы. В частности, не потеряйте lifecycle для versioning, архивирования или резервных копий.
+
+Из корня проекта загрузите production-переменные без вывода secrets и сопоставьте имена credentials с теми, которые понимает AWS CLI. Не включайте `set -x` для этой shell-сессии:
+
+```bash
+set -a
+source .env.production
+set +a
+export AWS_ACCESS_KEY_ID="$S3_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$S3_SECRET_ACCESS_KEY"
+export AWS_DEFAULT_REGION="$S3_REGION"
+```
+
+Сохраните текущие конфигурации в каталог резервной копии. `NoSuchCORSConfiguration` или `NoSuchLifecycleConfiguration` означает, что соответствующей конфигурации ещё нет; в этом случае не считайте пустой перенаправленный файл резервной копией:
+
+```bash
+S3_CONFIG_BACKUP_DIR="backups/s3-config-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$S3_CONFIG_BACKUP_DIR"
+
+aws s3api get-bucket-cors \
+  --endpoint-url "$S3_ENDPOINT_URL" \
+  --region "$S3_REGION" \
+  --bucket "$S3_BUCKET" \
+  --output json > "$S3_CONFIG_BACKUP_DIR/cors.json.tmp" \
+  && mv "$S3_CONFIG_BACKUP_DIR/cors.json.tmp" "$S3_CONFIG_BACKUP_DIR/cors.json"
+
+aws s3api get-bucket-lifecycle-configuration \
+  --endpoint-url "$S3_ENDPOINT_URL" \
+  --region "$S3_REGION" \
+  --bucket "$S3_BUCKET" \
+  --output json > "$S3_CONFIG_BACKUP_DIR/lifecycle.json.tmp" \
+  && mv "$S3_CONFIG_BACKUP_DIR/lifecycle.json.tmp" "$S3_CONFIG_BACKUP_DIR/lifecycle.json"
+```
+
+Создайте рабочий CORS-файл с production-origin и проверьте его перед применением:
+
+```bash
+jq --arg origin "https://$DOMAIN" \
+  '.CORSRules[0].AllowedOrigins = [$origin]' \
+  infra/s3-cors.production.json.example \
+  > /tmp/mentoring-s3-cors.json
+jq empty /tmp/mentoring-s3-cors.json
+```
+
+Если старых правил нет, скопируйте lifecycle-шаблон без изменений. Если они есть, создайте `/tmp/mentoring-s3-lifecycle.json`, содержащий и старые правила, и оба правила платформы. После ручной проверки примените полные конфигурации:
+
+```bash
+# Выполните cp только если старой lifecycle-конфигурации не было.
+# Иначе сначала сохраните объединённый JSON по этому же пути.
+cp infra/s3-lifecycle.production.json.example /tmp/mentoring-s3-lifecycle.json
+jq empty /tmp/mentoring-s3-lifecycle.json
+
+aws s3api put-bucket-cors \
+  --endpoint-url "$S3_ENDPOINT_URL" \
+  --region "$S3_REGION" \
+  --bucket "$S3_BUCKET" \
+  --cors-configuration file:///tmp/mentoring-s3-cors.json
+
+aws s3api put-bucket-lifecycle-configuration \
+  --endpoint-url "$S3_ENDPOINT_URL" \
+  --region "$S3_REGION" \
+  --bucket "$S3_BUCKET" \
+  --lifecycle-configuration file:///tmp/mentoring-s3-lifecycle.json
+```
+
+Сразу перечитайте обе конфигурации теми же `get-bucket-cors` и `get-bucket-lifecycle-configuration`. Затем проверьте preflight через публичный endpoint:
+
+```bash
+curl -isS -X OPTIONS "${S3_PUBLIC_ENDPOINT_URL%/}/${S3_BUCKET}/multipart-smoke/object" \
+  -H "Origin: https://${DOMAIN}" \
+  -H 'Access-Control-Request-Method: PUT' \
+  -H 'Access-Control-Request-Headers: content-type' \
+  | grep -iE 'HTTP/|access-control-allow-origin|access-control-allow-methods|access-control-expose-headers'
+```
+
+Ответ должен разрешать точный origin платформы и метод `PUT`. Конфигурация или ответ должны открывать `ETag`; некоторые S3-провайдеры не возвращают `Access-Control-Expose-Headers` на `OPTIONS`, поэтому окончательно проверьте его на фактическом `UploadPart` в DevTools: ответ `PUT` должен содержать читаемый frontend-кодом header `ETag`.
+
+Multipart использует части по 64 MiB (`S3_MULTIPART_PART_SIZE_BYTES`), presigned URL отдельной части сроком на шесть часов (`S3_MULTIPART_PRESIGN_TTL_SECONDS`) и upload-сессию сроком на сутки (`S3_MULTIPART_SESSION_TTL_SECONDS`). Отдельный TTL нужен для медленных загрузок до 5 GiB; общий `S3_PRESIGN_TTL_SECONDS=900` продолжает применяться к legacy upload/download и не меняется. Размер части не должен быть меньше 5 MiB; уменьшение размера резко увеличивает число запросов. Срок upload-сессии и `AbortIncompleteMultipartUpload` должны оставаться согласованными, чтобы пользователь не продолжал уже очищенную сессию.
+
+Безопасный порядок production rollout: сначала примените CORS и lifecycle bucket, затем разверните backend и только после его readiness — frontend. Миграция БД не требуется. Старый frontend не передаёт `upload_protocol` и продолжает использовать legacy presigned POST; новый frontend явно запрашивает `multipart-v1`. Поэтому backend можно развернуть заранее без остановки загрузок. Для rollback сначала верните старый frontend, а новый backend сохраняйте как минимум на `S3_MULTIPART_SESSION_TTL_SECONDS` либо до завершения всех уже начатых multipart-загрузок; старый backend не умеет завершать такие сессии. Multipart-сессия хранится в S3 и подписанном токене, поэтому переживает перезапуск совместимого backend в пределах этого TTL, пока credentials и signing secrets не меняются.
+
+После сборки нового backend выполните реальный provider smoke: команда создаёт upload через тот же код, что использует приложение, загружает 6 MiB по публичному presigned PUT URL, проверяет CORS для `WEB_FRONTEND_URL` и доступность `ETag`, завершает upload, проверяет объект через `HEAD` и удаляет его. `finally` дополнительно пытается прервать незавершённую сессию и удалить временный ключ; secrets и подписанные URL в вывод не попадают.
+
+```bash
+make prod-check-s3-multipart
+```
+
+Smoke использует внутренний `S3_ENDPOINT_URL` для создания/завершения сессии и `S3_PUBLIC_ENDPOINT_URL` для фактического PUT с browser-origin. После развёртывания frontend всё равно выполните небольшую загрузку из базы знаний и убедитесь в DevTools, что все `PUT` частей получили `2xx`, каждый ответ содержит доступный `ETag`, а запрос завершения вернул `2xx`.
 
 Для FirstVDS используйте API endpoint `https://s3.firstvds.ru` и регион `default` — именно эти значения указаны в документации провайдера. `S3_ENDPOINT_URL` доступен backend-контейнеру, а `S3_PUBLIC_ENDPOINT_URL` должен открываться из браузера. Архивные записи из bucket `interviews` также читаются через авторизованный S3 API: в личном дневнике выдаётся временный presigned URL, а каталог проксирует авторизованный `GetObject`. Прямой URL объекта в private bucket без `X-Amz-*` параметров должен отвечать `403` — это ожидаемое поведение.
 
@@ -211,7 +306,7 @@ make typecheck
 make api-generate       # обновить TS-типы из работающего FastAPI OpenAPI
 ```
 
-Development Compose автоматически запускает приватный MinIO, создаёт bucket и настраивает CORS для `http://localhost:5173`. S3 API доступен на `http://localhost:9000`, консоль MinIO — на `http://localhost:9001`; локальные ключи берутся из `.env.example`. Загружаемые файлы сохраняются в Docker volume `minio_data`.
+Development Compose автоматически запускает приватный MinIO, создаёт bucket и настраивает CORS для `http://localhost:5173`. Закреплённый MinIO OSS использует глобальный CORS через `MINIO_API_CORS_ALLOW_ORIGIN`; bucket-level `PutBucketCors` в OSS-редакции недоступен. Временные объекты `pending/` удаляются lifecycle-правилом из `infra/minio-lifecycle.json`, а незавершённые multipart-загрузки старше суток — эквивалентной серверной очисткой `MINIO_API_STALE_UPLOADS_EXPIRY=24h`. S3 API доступен на `http://localhost:9000`, консоль MinIO — на `http://localhost:9001`; локальные ключи берутся из `.env.example`. Загружаемые файлы сохраняются в Docker volume `minio_data`.
 
 Для `make api-generate` backend должен быть доступен по `OPENAPI_URL` (по умолчанию `http://localhost:8000/openapi.json`). Сгенерированный файл — единственный источник DTO frontend; прикладные aliases находятся в `frontend/src/types/api.ts`.
 
@@ -292,6 +387,8 @@ Admin frontend для треков доступен по `/admin/tracks`: адм
 
 Пользовательский интерфейс доступен по `/knowledge`, редактор администратора — по `/admin/knowledge`. База организована по темам; внутри темы материалы показаны таблицей, а каждая статья или вопрос редактируются на отдельной странице. Полный Markdown не загружается в общий список. Неопубликованные темы и материалы не попадают в публичные списки, прямые ссылки и результаты поиска.
 
+К статьям базы знаний и темам роадмапов администратор может прикреплять приватные аудио- и видеоматериалы. Видео учебных материалов ограничено 5 GiB параметром `CONTENT_VIDEO_MAX_BYTES`; это отдельный лимит и он не изменяет ограничение записей собеседований `INTERVIEW_VIDEO_MAX_BYTES`, которое по умолчанию остаётся равным 2 GiB.
+
 Полнотекстовый поиск реализован средствами PostgreSQL: generated-колонка `TSVECTOR` использует русскую конфигурацию и разные веса для заголовка, описания и полного текста, а GIN-индекс ускоряет выборку. Отдельный поисковый сервис для MVP не требуется. `make seed` добавляет демонстрационные темы и материалы.
 
 ## Собеседования
@@ -308,7 +405,7 @@ Admin frontend для треков доступен по `/admin/tracks`: адм
 
 Компании хранятся в общем нормализованном справочнике. Поиск не зависит от регистра, пробелов и пунктуации, учитывает транслитерацию и распространённые фонетические варианты: например, `Yandex` находит `Яндекс`, а `Т-банк` — `Тбанк`. При сохранении удаляются юридические формы `ИП`, `ООО`, `ОАО`, `ЗАО`, `ПАО`, `АО`, `LLC`, `Ltd` и аналогичные. Если ученик вводит одно название, но выбирает другую существующую компанию, интерфейс отдельно спрашивает, является ли введённый текст альтернативным названием. Алиас сохраняется только после явного подтверждения; при отказе трек создаётся для выбранной компании без новой связи. Если ученик вообще не выбрал подсказку, перед созданием платформа повторно получает актуальные совпадения и предлагает либо явно связать ввод с одной из компаний, либо подтвердить создание новой. Уже существующий дубль при подтверждённом связывании объединяется с канонической компанией, а связанные треки перепривязываются к ней. Миграция `20260801_0012` создаёт нормализованный справочник, а `20260801_0013` добавляет алиасы и фонетические ключи поиска.
 
-Файлы загружаются из браузера прямо в приватный S3 по подписанной POST-политике и не проходят через память или диск FastAPI. Backend ограничивает разрешённый MIME-тип и размер в самой S3-политике, а после загрузки повторно проверяет объект и только затем сохраняет связь в БД. В личном дневнике скачивание и inline-просмотр начинаются с авторизованного запроса и используют короткоживущую подписанную ссылку. В каталоге записи не получают прямую S3-ссылку: авторизованный запрос создаёт HttpOnly-сессию просмотра, привязанную к ученику и браузеру, после чего backend проксирует поток с поддержкой HTTP Range. Срок сессии задаётся через `INTERVIEW_STREAM_TICKET_TTL_SECONDS` (по умолчанию 10 минут). Плеер скрывает скачивание, запрещает контекстное меню и показывает предупреждающий watermark. Абсолютную защиту воспроизводимого медиа от записи экрана может дать только специализированный DRM, поэтому текущая защита рассчитана на предотвращение прямого скачивания и обычного копирования ссылки. Лимиты по умолчанию: видео — 2 GiB, аудио — 500 MiB, PDF/изображение оффера — 20 MiB, дополнительное вложение этапа — 50 MiB; они задаются через `INTERVIEW_VIDEO_MAX_BYTES`, `INTERVIEW_AUDIO_MAX_BYTES`, `INTERVIEW_OFFER_MAX_BYTES` и `INTERVIEW_ATTACHMENT_MAX_BYTES`. Коллекция вложений создаётся миграцией `20260801_0014`.
+Файлы загружаются из браузера прямо в приватный S3 частями по подписанным multipart PUT URL и не проходят через память или диск FastAPI. Backend фиксирует допустимый MIME-тип, полный размер и размер каждой части в подписанной upload-сессии, после завершения повторно проверяет объект через `HEAD` и только затем сохраняет связь в БД. Старый presigned POST временно поддерживается как совместимый fallback для поэтапного rollout. В личном дневнике скачивание и inline-просмотр начинаются с авторизованного запроса и используют короткоживущую подписанную ссылку. В каталоге записи не получают прямую S3-ссылку: авторизованный запрос создаёт HttpOnly-сессию просмотра, привязанную к ученику и браузеру, после чего backend проксирует поток с поддержкой HTTP Range. Срок сессии задаётся через `INTERVIEW_STREAM_TICKET_TTL_SECONDS` (по умолчанию 10 минут). Плеер скрывает скачивание, запрещает контекстное меню и показывает предупреждающий watermark. Абсолютную защиту воспроизводимого медиа от записи экрана может дать только специализированный DRM, поэтому текущая защита рассчитана на предотвращение прямого скачивания и обычного копирования ссылки. Лимиты по умолчанию: видео — 2 GiB, аудио — 500 MiB, PDF/изображение оффера — 20 MiB, дополнительное вложение этапа — 50 MiB; они задаются через `INTERVIEW_VIDEO_MAX_BYTES`, `INTERVIEW_AUDIO_MAX_BYTES`, `INTERVIEW_OFFER_MAX_BYTES` и `INTERVIEW_ATTACHMENT_MAX_BYTES`. Коллекция вложений создаётся миграцией `20260801_0014`.
 
 Миграция `20260731_0006` загружает в Python-колоду 495 карточек из `backend/migrations/data/python_interview_questions.csv`. Она сохраняет тему, компании, исходный номер и исходную частотность. Значение `Часто` преобразуется в высокий приоритет, `Средне`, `Иногда`, `Редко` и пустое значение — в обычный. Контрольная сумма файла зафиксирована в миграции, поэтому случайно изменённый источник не будет загружен частично.
 
@@ -324,7 +421,7 @@ Admin frontend для треков доступен по `/admin/tracks`: адм
 
 ## Interview Intelligence
 
-Разбор записей встроен в существующий журнал собеседований: `IntelligenceInterview` связан один-к-одному с `InterviewProcessStage`, поэтому компания, направление и дата не дублируются. Запись остаётся в приватном S3, браузер загружает её напрямую по presigned POST, а FastAPI только проверяет объект и ставит задачу в Redis. ARQ worker выполняет внешний pipeline:
+Разбор записей встроен в существующий журнал собеседований: `IntelligenceInterview` связан один-к-одному с `InterviewProcessStage`, поэтому компания, направление и дата не дублируются. Запись остаётся в приватном S3, браузер загружает её напрямую по multipart PUT, а FastAPI завершает upload, проверяет объект и ставит задачу в Redis. ARQ worker выполняет внешний pipeline:
 
 ```text
 S3 upload → Nexara transcription + diarization → выбор кандидата

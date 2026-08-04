@@ -1,0 +1,14 @@
+<CORSConfiguration>
+  <CORSRule>
+    <!-- Replace this value with https://DOMAIN from .env.production. -->
+    <AllowedOrigin>https://platform.example.com</AllowedOrigin>
+    <AllowedMethod>GET</AllowedMethod>
+    <AllowedMethod>HEAD</AllowedMethod>
+    <AllowedMethod>POST</AllowedMethod>
+    <AllowedMethod>PUT</AllowedMethod>
+    <AllowedHeader>*</AllowedHeader>
+    <!-- The browser needs each part ETag to complete a multipart upload. -->
+    <ExposeHeader>ETag</ExposeHeader>
+    <MaxAgeSeconds>3600</MaxAgeSeconds>
+  </CORSRule>
+</CORSConfiguration>

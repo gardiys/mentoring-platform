@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
 import type { UploadOptions } from "../../api/client";
-import type { ContentMediaPlayback } from "../../types/api";
+import type {
+  AdminKnowledgeEntryRead,
+  AdminTopicRead,
+  ContentMediaPlayback,
+  ProtectedContentMediaRead,
+} from "../../types/api";
 import { adminKnowledgeKeys } from "../admin/knowledgeQueries";
 import { adminRoadmapKeys } from "../admin/queries";
 import { roadmapKeys } from "../roadmaps/queries";
@@ -16,9 +21,9 @@ export interface ContentMediaUploadVariables {
 
 export function useAdminKnowledgeMedia(topicId: string, entryId?: string) {
   const queryClient = useQueryClient();
-  const refresh = async () => {
+  const refresh = () => {
     if (!entryId) return;
-    await Promise.all([
+    void Promise.all([
       queryClient.invalidateQueries({
         queryKey: adminKnowledgeKeys.entry(topicId, entryId),
       }),
@@ -44,7 +49,18 @@ export function useAdminKnowledgeMedia(topicId: string, entryId?: string) {
         options,
       );
     },
-    onSuccess: refresh,
+    onSuccess: (item) => {
+      if (entryId) {
+        queryClient.setQueryData<AdminKnowledgeEntryRead>(
+          adminKnowledgeKeys.entry(topicId, entryId),
+          (current) =>
+            current
+              ? { ...current, media: mediaWithItem(current.media, item) }
+              : current,
+        );
+      }
+      refresh();
+    },
   });
   const remove = useMutation({
     mutationFn: (mediaId: string) => {
@@ -56,15 +72,24 @@ export function useAdminKnowledgeMedia(topicId: string, entryId?: string) {
   return { upload, remove };
 }
 
+function mediaWithItem(
+  media: ProtectedContentMediaRead[],
+  item: ProtectedContentMediaRead,
+) {
+  return [...media.filter((current) => current.id !== item.id), item].sort(
+    (left, right) => left.position - right.position,
+  );
+}
+
 export function useAdminRoadmapTopicMedia(
   roadmapId: string,
   sectionId: string,
   topicId?: string,
 ) {
   const queryClient = useQueryClient();
-  const refresh = async () => {
+  const refresh = () => {
     if (!topicId) return;
-    await Promise.all([
+    void Promise.all([
       queryClient.invalidateQueries({
         queryKey: adminRoadmapKeys.topic(roadmapId, sectionId, topicId),
       }),
@@ -92,7 +117,18 @@ export function useAdminRoadmapTopicMedia(
         options,
       );
     },
-    onSuccess: refresh,
+    onSuccess: (item) => {
+      if (topicId) {
+        queryClient.setQueryData<AdminTopicRead>(
+          adminRoadmapKeys.topic(roadmapId, sectionId, topicId),
+          (current) =>
+            current
+              ? { ...current, media: mediaWithItem(current.media, item) }
+              : current,
+        );
+      }
+      refresh();
+    },
   });
   const remove = useMutation({
     mutationFn: (mediaId: string) => {

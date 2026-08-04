@@ -19,11 +19,19 @@ from app.interviews.schemas import (
     InterviewCatalogCommentMutation,
     InterviewCatalogCommentRead,
     InterviewDownloadUrl,
+    InterviewMultipartUploadIntent,
     InterviewUploadComplete,
     InterviewUploadIntent,
+    InterviewUploadIntentResponse,
+    InterviewUploadProtocol,
     InterviewUploadRequest,
 )
-from app.interviews.uploads import InterviewUploadStore, StoredUpload
+from app.interviews.upload_cleanup import delete_upload_if_unreferenced
+from app.interviews.uploads import (
+    CompletedMultipartUploadPart,
+    InterviewUploadStore,
+    StoredUpload,
+)
 from app.mentors.models import (
     MentorDocumentKind,
     MentorStudentDocument,
@@ -79,6 +87,81 @@ DOCUMENT_TYPES = (
 
 def _upload_intent(intent: object) -> InterviewUploadIntent:
     return InterviewUploadIntent.model_validate(intent, from_attributes=True)
+
+
+async def _create_file_upload(
+    user_id: UUID,
+    payload: InterviewUploadRequest,
+    *,
+    category: str,
+    resource: str,
+    allowed_content_types: tuple[str, ...],
+    max_bytes: int,
+) -> InterviewUploadIntentResponse:
+    if payload.upload_protocol is InterviewUploadProtocol.MULTIPART_V1:
+        intent = await store.create_multipart_upload_intent(
+            user_id=user_id,
+            category=category,
+            resource=resource,
+            filename=payload.filename,
+            content_type=payload.content_type,
+            size=payload.size,
+            allowed_content_types=allowed_content_types,
+            max_bytes=max_bytes,
+        )
+        return InterviewMultipartUploadIntent.model_validate(intent, from_attributes=True)
+    return _upload_intent(
+        store.create_upload_intent(
+            user_id=user_id,
+            category=category,
+            filename=payload.filename,
+            content_type=payload.content_type,
+            size=payload.size,
+            allowed_content_types=allowed_content_types,
+            max_bytes=max_bytes,
+        )
+    )
+
+
+async def _complete_file_upload(
+    user_id: UUID,
+    payload: InterviewUploadComplete,
+    *,
+    category: str,
+    resource: str,
+    allowed_content_types: tuple[str, ...],
+    max_bytes: int,
+) -> StoredUpload:
+    if payload.upload_protocol is InterviewUploadProtocol.MULTIPART_V1:
+        if payload.upload_id is None or payload.upload_token is None:
+            api_error(422, "invalid_interview_upload", "Multipart upload metadata is invalid")
+        return await store.complete_multipart_upload(
+            user_id=user_id,
+            category=category,
+            resource=resource,
+            storage_key=payload.storage_key,
+            upload_id=payload.upload_id,
+            upload_token=payload.upload_token,
+            filename=payload.filename,
+            content_type=payload.content_type,
+            expected_size=payload.size,
+            parts=tuple(
+                CompletedMultipartUploadPart(part_number=part.part_number, etag=part.etag)
+                for part in payload.parts
+            ),
+            allowed_content_types=allowed_content_types,
+            max_bytes=max_bytes,
+        )
+    return await store.complete_upload(
+        user_id=user_id,
+        category=category,
+        storage_key=payload.storage_key,
+        filename=payload.filename,
+        content_type=payload.content_type,
+        expected_size=payload.size,
+        allowed_content_types=allowed_content_types,
+        max_bytes=max_bytes,
+    )
 
 
 def _stored_upload(
@@ -205,7 +288,7 @@ async def mentor_set_document_text(
 
 @router.post(
     "/students/{student_id}/documents/{kind}/upload",
-    response_model=InterviewUploadIntent,
+    response_model=InterviewUploadIntentResponse,
 )
 async def mentor_document_upload(
     student_id: UUID,
@@ -213,18 +296,16 @@ async def mentor_document_upload(
     payload: InterviewUploadRequest,
     session: Session,
     mentor: MentorUser,
-) -> InterviewUploadIntent:
+) -> InterviewUploadIntentResponse:
     await assigned_student(session, mentor, student_id)
-    intent = store.create_upload_intent(
-        user_id=mentor.id,
+    return await _create_file_upload(
+        mentor.id,
+        payload,
         category="mentor-document",
-        filename=payload.filename,
-        content_type=payload.content_type,
-        size=payload.size,
+        resource=f"mentor-document:{student_id}:{kind.value}",
         allowed_content_types=DOCUMENT_TYPES,
         max_bytes=settings.interview_attachment_max_bytes,
     )
-    return _upload_intent(intent)
 
 
 @router.post(
@@ -239,22 +320,21 @@ async def mentor_document_complete(
     mentor: MentorUser,
 ) -> MentorDocumentRead:
     await assigned_student(session, mentor, student_id)
-    upload = await store.complete_upload(
-        user_id=mentor.id,
+    upload = await _complete_file_upload(
+        mentor.id,
+        payload,
         category="mentor-document",
-        storage_key=payload.storage_key,
-        filename=payload.filename,
-        content_type=payload.content_type,
-        expected_size=payload.size,
+        resource=f"mentor-document:{student_id}:{kind.value}",
         allowed_content_types=DOCUMENT_TYPES,
         max_bytes=settings.interview_attachment_max_bytes,
     )
     try:
         document, previous_key = await set_document_file(session, mentor, student_id, kind, upload)
     except Exception:
-        await store.delete(upload.storage_key)
+        await delete_upload_if_unreferenced(session, store, upload.storage_key)
         raise
-    await store.delete(previous_key)
+    if previous_key != upload.storage_key:
+        await store.delete(previous_key)
     return document
 
 
@@ -314,7 +394,7 @@ async def mentor_complete_mock(
 
 @router.post(
     "/students/{student_id}/mock-interviews/{mock_id}/media/upload",
-    response_model=InterviewUploadIntent,
+    response_model=InterviewUploadIntentResponse,
 )
 async def mentor_mock_media_upload(
     student_id: UUID,
@@ -322,20 +402,17 @@ async def mentor_mock_media_upload(
     payload: InterviewUploadRequest,
     session: Session,
     mentor: MentorUser,
-) -> InterviewUploadIntent:
+) -> InterviewUploadIntentResponse:
     await assigned_student(session, mentor, student_id)
     await get_mock(session, mentor, mock_id, student_id=student_id)
     allowed_types, max_bytes = _media_rules(payload.content_type)
-    return _upload_intent(
-        store.create_upload_intent(
-            user_id=mentor.id,
-            category="mock-media",
-            filename=payload.filename,
-            content_type=payload.content_type,
-            size=payload.size,
-            allowed_content_types=allowed_types,
-            max_bytes=max_bytes,
-        )
+    return await _create_file_upload(
+        mentor.id,
+        payload,
+        category="mock-media",
+        resource=f"mentor-mock-media:{student_id}:{mock_id}",
+        allowed_content_types=allowed_types,
+        max_bytes=max_bytes,
     )
 
 
@@ -353,22 +430,21 @@ async def mentor_mock_media_complete(
     await assigned_student(session, mentor, student_id)
     await get_mock(session, mentor, mock_id, student_id=student_id)
     allowed_types, max_bytes = _media_rules(payload.content_type)
-    upload = await store.complete_upload(
-        user_id=mentor.id,
+    upload = await _complete_file_upload(
+        mentor.id,
+        payload,
         category="mock-media",
-        storage_key=payload.storage_key,
-        filename=payload.filename,
-        content_type=payload.content_type,
-        expected_size=payload.size,
+        resource=f"mentor-mock-media:{student_id}:{mock_id}",
         allowed_content_types=allowed_types,
         max_bytes=max_bytes,
     )
     try:
         mock, previous_key = await set_mock_media(session, mentor, student_id, mock_id, upload)
     except Exception:
-        await store.delete(upload.storage_key)
+        await delete_upload_if_unreferenced(session, store, upload.storage_key)
         raise
-    await store.delete(previous_key)
+    if previous_key != upload.storage_key:
+        await store.delete(previous_key)
     return mock
 
 

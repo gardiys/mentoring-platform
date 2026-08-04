@@ -1,9 +1,14 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-import { apiRequest, uploadPresignedPost } from "../src/api/client";
+import {
+  apiRequest,
+  uploadPresignedPost,
+  uploadStorageIntent,
+} from "../src/api/client";
 import { clearDevUserId, setDevUserId } from "../src/features/auth/devAuth";
 
 afterEach(() => {
+  vi.useRealTimers();
   delete window.Telegram;
   clearDevUserId();
   vi.unstubAllGlobals();
@@ -166,4 +171,151 @@ it("отменяет загрузку подписанной S3 POST-формы 
     code: "request_aborted",
     message: "Загрузка отменена",
   });
+});
+
+it("загружает multipart частями, ограничивает параллелизм и собирает ETag", async () => {
+  type Listener = (event: ProgressEvent) => void;
+  let activeRequests = 0;
+  let maximumConcurrency = 0;
+
+  class XMLHttpRequestMock {
+    status = 200;
+    private url = "";
+    private listeners = new Map<string, Listener>();
+    private uploadListeners = new Map<string, Listener>();
+    upload = {
+      addEventListener: (name: string, listener: Listener) =>
+        this.uploadListeners.set(name, listener),
+    };
+    open(method: string, url: string) {
+      expect(method).toBe("PUT");
+      this.url = url;
+    }
+    setRequestHeader = vi.fn();
+    getResponseHeader(name: string) {
+      return name === "ETag" ? `"etag-${this.url.at(-1)}"` : null;
+    }
+    addEventListener(name: string, listener: Listener) {
+      this.listeners.set(name, listener);
+    }
+    send = vi.fn((body: Blob) => {
+      activeRequests += 1;
+      maximumConcurrency = Math.max(maximumConcurrency, activeRequests);
+      queueMicrotask(() => {
+        this.uploadListeners.get("progress")?.({
+          lengthComputable: true,
+          loaded: body.size,
+          total: body.size,
+        } as ProgressEvent);
+        activeRequests -= 1;
+        this.listeners.get("load")?.({} as ProgressEvent);
+      });
+    });
+    abort = vi.fn(() => this.listeners.get("abort")?.({} as ProgressEvent));
+  }
+
+  vi.stubGlobal("XMLHttpRequest", XMLHttpRequestMock);
+  const onStatus = vi.fn();
+  const file = new File(["abcdefgh"], "interview.mp4", {
+    type: "video/mp4",
+  });
+
+  await expect(
+    uploadStorageIntent(
+      {
+        upload_protocol: "multipart-v1",
+        upload_id: "upload-id",
+        upload_token: "upload-token",
+        storage_key: "media/user/object",
+        filename: file.name,
+        content_type: file.type,
+        size: file.size,
+        part_size: 2,
+        part_count: 4,
+        parts: [1, 2, 3, 4].map((partNumber) => ({
+          part_number: partNumber,
+          upload_url: `https://s3.example.test/part-${partNumber}`,
+          headers: { "x-test-header": "signed" },
+        })),
+        expires_in: 21_600,
+        abort_url: "/api/v1/uploads/multipart/abort",
+      },
+      file,
+      { onStatus },
+    ),
+  ).resolves.toEqual({
+    upload_protocol: "multipart-v1",
+    upload_id: "upload-id",
+    upload_token: "upload-token",
+    parts: [1, 2, 3, 4].map((partNumber) => ({
+      part_number: partNumber,
+      etag: `"etag-${partNumber}"`,
+    })),
+  });
+
+  expect(maximumConcurrency).toBe(3);
+  expect(onStatus).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      phase: "uploading",
+      percent: 100,
+      uploadedBytes: file.size,
+    }),
+  );
+});
+
+it("повторяет только неуспешную multipart-часть", async () => {
+  type Listener = (event: ProgressEvent) => void;
+  vi.useFakeTimers();
+  let attempts = 0;
+
+  class XMLHttpRequestMock {
+    status = 0;
+    private listeners = new Map<string, Listener>();
+    upload = { addEventListener: vi.fn() };
+    open = vi.fn();
+    setRequestHeader = vi.fn();
+    getResponseHeader = vi.fn(() => '"etag-after-retry"');
+    addEventListener(name: string, listener: Listener) {
+      this.listeners.set(name, listener);
+    }
+    send = vi.fn(() => {
+      attempts += 1;
+      this.status = attempts === 1 ? 500 : 200;
+      queueMicrotask(() => this.listeners.get("load")?.({} as ProgressEvent));
+    });
+    abort = vi.fn(() => this.listeners.get("abort")?.({} as ProgressEvent));
+  }
+  vi.stubGlobal("XMLHttpRequest", XMLHttpRequestMock);
+  const file = new File(["part"], "interview.mp4", { type: "video/mp4" });
+  const upload = uploadStorageIntent(
+    {
+      upload_protocol: "multipart-v1",
+      upload_id: "upload-id",
+      upload_token: "upload-token",
+      storage_key: "media/user/object",
+      filename: file.name,
+      content_type: file.type,
+      size: file.size,
+      part_size: file.size,
+      part_count: 1,
+      parts: [
+        {
+          part_number: 1,
+          upload_url: "https://s3.example.test/part-1",
+          headers: {},
+        },
+      ],
+      expires_in: 21_600,
+      abort_url: "/api/v1/uploads/multipart/abort",
+    },
+    file,
+  );
+
+  await vi.runAllTimersAsync();
+  await expect(upload).resolves.toEqual(
+    expect.objectContaining({
+      parts: [{ part_number: 1, etag: '"etag-after-retry"' }],
+    }),
+  );
+  expect(attempts).toBe(2);
 });

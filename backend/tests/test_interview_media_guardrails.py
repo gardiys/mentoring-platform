@@ -1,15 +1,18 @@
+import hashlib
 import json
 import os
 import subprocess
 from collections import namedtuple
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException
 from pytest import MonkeyPatch
 
+from app.core.config import Settings
 from app.interviews import media_guardrails
 from app.interviews.media_guardrails import (
     MEDIA_CODEC_ALLOWLIST,
@@ -27,6 +30,7 @@ from app.interviews.media_guardrails import (
 from app.interviews.uploads import (
     SAFE_ATTACHMENT_CONTENT_TYPES,
     SAFE_OFFER_CONTENT_TYPES,
+    CompletedMultipartUploadPart,
     InterviewUploadStore,
 )
 
@@ -40,6 +44,14 @@ class FakePresignedPostClient:
         return {"url": "https://s3.example.test/upload", "fields": {"key": kwargs["Key"]}}
 
 
+def test_multipart_part_urls_cannot_outlive_upload_session() -> None:
+    with pytest.raises(ValueError, match="S3_MULTIPART_PRESIGN_TTL_SECONDS"):
+        Settings(
+            s3_multipart_presign_ttl_seconds=7_200,
+            s3_multipart_session_ttl_seconds=3_600,
+        )
+
+
 def upload_store() -> tuple[InterviewUploadStore, FakePresignedPostClient]:
     client = FakePresignedPostClient()
     store = object.__new__(InterviewUploadStore)
@@ -47,6 +59,91 @@ def upload_store() -> tuple[InterviewUploadStore, FakePresignedPostClient]:
     store.expires_in = 900
     store.public_client = client
     return store, client
+
+
+class FakeMultipartClient:
+    def __init__(self) -> None:
+        self.create_request: dict[str, Any] | None = None
+        self.complete_requests: list[dict[str, Any]] = []
+        self.abort_requests: list[dict[str, Any]] = []
+        self.list_requests: list[dict[str, Any]] = []
+        self.previous_uploads: list[dict[str, str]] = []
+        self.deleted: list[dict[str, Any]] = []
+        self.head = {"ContentLength": 130 * 1024 * 1024, "ContentType": "video/mp4"}
+        self.completed = False
+        self.ambiguous_completion = False
+        self.head_missing_attempts = 0
+        self.head_calls = 0
+
+    def create_multipart_upload(self, **kwargs: Any) -> dict[str, str]:
+        self.create_request = kwargs
+        return {"UploadId": "provider-upload-id"}
+
+    def list_multipart_uploads(self, **kwargs: Any) -> dict[str, Any]:
+        self.list_requests.append(kwargs)
+        return {"Uploads": self.previous_uploads, "IsTruncated": False}
+
+    def complete_multipart_upload(self, **kwargs: Any) -> dict[str, str]:
+        self.complete_requests.append(kwargs)
+        if self.ambiguous_completion:
+            self.completed = True
+            raise BotoCoreError()
+        if self.completed:
+            raise ClientError(
+                {"Error": {"Code": "NoSuchUpload"}},
+                "CompleteMultipartUpload",
+            )
+        self.completed = True
+        return {"ETag": "completed"}
+
+    def head_object(self, **_kwargs: Any) -> dict[str, Any]:
+        self.head_calls += 1
+        if self.head_calls <= self.head_missing_attempts:
+            raise ClientError({"Error": {"Code": "NoSuchKey"}}, "HeadObject")
+        if not self.completed:
+            raise ClientError({"Error": {"Code": "NoSuchKey"}}, "HeadObject")
+        return self.head
+
+    def abort_multipart_upload(self, **kwargs: Any) -> dict[str, object]:
+        self.abort_requests.append(kwargs)
+        return {}
+
+    def delete_object(self, **kwargs: Any) -> dict[str, object]:
+        self.deleted.append(kwargs)
+        return {}
+
+
+class FakeMultipartPublicClient:
+    def __init__(self) -> None:
+        self.presigned: list[dict[str, Any]] = []
+
+    def generate_presigned_url(
+        self,
+        operation: str,
+        *,
+        Params: dict[str, Any],
+        ExpiresIn: int,
+    ) -> str:
+        self.presigned.append({"operation": operation, "params": Params, "expires_in": ExpiresIn})
+        return f"https://s3.example.test/part/{Params['PartNumber']}"
+
+
+def multipart_upload_store() -> tuple[
+    InterviewUploadStore,
+    FakeMultipartClient,
+    FakeMultipartPublicClient,
+]:
+    client = FakeMultipartClient()
+    public_client = FakeMultipartPublicClient()
+    store = object.__new__(InterviewUploadStore)
+    store.bucket = "interview-files"
+    store.multipart_part_size = 64 * 1024 * 1024
+    store.multipart_presign_expires_in = 21_600
+    store.multipart_session_expires_in = 86_400
+    store._multipart_token_secret = "multipart-test-secret"
+    store.client = client
+    store.public_client = public_client
+    return store, client, public_client
 
 
 def test_presigned_post_cannot_upload_more_than_the_declared_size() -> None:
@@ -67,6 +164,250 @@ def test_presigned_post_cannot_upload_more_than_the_declared_size() -> None:
     assert client.request["Conditions"] == [
         {"Content-Type": "video/mp4"},
         ["content-length-range", 1, 1_234],
+    ]
+
+
+async def test_multipart_upload_writes_directly_to_final_key_and_is_idempotent() -> None:
+    store, client, public_client = multipart_upload_store()
+    user_id = uuid4()
+    size = 130 * 1024 * 1024
+
+    intent = await store.create_multipart_upload_intent(
+        user_id=user_id,
+        category="media",
+        resource="interview-stage-media:process:stage",
+        filename="recording.mp4",
+        content_type="video/mp4",
+        size=size,
+        allowed_content_types=("video",),
+        max_bytes=2 * 1024 * 1024 * 1024,
+    )
+    parts = tuple(
+        CompletedMultipartUploadPart(part_number=number, etag=f'"etag-{number}"')
+        for number in range(1, 4)
+    )
+    completion = dict(
+        user_id=user_id,
+        category="media",
+        resource="interview-stage-media:process:stage",
+        storage_key=intent.storage_key,
+        upload_id=intent.upload_id,
+        upload_token=intent.upload_token,
+        filename=intent.filename,
+        content_type=intent.content_type,
+        expected_size=intent.size,
+        parts=parts,
+        allowed_content_types=("video",),
+        max_bytes=2 * 1024 * 1024 * 1024,
+    )
+
+    first = await store.complete_multipart_upload(**completion)
+    retried = await store.complete_multipart_upload(**completion)
+
+    assert intent.storage_key.startswith(f"media/{user_id}/")
+    assert not intent.storage_key.startswith("pending/")
+    assert intent.part_size == 64 * 1024 * 1024
+    assert intent.part_count == 3
+    assert [part.part_number for part in intent.parts] == [1, 2, 3]
+    assert all(call["expires_in"] == 21_600 for call in public_client.presigned)
+    assert [call["params"]["ContentLength"] for call in public_client.presigned] == [
+        64 * 1024 * 1024,
+        64 * 1024 * 1024,
+        2 * 1024 * 1024,
+    ]
+    assert client.create_request == {
+        "Bucket": "interview-files",
+        "Key": intent.storage_key,
+        "ContentType": "video/mp4",
+    }
+    assert client.list_requests[0]["Prefix"] == intent.storage_key.rsplit("/", 1)[0] + "/"
+    assert first == retried
+    assert first.storage_key == intent.storage_key
+    assert len(client.complete_requests) == 2
+
+
+async def test_multipart_init_aborts_previous_matching_resource_upload() -> None:
+    store, client, _ = multipart_upload_store()
+    user_id = uuid4()
+    resource = "interview-stage-media:process:stage"
+    resource_hash = hashlib.sha256(resource.encode()).hexdigest()[:16]
+    stale_key = f"media/{user_id}/{resource_hash}/{uuid4().hex}"
+    client.previous_uploads = [{"Key": stale_key, "UploadId": "stale-upload-id"}]
+
+    await store.create_multipart_upload_intent(
+        user_id=user_id,
+        category="media",
+        resource=resource,
+        filename="recording.mp4",
+        content_type="video/mp4",
+        size=1_000,
+        allowed_content_types=("video",),
+        max_bytes=2 * 1024 * 1024 * 1024,
+    )
+
+    assert client.abort_requests == [
+        {
+            "Bucket": "interview-files",
+            "Key": stale_key,
+            "UploadId": "stale-upload-id",
+        }
+    ]
+
+
+async def test_multipart_token_binds_actor_category_and_resource() -> None:
+    store, client, _ = multipart_upload_store()
+    owner_id = uuid4()
+    intent = await store.create_multipart_upload_intent(
+        user_id=owner_id,
+        category="media",
+        resource="interview-stage-media:process:stage",
+        filename="recording.mp4",
+        content_type="video/mp4",
+        size=130 * 1024 * 1024,
+        allowed_content_types=("video",),
+        max_bytes=2 * 1024 * 1024 * 1024,
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        await store.complete_multipart_upload(
+            user_id=uuid4(),
+            category="media",
+            resource="interview-stage-media:other:stage",
+            storage_key=intent.storage_key,
+            upload_id=intent.upload_id,
+            upload_token=intent.upload_token,
+            filename=intent.filename,
+            content_type=intent.content_type,
+            expected_size=intent.size,
+            parts=tuple(
+                CompletedMultipartUploadPart(
+                    part_number=number,
+                    etag=f'"etag-{number}"',
+                )
+                for number in range(1, 4)
+            ),
+            allowed_content_types=("video",),
+            max_bytes=2 * 1024 * 1024 * 1024,
+        )
+
+    assert caught.value.status_code == 404
+    assert caught.value.detail["code"] == "interview_upload_not_found"
+    assert client.complete_requests == []
+
+
+async def test_multipart_completion_reconciles_ambiguous_provider_timeout() -> None:
+    store, client, _ = multipart_upload_store()
+    user_id = uuid4()
+    client.ambiguous_completion = True
+    client.head_missing_attempts = 2
+    intent = await store.create_multipart_upload_intent(
+        user_id=user_id,
+        category="media",
+        resource="interview-stage-media:process:stage",
+        filename="recording.mp4",
+        content_type="video/mp4",
+        size=130 * 1024 * 1024,
+        allowed_content_types=("video",),
+        max_bytes=2 * 1024 * 1024 * 1024,
+    )
+
+    completed = await store.complete_multipart_upload(
+        user_id=user_id,
+        category="media",
+        resource="interview-stage-media:process:stage",
+        storage_key=intent.storage_key,
+        upload_id=intent.upload_id,
+        upload_token=intent.upload_token,
+        filename=intent.filename,
+        content_type=intent.content_type,
+        expected_size=intent.size,
+        parts=tuple(
+            CompletedMultipartUploadPart(part_number=number, etag=f'"etag-{number}"')
+            for number in range(1, 4)
+        ),
+        allowed_content_types=("video",),
+        max_bytes=2 * 1024 * 1024 * 1024,
+    )
+
+    assert completed.storage_key == intent.storage_key
+    assert client.head_calls == 3
+
+
+async def test_multipart_completion_deletes_metadata_mismatch() -> None:
+    store, client, _ = multipart_upload_store()
+    user_id = uuid4()
+    client.head["ContentLength"] = 1
+    intent = await store.create_multipart_upload_intent(
+        user_id=user_id,
+        category="media",
+        resource="interview-stage-media:process:stage",
+        filename="recording.mp4",
+        content_type="video/mp4",
+        size=130 * 1024 * 1024,
+        allowed_content_types=("video",),
+        max_bytes=2 * 1024 * 1024 * 1024,
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        await store.complete_multipart_upload(
+            user_id=user_id,
+            category="media",
+            resource="interview-stage-media:process:stage",
+            storage_key=intent.storage_key,
+            upload_id=intent.upload_id,
+            upload_token=intent.upload_token,
+            filename=intent.filename,
+            content_type=intent.content_type,
+            expected_size=intent.size,
+            parts=tuple(
+                CompletedMultipartUploadPart(
+                    part_number=number,
+                    etag=f'"etag-{number}"',
+                )
+                for number in range(1, 4)
+            ),
+            allowed_content_types=("video",),
+            max_bytes=2 * 1024 * 1024 * 1024,
+        )
+
+    assert caught.value.status_code == 422
+    assert client.deleted == [{"Bucket": "interview-files", "Key": intent.storage_key}]
+
+
+async def test_multipart_abort_requires_signed_actor_binding() -> None:
+    store, client, _ = multipart_upload_store()
+    owner_id = uuid4()
+    intent = await store.create_multipart_upload_intent(
+        user_id=owner_id,
+        category="offers",
+        resource="interview-offer:process",
+        filename="offer.pdf",
+        content_type="application/pdf",
+        size=1_000,
+        allowed_content_types=("application/pdf",),
+        max_bytes=20 * 1024 * 1024,
+    )
+
+    await store.abort_multipart_upload(
+        user_id=owner_id,
+        storage_key=intent.storage_key,
+        upload_id=intent.upload_id,
+        upload_token=intent.upload_token,
+    )
+    with pytest.raises(HTTPException):
+        await store.abort_multipart_upload(
+            user_id=UUID(int=0),
+            storage_key=intent.storage_key,
+            upload_id=intent.upload_id,
+            upload_token=intent.upload_token,
+        )
+
+    assert client.abort_requests == [
+        {
+            "Bucket": "interview-files",
+            "Key": intent.storage_key,
+            "UploadId": intent.upload_id,
+        }
     ]
 
 

@@ -1,4 +1,5 @@
 import type { components } from "../api/generated/schema";
+import type { StorageUploadIntent } from "../api/client";
 
 type Schemas = components["schemas"];
 
@@ -15,15 +16,7 @@ export interface ProtectedContentMediaRead {
   created_at: string;
 }
 
-export interface ContentMediaUploadIntent {
-  upload_url: string;
-  fields: Record<string, string>;
-  storage_key: string;
-  filename: string;
-  content_type: string;
-  size: number;
-  expires_in: number;
-}
+export type ContentMediaUploadIntent = StorageUploadIntent;
 
 export interface ContentMediaUploadMetadata {
   title: string | null;
@@ -168,7 +161,7 @@ export type AdminInterviewProcessPage = Schemas["AdminInterviewProcessPage"];
 export type InterviewProcessDetail = Schemas["InterviewProcessDetail"];
 export type CompanyOption = Schemas["CompanyOption"];
 export type InterviewDirectionOption = Schemas["InterviewDirectionOption"];
-export type InterviewUploadIntent = Schemas["InterviewUploadIntent"];
+export type InterviewUploadIntent = StorageUploadIntent;
 export type InterviewDownloadUrl = Schemas["InterviewDownloadUrl"];
 export type InterviewCatalogCompanyListItem =
   Schemas["InterviewCatalogCompanyListItem"];
@@ -528,8 +521,17 @@ export interface AdminQuestionModerationDetail extends AdminQuestionModerationSu
   candidate_answer: string | null;
   suggested_answer: string | null;
   matched_card_id: string | null;
+  matched_card_deck_id: string | null;
+  matched_card_category: string | null;
   matched_card_question: string | null;
   matched_card_asked_count: number | null;
+  deck_options: AdminQuestionModerationDeckOption[];
+}
+
+export interface AdminQuestionModerationDeckOption {
+  id: string;
+  title: string;
+  categories: string[];
 }
 
 export interface AdminQuestionModerationPage {

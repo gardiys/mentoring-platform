@@ -1,0 +1,14 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-pending-objects-after-one-day",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "pending/"
+      },
+      "Expiration": {
+        "Days": 1
+      }
+    }
+  ]
+}

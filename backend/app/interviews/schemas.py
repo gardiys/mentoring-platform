@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -204,12 +205,18 @@ class InterviewStageAttachmentRead(InterviewAttachmentRead):
     created_at: datetime
 
 
+class InterviewUploadProtocol(StrEnum):
+    LEGACY_POST = "legacy-post"
+    MULTIPART_V1 = "multipart-v1"
+
+
 class InterviewUploadRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     filename: str = Field(min_length=1, max_length=500)
     content_type: str = Field(min_length=1, max_length=160)
     size: int = Field(gt=0)
+    upload_protocol: InterviewUploadProtocol = InterviewUploadProtocol.LEGACY_POST
 
 
 class InterviewUploadIntent(BaseModel):
@@ -222,6 +229,34 @@ class InterviewUploadIntent(BaseModel):
     expires_in: int
 
 
+class InterviewMultipartUploadPartIntent(BaseModel):
+    part_number: int = Field(ge=1, le=10_000)
+    upload_url: str
+    headers: dict[str, str]
+
+
+class InterviewMultipartUploadIntent(BaseModel):
+    upload_protocol: Literal["multipart-v1"]
+    upload_id: str
+    upload_token: str
+    abort_url: str
+    storage_key: str
+    filename: str
+    content_type: str
+    size: int
+    part_size: int
+    part_count: int
+    parts: list[InterviewMultipartUploadPartIntent]
+    expires_in: int
+
+
+class InterviewCompletedMultipartPart(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    part_number: int = Field(ge=1, le=10_000)
+    etag: str = Field(min_length=1, max_length=200)
+
+
 class InterviewUploadComplete(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -229,6 +264,30 @@ class InterviewUploadComplete(BaseModel):
     filename: str = Field(min_length=1, max_length=500)
     content_type: str = Field(min_length=1, max_length=160)
     size: int = Field(gt=0)
+    upload_protocol: InterviewUploadProtocol = InterviewUploadProtocol.LEGACY_POST
+    upload_id: str | None = Field(default=None, min_length=1, max_length=1_000)
+    upload_token: str | None = Field(default=None, min_length=1, max_length=8_192)
+    parts: list[InterviewCompletedMultipartPart] = Field(default_factory=list, max_length=10_000)
+
+    @model_validator(mode="after")
+    def validate_upload_protocol_fields(self) -> "InterviewUploadComplete":
+        if self.upload_protocol is InterviewUploadProtocol.MULTIPART_V1:
+            if self.upload_id is None or self.upload_token is None or not self.parts:
+                raise ValueError("Multipart completion requires upload_id, upload_token and parts")
+        elif self.upload_id is not None or self.upload_token is not None or self.parts:
+            raise ValueError("Multipart fields require upload_protocol=multipart-v1")
+        return self
+
+
+class InterviewMultipartUploadAbort(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    storage_key: str = Field(min_length=1, max_length=500)
+    upload_id: str = Field(min_length=1, max_length=1_000)
+    upload_token: str = Field(min_length=1, max_length=8_192)
+
+
+type InterviewUploadIntentResponse = InterviewUploadIntent | InterviewMultipartUploadIntent
 
 
 class InterviewDownloadUrl(BaseModel):

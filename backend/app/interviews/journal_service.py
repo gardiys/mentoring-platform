@@ -576,13 +576,15 @@ async def set_stage_media(
     upload: StoredUpload,
 ) -> tuple[InterviewProcessDetail, str | None]:
     stage = await get_stage_model(session, user, process_id, stage_id, lock=True)
+    previous_key = stage.media_storage_key
+    if previous_key == upload.storage_key:
+        return await process_detail(session, user, process_id), previous_key
     if stage.ai_analysis_requested_at is not None:
         api_error(
             409,
             "interview_recording_locked_for_ai_analysis",
             "The recording cannot be replaced after AI analysis was requested",
         )
-    previous_key = stage.media_storage_key
     stage.media_storage_key = upload.storage_key
     stage.media_filename = upload.filename
     stage.media_content_type = upload.content_type
@@ -618,6 +620,14 @@ async def add_stage_attachment(
     upload: StoredUpload,
 ) -> InterviewProcessDetail:
     await get_stage_model(session, user, process_id, stage_id, lock=True)
+    existing = await session.scalar(
+        select(InterviewProcessStageAttachment.id).where(
+            InterviewProcessStageAttachment.stage_id == stage_id,
+            InterviewProcessStageAttachment.storage_key == upload.storage_key,
+        )
+    )
+    if existing is not None:
+        return await process_detail(session, user, process_id)
     count = await session.scalar(
         select(func.count(InterviewProcessStageAttachment.id)).where(
             InterviewProcessStageAttachment.stage_id == stage_id

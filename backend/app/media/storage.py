@@ -35,7 +35,7 @@ def content_media_upload_rules(
 ) -> tuple[tuple[str, ...], int]:
     normalized = content_type.split(";", 1)[0].strip().lower()
     if normalized in SAFE_CONTENT_VIDEO_TYPES:
-        return SAFE_CONTENT_VIDEO_TYPES, settings.interview_video_max_bytes
+        return SAFE_CONTENT_VIDEO_TYPES, settings.content_video_max_bytes
     if normalized in SAFE_CONTENT_AUDIO_TYPES:
         return SAFE_CONTENT_AUDIO_TYPES, settings.interview_audio_max_bytes
     api_error(

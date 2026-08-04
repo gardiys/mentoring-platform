@@ -5,7 +5,6 @@ import {
   Card,
   FileInput,
   Group,
-  Progress,
   ScrollArea,
   Select,
   SimpleGrid,
@@ -15,13 +14,12 @@ import {
   Textarea,
   TextInput,
   Title,
-  VisuallyHidden,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { ApiError } from "../api/client";
+import { ApiError, type UploadStatus } from "../api/client";
 import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
@@ -29,6 +27,7 @@ import { PageHeader } from "../components/PageHeader";
 import { ProgressBar } from "../components/ProgressBar";
 import { TelegramChatLink } from "../components/TelegramChatLink";
 import { TopicStatusBadge } from "../components/TopicStatusBadge";
+import { UploadProgressPanel } from "../components/UploadProgressPanel";
 import {
   useCompleteMockInterview,
   useCreateMentorNote,
@@ -206,7 +205,7 @@ function MockInterviewCard({
 }) {
   const [feedback, setFeedback] = useState(mock.feedback ?? "");
   const [file, setFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const uploadController = useRef<AbortController | null>(null);
   const complete = useCompleteMockInterview(studentId);
   const upload = useUploadMockInterviewMedia(studentId);
@@ -242,12 +241,15 @@ function MockInterviewCard({
 
     const controller = new AbortController();
     uploadController.current = controller;
-    setUploadProgress(0);
     upload.mutate(
       {
         mockId: mock.id,
         file,
-        onProgress: setUploadProgress,
+        onProgress: (percent) =>
+          setUploadStatus((current) =>
+            current?.phase === "uploading" ? { ...current, percent } : current,
+          ),
+        onStatus: setUploadStatus,
         signal: controller.signal,
       },
       {
@@ -265,7 +267,7 @@ function MockInterviewCard({
           }),
         onSettled: () => {
           uploadController.current = null;
-          setUploadProgress(null);
+          setUploadStatus(null);
         },
       },
     );
@@ -341,28 +343,11 @@ function MockInterviewCard({
             Загрузить
           </Button>
         </Group>
-        {upload.isPending && uploadProgress !== null && (
-          <Stack gap={6}>
-            <Group justify="space-between" wrap="nowrap">
-              <Text size="sm" fw={600} aria-hidden="true">
-                Загружаем запись… {uploadProgress}%
-              </Text>
-              <VisuallyHidden role="status" aria-live="polite">
-                {uploadProgress === 100
-                  ? "Загрузка завершена"
-                  : `Загружено ${Math.floor(uploadProgress / 25) * 25}%`}
-              </VisuallyHidden>
-              <Button
-                size="compact-sm"
-                variant="subtle"
-                color="red"
-                onClick={() => uploadController.current?.abort()}
-              >
-                Отменить
-              </Button>
-            </Group>
-            <Progress value={uploadProgress} animated />
-          </Stack>
+        {upload.isPending && uploadStatus && (
+          <UploadProgressPanel
+            status={uploadStatus}
+            onCancel={() => uploadController.current?.abort()}
+          />
         )}
       </Stack>
     </Card>

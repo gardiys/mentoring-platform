@@ -40,6 +40,7 @@ from app.interviews.schemas import (
     CompanyOption,
     InterviewDirectionOption,
     InterviewDownloadUrl,
+    InterviewMultipartUploadIntent,
     InterviewProcessDetail,
     InterviewProcessMutation,
     InterviewProcessOutcomeMutation,
@@ -48,11 +49,15 @@ from app.interviews.schemas import (
     InterviewProcessSummary,
     InterviewUploadComplete,
     InterviewUploadIntent,
+    InterviewUploadIntentResponse,
+    InterviewUploadProtocol,
     InterviewUploadRequest,
 )
+from app.interviews.upload_cleanup import delete_upload_if_unreferenced
 from app.interviews.uploads import (
     SAFE_ATTACHMENT_CONTENT_TYPES,
     SAFE_OFFER_CONTENT_TYPES,
+    CompletedMultipartUploadPart,
     InterviewUploadStore,
     StoredUpload,
 )
@@ -89,6 +94,84 @@ def _media_upload_rules(content_type: str) -> tuple[tuple[str, ...], int]:
 
 def _upload_intent_read(intent: object) -> InterviewUploadIntent:
     return InterviewUploadIntent.model_validate(intent, from_attributes=True)
+
+
+async def _create_upload_intent(
+    user_id: UUID,
+    payload: InterviewUploadRequest,
+    *,
+    category: str,
+    resource: str,
+    allowed_content_types: tuple[str, ...],
+    max_bytes: int,
+) -> InterviewUploadIntentResponse:
+    if payload.upload_protocol is InterviewUploadProtocol.MULTIPART_V1:
+        intent = await store.create_multipart_upload_intent(
+            user_id=user_id,
+            category=category,
+            resource=resource,
+            filename=payload.filename,
+            content_type=payload.content_type,
+            size=payload.size,
+            allowed_content_types=allowed_content_types,
+            max_bytes=max_bytes,
+        )
+        return InterviewMultipartUploadIntent.model_validate(intent, from_attributes=True)
+    return _upload_intent_read(
+        store.create_upload_intent(
+            user_id=user_id,
+            category=category,
+            filename=payload.filename,
+            content_type=payload.content_type,
+            size=payload.size,
+            allowed_content_types=allowed_content_types,
+            max_bytes=max_bytes,
+        )
+    )
+
+
+async def _complete_upload(
+    user_id: UUID,
+    payload: InterviewUploadComplete,
+    *,
+    category: str,
+    resource: str,
+    allowed_content_types: tuple[str, ...],
+    max_bytes: int,
+) -> StoredUpload:
+    if payload.upload_protocol is InterviewUploadProtocol.MULTIPART_V1:
+        if payload.upload_id is None or payload.upload_token is None:
+            api_error(422, "invalid_interview_upload", "Multipart upload metadata is invalid")
+        return await store.complete_multipart_upload(
+            user_id=user_id,
+            category=category,
+            resource=resource,
+            storage_key=payload.storage_key,
+            upload_id=payload.upload_id,
+            upload_token=payload.upload_token,
+            filename=payload.filename,
+            content_type=payload.content_type,
+            expected_size=payload.size,
+            parts=tuple(
+                CompletedMultipartUploadPart(
+                    part_number=part.part_number,
+                    etag=part.etag,
+                )
+                for part in payload.parts
+            ),
+            allowed_content_types=allowed_content_types,
+            max_bytes=max_bytes,
+        )
+    return await store.complete_upload(
+        user_id=user_id,
+        category=category,
+        storage_key=payload.storage_key,
+        filename=payload.filename,
+        content_type=payload.content_type,
+        expected_size=payload.size,
+        allowed_content_types=allowed_content_types,
+        max_bytes=max_bytes,
+    )
 
 
 @router.get("/companies", response_model=list[CompanyOption])
@@ -212,7 +295,7 @@ async def journal_start_stage_ai_analysis(
 
 @router.post(
     "/tracks/{process_id}/stages/{stage_id}/media/upload",
-    response_model=InterviewUploadIntent,
+    response_model=InterviewUploadIntentResponse,
 )
 async def journal_create_stage_media_upload(
     process_id: UUID,
@@ -220,7 +303,7 @@ async def journal_create_stage_media_upload(
     payload: InterviewUploadRequest,
     session: Session,
     student: JournalUser,
-) -> InterviewUploadIntent:
+) -> InterviewUploadIntentResponse:
     stage = await get_stage_model(session, student, process_id, stage_id)
     if stage.ai_analysis_requested_at is not None:
         api_error(
@@ -229,16 +312,14 @@ async def journal_create_stage_media_upload(
             "The recording cannot be replaced after AI analysis was requested",
         )
     allowed_types, max_bytes = _media_upload_rules(payload.content_type)
-    intent = store.create_upload_intent(
-        user_id=student.id,
+    return await _create_upload_intent(
+        student.id,
+        payload,
         category="media",
-        filename=payload.filename,
-        content_type=payload.content_type,
-        size=payload.size,
+        resource=f"interview-stage-media:{process_id}:{stage_id}",
         allowed_content_types=allowed_types,
         max_bytes=max_bytes,
     )
-    return _upload_intent_read(intent)
 
 
 @router.post(
@@ -254,22 +335,21 @@ async def journal_complete_stage_media_upload(
 ) -> InterviewProcessDetail:
     await get_stage_model(session, student, process_id, stage_id)
     allowed_types, max_bytes = _media_upload_rules(payload.content_type)
-    upload = await store.complete_upload(
-        user_id=student.id,
+    upload = await _complete_upload(
+        student.id,
+        payload,
         category="media",
-        storage_key=payload.storage_key,
-        filename=payload.filename,
-        content_type=payload.content_type,
-        expected_size=payload.size,
+        resource=f"interview-stage-media:{process_id}:{stage_id}",
         allowed_content_types=allowed_types,
         max_bytes=max_bytes,
     )
     try:
         detail, previous_key = await set_stage_media(session, student, process_id, stage_id, upload)
     except Exception:
-        await store.delete(upload.storage_key)
+        await delete_upload_if_unreferenced(session, store, upload.storage_key)
         raise
-    await store.delete(previous_key)
+    if previous_key != upload.storage_key:
+        await store.delete(previous_key)
     return detail
 
 
@@ -316,7 +396,7 @@ async def journal_delete_stage_media(
 
 @router.post(
     "/tracks/{process_id}/stages/{stage_id}/attachments/upload",
-    response_model=InterviewUploadIntent,
+    response_model=InterviewUploadIntentResponse,
 )
 async def journal_create_stage_attachment_upload(
     process_id: UUID,
@@ -324,18 +404,16 @@ async def journal_create_stage_attachment_upload(
     payload: InterviewUploadRequest,
     session: Session,
     student: JournalUser,
-) -> InterviewUploadIntent:
+) -> InterviewUploadIntentResponse:
     await ensure_stage_attachment_capacity(session, student, process_id, stage_id)
-    intent = store.create_upload_intent(
-        user_id=student.id,
+    return await _create_upload_intent(
+        student.id,
+        payload,
         category="attachments",
-        filename=payload.filename,
-        content_type=payload.content_type,
-        size=payload.size,
+        resource=f"interview-stage-attachment:{process_id}:{stage_id}",
         allowed_content_types=SAFE_ATTACHMENT_CONTENT_TYPES,
         max_bytes=settings.interview_attachment_max_bytes,
     )
-    return _upload_intent_read(intent)
 
 
 @router.post(
@@ -349,21 +427,18 @@ async def journal_complete_stage_attachment_upload(
     session: Session,
     student: JournalUser,
 ) -> InterviewProcessDetail:
-    await ensure_stage_attachment_capacity(session, student, process_id, stage_id)
-    upload = await store.complete_upload(
-        user_id=student.id,
+    upload = await _complete_upload(
+        student.id,
+        payload,
         category="attachments",
-        storage_key=payload.storage_key,
-        filename=payload.filename,
-        content_type=payload.content_type,
-        expected_size=payload.size,
+        resource=f"interview-stage-attachment:{process_id}:{stage_id}",
         allowed_content_types=SAFE_ATTACHMENT_CONTENT_TYPES,
         max_bytes=settings.interview_attachment_max_bytes,
     )
     try:
         return await add_stage_attachment(session, student, process_id, stage_id, upload)
     except Exception:
-        await store.delete(upload.storage_key)
+        await delete_upload_if_unreferenced(session, store, upload.storage_key)
         raise
 
 
@@ -419,25 +494,23 @@ async def journal_delete_stage_attachment(
 
 @router.post(
     "/tracks/{process_id}/offer/upload",
-    response_model=InterviewUploadIntent,
+    response_model=InterviewUploadIntentResponse,
 )
 async def journal_create_offer_upload(
     process_id: UUID,
     payload: InterviewUploadRequest,
     session: Session,
     student: JournalUser,
-) -> InterviewUploadIntent:
+) -> InterviewUploadIntentResponse:
     await get_process_model(session, student, process_id)
-    intent = store.create_upload_intent(
-        user_id=student.id,
+    return await _create_upload_intent(
+        student.id,
+        payload,
         category="offers",
-        filename=payload.filename,
-        content_type=payload.content_type,
-        size=payload.size,
+        resource=f"interview-offer:{process_id}",
         allowed_content_types=SAFE_OFFER_CONTENT_TYPES,
         max_bytes=settings.interview_offer_max_bytes,
     )
-    return _upload_intent_read(intent)
 
 
 @router.post(
@@ -451,22 +524,21 @@ async def journal_complete_offer_upload(
     student: JournalUser,
 ) -> InterviewProcessDetail:
     await get_process_model(session, student, process_id)
-    upload = await store.complete_upload(
-        user_id=student.id,
+    upload = await _complete_upload(
+        student.id,
+        payload,
         category="offers",
-        storage_key=payload.storage_key,
-        filename=payload.filename,
-        content_type=payload.content_type,
-        expected_size=payload.size,
+        resource=f"interview-offer:{process_id}",
         allowed_content_types=SAFE_OFFER_CONTENT_TYPES,
         max_bytes=settings.interview_offer_max_bytes,
     )
     try:
         detail, previous_key = await set_offer_file(session, student, process_id, upload)
     except Exception:
-        await store.delete(upload.storage_key)
+        await delete_upload_if_unreferenced(session, store, upload.storage_key)
         raise
-    await store.delete(previous_key)
+    if previous_key != upload.storage_key:
+        await store.delete(previous_key)
     return detail
 
 

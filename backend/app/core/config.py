@@ -34,7 +34,23 @@ class Settings(BaseSettings):
     s3_access_key_id: str = "mentoring-minio"
     s3_secret_access_key: SecretStr = SecretStr("mentoring-minio-secret")
     s3_presign_ttl_seconds: int = Field(default=900, ge=60, le=3_600)
+    s3_multipart_part_size_bytes: int = Field(
+        default=67_108_864,
+        ge=5_242_880,
+        le=536_870_912,
+    )
+    s3_multipart_presign_ttl_seconds: int = Field(default=21_600, ge=300, le=86_400)
+    s3_multipart_session_ttl_seconds: int = Field(
+        default=86_400,
+        ge=3_600,
+        le=604_800,
+    )
     interview_stream_ticket_ttl_seconds: int = Field(default=600, ge=60, le=3_600)
+    content_video_max_bytes: int = Field(
+        default=5_368_709_120,
+        ge=1_048_576,
+        le=10_737_418_240,
+    )
     interview_video_max_bytes: int = Field(default=2_147_483_648, ge=1_048_576, le=5_368_709_120)
     interview_audio_max_bytes: int = Field(default=524_288_000, ge=1_048_576, le=2_147_483_648)
     interview_offer_max_bytes: int = Field(default=20_971_520, ge=1_048_576, le=104_857_600)
@@ -155,6 +171,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_intelligence_job_lifetimes(self) -> "Settings":
+        if self.s3_multipart_presign_ttl_seconds > self.s3_multipart_session_ttl_seconds:
+            raise ValueError(
+                "S3_MULTIPART_PRESIGN_TTL_SECONDS must not exceed S3_MULTIPART_SESSION_TTL_SECONDS"
+            )
         if self.transcription_poll_deadline_seconds > self.intelligence_job_expires_seconds:
             raise ValueError(
                 "TRANSCRIPTION_POLL_DEADLINE_SECONDS must not exceed "
@@ -168,10 +188,7 @@ class Settings(BaseSettings):
                 "INTERVIEW_LEGACY_TRANSCODE_CLEANUP_AGE_SECONDS must exceed "
                 "INTERVIEW_LEGACY_TRANSCODE_TIMEOUT_SECONDS"
             )
-        if (
-            self.interview_legacy_transcode_max_reserved_bytes
-            < self.interview_audio_max_bytes * 2
-        ):
+        if self.interview_legacy_transcode_max_reserved_bytes < self.interview_audio_max_bytes * 2:
             raise ValueError(
                 "INTERVIEW_LEGACY_TRANSCODE_MAX_RESERVED_BYTES must be at least twice "
                 "INTERVIEW_AUDIO_MAX_BYTES"

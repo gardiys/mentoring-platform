@@ -1,6 +1,7 @@
 export type MediaKind = "audio" | "video";
 
 export const VIDEO_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+export const CONTENT_VIDEO_MAX_BYTES = 5 * 1024 * 1024 * 1024;
 export const AUDIO_MAX_BYTES = 500 * 1024 * 1024;
 
 const AUDIO_EXTENSIONS = new Set([

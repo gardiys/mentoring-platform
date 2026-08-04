@@ -5,7 +5,14 @@ from httpx import AsyncClient
 from pytest import MonkeyPatch
 
 from app.interviews import journal_router
-from app.interviews.uploads import StoredUpload, UploadIntent
+from app.interviews.models import InterviewProcessStage, InterviewProcessStageAttachment
+from app.interviews.upload_cleanup import delete_upload_if_unreferenced
+from app.interviews.uploads import (
+    MultipartUploadIntent,
+    MultipartUploadPartIntent,
+    StoredUpload,
+    UploadIntent,
+)
 from app.tracks.models import LearningTrackEnrollment
 from app.users.models import User, UserRole
 from tests.conftest import SeededData, TestSession, auth
@@ -52,6 +59,39 @@ class FakeInterviewUploadStore:
     async def complete_upload(self, **kwargs: object) -> StoredUpload:
         return StoredUpload(
             storage_key=str(kwargs["storage_key"]).replace("pending/", "", 1),
+            filename=str(kwargs["filename"]),
+            content_type=str(kwargs["content_type"]),
+            size=int(kwargs["expected_size"]),
+        )
+
+    async def create_multipart_upload_intent(self, **kwargs: object) -> MultipartUploadIntent:
+        user_id = kwargs["user_id"]
+        category = kwargs["category"]
+        storage_key = f"{category}/{user_id}/{uuid4().hex}"
+        return MultipartUploadIntent(
+            upload_protocol="multipart-v1",
+            upload_id="provider-upload-id",
+            upload_token="signed-upload-token",
+            abort_url="/api/v1/uploads/multipart/abort",
+            storage_key=storage_key,
+            filename=str(kwargs["filename"]),
+            content_type=str(kwargs["content_type"]),
+            size=int(kwargs["size"]),
+            part_size=64 * 1024 * 1024,
+            part_count=1,
+            parts=(
+                MultipartUploadPartIntent(
+                    part_number=1,
+                    upload_url="https://s3.example.test/part/1",
+                    headers={},
+                ),
+            ),
+            expires_in=21_600,
+        )
+
+    async def complete_multipart_upload(self, **kwargs: object) -> StoredUpload:
+        return StoredUpload(
+            storage_key=str(kwargs["storage_key"]),
             filename=str(kwargs["filename"]),
             content_type=str(kwargs["content_type"]),
             size=int(kwargs["expected_size"]),
@@ -531,6 +571,105 @@ async def test_student_uploads_protected_stage_media(
     assert wrong_type.status_code == 415
 
 
+async def test_student_multipart_stage_media_complete_is_idempotent(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    store = FakeInterviewUploadStore()
+    monkeypatch.setattr(journal_router, "store", store)
+    process = await create_process(client, seeded)
+    stage_response = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages",
+        headers=auth(seeded.student_id),
+        json=stage_payload(),
+    )
+    stage_id = stage_response.json()["stages"][0]["id"]
+    intent = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}/media/upload",
+        headers=auth(seeded.student_id),
+        json={
+            "filename": "recording.mp4",
+            "content_type": "video/mp4",
+            "size": 1_024,
+            "upload_protocol": "multipart-v1",
+        },
+    )
+    complete_payload = {
+        "storage_key": intent.json()["storage_key"],
+        "filename": "recording.mp4",
+        "content_type": "video/mp4",
+        "size": 1_024,
+        "upload_protocol": "multipart-v1",
+        "upload_id": intent.json()["upload_id"],
+        "upload_token": intent.json()["upload_token"],
+        "parts": [{"part_number": 1, "etag": '"part-etag"'}],
+    }
+    first = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}/media/complete",
+        headers=auth(seeded.student_id),
+        json=complete_payload,
+    )
+    async with TestSession() as session:
+        stage = await session.get(InterviewProcessStage, UUID(stage_id))
+        assert stage is not None
+        stage.ai_analysis_requested_at = datetime.now(UTC)
+        await session.commit()
+    retried = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}/media/complete",
+        headers=auth(seeded.student_id),
+        json=complete_payload,
+    )
+
+    assert intent.status_code == 200
+    assert intent.json()["upload_protocol"] == "multipart-v1"
+    assert intent.json()["part_count"] == 1
+    assert first.status_code == 200
+    assert retried.status_code == 200
+    assert first.json()["stages"][0]["media"] == retried.json()["stages"][0]["media"]
+    assert store.deleted == []
+
+
+async def test_failed_response_cleanup_preserves_referenced_upload(
+    client: AsyncClient,
+    seeded: SeededData,
+) -> None:
+    store = FakeInterviewUploadStore()
+    process = await create_process(client, seeded)
+    stage_response = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages",
+        headers=auth(seeded.student_id),
+        json=stage_payload(),
+    )
+    stage_id = UUID(stage_response.json()["stages"][0]["id"])
+    referenced_key = f"media/{seeded.student_id}/{uuid4().hex}"
+
+    async with TestSession() as session:
+        stage = await session.get(InterviewProcessStage, stage_id)
+        assert stage is not None
+        stage.media_storage_key = referenced_key
+        stage.media_filename = "recording.mp4"
+        stage.media_content_type = "video/mp4"
+        stage.media_size = 1_024
+        await session.commit()
+
+        referenced_deleted = await delete_upload_if_unreferenced(
+            session,
+            store,
+            referenced_key,
+        )
+        orphan_key = f"media/{seeded.student_id}/{uuid4().hex}"
+        orphan_deleted = await delete_upload_if_unreferenced(
+            session,
+            store,
+            orphan_key,
+        )
+
+    assert referenced_deleted is False
+    assert orphan_deleted is True
+    assert store.deleted == [orphan_key]
+
+
 async def test_student_adds_opens_and_deletes_stage_attachments(
     client: AsyncClient,
     seeded: SeededData,
@@ -560,6 +699,16 @@ async def test_student_adds_opens_and_deletes_stage_attachments(
             "size": 42,
         },
     )
+    retried = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}/attachments/complete",
+        headers=auth(seeded.student_id),
+        json={
+            "storage_key": intent.json()["storage_key"],
+            "filename": "diagram.png",
+            "content_type": "image/png",
+            "size": 42,
+        },
+    )
     attachment = uploaded.json()["stages"][0]["attachments"][0]
     viewed = await client.get(
         f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}/attachments/{attachment['id']}?inline=true",
@@ -576,12 +725,60 @@ async def test_student_adds_opens_and_deletes_stage_attachments(
 
     assert intent.status_code == 200
     assert uploaded.status_code == 200
+    assert retried.status_code == 200
+    assert len(retried.json()["stages"][0]["attachments"]) == 1
     assert attachment["filename"] == "diagram.png"
     assert attachment["content_type"] == "image/png"
     assert viewed.json()["url"].endswith("?mode=inline")
     assert downloaded.json()["url"].endswith("?mode=download")
     assert deleted.status_code == 204
     assert any(key.startswith("attachments/") for key in store.deleted)
+
+
+async def test_attachment_complete_retry_succeeds_at_capacity(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    store = FakeInterviewUploadStore()
+    monkeypatch.setattr(journal_router, "store", store)
+    process = await create_process(client, seeded)
+    stage_response = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages",
+        headers=auth(seeded.student_id),
+        json=stage_payload(),
+    )
+    stage_id = UUID(stage_response.json()["stages"][0]["id"])
+    existing_key = f"attachments/{seeded.student_id}/{uuid4().hex}"
+    async with TestSession() as session:
+        session.add_all(
+            [
+                InterviewProcessStageAttachment(
+                    stage_id=stage_id,
+                    storage_key=existing_key if index == 0 else f"attachments/{uuid4().hex}",
+                    filename=f"attachment-{index}.txt",
+                    content_type="text/plain",
+                    size=42,
+                )
+                for index in range(20)
+            ]
+        )
+        await session.commit()
+
+    response = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}/attachments/complete",
+        headers=auth(seeded.student_id),
+        json={
+            "storage_key": f"pending/{existing_key}",
+            "filename": "attachment-0.txt",
+            "content_type": "text/plain",
+            "size": 42,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["stages"][0]["attachments"]) == 20
+    assert store.deleted == []
 
 
 async def test_video_upload_is_limited_to_two_gibibytes(

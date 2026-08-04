@@ -6,7 +6,6 @@ import {
   FileInput,
   Group,
   NumberInput,
-  Progress,
   Stack,
   Text,
   TextInput,
@@ -16,13 +15,15 @@ import { notifications } from "@mantine/notifications";
 import type { UseMutationResult } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { ApiError, type UploadStatus } from "../api/client";
 import type { ProtectedContentMediaRead } from "../types/api";
 import {
   AUDIO_MAX_BYTES,
-  VIDEO_MAX_BYTES,
+  CONTENT_VIDEO_MAX_BYTES,
   inferFileContentType,
 } from "../utils/media";
 import type { ContentMediaUploadVariables } from "../features/media/queries";
+import { UploadProgressPanel } from "./UploadProgressPanel";
 
 interface Props {
   media: ProtectedContentMediaRead[];
@@ -95,7 +96,7 @@ export function AdminContentMediaManager({
   const [position, setPosition] = useState<number | string>(() =>
     nextMediaPosition(media),
   );
-  const [progress, setProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const uploadController = useRef<AbortController | null>(null);
 
   useEffect(
@@ -135,7 +136,8 @@ export function AdminContentMediaManager({
       notifications.show({ color: "red", message: "Выбранный файл пуст" });
       return;
     }
-    const maxBytes = kind === "video" ? VIDEO_MAX_BYTES : AUDIO_MAX_BYTES;
+    const maxBytes =
+      kind === "video" ? CONTENT_VIDEO_MAX_BYTES : AUDIO_MAX_BYTES;
     if (file.size > maxBytes) {
       notifications.show({
         color: "red",
@@ -146,13 +148,21 @@ export function AdminContentMediaManager({
 
     const controller = new AbortController();
     uploadController.current = controller;
-    setProgress(0);
     upload.mutate(
       {
         file,
         title: title.trim() || null,
         position: uploadPosition,
-        options: { signal: controller.signal, onProgress: setProgress },
+        options: {
+          signal: controller.signal,
+          onProgress: (percent) =>
+            setUploadStatus((current) =>
+              current?.phase === "uploading"
+                ? { ...current, percent }
+                : current,
+            ),
+          onStatus: setUploadStatus,
+        },
       },
       {
         onSuccess: () => {
@@ -164,13 +174,19 @@ export function AdminContentMediaManager({
               Math.max(nextMediaPosition(media), uploadPosition + 1),
             ),
           );
-          setProgress(0);
           notifications.show({ color: "green", message: "Медиа добавлено" });
         },
         onError: (error) =>
-          notifications.show({ color: "red", message: error.message }),
+          notifications.show({
+            color:
+              error instanceof ApiError && error.code === "request_aborted"
+                ? "yellow"
+                : "red",
+            message: error.message,
+          }),
         onSettled: () => {
           uploadController.current = null;
+          setUploadStatus(null);
         },
       },
     );
@@ -247,7 +263,7 @@ export function AdminContentMediaManager({
 
             <FileInput
               label="Аудио- или видеофайл"
-              description="MP4/WebM для видео, MP3/M4A/WAV для аудио. Видео — до 2 ГБ, аудио — до 500 МБ."
+              description="MP4/WebM для видео, MP3/M4A/WAV для аудио. Видео — до 5 ГБ, аудио — до 500 МБ."
               placeholder="Выберите файл"
               accept={ACCEPTED_MEDIA}
               clearable
@@ -275,25 +291,13 @@ export function AdminContentMediaManager({
                 onChange={setPosition}
               />
             </Group>
-            {upload.isPending && (
-              <Stack gap={4}>
-                <Progress value={progress} animated />
-                <Text size="xs" c="dimmed">
-                  Загружено {progress}%
-                </Text>
-              </Stack>
+            {upload.isPending && uploadStatus && (
+              <UploadProgressPanel
+                status={uploadStatus}
+                onCancel={() => uploadController.current?.abort()}
+              />
             )}
             <Group justify="flex-end">
-              {upload.isPending && (
-                <Button
-                  type="button"
-                  variant="subtle"
-                  color="red"
-                  onClick={() => uploadController.current?.abort()}
-                >
-                  Отменить загрузку
-                </Button>
-              )}
               <Button
                 type="button"
                 loading={upload.isPending}

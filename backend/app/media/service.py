@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -63,6 +64,11 @@ async def attach_knowledge_media(
     upload: StoredUpload,
     payload: ContentMediaUploadFinalize,
 ) -> ProtectedContentMediaRead:
+    existing = await _existing_media(session, upload.storage_key)
+    if existing is not None:
+        if existing.knowledge_entry_id != entry_id:
+            api_error(409, "content_media_conflict", "The media belongs to other content")
+        return content_media_read(existing)
     media = ProtectedContentMedia(
         knowledge_entry_id=entry_id,
         uploaded_by_user_id=uploaded_by_user_id,
@@ -74,7 +80,18 @@ async def attach_knowledge_media(
         position=payload.position,
     )
     session.add(media)
-    await _commit_media(session)
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        existing = await _existing_media(session, upload.storage_key)
+        if existing is not None and existing.knowledge_entry_id == entry_id:
+            return content_media_read(existing)
+        api_error(
+            409,
+            "content_media_conflict",
+            "The media attachment conflicts with existing content",
+        )
     await session.refresh(media)
     return content_media_read(media)
 
@@ -87,6 +104,11 @@ async def attach_roadmap_media(
     upload: StoredUpload,
     payload: ContentMediaUploadFinalize,
 ) -> ProtectedContentMediaRead:
+    existing = await _existing_media(session, upload.storage_key)
+    if existing is not None:
+        if existing.roadmap_topic_id != topic_id:
+            api_error(409, "content_media_conflict", "The media belongs to other content")
+        return content_media_read(existing)
     media = ProtectedContentMedia(
         roadmap_topic_id=topic_id,
         uploaded_by_user_id=uploaded_by_user_id,
@@ -98,21 +120,32 @@ async def attach_roadmap_media(
         position=payload.position,
     )
     session.add(media)
-    await _commit_media(session)
-    await session.refresh(media)
-    return content_media_read(media)
-
-
-async def _commit_media(session: AsyncSession) -> None:
     try:
         await session.commit()
     except IntegrityError:
         await session.rollback()
+        existing = await _existing_media(session, upload.storage_key)
+        if existing is not None and existing.roadmap_topic_id == topic_id:
+            return content_media_read(existing)
         api_error(
             409,
             "content_media_conflict",
             "The media attachment conflicts with existing content",
         )
+    await session.refresh(media)
+    return content_media_read(media)
+
+
+async def _existing_media(
+    session: AsyncSession,
+    storage_key: str,
+) -> ProtectedContentMedia | None:
+    return cast(
+        ProtectedContentMedia | None,
+        await session.scalar(
+            select(ProtectedContentMedia).where(ProtectedContentMedia.storage_key == storage_key)
+        ),
+    )
 
 
 async def _knowledge_media(

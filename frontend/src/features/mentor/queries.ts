@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
+import type { UploadOptions } from "../../api/client";
 import type {
   MentorDocumentKind,
   StudentAccessFilter,
@@ -68,8 +69,8 @@ function useStudentMutation<TVariables, TData>(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn,
-    onSuccess: async () => {
-      await Promise.all([
+    onSuccess: () => {
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: mentorKeys.students }),
         queryClient.invalidateQueries({
           queryKey: mentorKeys.student(studentId),
@@ -144,15 +145,18 @@ export function useUploadMockInterviewMedia(studentId: string) {
       mockId,
       file,
       onProgress,
+      onStatus,
       signal,
     }: {
       mockId: string;
       file: File;
       onProgress?: (percent: number) => void;
+      onStatus?: UploadOptions["onStatus"];
       signal?: AbortSignal;
     }) =>
       api.uploadMockInterviewMedia(studentId, mockId, file, {
         onProgress,
+        onStatus,
         signal,
       }),
   );

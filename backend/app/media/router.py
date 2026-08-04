@@ -13,15 +13,20 @@ from app.auth.web_session import SignedPayloadError
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
+from app.interviews.upload_cleanup import delete_upload_if_unreferenced
+from app.interviews.uploads import CompletedMultipartUploadPart
 from app.media.models import ProtectedContentMedia
 from app.media.protected_stream import (
     create_bound_stream_ticket,
     read_bound_stream_ticket,
 )
 from app.media.schemas import (
+    ContentMediaMultipartUploadIntent,
     ContentMediaPlayback,
     ContentMediaUploadFinalize,
     ContentMediaUploadIntent,
+    ContentMediaUploadIntentResponse,
+    ContentMediaUploadProtocol,
     ContentMediaUploadRequest,
     ProtectedContentMediaRead,
 )
@@ -66,15 +71,28 @@ def _ticket_kind(scope: MediaScope) -> str:
     return f"{scope}_content_media_stream"
 
 
-def _upload_intent(
+async def _upload_intent(
     admin: User,
     payload: ContentMediaUploadRequest,
     *,
     category: str,
-) -> ContentMediaUploadIntent:
+    resource: str,
+) -> ContentMediaUploadIntentResponse:
     allowed_types, max_bytes = content_media_upload_rules(settings, payload.content_type)
     _validate_media_size(payload.size, max_bytes)
-    intent = store.create_upload_intent(
+    if payload.upload_protocol is ContentMediaUploadProtocol.MULTIPART_V1:
+        intent = await store.create_multipart_upload_intent(
+            user_id=admin.id,
+            category=category,
+            resource=resource,
+            filename=payload.filename,
+            content_type=payload.content_type,
+            size=payload.size,
+            allowed_content_types=allowed_types,
+            max_bytes=max_bytes,
+        )
+        return ContentMediaMultipartUploadIntent.model_validate(intent, from_attributes=True)
+    legacy_intent = store.create_upload_intent(
         user_id=admin.id,
         category=category,
         filename=payload.filename,
@@ -83,7 +101,7 @@ def _upload_intent(
         allowed_content_types=allowed_types,
         max_bytes=max_bytes,
     )
-    return ContentMediaUploadIntent.model_validate(intent, from_attributes=True)
+    return ContentMediaUploadIntent.model_validate(legacy_intent, from_attributes=True)
 
 
 async def _complete_upload(
@@ -91,9 +109,30 @@ async def _complete_upload(
     payload: ContentMediaUploadFinalize,
     *,
     category: str,
+    resource: str,
 ) -> StoredUpload:
     allowed_types, max_bytes = content_media_upload_rules(settings, payload.content_type)
     _validate_media_size(payload.size, max_bytes)
+    if payload.upload_protocol is ContentMediaUploadProtocol.MULTIPART_V1:
+        if payload.upload_id is None or payload.upload_token is None:
+            api_error(422, "invalid_interview_upload", "Multipart upload metadata is invalid")
+        return await store.complete_multipart_upload(
+            user_id=admin.id,
+            category=category,
+            resource=resource,
+            storage_key=payload.storage_key,
+            upload_id=payload.upload_id,
+            upload_token=payload.upload_token,
+            filename=payload.filename,
+            content_type=payload.content_type,
+            expected_size=payload.size,
+            parts=tuple(
+                CompletedMultipartUploadPart(part_number=part.part_number, etag=part.etag)
+                for part in payload.parts
+            ),
+            allowed_content_types=allowed_types,
+            max_bytes=max_bytes,
+        )
     return await store.complete_upload(
         user_id=admin.id,
         category=category,
@@ -117,7 +156,7 @@ def _validate_media_size(size: int, max_bytes: int) -> None:
 
 @admin_knowledge_media_router.post(
     "/{topic_id}/entries/{entry_id}/media/upload-url",
-    response_model=ContentMediaUploadIntent,
+    response_model=ContentMediaUploadIntentResponse,
 )
 async def admin_knowledge_media_upload_url(
     topic_id: UUID,
@@ -125,9 +164,14 @@ async def admin_knowledge_media_upload_url(
     payload: ContentMediaUploadRequest,
     session: Session,
     admin: AdminUser,
-) -> ContentMediaUploadIntent:
+) -> ContentMediaUploadIntentResponse:
     await require_admin_knowledge_entry(session, topic_id, entry_id)
-    return _upload_intent(admin, payload, category="knowledge-media")
+    return await _upload_intent(
+        admin,
+        payload,
+        category="knowledge-media",
+        resource=f"knowledge-media:{topic_id}:{entry_id}",
+    )
 
 
 @admin_knowledge_media_router.post(
@@ -143,7 +187,12 @@ async def admin_finalize_knowledge_media(
     admin: AdminUser,
 ) -> ProtectedContentMediaRead:
     entry = await require_admin_knowledge_entry(session, topic_id, entry_id)
-    upload = await _complete_upload(admin, payload, category="knowledge-media")
+    upload = await _complete_upload(
+        admin,
+        payload,
+        category="knowledge-media",
+        resource=f"knowledge-media:{topic_id}:{entry_id}",
+    )
     try:
         return await attach_knowledge_media(
             session,
@@ -153,7 +202,7 @@ async def admin_finalize_knowledge_media(
             payload=payload,
         )
     except Exception:
-        await store.delete(upload.storage_key)
+        await delete_upload_if_unreferenced(session, store, upload.storage_key)
         raise
 
 
@@ -181,7 +230,7 @@ async def admin_delete_knowledge_media(
 
 @admin_roadmap_media_router.post(
     "/{roadmap_id}/sections/{section_id}/topics/{topic_id}/media/upload-url",
-    response_model=ContentMediaUploadIntent,
+    response_model=ContentMediaUploadIntentResponse,
 )
 async def admin_roadmap_media_upload_url(
     roadmap_id: UUID,
@@ -190,9 +239,14 @@ async def admin_roadmap_media_upload_url(
     payload: ContentMediaUploadRequest,
     session: Session,
     admin: AdminUser,
-) -> ContentMediaUploadIntent:
+) -> ContentMediaUploadIntentResponse:
     await require_admin_roadmap_topic(session, roadmap_id, section_id, topic_id)
-    return _upload_intent(admin, payload, category="roadmap-media")
+    return await _upload_intent(
+        admin,
+        payload,
+        category="roadmap-media",
+        resource=f"roadmap-media:{roadmap_id}:{section_id}:{topic_id}",
+    )
 
 
 @admin_roadmap_media_router.post(
@@ -214,7 +268,12 @@ async def admin_finalize_roadmap_media(
         section_id,
         topic_id,
     )
-    upload = await _complete_upload(admin, payload, category="roadmap-media")
+    upload = await _complete_upload(
+        admin,
+        payload,
+        category="roadmap-media",
+        resource=f"roadmap-media:{roadmap_id}:{section_id}:{topic_id}",
+    )
     try:
         return await attach_roadmap_media(
             session,
@@ -224,7 +283,7 @@ async def admin_finalize_roadmap_media(
             payload=payload,
         )
     except Exception:
-        await store.delete(upload.storage_key)
+        await delete_upload_if_unreferenced(session, store, upload.storage_key)
         raise
 
 
@@ -450,9 +509,7 @@ async def _stream_media(
         headers["ETag"] = opened.etag
     return StreamingResponse(
         opened.chunks(),
-        status_code=(
-            status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK
-        ),
+        status_code=(status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK),
         media_type=media.content_type,
         headers=headers,
     )

@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 PROD_COMPOSE := docker compose -f infra/docker-compose.prod.yml --env-file .env.production
 first_name ?= Администратор
 
-.PHONY: install up down backend frontend worker worker-ai migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara ensure-test-db prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend worker worker-ai migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara check-s3-multipart prod-check-s3-multipart ensure-test-db prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -31,6 +31,16 @@ check-nexara:
 
 prod-check-nexara:
 	$(PROD_COMPOSE) run --rm --no-deps intelligence-worker python -m app.check_nexara
+
+check-s3-multipart:
+	$(COMPOSE) up -d --wait minio
+	$(COMPOSE) run --rm minio-init
+	$(COMPOSE) run --rm --no-deps \
+		-e S3_PUBLIC_ENDPOINT_URL=http://minio:9000 \
+		backend python -m app.check_s3_multipart --confirm
+
+prod-check-s3-multipart: prod-config
+	$(PROD_COMPOSE) run --rm --no-deps backend python -m app.check_s3_multipart --confirm
 
 migrate:
 	cd backend && poetry run alembic upgrade head

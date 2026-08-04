@@ -809,14 +809,21 @@ async def test_fake_processing_pipeline_reaches_ready(
     assert ai_comments[0]["author"] is None
 
     async with TestSession() as session:
+        empty_deck = InterviewDeck(
+            track_id=seeded.python_track_id,
+            slug="python-ai-moderation-empty",
+            title="Общие вопросы",
+            position=0,
+            is_published=True,
+        )
         deck = InterviewDeck(
             track_id=seeded.python_track_id,
             slug="python-ai-moderation",
             title="Python",
-            position=0,
+            position=1,
             is_published=True,
         )
-        session.add(deck)
+        session.add_all([empty_deck, deck])
         existing_card = InterviewCard(
             deck=deck,
             slug="existing-gil-question",
@@ -837,7 +844,9 @@ async def test_fake_processing_pipeline_reaches_ready(
         assert missed_answer is not None
         missed_answer.answer_text = ""
         await session.commit()
+        empty_deck_id = empty_deck.id
         deck_id = deck.id
+        existing_card_id = existing_card.id
 
     async with TestSession() as session:
         interview = await session.get(IntelligenceInterview, interview_id)
@@ -897,8 +906,19 @@ async def test_fake_processing_pipeline_reaches_ready(
         headers=auth(seeded.admin_id),
     )
     assert queue_detail.status_code == 200, queue_detail.text
-    assert queue_detail.json()["matched_card_id"] == str(existing_card.id)
-    assert queue_detail.json()["matched_card_asked_count"] == 4
+    moderation_detail = queue_detail.json()
+    assert moderation_detail["matched_card_id"] == str(existing_card_id)
+    assert moderation_detail["matched_card_deck_id"] == str(deck_id)
+    assert moderation_detail["matched_card_category"] == "python"
+    assert moderation_detail["matched_card_asked_count"] == 4
+    assert moderation_detail["deck_options"] == [
+        {
+            "id": str(empty_deck_id),
+            "title": "Общие вопросы",
+            "categories": [],
+        },
+        {"id": str(deck_id), "title": "Python", "categories": ["python"]},
+    ]
 
     ai_reviews = [
         question["answer"]["reviews"][0]
@@ -934,6 +954,37 @@ async def test_fake_processing_pipeline_reaches_ready(
     assert completed.status_code == 200, completed.text
     assert completed.json()["reviewed_at"] is not None
 
+    new_question = detail["questions"][1]
+    category_not_selected = await client.post(
+        f"/api/v1/mentor/interviews/{interview_id}/questions/{new_question['id']}/moderation",
+        headers=auth(seeded.admin_id),
+        json={
+            "action": "approve",
+            "question_markdown": new_question["question_text"],
+            "answer_markdown": "Проверенный ответ администратора",
+            "deck_id": str(deck_id),
+            "category": "Новая тема",
+            "frequency": "occasional",
+        },
+    )
+    assert category_not_selected.status_code == 422
+    assert category_not_selected.json()["detail"]["code"] == "interview_card_category_not_found"
+    category_collision = await client.post(
+        f"/api/v1/mentor/interviews/{interview_id}/questions/{new_question['id']}/moderation",
+        headers=auth(seeded.admin_id),
+        json={
+            "action": "approve",
+            "question_markdown": new_question["question_text"],
+            "answer_markdown": "Проверенный ответ администратора",
+            "deck_id": str(deck_id),
+            "category": "  PYTHON  ",
+            "create_category": True,
+            "frequency": "occasional",
+        },
+    )
+    assert category_collision.status_code == 422
+    assert category_collision.json()["detail"]["code"] == "interview_card_category_already_exists"
+
     for question in detail["questions"]:
         review = question["answer"]["reviews"][-1] if question["answer"] else None
         moderated = await client.post(
@@ -947,7 +998,13 @@ async def test_fake_processing_pipeline_reaches_ready(
                     if review and review["suggested_better_answer"]
                     else question["answer"]["answer_text"] or "Проверенный ответ администратора"
                 ),
-                "category": question["category"],
+                "deck_id": str(deck_id),
+                "category": (
+                    question["category"]
+                    if question["id"] == first_question_id
+                    else "  Career   Growth  "
+                ),
+                "create_category": question["id"] != first_question_id,
                 "frequency": "occasional",
             },
         )
@@ -986,6 +1043,7 @@ async def test_fake_processing_pipeline_reaches_ready(
         assert occurrences[0].company_name == detail["company_name"]
         missed_question = await session.get(IntelligenceQuestion, missed_question_id)
         assert missed_question is not None and missed_question.published_card_id is not None
+        assert missed_question.category == "Career Growth"
         progress = await session.get(
             InterviewCardProgress,
             {

@@ -37,6 +37,7 @@ const created: AdminRoadmapRead = {
           position: 0,
           estimated_minutes: null,
           is_published: false,
+          media: [],
         },
       ],
     },

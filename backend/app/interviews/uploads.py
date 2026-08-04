@@ -3,6 +3,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import logging
+import math
 import shutil
 import stat
 import subprocess
@@ -12,6 +13,8 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO, NoReturn
 from urllib.parse import quote, unquote, urlsplit
@@ -22,6 +25,7 @@ import boto3
 from botocore.client import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.auth.web_session import SignedPayloadError, sign_payload, verify_payload
 from app.core.config import Settings
 from app.core.errors import api_error
 
@@ -29,6 +33,12 @@ EXTERNAL_STORAGE_KEY_PREFIX = "external:"
 LEGACY_INTERVIEW_MEDIA_PREFIX = "https://s3.firstvds.ru:443/interviews/"
 LEGACY_S3_ENDPOINT_URL = "https://s3.firstvds.ru"
 LEGACY_S3_REGION = "default"
+MULTIPART_UPLOAD_TOKEN_KIND = "private_s3_multipart_upload"
+MULTIPART_UPLOAD_ABORT_URL = "/api/v1/uploads/multipart/abort"
+S3_MULTIPART_MIN_PART_BYTES = 5 * 1024 * 1024
+S3_MULTIPART_MAX_PARTS = 10_000
+MULTIPART_HEAD_RECONCILIATION_DELAYS = (0.0, 0.25, 1.0, 2.0)
+MULTIPART_ACTIVE_UPLOAD_LIST_PAGES = 4
 SAFE_RASTER_IMAGE_CONTENT_TYPES = (
     "image/avif",
     "image/bmp",
@@ -77,6 +87,35 @@ class UploadIntent:
     content_type: str
     size: int
     expires_in: int
+
+
+@dataclass(frozen=True)
+class MultipartUploadPartIntent:
+    part_number: int
+    upload_url: str
+    headers: dict[str, str]
+
+
+@dataclass(frozen=True)
+class MultipartUploadIntent:
+    upload_protocol: str
+    upload_id: str
+    upload_token: str
+    abort_url: str
+    storage_key: str
+    filename: str
+    content_type: str
+    size: int
+    part_size: int
+    part_count: int
+    parts: tuple[MultipartUploadPartIntent, ...]
+    expires_in: int
+
+
+@dataclass(frozen=True)
+class CompletedMultipartUploadPart:
+    part_number: int
+    etag: str
 
 
 @dataclass
@@ -202,6 +241,14 @@ class InterviewUploadStore:
     def __init__(self, settings: Settings) -> None:
         self.bucket = settings.s3_bucket
         self.expires_in = settings.s3_presign_ttl_seconds
+        self.multipart_part_size = settings.s3_multipart_part_size_bytes
+        self.multipart_presign_expires_in = settings.s3_multipart_presign_ttl_seconds
+        self.multipart_session_expires_in = settings.s3_multipart_session_ttl_seconds
+        self._multipart_token_secret = (
+            settings.web_session_secret.get_secret_value()
+            if settings.web_session_secret is not None
+            else settings.s3_secret_access_key.get_secret_value()
+        )
         credentials = {
             "aws_access_key_id": settings.s3_access_key_id,
             "aws_secret_access_key": settings.s3_secret_access_key.get_secret_value(),
@@ -233,9 +280,7 @@ class InterviewUploadStore:
         self._legacy_transcode_cleanup_age_seconds = (
             settings.interview_legacy_transcode_cleanup_age_seconds
         )
-        self._legacy_transcode_timeout_seconds = (
-            settings.interview_legacy_transcode_timeout_seconds
-        )
+        self._legacy_transcode_timeout_seconds = settings.interview_legacy_transcode_timeout_seconds
         self._legacy_transcode_max_file_bytes = settings.interview_audio_max_bytes
         self._legacy_transcode_guard = _LegacyTranscodeGuard(
             max_concurrency=settings.interview_legacy_transcode_max_concurrency,
@@ -292,6 +337,229 @@ class InterviewUploadStore:
             size=size,
             expires_in=self.expires_in,
         )
+
+    async def create_multipart_upload_intent(
+        self,
+        *,
+        user_id: UUID,
+        category: str,
+        resource: str,
+        filename: str,
+        content_type: str,
+        size: int,
+        allowed_content_types: tuple[str, ...],
+        max_bytes: int,
+    ) -> MultipartUploadIntent:
+        clean_filename = Path(filename.replace("\x00", "")).name.strip()[:500]
+        clean_content_type = content_type.split(";", 1)[0].strip().lower()
+        if not clean_filename:
+            api_error(422, "invalid_interview_filename", "A filename is required")
+        if not self._content_type_allowed(clean_content_type, allowed_content_types):
+            api_error(
+                415,
+                "unsupported_interview_file_type",
+                "The selected file type is not supported",
+            )
+        if size <= 0:
+            api_error(422, "empty_interview_file", "The selected file is empty")
+        if size > max_bytes:
+            api_error(413, "interview_file_too_large", "The selected file is too large")
+
+        resource_hash = hashlib.sha256(resource.encode("utf-8")).hexdigest()[:16]
+        object_uuid = uuid4().hex
+        resource_prefix = f"{category}/{user_id}/{resource_hash}/"
+        storage_key = f"{resource_prefix}{object_uuid}"
+        await self._abort_previous_resource_uploads(prefix=resource_prefix)
+        part_size = self._multipart_part_size(size)
+        part_count = math.ceil(size / part_size)
+        upload_id: str | None = None
+        try:
+            response = await anyio.to_thread.run_sync(
+                lambda: self.client.create_multipart_upload(
+                    Bucket=self.bucket,
+                    Key=storage_key,
+                    ContentType=clean_content_type,
+                )
+            )
+            upload_id = str(response["UploadId"])
+            parts = tuple(
+                MultipartUploadPartIntent(
+                    part_number=part_number,
+                    upload_url=str(
+                        self.public_client.generate_presigned_url(
+                            "upload_part",
+                            Params={
+                                "Bucket": self.bucket,
+                                "Key": storage_key,
+                                "UploadId": upload_id,
+                                "PartNumber": part_number,
+                                "ContentLength": min(
+                                    part_size,
+                                    size - (part_number - 1) * part_size,
+                                ),
+                            },
+                            ExpiresIn=self.multipart_presign_expires_in,
+                        )
+                    ),
+                    headers={},
+                )
+                for part_number in range(1, part_count + 1)
+            )
+        except (BotoCoreError, ClientError, KeyError) as error:
+            if upload_id is not None:
+                await self._abort_provider_multipart_upload(
+                    storage_key=storage_key,
+                    upload_id=upload_id,
+                )
+            self._storage_unavailable(error)
+
+        upload_token = sign_payload(
+            {
+                "kind": MULTIPART_UPLOAD_TOKEN_KIND,
+                "user_id": str(user_id),
+                "category": category,
+                "resource": resource,
+                "storage_key": storage_key,
+                "upload_id": upload_id,
+                "filename": clean_filename,
+                "content_type": clean_content_type,
+                "size": size,
+                "part_size": part_size,
+                "part_count": part_count,
+                "exp": self._timestamp() + self.multipart_session_expires_in,
+            },
+            self._multipart_token_secret,
+        )
+        return MultipartUploadIntent(
+            upload_protocol="multipart-v1",
+            upload_id=upload_id,
+            upload_token=upload_token,
+            abort_url=MULTIPART_UPLOAD_ABORT_URL,
+            storage_key=storage_key,
+            filename=clean_filename,
+            content_type=clean_content_type,
+            size=size,
+            part_size=part_size,
+            part_count=part_count,
+            parts=parts,
+            expires_in=self.multipart_presign_expires_in,
+        )
+
+    async def complete_multipart_upload(
+        self,
+        *,
+        user_id: UUID,
+        category: str,
+        resource: str,
+        storage_key: str,
+        upload_id: str,
+        upload_token: str,
+        filename: str,
+        content_type: str,
+        expected_size: int,
+        parts: tuple[CompletedMultipartUploadPart, ...],
+        allowed_content_types: tuple[str, ...],
+        max_bytes: int,
+    ) -> StoredUpload:
+        clean_filename = Path(filename.replace("\x00", "")).name.strip()[:500]
+        clean_content_type = content_type.split(";", 1)[0].strip().lower()
+        payload = self._verified_multipart_payload(
+            upload_token,
+            user_id=user_id,
+            category=category,
+            resource=resource,
+            storage_key=storage_key,
+            upload_id=upload_id,
+        )
+        if (
+            not clean_filename
+            or clean_filename != payload.get("filename")
+            or clean_content_type != payload.get("content_type")
+            or expected_size != payload.get("size")
+            or expected_size <= 0
+            or expected_size > max_bytes
+            or not self._content_type_allowed(clean_content_type, allowed_content_types)
+        ):
+            api_error(422, "invalid_interview_upload", "Interview upload metadata is invalid")
+
+        expected_part_count = payload.get("part_count")
+        if not isinstance(expected_part_count, int) or expected_part_count <= 0:
+            api_error(404, "interview_upload_not_found", "Interview upload was not found")
+        if len(parts) != expected_part_count or tuple(part.part_number for part in parts) != tuple(
+            range(1, expected_part_count + 1)
+        ):
+            api_error(
+                422,
+                "invalid_interview_multipart_parts",
+                "Every uploaded file part must be confirmed in order",
+            )
+
+        provider_parts = [{"PartNumber": part.part_number, "ETag": part.etag} for part in parts]
+        ambiguous_completion_error: BotoCoreError | None = None
+        try:
+            await anyio.to_thread.run_sync(
+                lambda: self.client.complete_multipart_upload(
+                    Bucket=self.bucket,
+                    Key=storage_key,
+                    UploadId=upload_id,
+                    MultipartUpload={"Parts": provider_parts},
+                )
+            )
+        except ClientError as error:
+            if not self._is_no_such_upload(error):
+                self._storage_unavailable(error)
+            # A retry after a successful provider completion receives
+            # NoSuchUpload. HEAD below turns that case into an idempotent result.
+        except BotoCoreError as error:
+            # A connection/read timeout can happen after S3 has committed the
+            # multipart upload. Reconcile with HEAD before telling the client
+            # to retry, otherwise a successful object becomes an orphan.
+            ambiguous_completion_error = error
+
+        head = await self._head_completed_multipart_upload(
+            storage_key,
+            missing_after_ambiguous_error=ambiguous_completion_error,
+        )
+        actual_size = int(head.get("ContentLength", 0))
+        actual_content_type = str(head.get("ContentType", "")).split(";", 1)[0].lower()
+        if actual_size != expected_size or actual_content_type != clean_content_type:
+            await self.delete(storage_key)
+            api_error(422, "invalid_interview_upload", "Uploaded file metadata does not match")
+        return StoredUpload(
+            storage_key=storage_key,
+            filename=clean_filename,
+            content_type=clean_content_type,
+            size=actual_size,
+        )
+
+    async def abort_multipart_upload(
+        self,
+        *,
+        user_id: UUID,
+        storage_key: str,
+        upload_id: str,
+        upload_token: str,
+    ) -> None:
+        self._verified_multipart_payload(
+            upload_token,
+            user_id=user_id,
+            storage_key=storage_key,
+            upload_id=upload_id,
+        )
+        try:
+            await anyio.to_thread.run_sync(
+                lambda: self.client.abort_multipart_upload(
+                    Bucket=self.bucket,
+                    Key=storage_key,
+                    UploadId=upload_id,
+                )
+            )
+        except ClientError as error:
+            if self._is_no_such_upload(error):
+                return
+            self._storage_unavailable(error)
+        except BotoCoreError as error:
+            self._storage_unavailable(error)
 
     async def complete_upload(
         self,
@@ -564,9 +832,7 @@ class InterviewUploadStore:
                 tempfile.mkdtemp(prefix="legacy-alac-", dir=self._legacy_transcode_root)
             )
         except OSError as error:
-            raise LegacyTranscodeCapacityError(
-                "legacy_transcode_directory_unavailable"
-            ) from error
+            raise LegacyTranscodeCapacityError("legacy_transcode_directory_unavailable") from error
         source_path = directory / "source.m4a"
         target_path = directory / "recording.mp3"
         try:
@@ -581,10 +847,7 @@ class InterviewUploadStore:
                         ),
                     )
                 source_stat = source_path.lstat()
-                if (
-                    not stat.S_ISREG(source_stat.st_mode)
-                    or source_stat.st_size != source_size
-                ):
+                if not stat.S_ISREG(source_stat.st_mode) or source_stat.st_size != source_size:
                     raise OSError("Legacy source size does not match storage metadata")
             except LegacyTranscodeCapacityError:
                 raise
@@ -691,9 +954,7 @@ class InterviewUploadStore:
         try:
             entries = tuple(self._legacy_transcode_root.iterdir())
         except OSError as error:
-            raise LegacyTranscodeCapacityError(
-                "legacy_transcode_directory_unavailable"
-            ) from error
+            raise LegacyTranscodeCapacityError("legacy_transcode_directory_unavailable") from error
         for entry in entries:
             if not entry.name.startswith("legacy-alac-"):
                 continue
@@ -716,6 +977,185 @@ class InterviewUploadStore:
             )
         except (BotoCoreError, ClientError) as error:
             self._storage_unavailable(error)
+
+    def _multipart_part_size(self, size: int) -> int:
+        minimum_for_part_limit = math.ceil(size / S3_MULTIPART_MAX_PARTS)
+        minimum_for_part_limit = (
+            math.ceil(minimum_for_part_limit / S3_MULTIPART_MIN_PART_BYTES)
+            * S3_MULTIPART_MIN_PART_BYTES
+        )
+        return max(self.multipart_part_size, minimum_for_part_limit)
+
+    def _verified_multipart_payload(
+        self,
+        token: str,
+        *,
+        user_id: UUID,
+        storage_key: str,
+        upload_id: str,
+        category: str | None = None,
+        resource: str | None = None,
+    ) -> dict[str, Any]:
+        try:
+            payload = verify_payload(
+                token,
+                self._multipart_token_secret,
+                expected_kind=MULTIPART_UPLOAD_TOKEN_KIND,
+            )
+        except SignedPayloadError:
+            api_error(404, "interview_upload_not_found", "Interview upload was not found")
+
+        token_category = payload.get("category")
+        token_resource = payload.get("resource")
+        expected_values: tuple[tuple[object, object], ...] = (
+            (payload.get("user_id"), str(user_id)),
+            (payload.get("storage_key"), storage_key),
+            (payload.get("upload_id"), upload_id),
+        )
+        if category is not None:
+            expected_values += ((token_category, category),)
+        if resource is not None:
+            expected_values += ((token_resource, resource),)
+        if (
+            not isinstance(token_category, str)
+            or not isinstance(token_resource, str)
+            or any(actual != expected for actual, expected in expected_values)
+        ):
+            api_error(404, "interview_upload_not_found", "Interview upload was not found")
+
+        path = PurePosixPath(storage_key)
+        resource_hash = hashlib.sha256(token_resource.encode("utf-8")).hexdigest()[:16]
+        prefix = f"{token_category}/{user_id}/{resource_hash}/"
+        if not storage_key.startswith(prefix) or len(path.parts) != 4:
+            api_error(404, "interview_upload_not_found", "Interview upload was not found")
+        try:
+            UUID(hex=path.parts[-1])
+        except ValueError:
+            api_error(404, "interview_upload_not_found", "Interview upload was not found")
+        return payload
+
+    async def _head_completed_multipart_upload(
+        self,
+        storage_key: str,
+        *,
+        missing_after_ambiguous_error: BotoCoreError | None = None,
+    ) -> dict[str, Any]:
+        delays = (
+            MULTIPART_HEAD_RECONCILIATION_DELAYS
+            if missing_after_ambiguous_error is not None
+            else (0.0,)
+        )
+        for attempt, delay in enumerate(delays, start=1):
+            if delay:
+                await anyio.sleep(delay)
+            try:
+                return dict(
+                    await anyio.to_thread.run_sync(
+                        lambda: self.client.head_object(
+                            Bucket=self.bucket,
+                            Key=storage_key,
+                        )
+                    )
+                )
+            except ClientError as error:
+                if error.response.get("Error", {}).get("Code") in {
+                    "404",
+                    "NoSuchKey",
+                    "NotFound",
+                }:
+                    if attempt < len(delays):
+                        continue
+                    if missing_after_ambiguous_error is not None:
+                        self._storage_unavailable(missing_after_ambiguous_error)
+                    api_error(
+                        409,
+                        "interview_upload_incomplete",
+                        "Upload every file part before confirming it",
+                    )
+                self._storage_unavailable(error)
+            except BotoCoreError as error:
+                self._storage_unavailable(error)
+        raise AssertionError("Multipart HEAD reconciliation exhausted unexpectedly")
+
+    async def _abort_provider_multipart_upload(
+        self,
+        *,
+        storage_key: str,
+        upload_id: str,
+    ) -> None:
+        try:
+            await anyio.to_thread.run_sync(
+                lambda: self.client.abort_multipart_upload(
+                    Bucket=self.bucket,
+                    Key=storage_key,
+                    UploadId=upload_id,
+                )
+            )
+        except (BotoCoreError, ClientError) as error:
+            logger.warning(
+                "Could not abort partially initialized multipart upload key=%s: %s",
+                storage_key,
+                error,
+            )
+
+    async def _abort_previous_resource_uploads(self, *, prefix: str) -> None:
+        key_marker: str | None = None
+        upload_id_marker: str | None = None
+        for _ in range(MULTIPART_ACTIVE_UPLOAD_LIST_PAGES):
+            params: dict[str, Any] = {
+                "Bucket": self.bucket,
+                "Prefix": prefix,
+                "MaxUploads": 1_000,
+            }
+            if key_marker is not None:
+                params["KeyMarker"] = key_marker
+            if upload_id_marker is not None:
+                params["UploadIdMarker"] = upload_id_marker
+            try:
+                page = await anyio.to_thread.run_sync(
+                    partial(self.client.list_multipart_uploads, **params)
+                )
+            except (BotoCoreError, ClientError) as error:
+                # Listing is a cost guard, not a correctness dependency. Keep
+                # S3-compatible providers without this optional API usable and
+                # rely on AbortIncompleteMultipartUpload lifecycle there.
+                logger.warning(
+                    "Could not list previous multipart uploads prefix=%s: %s",
+                    prefix,
+                    error,
+                )
+                return
+            for upload in page.get("Uploads", ()):
+                key = upload.get("Key")
+                upload_id = upload.get("UploadId")
+                if not isinstance(key, str) or not isinstance(upload_id, str):
+                    continue
+                await self._abort_provider_multipart_upload(
+                    storage_key=key,
+                    upload_id=upload_id,
+                )
+            if not page.get("IsTruncated"):
+                return
+            next_key_marker = page.get("NextKeyMarker")
+            next_upload_id_marker = page.get("NextUploadIdMarker")
+            if not isinstance(next_key_marker, str):
+                return
+            key_marker = next_key_marker
+            upload_id_marker = (
+                next_upload_id_marker if isinstance(next_upload_id_marker, str) else None
+            )
+
+    @staticmethod
+    def _is_no_such_upload(error: ClientError) -> bool:
+        return error.response.get("Error", {}).get("Code") in {
+            "404",
+            "NoSuchUpload",
+            "NotFound",
+        }
+
+    @staticmethod
+    def _timestamp() -> int:
+        return int(datetime.now(UTC).timestamp())
 
     @staticmethod
     def _content_type_allowed(content_type: str, allowed_content_types: tuple[str, ...]) -> bool:

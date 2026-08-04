@@ -1,0 +1,24 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-pending-objects-after-one-day",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "pending/"
+      },
+      "Expiration": {
+        "Days": 1
+      }
+    },
+    {
+      "ID": "abort-incomplete-multipart-uploads-after-one-day",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": ""
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    }
+  ]
+}

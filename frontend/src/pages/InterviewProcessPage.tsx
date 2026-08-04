@@ -5,7 +5,6 @@ import {
   Card,
   FileInput,
   Group,
-  Progress,
   Select,
   SimpleGrid,
   Stack,
@@ -14,17 +13,17 @@ import {
   Textarea,
   TextInput,
   Title,
-  VisuallyHidden,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { ApiError } from "../api/client";
+import { ApiError, type UploadStatus } from "../api/client";
 import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { UploadProgressPanel } from "../components/UploadProgressPanel";
 import {
   useCancelInterviewOffer,
   useCreateInterviewStage,
@@ -123,7 +122,7 @@ function StageMedia({
   const [file, setFile] = useState<File | null>(null);
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const [isPlayerLoading, setIsPlayerLoading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const uploadController = useRef<AbortController | null>(null);
   const mutation = useUploadInterviewStageMedia();
   const analysisMutation = useStartInterviewStageAnalysis();
@@ -184,14 +183,17 @@ function StageMedia({
     }
     const controller = new AbortController();
     uploadController.current = controller;
-    setUploadProgress(0);
     mutation.mutate(
       {
         processId,
         stageId: stage.id,
         file,
         signal: controller.signal,
-        onProgress: setUploadProgress,
+        onProgress: (percent) =>
+          setUploadStatus((current) =>
+            current?.phase === "uploading" ? { ...current, percent } : current,
+          ),
+        onStatus: setUploadStatus,
       },
       {
         onSuccess: () => {
@@ -208,7 +210,7 @@ function StageMedia({
           }),
         onSettled: () => {
           uploadController.current = null;
-          setUploadProgress(null);
+          setUploadStatus(null);
         },
       },
     );
@@ -358,28 +360,11 @@ function StageMedia({
               Загрузить
             </Button>
           </Group>
-          {mutation.isPending && uploadProgress !== null && (
-            <Stack gap={6}>
-              <Group justify="space-between" wrap="nowrap">
-                <Text size="sm" fw={600} aria-hidden="true">
-                  Загружаем запись… {uploadProgress}%
-                </Text>
-                <VisuallyHidden role="status" aria-live="polite">
-                  {uploadProgress === 100
-                    ? "Загрузка завершена"
-                    : `Загружено ${Math.floor(uploadProgress / 25) * 25}%`}
-                </VisuallyHidden>
-                <Button
-                  size="compact-sm"
-                  variant="subtle"
-                  color="red"
-                  onClick={() => uploadController.current?.abort()}
-                >
-                  Отменить
-                </Button>
-              </Group>
-              <Progress value={uploadProgress} animated />
-            </Stack>
+          {mutation.isPending && uploadStatus && (
+            <UploadProgressPanel
+              status={uploadStatus}
+              onCancel={() => uploadController.current?.abort()}
+            />
           )}
         </Stack>
       )}
@@ -395,8 +380,18 @@ function StageAttachments({
   stage: InterviewProcessStageRead;
 }) {
   const [files, setFiles] = useState<File[]>([]);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
+  const [uploadDetail, setUploadDetail] = useState<string | null>(null);
+  const uploadController = useRef<AbortController | null>(null);
   const uploadMutation = useUploadInterviewStageAttachments();
   const deleteMutation = useDeleteInterviewStageAttachment();
+
+  useEffect(
+    () => () => {
+      uploadController.current?.abort();
+    },
+    [],
+  );
 
   const upload = () => {
     if (files.length === 0) return;
@@ -415,15 +410,48 @@ function StageAttachments({
       });
       return;
     }
+    const controller = new AbortController();
+    uploadController.current = controller;
     uploadMutation.mutate(
-      { processId, stageId: stage.id, files },
+      {
+        processId,
+        stageId: stage.id,
+        files,
+        onFileStart: (currentFile, index, total) =>
+          setUploadDetail(`Файл ${index + 1} из ${total}: ${currentFile.name}`),
+        onFileComplete: (completedFile) =>
+          setFiles((current) =>
+            current.filter((candidate) => candidate !== completedFile),
+          ),
+        options: {
+          signal: controller.signal,
+          onStatus: setUploadStatus,
+          onProgress: (percent) =>
+            setUploadStatus((current) =>
+              current?.phase === "uploading"
+                ? { ...current, percent }
+                : current,
+            ),
+        },
+      },
       {
         onSuccess: () => {
           setFiles([]);
           notifications.show({ color: "green", message: "Файлы добавлены" });
         },
         onError: (error) =>
-          notifications.show({ color: "red", message: error.message }),
+          notifications.show({
+            color:
+              error instanceof ApiError && error.code === "request_aborted"
+                ? "yellow"
+                : "red",
+            message: error.message,
+          }),
+        onSettled: () => {
+          uploadController.current = null;
+          setUploadStatus(null);
+          setUploadDetail(null);
+        },
       },
     );
   };
@@ -522,6 +550,7 @@ function StageAttachments({
           description="До 50 МБ на файл, максимум 20 файлов"
           value={files}
           onChange={setFiles}
+          disabled={uploadMutation.isPending}
           clearable
         />
         <Button
@@ -533,6 +562,13 @@ function StageAttachments({
           Загрузить файлы
         </Button>
       </Group>
+      {uploadMutation.isPending && uploadStatus && (
+        <UploadProgressPanel
+          status={uploadStatus}
+          detail={uploadDetail ?? undefined}
+          onCancel={() => uploadController.current?.abort()}
+        />
+      )}
     </Stack>
   );
 }
@@ -550,6 +586,9 @@ export function InterviewProcessPage() {
   const [description, setDescription] = useState("");
   const [closeReason, setCloseReason] = useState("");
   const [offerFile, setOfferFile] = useState<File | null>(null);
+  const [offerUploadStatus, setOfferUploadStatus] =
+    useState<UploadStatus | null>(null);
+  const offerUploadController = useRef<AbortController | null>(null);
   const [recruiterUsernames, setRecruiterUsernames] = useState<string[]>([]);
   const recruitersInitializedFor = useRef<string | null>(null);
 
@@ -561,6 +600,13 @@ export function InterviewProcessPage() {
       query.data.recruiter_telegram_usernames.map((username) => `@${username}`),
     );
   }, [query.data]);
+
+  useEffect(
+    () => () => {
+      offerUploadController.current?.abort();
+    },
+    [],
+  );
 
   if (query.isPending) return <LoadingState label="Загружаем трек…" />;
   if (query.isError)
@@ -588,7 +634,13 @@ export function InterviewProcessPage() {
           notifications.show({ color: "green", message: "Этап добавлен" });
         },
         onError: (error) =>
-          notifications.show({ color: "red", message: error.message }),
+          notifications.show({
+            color:
+              error instanceof ApiError && error.code === "request_aborted"
+                ? "yellow"
+                : "red",
+            message: error.message,
+          }),
       },
     );
   };
@@ -646,13 +698,40 @@ export function InterviewProcessPage() {
       });
       return;
     }
+    const controller = offerFile ? new AbortController() : null;
+    offerUploadController.current = controller;
     offerMutation.mutate(
-      { processId, file: offerFile },
+      {
+        processId,
+        file: offerFile,
+        options: controller
+          ? {
+              signal: controller.signal,
+              onStatus: setOfferUploadStatus,
+              onProgress: (percent) =>
+                setOfferUploadStatus((current) =>
+                  current?.phase === "uploading"
+                    ? { ...current, percent }
+                    : current,
+                ),
+            }
+          : undefined,
+      },
       {
         onSuccess: () =>
           notifications.show({ color: "green", message: "Оффер сохранён" }),
         onError: (error) =>
-          notifications.show({ color: "red", message: error.message }),
+          notifications.show({
+            color:
+              error instanceof ApiError && error.code === "request_aborted"
+                ? "yellow"
+                : "red",
+            message: error.message,
+          }),
+        onSettled: () => {
+          offerUploadController.current = null;
+          setOfferUploadStatus(null);
+        },
       },
     );
   };
@@ -948,8 +1027,15 @@ export function InterviewProcessPage() {
                   accept="application/pdf,image/*"
                   value={offerFile}
                   onChange={setOfferFile}
+                  disabled={offerMutation.isPending}
                   clearable
                 />
+                {offerMutation.isPending && offerUploadStatus && (
+                  <UploadProgressPanel
+                    status={offerUploadStatus}
+                    onCancel={() => offerUploadController.current?.abort()}
+                  />
+                )}
                 <Button
                   color="brandYellow"
                   c="brandNavy.9"
@@ -996,7 +1082,14 @@ export function InterviewProcessPage() {
               description="Не больше 20 МБ"
               value={offerFile}
               onChange={setOfferFile}
+              disabled={offerMutation.isPending}
             />
+            {offerMutation.isPending && offerUploadStatus && (
+              <UploadProgressPanel
+                status={offerUploadStatus}
+                onCancel={() => offerUploadController.current?.abort()}
+              />
+            )}
             <Button
               disabled={!offerFile}
               loading={offerMutation.isPending}

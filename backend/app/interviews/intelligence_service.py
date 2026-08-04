@@ -33,6 +33,7 @@ from app.interviews.intelligence_models import (
     IntelligenceUtterance,
 )
 from app.interviews.intelligence_schemas import (
+    AdminQuestionModerationDeckOption,
     AdminQuestionModerationDetail,
     AdminQuestionModerationPage,
     AdminQuestionModerationSummary,
@@ -1072,27 +1073,34 @@ async def moderate_intelligence_question(
             api_error(403, "admin_access_required", "Only an admin can publish a question")
         question_text = (payload.question_markdown or question.question_text).strip()
         answer_text = (payload.answer_markdown or "").strip()
-        category = (payload.category or question.category).strip()
+        category = _normalize_card_category(payload.category or question.category)
         if not answer_text:
             api_error(422, "interview_card_answer_required", "A verified answer is required")
+        if not category:
+            api_error(422, "interview_card_category_required", "A topic is required")
         stage = await session.get(InterviewProcessStage, interview.stage_id)
         if stage is None:
             api_error(409, "interview_process_missing", "Interview process was not found")
         process = await session.get(InterviewProcess, stage.process_id)
         if process is None:
             api_error(409, "interview_process_missing", "Interview process was not found")
-        deck = await session.scalar(
-            select(InterviewDeck)
-            .where(InterviewDeck.track_id == process.track_id, InterviewDeck.is_published.is_(True))
-            .order_by(InterviewDeck.position, InterviewDeck.created_at)
-            .with_for_update()
+        decks = list(
+            await session.scalars(
+                select(InterviewDeck)
+                .where(
+                    InterviewDeck.track_id == process.track_id,
+                    InterviewDeck.is_published.is_(True),
+                )
+                .order_by(InterviewDeck.position, InterviewDeck.created_at)
+                .with_for_update()
+            )
         )
-        if deck is None:
+        if not decks:
             api_error(409, "interview_deck_missing", "Publish a question deck for this direction")
         cards = list(
             await session.scalars(
                 select(InterviewCard)
-                .where(InterviewCard.deck_id == deck.id)
+                .where(InterviewCard.deck_id.in_([deck.id for deck in decks]))
                 .order_by(InterviewCard.position, InterviewCard.id)
                 .with_for_update()
             )
@@ -1101,16 +1109,51 @@ async def moderate_intelligence_question(
         card = next(
             (
                 item
+                for deck_item in decks
                 for item in cards
+                if item.deck_id == deck_item.id
                 if _normalize_card_question(item.question_markdown) == normalized_question
             ),
             None,
         )
+        deck = next((item for item in decks if card and item.id == card.deck_id), None)
         if card is None:
-            max_position_value = await session.scalar(
-                select(func.max(InterviewCard.position)).where(InterviewCard.deck_id == deck.id)
+            deck = (
+                next((item for item in decks if item.id == payload.deck_id), None)
+                if payload.deck_id is not None
+                else decks[0]
             )
-            max_position = -1 if max_position_value is None else int(max_position_value)
+            if deck is None:
+                api_error(
+                    422,
+                    "interview_deck_not_available",
+                    "Choose a published question deck for this direction",
+                )
+            deck_cards = [item for item in cards if item.deck_id == deck.id]
+            category_key = category.casefold()
+            existing_category = next(
+                (
+                    item.category
+                    for item in deck_cards
+                    if _normalize_card_category(item.category).casefold() == category_key
+                ),
+                None,
+            )
+            if payload.create_category and existing_category is not None:
+                api_error(
+                    422,
+                    "interview_card_category_already_exists",
+                    "This topic already exists; choose it from the list",
+                )
+            if not payload.create_category and existing_category is None:
+                api_error(
+                    422,
+                    "interview_card_category_not_found",
+                    "Choose an existing topic or explicitly create a new one",
+                )
+            if existing_category is not None:
+                category = existing_category
+            max_position = max((item.position for item in deck_cards), default=-1)
             card = InterviewCard(
                 deck_id=deck.id,
                 slug=f"ai-{question.id.hex}",
@@ -1125,6 +1168,9 @@ async def moderate_intelligence_question(
             )
             session.add(card)
             await session.flush()
+        assert deck is not None
+        category = card.category
+        question.category = category
         occurrence = await session.scalar(
             select(InterviewCardOccurrence).where(
                 InterviewCardOccurrence.source_question_id == question.id
@@ -1155,13 +1201,17 @@ async def moderate_intelligence_question(
         if candidate_answer is None or not candidate_answer.answer_text.strip():
             selection = await session.get(
                 InterviewTopicSelection,
-                {"user_id": interview.student_id, "deck_id": deck.id, "category": card.category},
+                {
+                    "user_id": interview.student_id,
+                    "deck_id": card.deck_id,
+                    "category": card.category,
+                },
             )
             if selection is None:
                 session.add(
                     InterviewTopicSelection(
                         user_id=interview.student_id,
-                        deck_id=deck.id,
+                        deck_id=card.deck_id,
                         category=card.category,
                     )
                 )
@@ -1309,16 +1359,20 @@ async def get_admin_question_moderation(
         )
         suggested_answer = review.suggested_better_answer if review is not None else None
     matched_card = await _matching_card(session, process.track_id, question.question_text)
+    deck_options = await _moderation_deck_options(session, process.track_id)
     summary = _admin_question_summary(question, interview, stage, process, track, student)
     return AdminQuestionModerationDetail(
         **summary.model_dump(),
         candidate_answer=answer.answer_text if answer is not None else None,
         suggested_answer=suggested_answer,
         matched_card_id=matched_card.id if matched_card is not None else None,
+        matched_card_deck_id=matched_card.deck_id if matched_card is not None else None,
+        matched_card_category=matched_card.category if matched_card is not None else None,
         matched_card_question=(
             matched_card.question_markdown if matched_card is not None else None
         ),
         matched_card_asked_count=(matched_card.asked_count if matched_card is not None else None),
+        deck_options=deck_options,
     )
 
 
@@ -1350,19 +1404,62 @@ def _admin_question_summary(
 async def _matching_card(
     session: AsyncSession, track_id: UUID, question_text: str
 ) -> InterviewCard | None:
-    deck = await session.scalar(
-        select(InterviewDeck)
-        .where(InterviewDeck.track_id == track_id, InterviewDeck.is_published.is_(True))
-        .order_by(InterviewDeck.position, InterviewDeck.created_at)
-    )
-    if deck is None:
-        return None
     normalized = _normalize_card_question(question_text)
-    cards = await session.scalars(select(InterviewCard).where(InterviewCard.deck_id == deck.id))
+    cards = await session.scalars(
+        select(InterviewCard)
+        .join(InterviewDeck, InterviewDeck.id == InterviewCard.deck_id)
+        .where(
+            InterviewDeck.track_id == track_id,
+            InterviewDeck.is_published.is_(True),
+        )
+        .order_by(
+            InterviewDeck.position,
+            InterviewDeck.created_at,
+            InterviewCard.position,
+            InterviewCard.id,
+        )
+    )
     return next(
         (card for card in cards if _normalize_card_question(card.question_markdown) == normalized),
         None,
     )
+
+
+async def _moderation_deck_options(
+    session: AsyncSession, track_id: UUID
+) -> list[AdminQuestionModerationDeckOption]:
+    decks = list(
+        await session.scalars(
+            select(InterviewDeck)
+            .where(
+                InterviewDeck.track_id == track_id,
+                InterviewDeck.is_published.is_(True),
+            )
+            .order_by(InterviewDeck.position, InterviewDeck.created_at)
+        )
+    )
+    if not decks:
+        return []
+    rows = (
+        await session.execute(
+            select(InterviewCard.deck_id, InterviewCard.category)
+            .where(InterviewCard.deck_id.in_([deck.id for deck in decks]))
+            .order_by(InterviewCard.position, InterviewCard.id)
+        )
+    ).all()
+    categories_by_deck: dict[UUID, dict[str, str]] = {deck.id: {} for deck in decks}
+    for deck_id, raw_category in rows:
+        category = _normalize_card_category(raw_category)
+        if category:
+            categories_by_deck[deck_id].setdefault(category.casefold(), category)
+    return [
+        AdminQuestionModerationDeckOption(
+            id=deck.id,
+            title=deck.title,
+            categories=sorted(categories_by_deck[deck.id].values(), key=str.casefold),
+        )
+        for deck in decks
+    ]
 
 
 def _normalize_card_question(value: str) -> str:
@@ -1370,6 +1467,10 @@ def _normalize_card_question(value: str) -> str:
     normalized = re.sub(r"^#{1,6}\s*", "", normalized)
     normalized = re.sub(r"\s+", " ", normalized).casefold().replace("ё", "е")
     return normalized.rstrip(" ?!.,;:")
+
+
+def _normalize_card_category(value: str) -> str:
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", value).strip())
 
 
 def _merge_company_name(existing: str | None, company_name: str) -> str:

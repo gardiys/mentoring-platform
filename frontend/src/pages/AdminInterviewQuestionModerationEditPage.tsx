@@ -28,23 +28,71 @@ import {
 } from "../features/interviews/intelligencePresentation";
 import type { AdminQuestionModerationDetail } from "../types/api";
 
+function normalizeCategory(value: string) {
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("ru-RU");
+}
+
+function matchingCategory(categories: string[], value: string) {
+  const normalized = normalizeCategory(value);
+  return (
+    categories.find((category) => normalizeCategory(category) === normalized) ??
+    null
+  );
+}
+
 function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
   const navigate = useNavigate();
   const moderation = useIntelligenceQuestionModeration();
+  const initialDeckId =
+    item.matched_card_deck_id ?? item.deck_options[0]?.id ?? null;
+  const initialDeck = item.deck_options.find(
+    (option) => option.id === initialDeckId,
+  );
+  const initialCategory =
+    item.matched_card_category ??
+    matchingCategory(initialDeck?.categories ?? [], item.category);
   const [question, setQuestion] = useState(item.question_text);
   const [answer, setAnswer] = useState(
     item.suggested_answer || item.candidate_answer || "",
   );
-  const [category, setCategory] = useState(item.category);
+  const [deckId, setDeckId] = useState<string | null>(initialDeckId);
+  const [category, setCategory] = useState<string | null>(initialCategory);
+  const [createCategory, setCreateCategory] = useState(false);
+  const [newCategory, setNewCategory] = useState(item.category);
   const [frequency, setFrequency] = useState<"frequent" | "occasional">(
     "occasional",
   );
+  const selectedDeck = item.deck_options.find((option) => option.id === deckId);
+  const matchedDeck = item.deck_options.find(
+    (option) => option.id === item.matched_card_deck_id,
+  );
+  const moderationDeckId = item.matched_card_id
+    ? item.matched_card_deck_id
+    : deckId;
+  const moderationCategory = item.matched_card_id
+    ? item.matched_card_category
+    : createCategory
+      ? newCategory.trim()
+      : category;
   const allowNavigation = useUnsavedChanges(
     question !== item.question_text ||
       answer !== (item.suggested_answer || item.candidate_answer || "") ||
-      category !== item.category ||
+      deckId !== initialDeckId ||
+      category !== initialCategory ||
+      createCategory ||
       frequency !== "occasional",
   );
+
+  const changeDeck = (value: string | null) => {
+    const nextDeck = item.deck_options.find((option) => option.id === value);
+    setDeckId(value);
+    setCategory(matchingCategory(nextDeck?.categories ?? [], item.category));
+    setCreateCategory(false);
+  };
 
   const submit = (action: "approve" | "reject") => {
     if (
@@ -64,7 +112,9 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
                 action,
                 question_markdown: question.trim(),
                 answer_markdown: answer.trim(),
-                category: category.trim(),
+                deck_id: moderationDeckId ?? undefined,
+                category: moderationCategory?.trim(),
+                create_category: !item.matched_card_id && createCategory,
                 frequency,
               }
             : { action },
@@ -112,7 +162,17 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
               После подтверждения новая карточка не создастся — добавится
               компания и увеличится счётчик.
             </Text>
+            <Text size="sm">
+              Набор: {matchedDeck?.title ?? "—"} · Тема:{" "}
+              {item.matched_card_category ?? "—"}
+            </Text>
           </Stack>
+        </Alert>
+      )}
+      {!item.matched_card_id && item.deck_options.length === 0 && (
+        <Alert color="red" title="Нет опубликованных наборов карточек">
+          Сначала опубликуйте хотя бы один набор для направления «
+          {item.track_title}».
         </Alert>
       )}
       <Card withBorder>
@@ -144,13 +204,68 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
               </Text>
             </Alert>
           )}
+          {item.matched_card_id ? (
+            <Group grow align="flex-end">
+              <TextInput
+                label="Набор карточек"
+                value={matchedDeck?.title ?? ""}
+                disabled
+              />
+              <TextInput
+                label="Тема"
+                value={item.matched_card_category ?? ""}
+                disabled
+              />
+            </Group>
+          ) : (
+            <Stack gap="xs">
+              <Group grow align="flex-end">
+                <Select
+                  label="Набор карточек"
+                  value={deckId}
+                  data={item.deck_options.map((option) => ({
+                    value: option.id,
+                    label: option.title,
+                  }))}
+                  onChange={changeDeck}
+                  required
+                  searchable
+                />
+                {createCategory ? (
+                  <TextInput
+                    label="Новая тема"
+                    value={newCategory}
+                    onChange={(event) =>
+                      setNewCategory(event.currentTarget.value)
+                    }
+                    required
+                  />
+                ) : (
+                  <Select
+                    label="Существующая тема"
+                    value={category}
+                    data={selectedDeck?.categories ?? []}
+                    onChange={setCategory}
+                    disabled={!selectedDeck}
+                    nothingFoundMessage="В этом наборе пока нет тем"
+                    required
+                    searchable
+                  />
+                )}
+              </Group>
+              <Button
+                variant="subtle"
+                size="compact-sm"
+                w="fit-content"
+                onClick={() => setCreateCategory((value) => !value)}
+              >
+                {createCategory
+                  ? "Выбрать существующую тему"
+                  : "Нужной темы нет — создать новую"}
+              </Button>
+            </Stack>
+          )}
           <Group grow align="flex-end">
-            <TextInput
-              label="Тема"
-              value={category}
-              onChange={(event) => setCategory(event.currentTarget.value)}
-              required
-            />
             <Select
               label="Частота"
               value={frequency}
@@ -166,7 +281,12 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
           <Group>
             <Button
               loading={moderation.isPending}
-              disabled={!question.trim() || !answer.trim() || !category.trim()}
+              disabled={
+                !question.trim() ||
+                !answer.trim() ||
+                !moderationDeckId ||
+                !moderationCategory?.trim()
+              }
               onClick={() => submit("approve")}
             >
               {item.matched_card_id
