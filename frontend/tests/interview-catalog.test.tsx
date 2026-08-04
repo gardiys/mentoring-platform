@@ -192,6 +192,7 @@ it("показывает треки, запись, файлы и отправл�
       "controlslist",
       "nodownload noremoteplayback",
     );
+    expect(player).toHaveAttribute("preload", "metadata");
     expect(player).toHaveAttribute("disablepictureinpicture");
   });
   expect(

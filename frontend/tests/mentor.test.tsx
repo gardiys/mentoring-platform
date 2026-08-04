@@ -212,6 +212,7 @@ it.each([
         `${playerTag}[controls]`,
       );
       expect(player?.src).toContain(`/media/${stageId}/stream`);
+      expect(player).toHaveAttribute("preload", "metadata");
     });
     expect(media).toHaveBeenCalledWith(stageId);
   },

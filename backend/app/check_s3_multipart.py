@@ -15,6 +15,7 @@ from app.interviews.uploads import (
 
 SMOKE_PAYLOAD_SIZE = 6 * 1024 * 1024
 SMOKE_CONTENT_TYPE = "application/octet-stream"
+SMOKE_PLAYBACK_RANGE_SIZE = 1024 * 1024
 
 
 def _error_label(error: Exception) -> str:
@@ -70,8 +71,7 @@ async def check() -> int:
             browser_headers = ", ".join(
                 f"{name}={value}"
                 for name, value in response.headers.items()
-                if name.casefold().startswith("access-control-")
-                or name.casefold() == "etag"
+                if name.casefold().startswith("access-control-") or name.casefold() == "etag"
             )
             raise ValueError(
                 "S3 response does not allow the configured frontend origin "
@@ -105,6 +105,32 @@ async def check() -> int:
         )
         if upload.size != SMOKE_PAYLOAD_SIZE:
             raise ValueError("completed object size does not match")
+
+        playback_url = store.download_url(upload, inline=True, expires_in=60)
+        async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
+            playback = await client.get(
+                playback_url,
+                headers={
+                    "Accept": "*/*",
+                    "Range": f"bytes=0-{SMOKE_PLAYBACK_RANGE_SIZE - 1}",
+                    "User-Agent": "Mozilla/5.0 private-media-playback-smoke",
+                },
+            )
+        playback.raise_for_status()
+        expected_content_range = f"bytes 0-{SMOKE_PLAYBACK_RANGE_SIZE - 1}/{SMOKE_PAYLOAD_SIZE}"
+        if playback.status_code != 206:
+            raise ValueError(
+                "S3 signed playback does not support byte ranges "
+                f"(expected 206, received {playback.status_code})"
+            )
+        if playback.headers.get("content-range") != expected_content_range:
+            raise ValueError(
+                "S3 signed playback returned an invalid Content-Range "
+                f"(expected {expected_content_range}, received "
+                f"{playback.headers.get('content-range') or 'missing'})"
+            )
+        if len(playback.content) != SMOKE_PLAYBACK_RANGE_SIZE:
+            raise ValueError("S3 signed playback returned an invalid byte-range length")
     except Exception as error:  # noqa: BLE001 - report only a sanitized smoke label
         failure = _error_label(error)
     finally:
@@ -134,7 +160,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Upload through a public presigned URL, verify browser CORS/ETag, "
-            "complete, HEAD, and delete a temporary S3 multipart object."
+            "complete, verify signed byte-range playback, HEAD, and delete a "
+            "temporary S3 multipart object."
         )
     )
     parser.add_argument(

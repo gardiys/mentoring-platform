@@ -418,6 +418,8 @@ export function InterviewIntelligencePage() {
                 ref={mediaRef as React.RefObject<HTMLVideoElement>}
                 controls
                 controlsList="nodownload noremoteplayback"
+                playsInline
+                preload="metadata"
                 src={media.url}
                 onError={handleMediaError}
                 style={{ width: "100%", maxHeight: 640, borderRadius: 12 }}
@@ -428,6 +430,7 @@ export function InterviewIntelligencePage() {
                 ref={mediaRef}
                 controls
                 controlsList="nodownload noremoteplayback"
+                preload="metadata"
                 src={media.url}
                 onError={handleMediaError}
                 style={{ width: "100%" }}

@@ -3,7 +3,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CatalogUser
@@ -38,6 +38,7 @@ from app.interviews.schemas import (
     InterviewDownloadUrl,
 )
 from app.interviews.uploads import InterviewUploadStore, StoredUpload
+from app.media.delivery import direct_private_media_response
 from app.users.models import User, UserRole
 
 router = APIRouter(prefix="/interviews/catalog", tags=["interview-catalog"])
@@ -160,7 +161,7 @@ async def catalog_stream_stage_media(
     stage_id: UUID,
     session: Session,
     request: Request,
-) -> StreamingResponse:
+) -> RedirectResponse:
     ticket = request.cookies.get(STREAM_COOKIE)
     if ticket is None:
         api_error(401, "interview_stream_ticket_required", "Playback session is required")
@@ -198,34 +199,18 @@ async def catalog_stream_stage_media(
     range_header = request.headers.get("range")
     if range_header is not None and RANGE_PATTERN.fullmatch(range_header) is None:
         api_error(416, "invalid_interview_media_range", "Requested range is invalid")
-    opened = await store.open_download(
+    return direct_private_media_response(
+        store,
         StoredUpload(
             storage_key=stage.media_storage_key,
             filename=stage.media_filename,
             content_type=stage.media_content_type,
             size=stage.media_size,
         ),
-        range_header=range_header,
-    )
-    headers = {
-        "Accept-Ranges": "bytes",
-        "Cache-Control": "private, no-store, max-age=0",
-        "Content-Disposition": "inline",
-        "Content-Length": str(opened.content_length),
-        "Cross-Origin-Resource-Policy": "same-site",
-        "Pragma": "no-cache",
-        "Referrer-Policy": "no-referrer",
-        "X-Content-Type-Options": "nosniff",
-    }
-    if opened.content_range is not None:
-        headers["Content-Range"] = opened.content_range
-    if opened.etag is not None:
-        headers["ETag"] = opened.etag
-    return StreamingResponse(
-        opened.chunks(),
-        status_code=status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK,
-        media_type=stage.media_content_type,
-        headers=headers,
+        expires_in=min(
+            settings.media_stream_redirect_ttl_seconds,
+            settings.interview_stream_ticket_ttl_seconds,
+        ),
     )
 
 

@@ -95,7 +95,7 @@ async def test_private_legacy_media_uses_authenticated_s3_requests() -> None:
         size=0,
     )
 
-    signed_url = store.download_url(upload, inline=True)
+    signed_url = store.download_url(upload, inline=True, expires_in=60)
     opened = await store.open_download(upload, range_header="bytes=0-4")
 
     assert "X-Amz-Signature=test" in signed_url
@@ -105,6 +105,7 @@ async def test_private_legacy_media_uses_authenticated_s3_requests() -> None:
         "ResponseContentDisposition": "inline; filename*=UTF-8''%D1%81%D0%BE%D0%B1%D0%B5%D1%81.mp4",
         "ResponseContentType": "video/mp4",
     }
+    assert legacy_client.presigned[0]["expires_in"] == 60
     assert legacy_client.downloaded == [
         {
             "Bucket": "interviews",
@@ -287,10 +288,7 @@ def test_legacy_alac_transcoding_rejects_insufficient_disk_budget(tmp_path: Path
         )
 
     assert caught.value.status_code == 503
-    assert (
-        caught.value.detail["code"]
-        == "interview_audio_transcoding_capacity_unavailable"
-    )
+    assert caught.value.detail["code"] == "interview_audio_transcoding_capacity_unavailable"
 
 
 def test_legacy_alac_download_io_error_is_503_and_cleans_directory(tmp_path: Path) -> None:

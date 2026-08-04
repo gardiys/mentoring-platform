@@ -11,39 +11,27 @@ from app.interviews.models import (
     InterviewProcessStageAttachment,
     InterviewProcessStatus,
 )
-from app.interviews.uploads import OpenedDownload, StoredUpload
+from app.interviews.uploads import StoredUpload
 from app.tracks.models import LearningTrackEnrollment
 from app.users.models import User, UserRole
 from tests.conftest import SeededData, TestSession, auth
 
 
 class FakeCatalogStore:
-    def download_url(self, upload: StoredUpload, *, inline: bool = False) -> str:
+    def __init__(self) -> None:
+        self.playback_urls: list[tuple[StoredUpload, bool, int | None]] = []
+
+    def download_url(
+        self,
+        upload: StoredUpload,
+        *,
+        inline: bool = False,
+        expires_in: int | None = None,
+    ) -> str:
+        self.playback_urls.append((upload, inline, expires_in))
         mode = "inline" if inline else "download"
-        return f"https://s3.example.test/{upload.storage_key}?mode={mode}"
-
-    async def open_download(
-        self, upload: StoredUpload, *, range_header: str | None
-    ) -> OpenedDownload:
-        del upload
-        return OpenedDownload(
-            body=FakeStreamingBody(b"video"),
-            content_length=5,
-            content_range="bytes 0-4/5" if range_header else None,
-            etag='"catalog-video"',
-        )
-
-
-class FakeStreamingBody:
-    def __init__(self, content: bytes) -> None:
-        self.content = content
-
-    def iter_chunks(self, chunk_size: int) -> list[bytes]:
-        del chunk_size
-        return [self.content]
-
-    def close(self) -> None:
-        return None
+        ttl = f"&ttl={expires_in}" if expires_in is not None else ""
+        return f"https://s3.example.test/{upload.storage_key}?mode={mode}{ttl}"
 
 
 async def test_students_browse_company_tracks_files_and_comments(
@@ -51,7 +39,8 @@ async def test_students_browse_company_tracks_files_and_comments(
     seeded: SeededData,
     monkeypatch: MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(catalog_router, "store", FakeCatalogStore())
+    fake_store = FakeCatalogStore()
+    monkeypatch.setattr(catalog_router, "store", fake_store)
     second_student_id = uuid4()
     async with TestSession() as session:
         owner = await session.get(User, seeded.student_id)
@@ -254,10 +243,14 @@ async def test_students_browse_company_tracks_files_and_comments(
     assert media.json()["url"].endswith(f"/{stage_id}/media/stream")
     assert "s3.example.test" not in media.json()["url"]
     assert "httponly" in media.headers["set-cookie"].lower()
-    assert stream.status_code == 206
-    assert stream.content == b"video"
-    assert stream.headers["content-range"] == "bytes 0-4/5"
+    assert stream.status_code == 307
+    assert stream.headers["location"].startswith("https://s3.example.test/")
+    assert stream.headers["location"].endswith("?mode=inline&ttl=60")
     assert stream.headers["cache-control"] == "private, no-store, max-age=0"
+    assert any(
+        inline is True and expires_in == 60
+        for _upload, inline, expires_in in fake_store.playback_urls
+    )
     assert copied_to_another_browser.status_code == 401
     assert attachment.json()["url"].endswith("?mode=inline")
     assert mentor_listing.status_code == 200

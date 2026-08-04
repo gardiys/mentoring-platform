@@ -544,6 +544,7 @@ it("лениво открывает защищённое видео статьи
   expect(playback).toHaveBeenCalledWith(entry.slug, media.id);
   expect(video).toHaveAttribute("controlsList", "nodownload noremoteplayback");
   expect(video).toHaveAttribute("disablePictureInPicture");
+  expect(video).toHaveAttribute("preload", "metadata");
   await waitFor(() => expect(playback).toHaveBeenCalledTimes(2), {
     timeout: 1_600,
   });
@@ -587,5 +588,6 @@ it("открывает защищённое аудио в теме роадма�
   await userEvent.click(screen.getByRole("button", { name: "Открыть запись" }));
   const player = await screen.findByLabelText(`Аудио: ${audio.title}`);
   expect(player).toHaveAttribute("controlsList", "nodownload noremoteplayback");
+  expect(player).toHaveAttribute("preload", "metadata");
   expect(playback).toHaveBeenCalledWith(topic.id, audio.id);
 });

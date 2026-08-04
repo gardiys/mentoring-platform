@@ -4,27 +4,16 @@ from httpx import AsyncClient
 from pytest import MonkeyPatch
 
 from app.core.errors import api_error
-from app.interviews.uploads import OpenedDownload, StoredUpload, UploadIntent
+from app.interviews.uploads import StoredUpload, UploadIntent
 from app.media import router as media_router
 from tests.conftest import SeededData, auth
-
-
-class FakeStreamingBody:
-    def __init__(self, content: bytes) -> None:
-        self.content = content
-
-    def iter_chunks(self, chunk_size: int) -> list[bytes]:
-        del chunk_size
-        return [self.content]
-
-    def close(self) -> None:
-        return None
 
 
 class FakePrivateMediaStore:
     def __init__(self) -> None:
         self.pending: dict[str, tuple[UUID, str, str, str, int]] = {}
         self.deleted: list[str] = []
+        self.playback_urls: list[tuple[StoredUpload, bool, int | None]] = []
 
     def create_upload_intent(self, **kwargs: object) -> UploadIntent:
         user_id = UUID(str(kwargs["user_id"]))
@@ -76,19 +65,16 @@ class FakePrivateMediaStore:
             size=supplied[4],
         )
 
-    async def open_download(
+    def download_url(
         self,
         upload: StoredUpload,
         *,
-        range_header: str | None,
-    ) -> OpenedDownload:
-        del upload
-        return OpenedDownload(
-            body=FakeStreamingBody(b"media"),
-            content_length=5,
-            content_range="bytes 0-4/5" if range_header else None,
-            etag='"protected-media"',
-        )
+        inline: bool = False,
+        expires_in: int | None = None,
+    ) -> str:
+        self.playback_urls.append((upload, inline, expires_in))
+        mode = "inline" if inline else "download"
+        return f"https://s3.example.test/{upload.storage_key}?mode={mode}&ttl={expires_in}"
 
     async def delete(self, storage_key: str | None) -> None:
         if storage_key is not None:
@@ -277,10 +263,11 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
     )
     assert "s3.example.test" not in playback.json()["url"]
     assert "httponly" in playback.headers["set-cookie"].lower()
-    assert stream.status_code == 206
-    assert stream.content == b"media"
-    assert stream.headers["content-range"] == "bytes 0-4/5"
+    assert stream.status_code == 307
+    assert stream.headers["location"].startswith("https://s3.example.test/")
+    assert stream.headers["location"].endswith("?mode=inline&ttl=60")
     assert stream.headers["cache-control"] == "private, no-store, max-age=0"
+    assert fake_store.playback_urls[-1][1:] == (True, 60)
     assert copied_ticket.status_code == 401
     assert browser_fetch.status_code == 403
     assert browser_fetch.json()["detail"]["code"] == "content_media_player_required"
@@ -420,9 +407,9 @@ async def test_roadmap_media_private_upload_and_track_scoped_playback(
     assert topic.json()["media"] == [finalized.json()]
     assert wrong_direction.status_code == 404
     assert playback.status_code == 200, playback.text
-    assert stream.status_code == 200
-    assert stream.content == b"media"
-    assert stream.headers["content-type"].startswith("audio/mpeg")
+    assert stream.status_code == 307
+    assert stream.headers["location"].endswith("?mode=inline&ttl=60")
+    assert fake_store.playback_urls[-1][0].content_type == "audio/mpeg"
 
     deleted = await client.delete(
         f"{base_path}/{media_id}",

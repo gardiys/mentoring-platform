@@ -22,6 +22,7 @@ import { Link, useParams } from "react-router-dom";
 import { ApiError, type UploadStatus } from "../api/client";
 import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
+import { InlineInterviewMediaPlayer } from "../components/InlineInterviewMediaPlayer";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { ProgressBar } from "../components/ProgressBar";
@@ -315,15 +316,10 @@ function MockInterviewCard({
             : "Завершить и опубликовать"}
         </Button>
         {mock.media && (
-          <Button
-            size="xs"
-            variant="subtle"
-            onClick={() =>
-              void openUrl(api.openMockInterviewMedia(studentId, mock.id))
-            }
-          >
-            Открыть запись: {mock.media.filename}
-          </Button>
+          <InlineInterviewMediaPlayer
+            media={mock.media}
+            loadUrl={() => api.openMockInterviewMedia(studentId, mock.id)}
+          />
         )}
         <Group align="flex-end" className="upload-control-row">
           <FileInput

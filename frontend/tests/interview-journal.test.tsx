@@ -434,6 +434,7 @@ it("проигрывает видеозапись собеседования н�
     const player = document.querySelector<HTMLVideoElement>("video[controls]");
     expect(player).not.toBeNull();
     expect(player?.src).toContain("interview.mp4?inline=true");
+    expect(player).toHaveAttribute("preload", "metadata");
   });
 });
 

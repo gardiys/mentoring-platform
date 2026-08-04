@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import AdminUser, CurrentUser
@@ -15,6 +15,7 @@ from app.core.errors import api_error
 from app.db.session import get_db_session
 from app.interviews.upload_cleanup import delete_upload_if_unreferenced
 from app.interviews.uploads import CompletedMultipartUploadPart
+from app.media.delivery import direct_private_media_response
 from app.media.models import ProtectedContentMedia
 from app.media.protected_stream import (
     create_bound_stream_ticket,
@@ -382,7 +383,7 @@ async def stream_knowledge_media(
     media_id: UUID,
     session: Session,
     request: Request,
-) -> StreamingResponse:
+) -> RedirectResponse:
     user = await _ticket_user(request, session, media_id=media_id, scope="knowledge")
     media = await knowledge_media_for_user(
         session,
@@ -431,7 +432,7 @@ async def stream_roadmap_media(
     media_id: UUID,
     session: Session,
     request: Request,
-) -> StreamingResponse:
+) -> RedirectResponse:
     user = await _ticket_user(request, session, media_id=media_id, scope="roadmap")
     media = await roadmap_media_for_user(
         session,
@@ -482,7 +483,7 @@ async def _ticket_user(
 async def _stream_media(
     request: Request,
     media: ProtectedContentMedia,
-) -> StreamingResponse:
+) -> RedirectResponse:
     range_header = request.headers.get("range")
     if range_header is not None and RANGE_PATTERN.fullmatch(range_header) is None:
         api_error(416, "invalid_content_media_range", "Requested range is invalid")
@@ -492,24 +493,11 @@ async def _stream_media(
         content_type=media.content_type,
         size=media.size,
     )
-    opened = await store.open_download(upload, range_header=range_header)
-    headers = {
-        "Accept-Ranges": "bytes",
-        "Cache-Control": "private, no-store, max-age=0",
-        "Content-Disposition": "inline",
-        "Content-Length": str(opened.content_length),
-        "Cross-Origin-Resource-Policy": "same-site",
-        "Pragma": "no-cache",
-        "Referrer-Policy": "no-referrer",
-        "X-Content-Type-Options": "nosniff",
-    }
-    if opened.content_range is not None:
-        headers["Content-Range"] = opened.content_range
-    if opened.etag is not None:
-        headers["ETag"] = opened.etag
-    return StreamingResponse(
-        opened.chunks(),
-        status_code=(status.HTTP_206_PARTIAL_CONTENT if range_header else status.HTTP_200_OK),
-        media_type=media.content_type,
-        headers=headers,
+    return direct_private_media_response(
+        store,
+        upload,
+        expires_in=min(
+            settings.media_stream_redirect_ttl_seconds,
+            settings.interview_stream_ticket_ttl_seconds,
+        ),
     )

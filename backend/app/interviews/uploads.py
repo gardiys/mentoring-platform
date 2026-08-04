@@ -639,7 +639,13 @@ class InterviewUploadStore:
             size=actual_size,
         )
 
-    def download_url(self, upload: StoredUpload, *, inline: bool = False) -> str:
+    def download_url(
+        self,
+        upload: StoredUpload,
+        *,
+        inline: bool = False,
+        expires_in: int | None = None,
+    ) -> str:
         external_location = self._external_media_location(upload.storage_key)
         client = self.legacy_client if external_location is not None else self.public_client
         bucket, key = external_location or (self.bucket, upload.storage_key)
@@ -655,7 +661,7 @@ class InterviewUploadStore:
                         "ResponseContentDisposition": disposition,
                         "ResponseContentType": upload.content_type,
                     },
-                    ExpiresIn=self.expires_in,
+                    ExpiresIn=expires_in if expires_in is not None else self.expires_in,
                 )
             )
         except (BotoCoreError, ClientError) as error:

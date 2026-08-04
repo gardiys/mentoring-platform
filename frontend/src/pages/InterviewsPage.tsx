@@ -16,6 +16,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
+import { InlineInterviewMediaPlayer } from "../components/InlineInterviewMediaPlayer";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useMe } from "../features/auth/queries";
@@ -323,24 +324,10 @@ export function InterviewsPage() {
                       </Text>
                     )}
                     {mock.media && (
-                      <Button
-                        variant="light"
-                        onClick={() =>
-                          void openExternalResource(
-                            api.openMyMockInterviewMedia(mock.id),
-                          ).catch((error: unknown) =>
-                            notifications.show({
-                              color: "red",
-                              message:
-                                error instanceof Error
-                                  ? error.message
-                                  : "Не удалось открыть запись",
-                            }),
-                          )
-                        }
-                      >
-                        Открыть запись
-                      </Button>
+                      <InlineInterviewMediaPlayer
+                        media={mock.media}
+                        loadUrl={() => api.openMyMockInterviewMedia(mock.id)}
+                      />
                     )}
                   </Stack>
                 </Card>
