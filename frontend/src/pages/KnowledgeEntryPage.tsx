@@ -10,9 +10,11 @@ import {
 import ReactMarkdown from "react-markdown";
 import { Link, useParams } from "react-router-dom";
 
+import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { ProtectedContentMediaList } from "../components/ProtectedContentMediaList";
 import { useKnowledgeEntry } from "../features/knowledge/queries";
 
 export function KnowledgeEntryPage() {
@@ -63,6 +65,13 @@ export function KnowledgeEntryPage() {
       >
         <ReactMarkdown>{query.data.content_markdown}</ReactMarkdown>
       </Paper>
+      <ProtectedContentMediaList
+        media={query.data.media ?? []}
+        resourceKey={`knowledge:${query.data.id}`}
+        loadPlayback={(mediaId) =>
+          api.knowledgeMediaPlayback(entrySlug, mediaId)
+        }
+      />
     </Stack>
   );
 }

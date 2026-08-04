@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import AdminUser
 from app.db.session import get_db_session
+from app.mentors.models import StudentLearningStatus
 from app.students.schemas import (
     AdminStudentAccessMutation,
     AdminStudentDetail,
@@ -31,16 +32,30 @@ async def admin_students(
     session: Session,
     _admin: AdminUser,
     q: str | None = Query(default=None, max_length=160),
-    access: Literal["all", "active", "blocked"] = Query(default="all"),
+    track_id: UUID | None = None,
+    learning_status: Annotated[list[StudentLearningStatus] | None, Query()] = None,
+    is_active: bool | None = None,
+    access: Literal["all", "active", "blocked"] | None = Query(
+        default=None,
+        deprecated=True,
+    ),
     mentor_id: UUID | None = None,
     without_mentor: bool = False,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> AdminStudentPage:
+    resolved_is_active = is_active
+    if resolved_is_active is None:
+        if access == "active":
+            resolved_is_active = True
+        elif access == "blocked":
+            resolved_is_active = False
     return await list_students(
         session,
         query=q,
-        access=access,
+        track_id=track_id,
+        learning_statuses=learning_status,
+        is_active=resolved_is_active,
         mentor_id=mentor_id,
         without_mentor=without_mentor,
         limit=limit,

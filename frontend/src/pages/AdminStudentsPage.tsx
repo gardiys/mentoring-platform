@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   Group,
+  MultiSelect,
   Pagination,
   Select,
   Stack,
@@ -17,12 +18,17 @@ import { Link } from "react-router-dom";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
-import {
-  type StudentAccessFilter,
-  useAdminStudents,
-} from "../features/admin/studentQueries";
+import { useAdminStudents } from "../features/admin/studentQueries";
+import type { StudentAccessFilter, StudentLearningStatus } from "../types/api";
 
 const PAGE_SIZE = 50;
+
+const statusLabels: Record<StudentLearningStatus, string> = {
+  learning: "Учится",
+  interviewing: "Ходит на собеседования",
+  probation: "Работает на испыталке",
+  finished: "Обучение завершено",
+};
 
 function studentName(firstName: string, lastName: string | null) {
   return [firstName, lastName].filter(Boolean).join(" ");
@@ -35,17 +41,24 @@ function formatDate(value: string | null) {
 export function AdminStudentsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search.trim(), 250);
-  const [access, setAccess] = useState<StudentAccessFilter>("all");
+  const [trackId, setTrackId] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<StudentLearningStatus[]>([]);
+  const [access, setAccess] = useState<StudentAccessFilter>("active");
   const [mentorFilter, setMentorFilter] = useState("all");
   const [page, setPage] = useState(1);
   const query = useAdminStudents({
     query: debouncedSearch,
+    trackId,
+    learningStatuses: statuses,
     access,
     mentorFilter,
     page,
   });
 
-  useEffect(() => setPage(1), [debouncedSearch, access, mentorFilter]);
+  useEffect(
+    () => setPage(1),
+    [debouncedSearch, trackId, statuses, access, mentorFilter],
+  );
 
   return (
     <Stack gap="xl">
@@ -65,20 +78,45 @@ export function AdminStudentsPage() {
           <Group grow align="flex-end">
             <TextInput
               label="Поиск"
-              placeholder="Имя, email или Telegram ID"
+              placeholder="Имя, email, username или Telegram ID"
               value={search}
               onChange={(event) => setSearch(event.currentTarget.value)}
+            />
+            <Select
+              label="Направление"
+              placeholder="Все направления"
+              clearable
+              searchable
+              value={trackId}
+              onChange={setTrackId}
+              data={(query.data?.tracks ?? []).map((track) => ({
+                value: track.id,
+                label: track.title,
+              }))}
+            />
+            <MultiSelect
+              label="Текущий статус"
+              placeholder="Все статусы"
+              clearable
+              value={statuses}
+              onChange={(values) =>
+                setStatuses(values as StudentLearningStatus[])
+              }
+              data={Object.entries(statusLabels).map(([value, label]) => ({
+                value,
+                label,
+              }))}
             />
             <Select
               label="Доступ"
               value={access}
               data={[
-                { value: "all", label: "Все ученики" },
                 { value: "active", label: "Доступ открыт" },
                 { value: "blocked", label: "Доступ закрыт" },
+                { value: "all", label: "Любой доступ" },
               ]}
               onChange={(value) =>
-                setAccess((value as StudentAccessFilter | null) ?? "all")
+                setAccess((value as StudentAccessFilter | null) ?? "active")
               }
             />
             <Select
@@ -106,6 +144,7 @@ export function AdminStudentsPage() {
             />
           ) : (
             <>
+              <Text fw={600}>Найдено учеников: {query.data.total}</Text>
               <Table.ScrollContainer minWidth={900}>
                 <Table striped highlightOnHover verticalSpacing="sm">
                   <Table.Thead>
@@ -114,6 +153,7 @@ export function AdminStudentsPage() {
                       <Table.Th>Контакты</Table.Th>
                       <Table.Th>Треки</Table.Th>
                       <Table.Th>Ментор</Table.Th>
+                      <Table.Th>Текущий статус</Table.Th>
                       <Table.Th>Последний прогресс</Table.Th>
                       <Table.Th>Доступ</Table.Th>
                       <Table.Th />
@@ -135,9 +175,11 @@ export function AdminStudentsPage() {
                             {student.email ?? "Email не указан"}
                           </Text>
                           <Text size="xs" c="dimmed">
-                            {student.telegram_id
-                              ? `Telegram ID: ${student.telegram_id}`
-                              : "Telegram ID не указан"}
+                            {student.telegram_username
+                              ? `@${student.telegram_username}`
+                              : student.telegram_id
+                                ? `Telegram ID: ${student.telegram_id}`
+                                : "Telegram не указан"}
                           </Text>
                         </Table.Td>
                         <Table.Td>
@@ -168,6 +210,11 @@ export function AdminStudentsPage() {
                               Не назначен
                             </Text>
                           )}
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge variant="light">
+                            {statusLabels[student.learning_status]}
+                          </Badge>
                         </Table.Td>
                         <Table.Td>
                           <Text size="sm">

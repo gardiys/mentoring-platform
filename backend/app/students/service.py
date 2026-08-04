@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
-from app.mentors.models import MentorStudent
+from app.mentors.models import MentorStudent, StudentLearningStatus
 from app.progress.models import TopicProgress
 from app.roadmaps.models import RoadmapEnrollment
 from app.students.schemas import (
@@ -103,6 +103,21 @@ async def _student_mentors(
     }
 
 
+async def _student_learning_statuses(
+    session: AsyncSession, student_ids: list[UUID]
+) -> dict[UUID, StudentLearningStatus]:
+    if not student_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(MentorStudent.student_id, MentorStudent.learning_status).where(
+                MentorStudent.student_id.in_(student_ids)
+            )
+        )
+    ).all()
+    return {student_id: learning_status for student_id, learning_status in rows}
+
+
 async def _available_mentors(session: AsyncSession) -> list[AdminStudentMentorRead]:
     mentors = list(
         await session.scalars(
@@ -123,11 +138,30 @@ async def _available_mentors(session: AsyncSession) -> list[AdminStudentMentorRe
     ]
 
 
+async def _available_tracks(session: AsyncSession) -> list[AdminStudentTrackOption]:
+    tracks = list(
+        await session.scalars(
+            select(LearningTrack).order_by(LearningTrack.position, LearningTrack.title)
+        )
+    )
+    return [
+        AdminStudentTrackOption(
+            id=track.id,
+            slug=track.slug,
+            title=track.title,
+            is_published=track.is_published,
+        )
+        for track in tracks
+    ]
+
+
 async def list_students(
     session: AsyncSession,
     *,
     query: str | None,
-    access: str,
+    track_id: UUID | None,
+    learning_statuses: list[StudentLearningStatus] | None,
+    is_active: bool | None,
     mentor_id: UUID | None,
     without_mentor: bool,
     limit: int,
@@ -143,14 +177,30 @@ async def list_students(
                 User.first_name.ilike(pattern),
                 User.last_name.ilike(pattern),
                 User.email.ilike(pattern),
+                User.telegram_username.ilike(pattern),
                 cast(User.telegram_id, String).ilike(pattern),
             )
         )
-    if access == "active":
-        conditions.append(User.is_active.is_(True))
-    elif access == "blocked":
-        conditions.append(User.is_active.is_(False))
+    if is_active is not None:
+        conditions.append(User.is_active.is_(is_active))
+    if track_id is not None:
+        conditions.append(
+            select(LearningTrackEnrollment.user_id)
+            .where(
+                LearningTrackEnrollment.user_id == User.id,
+                LearningTrackEnrollment.track_id == track_id,
+            )
+            .exists()
+        )
     mentor_relation = select(MentorStudent.student_id).where(MentorStudent.student_id == User.id)
+    if learning_statuses:
+        matching_status = mentor_relation.where(
+            MentorStudent.learning_status.in_(learning_statuses)
+        )
+        if StudentLearningStatus.LEARNING in learning_statuses:
+            conditions.append(or_(matching_status.exists(), ~mentor_relation.exists()))
+        else:
+            conditions.append(matching_status.exists())
     if mentor_id is not None:
         conditions.append(mentor_relation.where(MentorStudent.mentor_id == mentor_id).exists())
     elif without_mentor:
@@ -170,15 +220,20 @@ async def list_students(
     tracks = await _student_tracks(session, ids)
     progress = await _last_progress(session, ids)
     mentors = await _student_mentors(session, ids)
+    learning_statuses_by_student = await _student_learning_statuses(session, ids)
     return AdminStudentPage(
         items=[
             AdminStudentListItem(
                 id=student.id,
                 telegram_id=student.telegram_id,
+                telegram_username=student.telegram_username,
                 first_name=student.first_name,
                 last_name=student.last_name,
                 email=student.email,
                 is_active=student.is_active,
+                learning_status=learning_statuses_by_student.get(
+                    student.id, StudentLearningStatus.LEARNING
+                ),
                 created_at=student.created_at,
                 learning_start_date=student.learning_start_date,
                 mentor=mentors.get(student.id),
@@ -191,6 +246,7 @@ async def list_students(
         limit=limit,
         offset=offset,
         mentors=await _available_mentors(session),
+        tracks=await _available_tracks(session),
     )
 
 
@@ -199,13 +255,16 @@ async def student_detail(session: AsyncSession, student_id: UUID) -> AdminStuden
     tracks = await _student_tracks(session, [student.id])
     progress = await _last_progress(session, [student.id])
     mentors = await _student_mentors(session, [student.id])
+    learning_statuses = await _student_learning_statuses(session, [student.id])
     return AdminStudentDetail(
         id=student.id,
         telegram_id=student.telegram_id,
+        telegram_username=student.telegram_username,
         first_name=student.first_name,
         last_name=student.last_name,
         email=student.email,
         is_active=student.is_active,
+        learning_status=learning_statuses.get(student.id, StudentLearningStatus.LEARNING),
         created_at=student.created_at,
         learning_start_date=student.learning_start_date,
         mentor=mentors.get(student.id),
@@ -217,22 +276,9 @@ async def student_detail(session: AsyncSession, student_id: UUID) -> AdminStuden
 
 
 async def student_options(session: AsyncSession) -> AdminStudentOptions:
-    tracks = list(
-        await session.scalars(
-            select(LearningTrack).order_by(LearningTrack.position, LearningTrack.title)
-        )
-    )
     mentors = await _available_mentors(session)
     return AdminStudentOptions(
-        tracks=[
-            AdminStudentTrackOption(
-                id=track.id,
-                slug=track.slug,
-                title=track.title,
-                is_published=track.is_published,
-            )
-            for track in tracks
-        ],
+        tracks=await _available_tracks(session),
         mentors=mentors,
     )
 
@@ -324,6 +370,7 @@ async def create_student(
     now = datetime.now(UTC)
     student = User(
         telegram_id=payload.telegram_id,
+        telegram_username=payload.telegram_username,
         first_name=payload.first_name,
         last_name=payload.last_name or None,
         email=payload.email or None,
@@ -350,6 +397,7 @@ async def update_student(
     student = await get_student_model(session, student_id, lock=True)
     await _validate_student_payload(session, payload, student_id=student_id)
     student.telegram_id = payload.telegram_id
+    student.telegram_username = payload.telegram_username
     student.first_name = payload.first_name
     student.last_name = payload.last_name or None
     student.email = payload.email or None

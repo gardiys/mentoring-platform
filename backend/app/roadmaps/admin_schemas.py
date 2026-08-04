@@ -2,6 +2,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.media.schemas import ProtectedContentMediaRead
+
 SLUG_PATTERN = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
 
 
@@ -78,6 +80,7 @@ class AdminTopicRead(BaseModel):
     position: int
     estimated_minutes: int | None
     is_published: bool
+    media: list[ProtectedContentMediaRead]
 
 
 class AdminSectionRead(BaseModel):

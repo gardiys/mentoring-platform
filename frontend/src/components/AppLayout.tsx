@@ -44,6 +44,7 @@ export function AppLayout() {
   const platform = usePlatform();
   const me = useMe();
   const logout = useLogout();
+  const student = me.data?.role === "student";
   const mentor = me.data?.role === "mentor" || me.data?.role === "admin";
   const admin = me.data?.role === "admin";
 
@@ -68,7 +69,11 @@ export function AppLayout() {
     const rootRoute =
       location.pathname === "/roadmaps" ||
       location.pathname === "/knowledge" ||
-      location.pathname === "/interviews";
+      location.pathname === "/interviews" ||
+      location.pathname === "/my-mentor" ||
+      location.pathname === "/mentor/profile" ||
+      location.pathname === "/admin/schedule" ||
+      location.pathname === "/admin/useful-links";
     if (rootRoute) {
       platform.hideBackButton();
       return;
@@ -182,8 +187,30 @@ export function AppLayout() {
             active={location.pathname.startsWith("/interviews")}
             onClick={close}
           />
+          {student && (
+            <NavLink
+              component={Link}
+              to="/my-mentor"
+              label="Мой ментор"
+              description="Контакты и созвоны"
+              leftSection={<span className="nav-index">ME</span>}
+              className="brand-nav-link"
+              active={location.pathname.startsWith("/my-mentor")}
+              onClick={close}
+            />
+          )}
           {mentor && (
             <>
+              <NavLink
+                component={Link}
+                to="/mentor/profile"
+                label="Профиль ментора"
+                description="Консультации и созвоны"
+                leftSection={<span className="nav-index">MP</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/mentor/profile")}
+                onClick={close}
+              />
               <NavLink
                 component={Link}
                 to="/mentor/students"
@@ -228,6 +255,26 @@ export function AppLayout() {
                 leftSection={<span className="nav-index">06</span>}
                 className="brand-nav-link"
                 active={location.pathname.startsWith("/admin/mentors")}
+                onClick={close}
+              />
+              <NavLink
+                component={Link}
+                to="/admin/schedule"
+                label="Расписание"
+                description="События направлений"
+                leftSection={<span className="nav-index">EV</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/admin/schedule")}
+                onClick={close}
+              />
+              <NavLink
+                component={Link}
+                to="/admin/useful-links"
+                label="Полезные ссылки"
+                description="Сервисы и материалы"
+                leftSection={<span className="nav-index">URL</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/admin/useful-links")}
                 onClick={close}
               />
               <NavLink

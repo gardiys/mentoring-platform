@@ -15,6 +15,7 @@ import { type FormEvent, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
+import { AdminContentMediaManager } from "../components/AdminContentMediaManager";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
@@ -26,6 +27,7 @@ import type {
   AdminKnowledgeEntryMutation,
   AdminKnowledgeEntryRead,
 } from "../types/api";
+import { useAdminKnowledgeMedia } from "../features/media/queries";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -38,6 +40,7 @@ function EntryForm({
 }) {
   const navigate = useNavigate();
   const mutation = useSaveAdminKnowledgeEntry();
+  const media = useAdminKnowledgeMedia(topicId, entry?.id);
   const [form, setForm] = useState<AdminKnowledgeEntryMutation>({
     id: entry?.id,
     kind: entry?.kind ?? "article",
@@ -78,123 +81,135 @@ function EntryForm({
     );
   };
   return (
-    <form onSubmit={submit}>
-      <Stack gap="xl">
-        <PageHeader
-          eyebrow="Knowledge base · одна запись"
-          title={entry ? "Редактирование материала" : "Новый материал"}
-          description="Редактор загружает только выбранную статью или вопрос."
-        />
-        <Card withBorder>
-          <Stack>
-            {mutation.error && (
-              <Alert color="red">{mutation.error.message}</Alert>
-            )}
-            <Group grow align="flex-start">
-              <Select
-                label="Тип"
-                data={[
-                  { value: "article", label: "Статья" },
-                  { value: "question", label: "Вопрос" },
-                ]}
-                value={form.kind}
-                onChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    kind: value === "question" ? "question" : "article",
-                  }))
-                }
-              />
+    <Stack gap="xl">
+      <form onSubmit={submit}>
+        <Stack gap="xl">
+          <PageHeader
+            eyebrow="Knowledge base · одна запись"
+            title={entry ? "Редактирование материала" : "Новый материал"}
+            description="Редактор загружает только выбранную статью или вопрос."
+          />
+          <Card withBorder>
+            <Stack>
+              {mutation.error && (
+                <Alert color="red">{mutation.error.message}</Alert>
+              )}
+              <Group grow align="flex-start">
+                <Select
+                  label="Тип"
+                  data={[
+                    { value: "article", label: "Статья" },
+                    { value: "question", label: "Вопрос" },
+                  ]}
+                  value={form.kind}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      kind: value === "question" ? "question" : "article",
+                    }))
+                  }
+                />
+                <TextInput
+                  label="Slug"
+                  required
+                  value={form.slug}
+                  error={
+                    form.slug && !SLUG_PATTERN.test(form.slug)
+                      ? "Некорректный slug"
+                      : null
+                  }
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      slug: event.currentTarget.value,
+                    }))
+                  }
+                />
+              </Group>
               <TextInput
-                label="Slug"
+                label="Название"
                 required
-                value={form.slug}
-                error={
-                  form.slug && !SLUG_PATTERN.test(form.slug)
-                    ? "Некорректный slug"
-                    : null
-                }
+                value={form.title}
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    slug: event.currentTarget.value,
+                    title: event.currentTarget.value,
                   }))
                 }
               />
-            </Group>
-            <TextInput
-              label="Название"
-              required
-              value={form.title}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  title: event.currentTarget.value,
-                }))
-              }
-            />
-            <Textarea
-              label="Краткое описание"
-              value={form.summary ?? ""}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  summary: event.currentTarget.value || null,
-                }))
-              }
-            />
-            <Textarea
-              label="Содержание (Markdown)"
-              required
-              autosize
-              minRows={16}
-              value={form.content_markdown}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  content_markdown: event.currentTarget.value,
-                }))
-              }
-            />
-            <Group grow>
-              <NumberInput
-                label="Позиция"
-                min={0}
-                value={form.position}
-                onChange={(value) =>
-                  setForm((current) => ({
-                    ...current,
-                    position: typeof value === "number" ? value : 0,
-                  }))
-                }
-              />
-              <Switch
-                label="Опубликован"
-                checked={form.is_published}
+              <Textarea
+                label="Краткое описание"
+                value={form.summary ?? ""}
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    is_published: event.currentTarget.checked,
+                    summary: event.currentTarget.value || null,
                   }))
                 }
               />
-            </Group>
-            <Group justify="flex-end">
-              <Button variant="subtle" onClick={() => navigate(back)}>
-                Отмена
-              </Button>
-              <Button
-                type="submit"
-                loading={mutation.isPending}
-                disabled={!valid}
-              >
-                Сохранить
-              </Button>
-            </Group>
-          </Stack>
-        </Card>
-      </Stack>
-    </form>
+              <Textarea
+                label="Содержание (Markdown)"
+                required
+                autosize
+                minRows={16}
+                value={form.content_markdown}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    content_markdown: event.currentTarget.value,
+                  }))
+                }
+              />
+              <Group grow>
+                <NumberInput
+                  label="Позиция"
+                  min={0}
+                  value={form.position}
+                  onChange={(value) =>
+                    setForm((current) => ({
+                      ...current,
+                      position: typeof value === "number" ? value : 0,
+                    }))
+                  }
+                />
+                <Switch
+                  label="Опубликован"
+                  checked={form.is_published}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      is_published: event.currentTarget.checked,
+                    }))
+                  }
+                />
+              </Group>
+              <Group justify="flex-end">
+                <Button variant="subtle" onClick={() => navigate(back)}>
+                  Отмена
+                </Button>
+                <Button
+                  type="submit"
+                  loading={mutation.isPending}
+                  disabled={!valid}
+                >
+                  Сохранить
+                </Button>
+              </Group>
+            </Stack>
+          </Card>
+        </Stack>
+      </form>
+      <AdminContentMediaManager
+        media={entry?.media ?? []}
+        disabledReason={
+          entry
+            ? undefined
+            : "Создайте материал, затем снова откройте его для редактирования и загрузите аудио или видео."
+        }
+        upload={media.upload}
+        remove={media.remove}
+      />
+    </Stack>
   );
 }
 

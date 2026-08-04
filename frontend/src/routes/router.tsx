@@ -101,6 +101,13 @@ const studentRoutes = [
 
 const mentorRoutes = [
   {
+    path: "/mentor/profile",
+    lazy: lazyPage(
+      () => import("../pages/MentorProfilePage"),
+      "MentorProfilePage",
+    ),
+  },
+  {
     path: "/mentor/students",
     lazy: lazyPage(
       () => import("../pages/MentorStudentsPage"),
@@ -138,6 +145,20 @@ const mentorRoutes = [
 ];
 
 const adminRoutes = [
+  {
+    path: "/admin/schedule",
+    lazy: lazyPage(
+      () => import("../pages/AdminSchedulePage"),
+      "AdminSchedulePage",
+    ),
+  },
+  {
+    path: "/admin/useful-links",
+    lazy: lazyPage(
+      () => import("../pages/AdminUsefulLinksPage"),
+      "AdminUsefulLinksPage",
+    ),
+  },
   {
     path: "/admin/roadmaps",
     lazy: lazyPage(
@@ -361,6 +382,18 @@ export const router = createBrowserRouter([
             children: [
               { path: "/", element: <Navigate to="/roadmaps" replace /> },
               ...studentRoutes,
+              {
+                element: <RoleGuard roles={["student"]} />,
+                children: [
+                  {
+                    path: "/my-mentor",
+                    lazy: lazyPage(
+                      () => import("../pages/MyMentorPage"),
+                      "MyMentorPage",
+                    ),
+                  },
+                ],
+              },
               {
                 element: <RoleGuard roles={["mentor", "admin"]} />,
                 children: mentorRoutes,

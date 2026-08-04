@@ -11,9 +11,11 @@ import { notifications } from "@mantine/notifications";
 import ReactMarkdown from "react-markdown";
 import { Link, useParams } from "react-router-dom";
 
+import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { ProtectedContentMediaList } from "../components/ProtectedContentMediaList";
 import { TopicStatusBadge } from "../components/TopicStatusBadge";
 import { useUpdateProgress } from "../features/progress/mutations";
 import { useTopic } from "../features/roadmaps/queries";
@@ -92,6 +94,13 @@ export function TopicPage() {
           {query.data.content_markdown}
         </ReactMarkdown>
       </Paper>
+      <ProtectedContentMediaList
+        media={query.data.media ?? []}
+        resourceKey={`roadmap:${query.data.id}`}
+        loadPlayback={(mediaId) =>
+          api.roadmapTopicMediaPlayback(query.data.id, mediaId)
+        }
+      />
       <Group>
         {query.data.status === "not_started" && (
           <Button

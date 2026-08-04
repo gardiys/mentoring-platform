@@ -29,6 +29,7 @@ from app.knowledge.schemas import (
     KnowledgeTopicDetail,
     KnowledgeTopicListItem,
 )
+from app.media.presenters import content_media_reads
 from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack
 from app.users.models import User, UserRole
@@ -129,13 +130,19 @@ async def get_public_entry(session: AsyncSession, slug: str, user: User) -> Know
         statement = statement.join(KnowledgeTopicTrack).where(
             KnowledgeTopicTrack.track_id.in_(track_ids)
         )
-    entry = await session.scalar(statement.options(selectinload(KnowledgeEntry.topic)))
+    entry = await session.scalar(
+        statement.options(
+            selectinload(KnowledgeEntry.topic),
+            selectinload(KnowledgeEntry.media),
+        )
+    )
     if entry is None:
         api_error(404, "knowledge_entry_not_found", "Knowledge entry was not found")
     return KnowledgeEntryDetail(
         **_entry_list_item(entry).model_dump(),
         content_markdown=entry.content_markdown,
         topic=_topic_context(entry.topic),
+        media=content_media_reads(entry.media),
         updated_at=entry.updated_at,
     )
 
@@ -187,6 +194,7 @@ def _admin_entry_read(entry: KnowledgeEntry) -> AdminKnowledgeEntryRead:
         content_markdown=entry.content_markdown,
         position=entry.position,
         is_published=entry.is_published,
+        media=content_media_reads(entry.media),
         updated_at=entry.updated_at,
     )
 
@@ -213,7 +221,9 @@ async def _admin_topic_model(
     statement = (
         select(KnowledgeTopic)
         .where(KnowledgeTopic.id == topic_id)
-        .options(selectinload(KnowledgeTopic.entries))
+        .options(
+            selectinload(KnowledgeTopic.entries).selectinload(KnowledgeEntry.media)
+        )
         .options(selectinload(KnowledgeTopic.track_links))
     )
     if lock:
@@ -229,7 +239,9 @@ async def list_admin_topics(session: AsyncSession) -> list[AdminKnowledgeTopicRe
         await session.scalars(
             select(KnowledgeTopic)
             .order_by(KnowledgeTopic.position, KnowledgeTopic.title)
-            .options(selectinload(KnowledgeTopic.entries))
+            .options(
+                selectinload(KnowledgeTopic.entries).selectinload(KnowledgeEntry.media)
+            )
             .options(selectinload(KnowledgeTopic.track_links))
         )
     )
@@ -332,7 +344,11 @@ async def update_admin_topic_settings(
 async def get_admin_entry(
     session: AsyncSession, topic_id: UUID, entry_id: UUID
 ) -> AdminKnowledgeEntryRead:
-    entry = await session.get(KnowledgeEntry, entry_id)
+    entry = await session.scalar(
+        select(KnowledgeEntry)
+        .where(KnowledgeEntry.id == entry_id)
+        .options(selectinload(KnowledgeEntry.media))
+    )
     if entry is None or entry.topic_id != topic_id:
         api_error(404, "knowledge_entry_not_found", "Knowledge entry was not found")
     return _admin_entry_read(entry)
@@ -362,8 +378,7 @@ async def create_admin_entry(
     except IntegrityError:
         await session.rollback()
         api_error(409, "knowledge_entry_conflict", "Knowledge entry contains conflicts")
-    await session.refresh(entry)
-    return _admin_entry_read(entry)
+    return await get_admin_entry(session, topic_id, entry.id)
 
 
 async def update_admin_entry(
@@ -384,8 +399,7 @@ async def update_admin_entry(
     except IntegrityError:
         await session.rollback()
         api_error(409, "knowledge_entry_conflict", "Knowledge entry contains conflicts")
-    await session.refresh(entry)
-    return _admin_entry_read(entry)
+    return await get_admin_entry(session, topic_id, entry.id)
 
 
 async def _validate_slugs(
@@ -478,6 +492,15 @@ async def update_admin_topic(
     supplied_ids = {entry.id for entry in payload.entries if entry.id is not None}
     if not supplied_ids.issubset(existing):
         api_error(422, "invalid_knowledge_structure", "Entry does not belong to this topic")
+    protected_removals = [
+        entry for entry in topic.entries if entry.id not in supplied_ids and entry.media
+    ]
+    if protected_removals:
+        api_error(
+            409,
+            "knowledge_entry_has_media",
+            "Delete entry media attachments before removing the entry",
+        )
 
     topic.slug = payload.slug
     topic.title = payload.title

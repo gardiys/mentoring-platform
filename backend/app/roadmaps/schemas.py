@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.media.schemas import ProtectedContentMediaRead
 from app.progress.models import ProgressStatus
 from app.progress.schemas import ProgressSummary
 
@@ -67,6 +68,7 @@ class TopicDetail(BaseModel):
     description: str | None
     content_markdown: str
     estimated_minutes: int | None
+    media: list[ProtectedContentMediaRead]
     roadmap: TopicContext
     section: TopicContext
     status: ProgressStatus

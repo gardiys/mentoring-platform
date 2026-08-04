@@ -27,10 +27,19 @@ import {
   usePromoteAdminStudent,
   useRemoveAdminMentor,
   useReassignAdminMentorStudent,
+  useUpdateAdminMentorProfile,
   useUpdateAdminMentorDirections,
 } from "../features/admin/mentorQueries";
 import { useAdminStudentOptions } from "../features/admin/studentQueries";
-import type { AdminMentorListItem, AdminMentorMutation } from "../types/api";
+import type {
+  AdminMentorListItem,
+  AdminMentorMutation,
+  AdminMentorProfileMutation,
+} from "../types/api";
+import {
+  isValidTelegramUsername,
+  normalizeTelegramUsername,
+} from "../utils/telegram";
 
 const emptyForm: AdminMentorMutation = {
   telegram_id: 0,
@@ -64,8 +73,60 @@ function MentorCard({
     mentor.tracks.map((track) => track.id),
   );
   const [targets, setTargets] = useState<Record<string, string | null>>({});
+  const [profileOpened, profileModal] = useDisclosure(false);
+  const [profile, setProfile] = useState<AdminMentorProfileMutation>({
+    first_name: mentor.first_name,
+    last_name: mentor.last_name,
+    email: mentor.email,
+    telegram_username: mentor.telegram_username,
+  });
   const updateDirections = useUpdateAdminMentorDirections();
+  const updateProfile = useUpdateAdminMentorProfile();
   const reassign = useReassignAdminMentorStudent();
+
+  const openProfile = () => {
+    setProfile({
+      first_name: mentor.first_name,
+      last_name: mentor.last_name,
+      email: mentor.email,
+      telegram_username: mentor.telegram_username,
+    });
+    profileModal.open();
+  };
+
+  const saveProfile = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (
+      !profile.first_name.trim() ||
+      !isValidTelegramUsername(profile.telegram_username)
+    ) {
+      return;
+    }
+    updateProfile.mutate(
+      {
+        mentorId: mentor.id,
+        payload: {
+          first_name: profile.first_name.trim(),
+          last_name: profile.last_name?.trim() || null,
+          email: profile.email?.trim() || null,
+          telegram_username: normalizeTelegramUsername(
+            profile.telegram_username,
+          ),
+        },
+      },
+      {
+        onSuccess: () => {
+          notifications.show({
+            color: "green",
+            message: "Данные ментора обновлены",
+          });
+          profileModal.close();
+        },
+        onError: (error) =>
+          notifications.show({ color: "red", message: error.message }),
+      },
+    );
+  };
 
   const saveDirections = () => {
     if (trackIds.length === 0) return;
@@ -105,6 +166,9 @@ function MentorCard({
               ? `Telegram ID: ${mentor.telegram_id}`
               : "Telegram не указан"}
         </Text>
+        <Button variant="subtle" onClick={openProfile}>
+          Редактировать данные
+        </Button>
         {isAdmin ? (
           <Stack gap="xs">
             <Text fw={600} size="sm">
@@ -233,6 +297,89 @@ function MentorCard({
             )}
           </>
         )}
+        <Modal
+          opened={profileOpened}
+          onClose={profileModal.close}
+          title={`Данные ментора · ${name}`}
+          centered
+        >
+          <form onSubmit={saveProfile}>
+            <Stack>
+              <TextInput
+                required
+                label="Имя ментора"
+                value={profile.first_name}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setProfile((current) => ({
+                    ...current,
+                    first_name: value,
+                  }));
+                }}
+              />
+              <TextInput
+                label="Фамилия ментора"
+                value={profile.last_name ?? ""}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setProfile((current) => ({
+                    ...current,
+                    last_name: value || null,
+                  }));
+                }}
+              />
+              <TextInput
+                type="email"
+                label="Email ментора"
+                value={profile.email ?? ""}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setProfile((current) => ({
+                    ...current,
+                    email: value || null,
+                  }));
+                }}
+              />
+              <TextInput
+                label="Telegram username ментора"
+                description="Можно указать с @ — при сохранении он будет удалён"
+                placeholder="username"
+                value={profile.telegram_username ?? ""}
+                error={
+                  isValidTelegramUsername(profile.telegram_username)
+                    ? undefined
+                    : "От 5 до 32 латинских букв, цифр или _, первый символ — буква"
+                }
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setProfile((current) => ({
+                    ...current,
+                    telegram_username: value || null,
+                  }));
+                }}
+              />
+              <Group justify="flex-end">
+                <Button
+                  type="button"
+                  variant="subtle"
+                  onClick={profileModal.close}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  type="submit"
+                  loading={updateProfile.isPending}
+                  disabled={
+                    !profile.first_name.trim() ||
+                    !isValidTelegramUsername(profile.telegram_username)
+                  }
+                >
+                  Сохранить данные
+                </Button>
+              </Group>
+            </Stack>
+          </form>
+        </Modal>
       </Stack>
     </Card>
   );
@@ -259,6 +406,7 @@ export function AdminMentorsPage() {
     if (
       !form.telegram_id ||
       !form.first_name.trim() ||
+      !isValidTelegramUsername(form.telegram_username) ||
       form.track_ids.length === 0
     )
       return;
@@ -268,7 +416,7 @@ export function AdminMentorsPage() {
         first_name: form.first_name.trim(),
         last_name: form.last_name?.trim() || null,
         email: form.email?.trim() || null,
-        telegram_username: form.telegram_username?.trim() || null,
+        telegram_username: normalizeTelegramUsername(form.telegram_username),
       },
       {
         onSuccess: () => {
@@ -453,6 +601,11 @@ export function AdminMentorsPage() {
               label="Telegram username"
               placeholder="username без @"
               value={form.telegram_username ?? ""}
+              error={
+                isValidTelegramUsername(form.telegram_username)
+                  ? undefined
+                  : "От 5 до 32 латинских букв, цифр или _, первый символ — буква"
+              }
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -464,7 +617,16 @@ export function AdminMentorsPage() {
               <Button variant="subtle" onClick={close} type="button">
                 Отмена
               </Button>
-              <Button type="submit" loading={create.isPending}>
+              <Button
+                type="submit"
+                loading={create.isPending}
+                disabled={
+                  !form.telegram_id ||
+                  !form.first_name.trim() ||
+                  !isValidTelegramUsername(form.telegram_username) ||
+                  form.track_ids.length === 0
+                }
+              >
                 Добавить
               </Button>
             </Group>

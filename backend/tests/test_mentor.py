@@ -62,7 +62,12 @@ async def test_mentor_student_list_supports_pagination_direction_and_multiple_st
                     telegram_username="petya_python",
                     role=UserRole.STUDENT,
                 ),
-                User(id=probation_id, first_name="Сергей", role=UserRole.STUDENT),
+                User(
+                    id=probation_id,
+                    first_name="Сергей",
+                    role=UserRole.STUDENT,
+                    is_active=False,
+                ),
                 User(id=unassigned_id, first_name="Без ментора", role=UserRole.STUDENT),
             ]
         )
@@ -107,6 +112,16 @@ async def test_mentor_student_list_supports_pagination_direction_and_multiple_st
         headers=auth(seeded.mentor_id),
         params={"query": "petya_python"},
     )
+    active = await client.get(
+        "/api/v1/mentor/students",
+        headers=auth(seeded.mentor_id),
+        params={"is_active": "true"},
+    )
+    inactive = await client.get(
+        "/api/v1/mentor/students",
+        headers=auth(seeded.mentor_id),
+        params={"is_active": "false"},
+    )
     assigned_to_mentor = await client.get(
         "/api/v1/mentor/students",
         headers=auth(seeded.admin_id),
@@ -128,6 +143,10 @@ async def test_mentor_student_list_supports_pagination_direction_and_multiple_st
     assert response.json()["offset"] == 1
     assert [direction["title"] for direction in response.json()["directions"]] == ["Python"]
     assert [item["id"] for item in searched.json()["items"]] == [str(interviewing_id)]
+    assert searched.json()["items"][0]["telegram_username"] == "petya_python"
+    assert active.json()["total"] == 2
+    assert [item["id"] for item in inactive.json()["items"]] == [str(probation_id)]
+    assert inactive.json()["items"][0]["is_active"] is False
     assert assigned_to_mentor.json()["total"] == 3
     assert without_mentor.json()["total"] == 1
     assert without_mentor.json()["items"][0]["id"] == str(unassigned_id)

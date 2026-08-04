@@ -168,3 +168,54 @@ async def test_admin_updates_directions_and_reassigns_students(
     mentors = {item["id"]: item for item in listing.json()}
     assert mentors[str(seeded.mentor_id)]["students"] == []
     assert mentors[str(seeded.other_mentor_id)]["students"][0]["id"] == str(seeded.student_id)
+
+
+async def test_admin_edits_existing_mentor_and_admin_profile_data(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    mentor_updated = await client.patch(
+        f"/api/v1/admin/mentors/{seeded.mentor_id}/profile",
+        headers=auth(seeded.admin_id),
+        json={
+            "first_name": "Антон",
+            "last_name": "Менторов",
+            "email": "anton.mentor@example.com",
+            "telegram_username": "  @@anton_python  ",
+        },
+    )
+    admin_updated = await client.patch(
+        f"/api/v1/admin/mentors/{seeded.admin_id}/profile",
+        headers=auth(seeded.admin_id),
+        json={
+            "first_name": "Главный администратор",
+            "last_name": None,
+            "email": None,
+            "telegram_username": "@platform_admin",
+        },
+    )
+    invalid = await client.patch(
+        f"/api/v1/admin/mentors/{seeded.other_mentor_id}/profile",
+        headers=auth(seeded.admin_id),
+        json={
+            "first_name": "Другой",
+            "telegram_username": "invalid username",
+        },
+    )
+
+    assert mentor_updated.status_code == 200, mentor_updated.text
+    assert mentor_updated.json()["telegram_username"] == "anton_python"
+    assert mentor_updated.json()["last_name"] == "Менторов"
+    assert mentor_updated.json()["email"] == "anton.mentor@example.com"
+    assert admin_updated.status_code == 200, admin_updated.text
+    assert admin_updated.json()["role"] == "admin"
+    assert admin_updated.json()["telegram_username"] == "platform_admin"
+    assert invalid.status_code == 422
+
+    async with TestSession() as session:
+        mentor = await session.get(User, seeded.mentor_id)
+        admin = await session.get(User, seeded.admin_id)
+        assert mentor is not None and admin is not None
+        assert mentor.role is UserRole.MENTOR
+        assert admin.role is UserRole.ADMIN
+        assert mentor.telegram_id is None
+        assert admin.telegram_id is None

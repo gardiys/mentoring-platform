@@ -70,13 +70,22 @@ export function AdminTracksPage() {
                     <b>{track.student_ids.length}</b> учеников
                   </Text>
                 </Group>
-                <Button
-                  component={Link}
-                  to={`/admin/tracks/${track.id}/edit`}
-                  variant="light"
-                >
-                  Настроить трек и доступы
-                </Button>
+                <Group grow>
+                  <Button
+                    component={Link}
+                    to={`/admin/tracks/${track.id}/edit`}
+                    variant="light"
+                  >
+                    Настроить трек
+                  </Button>
+                  <Button
+                    component={Link}
+                    to={`/admin/schedule?track_id=${track.id}`}
+                    variant="outline"
+                  >
+                    События направления
+                  </Button>
+                </Group>
               </Stack>
             </Card>
           ))}

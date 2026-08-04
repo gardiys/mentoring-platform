@@ -502,6 +502,62 @@ a {
   border-top: 4px solid var(--brand-blue);
 }
 
+.schedule-event-card {
+  min-width: 0;
+}
+
+.schedule-event-card--rescheduled {
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--brand-yellow) 14%, transparent),
+      transparent 62%
+    ),
+    color-mix(in srgb, var(--brand-sand) 65%, var(--brand-warm));
+  border: 2px solid
+    color-mix(in srgb, var(--brand-yellow) 82%, var(--brand-border));
+  border-top-width: 6px;
+  box-shadow: 0 16px 42px
+    color-mix(in srgb, var(--brand-yellow) 14%, transparent);
+}
+
+.schedule-event-heading {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  flex: 1 1 220px;
+}
+
+.schedule-event-badges {
+  flex: 0 1 auto;
+}
+
+.schedule-reschedule-alert {
+  color: var(--brand-text);
+  background: color-mix(in srgb, var(--brand-yellow) 16%, var(--brand-warm));
+  border: 1px solid
+    color-mix(in srgb, var(--brand-yellow) 78%, var(--brand-border));
+}
+
+.schedule-reschedule-new-time {
+  margin-top: 0.2rem;
+  line-height: 1.25;
+}
+
+.schedule-reschedule-alert del {
+  text-decoration-color: var(--mantine-color-red-6);
+  text-decoration-thickness: 2px;
+}
+
+@media (max-width: 36em) {
+  .schedule-event-badges {
+    width: 100%;
+  }
+
+  .schedule-reschedule-alert {
+    padding: 0.85rem;
+  }
+}
+
 .student-roadmap {
   padding: clamp(1rem, 3vw, 1.5rem);
   background: color-mix(in srgb, var(--brand-sand) 55%, var(--brand-warm));

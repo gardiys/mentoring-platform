@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/endpoints";
 import type {
   MentorDocumentKind,
+  StudentAccessFilter,
   StudentLearningStatus,
   StudentStrengthLevel,
 } from "../../types/api";
@@ -23,6 +24,7 @@ export interface MentorStudentListOptions {
   query: string;
   trackId: string | null;
   mentorFilter: string;
+  access: StudentAccessFilter;
   learningStatuses: StudentLearningStatus[];
   page: number;
 }
@@ -42,6 +44,7 @@ export function useMentorStudents(options: MentorStudentListOptions) {
             ? options.mentorFilter
             : null,
         withoutMentor: options.mentorFilter === "unassigned",
+        isActive: options.access === "all" ? null : options.access === "active",
         learningStatuses: options.learningStatuses,
         limit: STUDENTS_PAGE_SIZE,
         offset: (options.page - 1) * STUDENTS_PAGE_SIZE,

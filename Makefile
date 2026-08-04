@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 PROD_COMPOSE := docker compose -f infra/docker-compose.prod.yml --env-file .env.production
 first_name ?= Администратор
 
-.PHONY: install up down backend frontend worker worker-ai migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara ensure-test-db prod-init prod-volume-check prod-config prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend worker worker-ai migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara ensure-test-db prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -34,6 +34,10 @@ prod-check-nexara:
 
 migrate:
 	cd backend && poetry run alembic upgrade head
+
+docker-migrate:
+	$(COMPOSE) up -d --wait postgres
+	$(COMPOSE) run --rm --build --no-deps backend alembic upgrade head
 
 migration:
 	cd backend && poetry run alembic revision --autogenerate -m "$(name)"
@@ -77,6 +81,11 @@ prod-volume-check:
 
 prod-config:
 	$(PROD_COMPOSE) config --quiet
+
+prod-migrate: prod-volume-check prod-config
+	$(PROD_COMPOSE) build migrate
+	$(PROD_COMPOSE) up -d --wait --wait-timeout 120 postgres
+	$(PROD_COMPOSE) run --rm --no-deps migrate
 
 prod-up: prod-volume-check prod-config
 	$(PROD_COMPOSE) build migrate backend intelligence-worker intelligence-ai-worker frontend

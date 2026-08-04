@@ -41,6 +41,7 @@ const entry: KnowledgeEntryDetail = {
   summary: searchResult.summary,
   content_markdown: "# Краткий ответ\n\nИспользуйте `await` для ожидания.",
   topic: searchResult.topic,
+  media: [],
   updated_at: "2026-07-31T12:00:00Z",
 };
 

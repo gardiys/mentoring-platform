@@ -19,8 +19,9 @@ import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { ProgressBar } from "../components/ProgressBar";
+import { TelegramChatLink } from "../components/TelegramChatLink";
 import { useMentorStudents } from "../features/mentor/queries";
-import type { StudentLearningStatus } from "../types/api";
+import type { StudentAccessFilter, StudentLearningStatus } from "../types/api";
 
 const statusLabels: Record<StudentLearningStatus, string> = {
   learning: "Учится",
@@ -50,19 +51,21 @@ export function MentorStudentsPage() {
   const [debouncedSearch] = useDebouncedValue(search.trim(), 250);
   const [trackId, setTrackId] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<StudentLearningStatus[]>([]);
+  const [access, setAccess] = useState<StudentAccessFilter>("active");
   const [mentorFilter, setMentorFilter] = useState("all");
   const [page, setPage] = useState(1);
   const query = useMentorStudents({
     query: debouncedSearch,
     trackId,
     mentorFilter,
+    access,
     learningStatuses: statuses,
     page,
   });
 
   useEffect(
     () => setPage(1),
-    [debouncedSearch, trackId, statuses, mentorFilter],
+    [debouncedSearch, trackId, statuses, access, mentorFilter],
   );
 
   if (query.isPending) return <LoadingState label="Загружаем учеников…" />;
@@ -110,6 +113,19 @@ export function MentorStudentsPage() {
           }))}
           w={{ base: "100%", sm: 340 }}
         />
+        <Select
+          label="Доступ"
+          value={access}
+          onChange={(value) =>
+            setAccess((value as StudentAccessFilter | null) ?? "active")
+          }
+          data={[
+            { value: "active", label: "Доступ открыт" },
+            { value: "blocked", label: "Доступ закрыт" },
+            { value: "all", label: "Любой доступ" },
+          ]}
+          w={{ base: "100%", sm: 220 }}
+        />
         {query.data.can_filter_by_mentor && (
           <Select
             label="Ментор"
@@ -128,6 +144,7 @@ export function MentorStudentsPage() {
           />
         )}
       </Group>
+      <Text fw={600}>Найдено учеников: {query.data.total}</Text>
       {query.data.items.length === 0 ? (
         <Text c="dimmed">Подходящих учеников нет.</Text>
       ) : (
@@ -162,8 +179,15 @@ export function MentorStudentsPage() {
                     <Text c="dimmed" size="sm">
                       {student.email ?? "Email не указан"}
                     </Text>
+                    <TelegramChatLink username={student.telegram_username} />
                   </div>
                   <Group gap="xs" justify="flex-end">
+                    <Badge
+                      color={student.is_active ? "green" : "red"}
+                      variant="outline"
+                    >
+                      {student.is_active ? "Доступ открыт" : "Доступ закрыт"}
+                    </Badge>
                     {student.is_overdue && <Badge color="red">Не в срок</Badge>}
                     <Badge variant="light">
                       {statusLabels[student.learning_status]}

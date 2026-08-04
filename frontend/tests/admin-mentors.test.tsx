@@ -1,4 +1,5 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
@@ -69,6 +70,9 @@ it("показывает менторов и защищает ментора с 
     ],
     mentors: [],
   });
+  const updateProfile = vi
+    .spyOn(api, "updateAdminMentorProfile")
+    .mockReturnValue(new Promise(() => undefined));
 
   renderPage(<AdminMentorsPage />, "/admin/mentors", "/admin/mentors");
 
@@ -91,4 +95,26 @@ it("показывает менторов и защищает ментора с 
   expect(
     screen.getAllByRole("button", { name: "Убрать из менторов" }),
   ).toHaveLength(1);
+
+  await userEvent.click(
+    screen.getAllByRole("button", { name: "Редактировать данные" })[1]!,
+  );
+  const username = await screen.findByLabelText("Telegram username ментора");
+  await userEvent.clear(username);
+  await userEvent.type(username, "  @@platform_admin  ");
+  await userEvent.click(
+    screen.getByRole("button", { name: "Сохранить данные" }),
+  );
+
+  await waitFor(() =>
+    expect(updateProfile).toHaveBeenCalledWith(
+      "10000000-0000-4000-8000-000000000002",
+      {
+        first_name: "Администратор",
+        last_name: null,
+        email: "admin@example.com",
+        telegram_username: "platform_admin",
+      },
+    ),
+  );
 });

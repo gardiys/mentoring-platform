@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -31,10 +31,12 @@ const adminMentor = {
 const student: AdminStudentDetail = {
   id: "20000000-0000-4000-8000-000000000001",
   telegram_id: 987654321,
+  telegram_username: "ivan_student",
   first_name: "Иван",
   last_name: "Иванов",
   email: "student@example.com",
   is_active: true,
+  learning_status: "learning",
   created_at: "2026-08-01T10:00:00Z",
   learning_start_date: "2026-08-01",
   mentor,
@@ -72,6 +74,20 @@ const options: AdminStudentOptions = {
 
 afterEach(() => vi.restoreAllMocks());
 
+async function selectOption(label: string, option: string) {
+  const input = screen
+    .getAllByLabelText(label)
+    .find((element) => element.tagName === "INPUT");
+  expect(input).toBeDefined();
+  await userEvent.click(input!);
+  await waitFor(() => expect(input!).toHaveAttribute("aria-controls"));
+  const listbox = document.getElementById(
+    input!.getAttribute("aria-controls")!,
+  );
+  expect(listbox).not.toBeNull();
+  await userEvent.click(within(listbox!).getByText(option));
+}
+
 it("показывает данные, треки и статус ученика в таблице", async () => {
   const page: AdminStudentPage = {
     items: [student],
@@ -79,16 +95,47 @@ it("показывает данные, треки и статус ученика
     limit: 50,
     offset: 0,
     mentors: [mentor],
+    tracks: options.tracks,
   };
-  vi.spyOn(api, "adminStudents").mockResolvedValue(page);
+  const list = vi.spyOn(api, "adminStudents").mockResolvedValue(page);
 
   renderPage(<AdminStudentsPage />);
 
   expect(await screen.findByText("Иван Иванов")).toBeInTheDocument();
   expect(screen.getByText("student@example.com")).toBeInTheDocument();
-  expect(screen.getByText("Python")).toBeInTheDocument();
+  expect(screen.getByText("@ivan_student")).toBeInTheDocument();
+  expect(screen.getAllByText("Python").length).toBeGreaterThan(0);
   expect(screen.getByText("Открыт")).toBeInTheDocument();
+  expect(screen.getAllByText("Учится").length).toBeGreaterThan(0);
   expect(screen.getAllByLabelText("Ментор")[0]).toBeInTheDocument();
+  expect(screen.getAllByLabelText("Направление")[0]).toBeInTheDocument();
+  expect(screen.getAllByLabelText("Текущий статус")[0]).toBeInTheDocument();
+  expect(screen.getAllByLabelText("Доступ")[0]).toHaveValue("Доступ открыт");
+  expect(screen.getByText("Найдено учеников: 1")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(list).toHaveBeenCalledWith(
+      expect.objectContaining({ isActive: true }),
+    ),
+  );
+
+  await userEvent.type(screen.getByLabelText("Поиск"), "Иван");
+  await selectOption("Направление", "Python");
+  await selectOption("Текущий статус", "Учится");
+  await selectOption("Доступ", "Доступ закрыт");
+  await selectOption("Ментор", "Антон Менторов");
+
+  await waitFor(() =>
+    expect(list).toHaveBeenLastCalledWith({
+      query: "Иван",
+      trackId: student.tracks[0]!.id,
+      learningStatuses: ["learning"],
+      isActive: false,
+      mentorId: mentor.id,
+      withoutMentor: false,
+      limit: 50,
+      offset: 0,
+    }),
+  );
 });
 
 it("создаёт ученика с выбранным треком и администратором-ментором", async () => {
@@ -101,6 +148,10 @@ it("создаёт ученика с выбранным треком и адми
   await userEvent.type(screen.getByLabelText("Фамилия"), "Петрова");
   await userEvent.type(screen.getByLabelText("Email"), "maria@example.com");
   await userEvent.type(screen.getByLabelText(/Telegram ID/), "777000111");
+  await userEvent.type(
+    screen.getByLabelText("Telegram username"),
+    "  @@maria_dev  ",
+  );
   await userEvent.click(screen.getByRole("textbox", { name: /^Ментор/ }));
   await userEvent.click(screen.getByText("Администратор · администратор"));
   await userEvent.click(screen.getByRole("checkbox", { name: /Go/ }));
@@ -110,6 +161,7 @@ it("создаёт ученика с выбранным треком и адми
 
   expect(create).toHaveBeenCalledWith({
     telegram_id: 777000111,
+    telegram_username: "maria_dev",
     first_name: "Мария",
     last_name: "Петрова",
     email: "maria@example.com",
@@ -135,6 +187,9 @@ it("редактирует данные и закрывает доступ бе�
   const learningStartDate = screen.getByLabelText(/^Дата начала обучения/);
   await userEvent.clear(learningStartDate);
   await userEvent.type(learningStartDate, "2026-07-15");
+  const telegramUsername = screen.getByLabelText("Telegram username");
+  await userEvent.clear(telegramUsername);
+  await userEvent.type(telegramUsername, "@ivan_updated");
   await userEvent.click(screen.getByRole("checkbox", { name: /Go/ }));
   await userEvent.click(
     screen.getByRole("button", { name: "Сохранить изменения" }),
@@ -144,6 +199,7 @@ it("редактирует данные и закрывает доступ бе�
     student.id,
     expect.objectContaining({
       first_name: "Новое имя",
+      telegram_username: "ivan_updated",
       learning_start_date: "2026-07-15",
       track_ids: [student.tracks[0]!.id, options.tracks[1]!.id],
     }),

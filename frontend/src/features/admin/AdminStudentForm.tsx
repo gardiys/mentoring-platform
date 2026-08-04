@@ -27,6 +27,10 @@ import type {
   AdminStudentOptions,
 } from "../../types/api";
 import {
+  isValidTelegramUsername,
+  normalizeTelegramUsername,
+} from "../../utils/telegram";
+import {
   useCreateAdminStudent,
   useSetAdminStudentAccess,
   useUpdateAdminStudent,
@@ -51,6 +55,7 @@ function todayInputValue() {
 function initialForm(student?: AdminStudentDetail): StudentFormState {
   return {
     telegram_id: student?.telegram_id ?? "",
+    telegram_username: student?.telegram_username ?? null,
     first_name: student?.first_name ?? "",
     last_name: student?.last_name ?? null,
     email: student?.email ?? null,
@@ -82,6 +87,7 @@ export function AdminStudentForm({ options, student }: Props) {
     typeof form.telegram_id === "number" &&
     form.telegram_id > 0 &&
     form.first_name.trim().length > 0 &&
+    isValidTelegramUsername(form.telegram_username) &&
     Boolean(form.learning_start_date) &&
     Boolean(form.mentor_id);
   const allowNavigation = useUnsavedChanges(
@@ -104,6 +110,7 @@ export function AdminStudentForm({ options, student }: Props) {
       ...form,
       telegram_id: form.telegram_id,
       first_name: form.first_name.trim(),
+      telegram_username: normalizeTelegramUsername(form.telegram_username),
       last_name: form.last_name?.trim() || null,
       email: form.email?.trim() || null,
     };
@@ -277,6 +284,24 @@ export function AdminStudentForm({ options, student }: Props) {
                   telegram_id: typeof value === "number" ? value : "",
                 }))
               }
+            />
+            <TextInput
+              label="Telegram username"
+              description="Можно указать с @ — при сохранении он будет удалён"
+              placeholder="username"
+              value={form.telegram_username ?? ""}
+              error={
+                isValidTelegramUsername(form.telegram_username)
+                  ? undefined
+                  : "От 5 до 32 латинских букв, цифр или _, первый символ — буква"
+              }
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setForm((current) => ({
+                  ...current,
+                  telegram_username: value || null,
+                }));
+              }}
             />
             <Select
               label="Ментор"

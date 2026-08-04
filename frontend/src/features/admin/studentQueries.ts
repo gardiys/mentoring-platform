@@ -1,13 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
-import type { AdminStudentMutation } from "../../types/api";
+import type {
+  AdminStudentMutation,
+  StudentAccessFilter,
+  StudentLearningStatus,
+} from "../../types/api";
 import { adminTrackKeys } from "./queries";
-
-export type StudentAccessFilter = "all" | "active" | "blocked";
 
 export interface AdminStudentListOptions {
   query: string;
+  trackId: string | null;
+  learningStatuses: StudentLearningStatus[];
   access: StudentAccessFilter;
   mentorFilter: string;
   page: number;
@@ -29,7 +33,9 @@ export function useAdminStudents(options: AdminStudentListOptions) {
     queryFn: () =>
       api.adminStudents({
         query: options.query,
-        access: options.access,
+        trackId: options.trackId,
+        learningStatuses: options.learningStatuses,
+        isActive: options.access === "all" ? null : options.access === "active",
         mentorId:
           options.mentorFilter !== "all" &&
           options.mentorFilter !== "unassigned"

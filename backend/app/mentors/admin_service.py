@@ -10,6 +10,7 @@ from app.mentors.admin_schemas import (
     AdminMentorCandidate,
     AdminMentorListItem,
     AdminMentorMutation,
+    AdminMentorProfileMutation,
     AdminMentorStudentRead,
     AdminMentorTrackRead,
 )
@@ -169,6 +170,44 @@ async def create_admin_mentor(
         api_error(409, "mentor_conflict", "Mentor data conflicts with an account")
     await session.refresh(mentor)
     return await _mentor_read(session, mentor, 0)
+
+
+async def update_admin_mentor_profile(
+    session: AsyncSession,
+    mentor_id: UUID,
+    payload: AdminMentorProfileMutation,
+) -> AdminMentorListItem:
+    mentor = await session.scalar(
+        select(User)
+        .where(User.id == mentor_id, User.role.in_(MENTOR_CAPABLE_ROLES))
+        .with_for_update()
+    )
+    if mentor is None:
+        api_error(404, "mentor_not_found", "Mentor was not found")
+    if payload.email:
+        email_owner = await session.scalar(
+            select(User.id).where(User.email == payload.email, User.id != mentor.id)
+        )
+        if email_owner is not None:
+            api_error(409, "email_already_used", "Email is already used")
+
+    mentor.first_name = payload.first_name
+    mentor.last_name = payload.last_name or None
+    mentor.email = payload.email or None
+    mentor.telegram_username = payload.telegram_username
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        api_error(409, "mentor_conflict", "Mentor data conflicts with an account")
+    await session.refresh(mentor)
+    student_count = int(
+        await session.scalar(
+            select(func.count(MentorStudent.student_id)).where(MentorStudent.mentor_id == mentor.id)
+        )
+        or 0
+    )
+    return await _mentor_read(session, mentor, student_count)
 
 
 async def promote_student_to_mentor(session: AsyncSession, student_id: UUID) -> AdminMentorListItem:

@@ -101,3 +101,11 @@ class KnowledgeEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     topic = relationship("KnowledgeTopic", back_populates="entries")
+    media = relationship(
+        "ProtectedContentMedia",
+        back_populates="knowledge_entry",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ProtectedContentMedia.position, ProtectedContentMedia.created_at",
+        lazy="selectin",
+    )

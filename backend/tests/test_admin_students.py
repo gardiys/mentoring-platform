@@ -1,10 +1,12 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from httpx import AsyncClient
 from sqlalchemy import func, select
 
+from app.mentors.models import MentorStudent, StudentLearningStatus
 from app.roadmaps.models import RoadmapEnrollment
 from app.tracks.models import LearningTrackEnrollment
+from app.users.models import User, UserRole
 from tests.conftest import SeededData, TestSession, auth
 
 
@@ -13,10 +15,12 @@ def student_payload(
     *,
     telegram_id: int = 777000111,
     first_name: str = "Мария",
+    telegram_username: str | None = None,
     track_ids: list[str] | None = None,
 ) -> dict[str, object]:
     return {
         "telegram_id": telegram_id,
+        "telegram_username": telegram_username,
         "first_name": first_name,
         "last_name": "Петрова",
         "email": "maria@example.com",
@@ -42,12 +46,13 @@ async def test_admin_creates_student_with_track_access(
     response = await client.post(
         "/api/v1/admin/students",
         headers=auth(seeded.admin_id),
-        json=student_payload(seeded),
+        json=student_payload(seeded, telegram_username="  @@maria_dev  "),
     )
 
     assert response.status_code == 201
     created = response.json()
     assert created["first_name"] == "Мария"
+    assert created["telegram_username"] == "maria_dev"
     assert created["is_active"] is True
     assert created["learning_start_date"] == created["created_at"][:10]
     assert [track["slug"] for track in created["tracks"]] == ["python"]
@@ -61,6 +66,14 @@ async def test_admin_creates_student_with_track_access(
     roadmaps = await client.get("/api/v1/roadmaps", headers=auth(created["id"]))
     assert me.status_code == 200
     assert [roadmap["slug"] for roadmap in roadmaps.json()] == ["python-backend"]
+
+    listing = await client.get("/api/v1/admin/students", headers=auth(seeded.admin_id))
+    detail = await client.get(
+        f"/api/v1/admin/students/{created['id']}", headers=auth(seeded.admin_id)
+    )
+    listed = next(item for item in listing.json()["items"] if item["id"] == created["id"])
+    assert listed["telegram_username"] == "maria_dev"
+    assert detail.json()["telegram_username"] == "maria_dev"
 
 
 async def test_admin_edits_student_data_and_track_access(
@@ -139,14 +152,59 @@ async def test_admin_student_list_supports_search_access_filter_and_options(
         headers=auth(seeded.admin_id),
         json={"is_active": False},
     )
+    probation_id = uuid4()
+    async with TestSession() as session:
+        session.add(
+            User(
+                id=probation_id,
+                telegram_id=777000222,
+                telegram_username="sergey_go",
+                first_name="Сергей",
+                role=UserRole.STUDENT,
+                is_active=True,
+            )
+        )
+        await session.flush()
+        session.add_all(
+            [
+                MentorStudent(
+                    mentor_id=seeded.other_mentor_id,
+                    student_id=probation_id,
+                    learning_status=StudentLearningStatus.PROBATION,
+                ),
+                LearningTrackEnrollment(
+                    user_id=probation_id,
+                    track_id=seeded.go_track_id,
+                ),
+            ]
+        )
+        await session.commit()
 
     search = await client.get(
         "/api/v1/admin/students?q=777000111",
         headers=auth(seeded.admin_id),
     )
-    blocked = await client.get(
-        "/api/v1/admin/students?access=blocked",
+    inactive = await client.get(
+        "/api/v1/admin/students?is_active=false",
         headers=auth(seeded.admin_id),
+    )
+    combined = await client.get(
+        "/api/v1/admin/students",
+        headers=auth(seeded.admin_id),
+        params=[
+            ("q", "sergey_go"),
+            ("track_id", str(seeded.go_track_id)),
+            ("learning_status", "learning"),
+            ("learning_status", "probation"),
+            ("mentor_id", str(seeded.other_mentor_id)),
+            ("is_active", "true"),
+            ("limit", "1"),
+        ],
+    )
+    learning = await client.get(
+        "/api/v1/admin/students",
+        headers=auth(seeded.admin_id),
+        params=[("learning_status", "learning")],
     )
     options = await client.get(
         "/api/v1/admin/students/options",
@@ -164,9 +222,15 @@ async def test_admin_student_list_supports_search_access_filter_and_options(
 
     assert search.json()["total"] == 1
     assert search.json()["items"][0]["first_name"] == "Мария"
-    assert blocked.json()["total"] == 1
-    assert blocked.json()["items"][0]["is_active"] is False
+    assert inactive.json()["total"] == 1
+    assert inactive.json()["items"][0]["is_active"] is False
+    assert combined.json()["total"] == 1
+    assert combined.json()["items"][0]["id"] == str(probation_id)
+    assert combined.json()["items"][0]["learning_status"] == "probation"
+    assert combined.json()["limit"] == 1
+    assert learning.json()["total"] == 2
     assert [track["slug"] for track in options.json()["tracks"]] == ["python", "go"]
+    assert [track["slug"] for track in combined.json()["tracks"]] == ["python", "go"]
     assert assigned_to_mentor.json()["total"] == 1
     assert assigned_to_mentor.json()["items"][0]["id"] == str(seeded.student_id)
     assert without_mentor.json()["total"] == 1
@@ -197,3 +261,35 @@ async def test_admin_rejects_duplicate_student_identifiers(
     assert first.status_code == 201
     assert duplicate.status_code == 409
     assert duplicate.json()["detail"]["code"] == "telegram_id_already_used"
+
+
+async def test_admin_validates_and_can_clear_student_telegram_username(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    invalid = await client.put(
+        f"/api/v1/admin/students/{seeded.student_id}",
+        headers=auth(seeded.admin_id),
+        json=student_payload(seeded, telegram_username="bad username"),
+    )
+    too_short = await client.put(
+        f"/api/v1/admin/students/{seeded.student_id}",
+        headers=auth(seeded.admin_id),
+        json=student_payload(seeded, telegram_username="abcd"),
+    )
+    updated = await client.put(
+        f"/api/v1/admin/students/{seeded.student_id}",
+        headers=auth(seeded.admin_id),
+        json=student_payload(seeded, telegram_username="  @Ivan_Python  "),
+    )
+    cleared = await client.put(
+        f"/api/v1/admin/students/{seeded.student_id}",
+        headers=auth(seeded.admin_id),
+        json=student_payload(seeded, telegram_username="  @  "),
+    )
+
+    assert invalid.status_code == 422
+    assert too_short.status_code == 422
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["telegram_username"] == "Ivan_Python"
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["telegram_username"] is None

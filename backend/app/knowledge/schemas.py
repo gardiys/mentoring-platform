@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.knowledge.models import KnowledgeEntryKind
+from app.media.schemas import ProtectedContentMediaRead
 from app.roadmaps.admin_schemas import SLUG_PATTERN
 
 
@@ -41,6 +42,7 @@ class KnowledgeTopicContext(BaseModel):
 class KnowledgeEntryDetail(KnowledgeEntryListItem):
     content_markdown: str
     topic: KnowledgeTopicContext
+    media: list[ProtectedContentMediaRead]
     updated_at: datetime
 
 
@@ -108,6 +110,7 @@ class AdminKnowledgeEntryRead(BaseModel):
     content_markdown: str
     position: int
     is_published: bool
+    media: list[ProtectedContentMediaRead]
     updated_at: datetime
 
 

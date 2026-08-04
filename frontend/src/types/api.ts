@@ -2,10 +2,45 @@ import type { components } from "../api/generated/schema";
 
 type Schemas = components["schemas"];
 
+export type ContentMediaKind = "audio" | "video";
+
+export interface ProtectedContentMediaRead {
+  id: string;
+  kind: ContentMediaKind;
+  filename: string;
+  content_type: string;
+  size: number;
+  title: string | null;
+  position: number;
+  created_at: string;
+}
+
+export interface ContentMediaUploadIntent {
+  upload_url: string;
+  fields: Record<string, string>;
+  storage_key: string;
+  filename: string;
+  content_type: string;
+  size: number;
+  expires_in: number;
+}
+
+export interface ContentMediaUploadMetadata {
+  title: string | null;
+  position: number;
+}
+
+export interface ContentMediaPlayback {
+  url: string;
+  expires_in: number;
+}
+
 export type User = Schemas["UserRead"];
 export type RoadmapListItem = Schemas["RoadmapListItem"];
 export type RoadmapDetail = Schemas["RoadmapDetail"];
-export type TopicDetail = Schemas["TopicDetail"];
+export type TopicDetail = Schemas["TopicDetail"] & {
+  media: ProtectedContentMediaRead[];
+};
 export type ProgressStatus = Schemas["TopicProgressRead"]["status"];
 export type ProgressUpdateResponse = Schemas["ProgressUpdateResponse"];
 export type AdminRoadmapCreate = Schemas["AdminRoadmapCreate"];
@@ -21,7 +56,9 @@ export type AdminRoadmapSettingsMutation =
   Schemas["AdminRoadmapSettingsMutation"];
 export type AdminSectionMutation = Schemas["AdminSectionMutation"];
 export type AdminSectionOutline = Schemas["AdminSectionOutline"];
-export type AdminTopicRead = Schemas["AdminTopicRead"];
+export type AdminTopicRead = Schemas["AdminTopicRead"] & {
+  media: ProtectedContentMediaRead[];
+};
 export type AdminTrackMutation = Schemas["AdminTrackMutation"];
 export type AdminTrackRead = Schemas["AdminTrackRead"];
 export type AdminTrackOptions = Schemas["AdminTrackOptions"];
@@ -33,6 +70,7 @@ export type AdminStudentMutation = Omit<
   Schemas["AdminStudentMutation"],
   "last_name" | "email" | "track_ids"
 > & {
+  telegram_username: string | null;
   last_name: string | null;
   email: string | null;
   track_ids: string[];
@@ -47,20 +85,31 @@ export interface AdminStudentMentorRead {
   telegram_username: string | null;
 }
 export type AdminStudentListItem = Schemas["AdminStudentListItem"] & {
+  telegram_username: string | null;
   mentor: AdminStudentMentorRead | null;
+  learning_status: StudentLearningStatus;
 };
 export type AdminStudentDetail = Schemas["AdminStudentDetail"] & {
+  telegram_username: string | null;
   mentor: AdminStudentMentorRead | null;
+  learning_status: StudentLearningStatus;
 };
 export type AdminStudentPage = Omit<Schemas["AdminStudentPage"], "items"> & {
   items: AdminStudentListItem[];
   mentors: AdminStudentMentorRead[];
+  tracks: AdminStudentTrackOption[];
 };
 export type AdminStudentTrackOption = Schemas["AdminStudentTrackOption"];
 export type AdminStudentOptions = Schemas["AdminStudentOptions"] & {
   mentors: AdminStudentMentorRead[];
 };
 export type AdminMentorMutation = Schemas["AdminMentorMutation"];
+export interface AdminMentorProfileMutation {
+  first_name: string;
+  last_name: string | null;
+  email: string | null;
+  telegram_username: string | null;
+}
 export type AdminMentorListItem = Schemas["AdminMentorListItem"];
 export type AdminMentorCandidate = Schemas["AdminMentorCandidate"];
 export type AdminMentorDirectionsMutation =
@@ -69,14 +118,18 @@ export type AdminStudentMentorMutation = Schemas["AdminStudentMentorMutation"];
 export type KnowledgeEntryKind = Schemas["KnowledgeEntryKind"];
 export type KnowledgeTopicListItem = Schemas["KnowledgeTopicListItem"];
 export type KnowledgeTopicDetail = Schemas["KnowledgeTopicDetail"];
-export type KnowledgeEntryDetail = Schemas["KnowledgeEntryDetail"];
+export type KnowledgeEntryDetail = Schemas["KnowledgeEntryDetail"] & {
+  media: ProtectedContentMediaRead[];
+};
 export type KnowledgeSearchResult = Schemas["KnowledgeSearchResult"];
 export type AdminKnowledgeEntryMutation =
   Schemas["AdminKnowledgeEntryMutation"];
 export type AdminKnowledgeTopicMutation =
   Schemas["AdminKnowledgeTopicMutation"];
 export type AdminKnowledgeTopicRead = Schemas["AdminKnowledgeTopicRead"];
-export type AdminKnowledgeEntryRead = Schemas["AdminKnowledgeEntryRead"];
+export type AdminKnowledgeEntryRead = Schemas["AdminKnowledgeEntryRead"] & {
+  media: ProtectedContentMediaRead[];
+};
 export type AdminKnowledgeTopicSummary = Schemas["AdminKnowledgeTopicSummary"];
 export type AdminKnowledgeTopicOutline = Schemas["AdminKnowledgeTopicOutline"];
 export type AdminKnowledgeTopicSettingsMutation =
@@ -153,9 +206,121 @@ export interface InterviewCatalogFilters {
 
 export type StudentLearningStatus =
   "learning" | "interviewing" | "probation" | "finished";
+export type StudentAccessFilter = "all" | "active" | "blocked";
 export type StudentStrengthLevel = "weak" | "medium" | "strong";
 export type MentorDocumentKind = "resume" | "legend";
 export type MockInterviewStatus = "planned" | "completed";
+
+export type ScheduleEventKind = "weekly_call" | "meeting";
+export type ScheduleEventSource = "mentor" | "platform";
+
+export interface ScheduleTrackRead {
+  id: string;
+  slug: string;
+  title: string;
+}
+
+export interface ScheduleEventRead {
+  id: string;
+  track: ScheduleTrackRead;
+  mentor_id: string | null;
+  source: ScheduleEventSource;
+  source_name: string;
+  kind: ScheduleEventKind;
+  title: string;
+  description: string | null;
+  meeting_url: string | null;
+  weekday: number | null;
+  starts_at_time: string | null;
+  timezone: string | null;
+  starts_at: string | null;
+  regular_next_occurrence_at: string | null;
+  next_occurrence_at: string | null;
+  is_rescheduled: boolean;
+  rescheduled_from: string | null;
+  rescheduled_to: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MentorProfileRead {
+  mentor_id: string;
+  consultation_url: string | null;
+  group_calendar_url: string | null;
+  tracks: ScheduleTrackRead[];
+  weekly_calls: ScheduleEventRead[];
+  one_off_activities: ScheduleEventRead[];
+  updated_at: string | null;
+}
+
+export interface MentorWeeklyCallMutation {
+  track_id: string;
+  title: string;
+  description: string | null;
+  weekday: number;
+  starts_at_time: string | null;
+  timezone: string;
+  meeting_url: string;
+}
+
+export interface MentorOneOffActivityMutation {
+  track_id: string;
+  title: string;
+  description: string | null;
+  starts_at: string;
+  meeting_url: string | null;
+}
+
+export interface MentorWeeklyCallRescheduleMutation {
+  starts_at: string;
+}
+
+export interface AdminScheduleEventMutation {
+  track_id: string;
+  kind: ScheduleEventKind;
+  title: string;
+  description: string | null;
+  meeting_url: string | null;
+  weekday: number | null;
+  starts_at_time: string | null;
+  timezone: string | null;
+  starts_at: string | null;
+}
+
+export interface AdminScheduleEventPageRead {
+  items: ScheduleEventRead[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface MyMentorPublicRead {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+  telegram_username: string | null;
+  consultation_url: string | null;
+  group_calendar_url: string | null;
+}
+
+export interface PinnedResourceLinkMutation {
+  title: string;
+  description: string | null;
+  url: string;
+  position: number;
+}
+
+export interface PinnedResourceLinkRead extends PinnedResourceLinkMutation {
+  id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MyMentorDashboardRead {
+  mentor: MyMentorPublicRead | null;
+  schedule: ScheduleEventRead[];
+  useful_links: PinnedResourceLinkRead[];
+}
 
 export interface MentorStudentRoadmapSummary {
   id: string;
@@ -186,6 +351,7 @@ export interface MentorStudentListItem {
   last_name: string | null;
   email: string | null;
   telegram_username: string | null;
+  is_active: boolean;
   learning_status: StudentLearningStatus;
   strength_level: StudentStrengthLevel | null;
   roadmaps: MentorStudentRoadmapSummary[];

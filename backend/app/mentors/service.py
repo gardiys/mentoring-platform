@@ -184,6 +184,7 @@ async def _student_item(
         last_name=student.last_name,
         email=student.email,
         telegram_username=student.telegram_username,
+        is_active=student.is_active,
         learning_status=(relation.learning_status if relation else StudentLearningStatus.LEARNING),
         strength_level=relation.strength_level if relation else None,
         roadmaps=[
@@ -216,6 +217,7 @@ async def list_students(
     track_id: UUID | None = None,
     mentor_id: UUID | None = None,
     without_mentor: bool = False,
+    is_active: bool | None = None,
     learning_statuses: list[StudentLearningStatus] | None = None,
     limit: int = 12,
     offset: int = 0,
@@ -252,6 +254,8 @@ async def list_students(
                 User.telegram_username.ilike(pattern),
             )
         )
+    if is_active is not None:
+        statement = statement.where(User.is_active.is_(is_active))
     if track_id is not None:
         statement = statement.where(
             select(LearningTrackEnrollment.user_id)
@@ -510,6 +514,7 @@ async def _batch_student_items(
                 last_name=student.last_name,
                 email=student.email,
                 telegram_username=student.telegram_username,
+                is_active=student.is_active,
                 learning_status=(
                     relation.learning_status if relation else StudentLearningStatus.LEARNING
                 ),

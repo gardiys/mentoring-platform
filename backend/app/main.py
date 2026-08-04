@@ -19,10 +19,22 @@ from app.interviews.journal_router import router as interview_journal_router
 from app.interviews.router import router as interviews_router
 from app.knowledge.admin_router import router as admin_knowledge_router
 from app.knowledge.router import router as knowledge_router
+from app.media.router import (
+    admin_knowledge_media_router,
+    admin_roadmap_media_router,
+    knowledge_media_router,
+    roadmap_media_router,
+)
 from app.mentors.admin_router import router as admin_mentors_router
 from app.mentors.router import router as mentors_router
 from app.roadmaps.admin_router import router as admin_roadmaps_router
 from app.roadmaps.router import router as roadmaps_router
+from app.schedule.router import (
+    admin_schedule_router,
+    admin_useful_links_router,
+    mentor_profile_router,
+    my_mentor_router,
+)
 from app.students.admin_router import router as admin_students_router
 from app.tracks.admin_router import router as admin_tracks_router
 from app.users.router import router as users_router
@@ -53,10 +65,18 @@ app.include_router(admin_intelligence_router, prefix="/api/v1")
 app.include_router(intelligence_operations_router, prefix="/api/v1")
 app.include_router(knowledge_router, prefix="/api/v1")
 app.include_router(admin_knowledge_router, prefix="/api/v1")
+app.include_router(knowledge_media_router, prefix="/api/v1")
+app.include_router(admin_knowledge_media_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(roadmaps_router, prefix="/api/v1")
 app.include_router(mentors_router, prefix="/api/v1")
 app.include_router(admin_mentors_router, prefix="/api/v1")
 app.include_router(admin_roadmaps_router, prefix="/api/v1")
+app.include_router(roadmap_media_router, prefix="/api/v1")
+app.include_router(admin_roadmap_media_router, prefix="/api/v1")
 app.include_router(admin_tracks_router, prefix="/api/v1")
 app.include_router(admin_students_router, prefix="/api/v1")
+app.include_router(mentor_profile_router, prefix="/api/v1")
+app.include_router(my_mentor_router, prefix="/api/v1")
+app.include_router(admin_schedule_router, prefix="/api/v1")
+app.include_router(admin_useful_links_router, prefix="/api/v1")

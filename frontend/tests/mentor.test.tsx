@@ -1,24 +1,45 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
+import { MentorStudentPage } from "../src/pages/MentorStudentPage";
 import { MentorStudentsPage } from "../src/pages/MentorStudentsPage";
 import { MentorInterviewPage } from "../src/pages/MentorInterviewPage";
-import type { MentorInterviewDetail } from "../src/types/api";
+import type {
+  MentorInterviewDetail,
+  MentorStudentDetail,
+} from "../src/types/api";
 import { renderPage } from "./render";
 
 afterEach(() => vi.restoreAllMocks());
 
 it("MentorStudentsPage отображает учеников", async () => {
-  vi.spyOn(api, "mentorStudents").mockResolvedValue({
+  const students = vi.spyOn(api, "mentorStudents").mockResolvedValue({
     items: [
       {
         id: "u1",
         first_name: "Иван",
         last_name: "Иванов",
         email: "student@example.com",
+        telegram_username: "  @@ivan_student  ",
+        is_active: true,
+        learning_status: "learning",
+        strength_level: null,
+        roadmaps: [],
+        current_topics: [],
+        last_progress_at: null,
+        completed_topics_this_week: 0,
+        is_overdue: false,
+        mock_interview_count: 0,
+      },
+      {
+        id: "u2",
+        first_name: "Мария",
+        last_name: null,
+        email: null,
         telegram_username: null,
+        is_active: false,
         learning_status: "learning",
         strength_level: null,
         roadmaps: [],
@@ -29,7 +50,7 @@ it("MentorStudentsPage отображает учеников", async () => {
         mock_interview_count: 0,
       },
     ],
-    total: 1,
+    total: 2,
     limit: 12,
     offset: 0,
     directions: [{ id: "python", slug: "python", title: "Python" }],
@@ -55,11 +76,76 @@ it("MentorStudentsPage отображает учеников", async () => {
   expect(await screen.findByText("Иван Иванов")).toBeInTheDocument();
   expect(screen.getAllByLabelText("Направление")[0]).toBeInTheDocument();
   expect(screen.getAllByLabelText("Текущий статус")[0]).toBeInTheDocument();
+  expect(screen.getAllByLabelText("Доступ")[0]).toHaveValue("Доступ открыт");
   expect(screen.getAllByLabelText("Ментор")[0]).toBeInTheDocument();
+  expect(screen.getByText("Найдено учеников: 2")).toBeInTheDocument();
+  expect(screen.getAllByText("Доступ закрыт").length).toBeGreaterThan(0);
+  await waitFor(() =>
+    expect(students).toHaveBeenCalledWith(
+      expect.objectContaining({ isActive: true }),
+    ),
+  );
+  const accessInput = screen.getAllByLabelText("Доступ")[0]!;
+  await userEvent.click(accessInput);
+  await waitFor(() => expect(accessInput).toHaveAttribute("aria-controls"));
+  const accessOptions = document.getElementById(
+    accessInput.getAttribute("aria-controls")!,
+  );
+  expect(accessOptions).not.toBeNull();
+  await userEvent.click(within(accessOptions!).getByText("Доступ закрыт"));
+  await waitFor(() =>
+    expect(students).toHaveBeenLastCalledWith(
+      expect.objectContaining({ isActive: false }),
+    ),
+  );
   await userEvent.click(screen.getAllByLabelText("Ментор")[0]!);
   expect(
     await screen.findByText("Администратор · администратор"),
   ).toBeInTheDocument();
+  const telegramLink = screen.getByRole("link", {
+    name: "Написать в Telegram · @ivan_student",
+  });
+  expect(telegramLink).toHaveAttribute("href", "https://t.me/ivan_student");
+  expect(telegramLink).toHaveAttribute("target", "_blank");
+  expect(telegramLink).toHaveAttribute("rel", "noopener noreferrer");
+  expect(screen.getByText("Telegram не указан")).toBeInTheDocument();
+});
+
+it("показывает Telegram-чат в детальной карточке ученика", async () => {
+  const student: MentorStudentDetail = {
+    id: "student-1",
+    first_name: "Иван",
+    last_name: "Иванов",
+    email: "student@example.com",
+    telegram_username: "@ivan_detail",
+    is_active: true,
+    learning_status: "learning",
+    strength_level: null,
+    roadmaps: [],
+    current_topics: [],
+    last_progress_at: null,
+    completed_topics_this_week: 0,
+    is_overdue: false,
+    mock_interview_count: 0,
+    interviews: [],
+    mock_interviews: [],
+    documents: [],
+    notes: [],
+  };
+  vi.spyOn(api, "mentorStudent").mockResolvedValue(student);
+
+  renderPage(
+    <MentorStudentPage />,
+    "/mentor/students/student-1",
+    "/mentor/students/:studentId",
+  );
+
+  const telegramLink = await screen.findByRole("link", {
+    name: "Написать в Telegram · @ivan_detail",
+  });
+  expect(telegramLink).toHaveAttribute("href", "https://t.me/ivan_detail");
+  expect(telegramLink).toHaveAttribute("target", "_blank");
+  expect(telegramLink).toHaveAttribute("rel", "noopener noreferrer");
 });
 
 it.each([

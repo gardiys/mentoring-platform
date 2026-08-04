@@ -21,6 +21,8 @@ import type {
   AdminRoadmapSettingsMutation,
   AdminRoadmapSummary,
   AdminRoadmapUpdate,
+  AdminScheduleEventMutation,
+  AdminScheduleEventPageRead,
   AdminSectionMutation,
   AdminSectionOutline,
   AdminStudentDetail,
@@ -30,6 +32,7 @@ import type {
   AdminMentorCandidate,
   AdminMentorListItem,
   AdminMentorMutation,
+  AdminMentorProfileMutation,
   AdminInterviewProcessPage,
   AdminTopicCreate,
   AdminTopicRead,
@@ -66,13 +69,26 @@ import type {
   IntelligenceProcessing,
   IntelligenceReview,
   CompanyOption,
+  ContentMediaPlayback,
+  ContentMediaUploadIntent,
+  ContentMediaUploadMetadata,
   MentorDocumentKind,
   MentorDocumentRead,
   MentorInterviewDetail,
   MentorNoteRead,
+  MentorOneOffActivityMutation,
+  MentorProfileRead,
   MentorStudentDetail,
   MentorStudentPage,
+  MentorWeeklyCallMutation,
+  MentorWeeklyCallRescheduleMutation,
   MockInterviewRead,
+  MyMentorDashboardRead,
+  PinnedResourceLinkMutation,
+  PinnedResourceLinkRead,
+  ProtectedContentMediaRead,
+  ScheduleEventKind,
+  ScheduleEventRead,
   StudentLearningStatus,
   StudentStrengthLevel,
   ProgressStatus,
@@ -110,6 +126,36 @@ async function uploadInterviewFile(
   return apiRequest<InterviewProcessDetail>(completePath, {
     method: "POST",
     body: JSON.stringify({ ...payload, storage_key: intent.storage_key }),
+    signal: options?.signal,
+  });
+}
+
+async function uploadProtectedContentMedia(
+  intentPath: string,
+  finalizePath: string,
+  file: File,
+  metadata: ContentMediaUploadMetadata,
+  options?: UploadOptions,
+): Promise<ProtectedContentMediaRead> {
+  const payload = {
+    filename: file.name,
+    content_type: inferFileContentType(file),
+    size: file.size,
+  };
+  const intent = await apiRequest<ContentMediaUploadIntent>(intentPath, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal: options?.signal,
+  });
+  await uploadPresignedPost(intent, file, options);
+  return apiRequest<ProtectedContentMediaRead>(finalizePath, {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      storage_key: intent.storage_key,
+      title: metadata.title,
+      position: metadata.position,
+    }),
     signal: options?.signal,
   });
 }
@@ -257,10 +303,72 @@ export const api = {
       body: JSON.stringify({ started_on: startedOn }),
     }),
   topic: (id: string) => apiRequest<TopicDetail>(`/api/v1/topics/${id}`),
+  roadmapTopicMediaPlayback: (topicId: string, mediaId: string) =>
+    apiRequest<ContentMediaPlayback>(
+      `/api/v1/topics/${topicId}/media/${mediaId}/playback`,
+    ).then((result) => ({ ...result, url: resolveApiUrl(result.url) })),
   updateProgress: (id: string, status: ProgressStatus) =>
     apiRequest<ProgressUpdateResponse>(`/api/v1/me/topics/${id}/progress`, {
       method: "PUT",
       body: JSON.stringify({ status }),
+    }),
+  myMentorDashboard: () =>
+    apiRequest<MyMentorDashboardRead>("/api/v1/me/mentor"),
+  mentorProfile: () => apiRequest<MentorProfileRead>("/api/v1/mentor/profile"),
+  updateMentorProfile: (payload: {
+    consultation_url: string | null;
+    group_calendar_url: string | null;
+  }) =>
+    apiRequest<MentorProfileRead>("/api/v1/mentor/profile", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  createMentorWeeklyCall: (payload: MentorWeeklyCallMutation) =>
+    apiRequest<ScheduleEventRead>("/api/v1/mentor/profile/weekly-calls", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateMentorWeeklyCall: (
+    eventId: string,
+    payload: MentorWeeklyCallMutation,
+  ) =>
+    apiRequest<ScheduleEventRead>(
+      `/api/v1/mentor/profile/weekly-calls/${eventId}`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
+  deleteMentorWeeklyCall: (eventId: string) =>
+    apiRequest<void>(`/api/v1/mentor/profile/weekly-calls/${eventId}`, {
+      method: "DELETE",
+    }),
+  rescheduleMentorWeeklyCall: (
+    eventId: string,
+    payload: MentorWeeklyCallRescheduleMutation,
+  ) =>
+    apiRequest<ScheduleEventRead>(
+      `/api/v1/mentor/profile/weekly-calls/${eventId}/reschedule`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
+  cancelMentorWeeklyCallReschedule: (eventId: string) =>
+    apiRequest<void>(
+      `/api/v1/mentor/profile/weekly-calls/${eventId}/reschedule`,
+      { method: "DELETE" },
+    ),
+  createMentorOneOffActivity: (payload: MentorOneOffActivityMutation) =>
+    apiRequest<ScheduleEventRead>("/api/v1/mentor/profile/activities", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateMentorOneOffActivity: (
+    eventId: string,
+    payload: MentorOneOffActivityMutation,
+  ) =>
+    apiRequest<ScheduleEventRead>(
+      `/api/v1/mentor/profile/activities/${eventId}`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
+  deleteMentorOneOffActivity: (eventId: string) =>
+    apiRequest<void>(`/api/v1/mentor/profile/activities/${eventId}`, {
+      method: "DELETE",
     }),
   mentorStudents: (
     options: {
@@ -268,6 +376,7 @@ export const api = {
       trackId?: string | null;
       mentorId?: string | null;
       withoutMentor?: boolean;
+      isActive?: boolean | null;
       learningStatuses?: StudentLearningStatus[];
       limit?: number;
       offset?: number;
@@ -281,6 +390,9 @@ export const api = {
     if (options.trackId) params.set("track_id", options.trackId);
     if (options.mentorId) params.set("mentor_id", options.mentorId);
     if (options.withoutMentor) params.set("without_mentor", "true");
+    if (options.isActive !== undefined && options.isActive !== null) {
+      params.set("is_active", String(options.isActive));
+    }
     options.learningStatuses?.forEach((status) =>
       params.append("learning_status", status),
     );
@@ -418,21 +530,29 @@ export const api = {
   adminStudents: (
     options: {
       query?: string;
-      access?: "all" | "active" | "blocked";
+      trackId?: string | null;
       mentorId?: string | null;
       withoutMentor?: boolean;
+      isActive?: boolean | null;
+      learningStatuses?: StudentLearningStatus[];
       limit?: number;
       offset?: number;
     } = {},
   ) => {
     const params = new URLSearchParams({
-      access: options.access ?? "all",
       limit: String(options.limit ?? 50),
       offset: String(options.offset ?? 0),
     });
     if (options.query) params.set("q", options.query);
+    if (options.trackId) params.set("track_id", options.trackId);
     if (options.mentorId) params.set("mentor_id", options.mentorId);
     if (options.withoutMentor) params.set("without_mentor", "true");
+    if (options.isActive !== undefined && options.isActive !== null) {
+      params.set("is_active", String(options.isActive));
+    }
+    options.learningStatuses?.forEach((status) =>
+      params.append("learning_status", status),
+    );
     return apiRequest<AdminStudentPage>(`/api/v1/admin/students?${params}`);
   },
   adminStudent: (id: string) =>
@@ -465,6 +585,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  updateAdminMentorProfile: (
+    mentorId: string,
+    payload: AdminMentorProfileMutation,
+  ) =>
+    apiRequest<AdminMentorListItem>(
+      `/api/v1/admin/mentors/${mentorId}/profile`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
   promoteAdminStudent: (studentId: string) =>
     apiRequest<AdminMentorListItem>(
       `/api/v1/admin/mentors/${studentId}/promote`,
@@ -486,6 +614,62 @@ export const api = {
     apiRequest<void>(`/api/v1/admin/mentors/students/${studentId}/mentor`, {
       method: "PATCH",
       body: JSON.stringify({ mentor_id: mentorId }),
+    }),
+  adminScheduleEvents: (
+    options: {
+      trackId?: string | null;
+      kind?: ScheduleEventKind | null;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
+    const params = new URLSearchParams({
+      limit: String(options.limit ?? 20),
+      offset: String(options.offset ?? 0),
+    });
+    if (options.trackId) params.set("track_id", options.trackId);
+    if (options.kind) params.set("kind", options.kind);
+    return apiRequest<AdminScheduleEventPageRead>(
+      `/api/v1/admin/schedule/events?${params.toString()}`,
+    );
+  },
+  adminScheduleEvent: (eventId: string) =>
+    apiRequest<ScheduleEventRead>(`/api/v1/admin/schedule/events/${eventId}`),
+  createAdminScheduleEvent: (payload: AdminScheduleEventMutation) =>
+    apiRequest<ScheduleEventRead>("/api/v1/admin/schedule/events", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateAdminScheduleEvent: (
+    eventId: string,
+    payload: AdminScheduleEventMutation,
+  ) =>
+    apiRequest<ScheduleEventRead>(`/api/v1/admin/schedule/events/${eventId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteAdminScheduleEvent: (eventId: string) =>
+    apiRequest<void>(`/api/v1/admin/schedule/events/${eventId}`, {
+      method: "DELETE",
+    }),
+  adminUsefulLinks: () =>
+    apiRequest<PinnedResourceLinkRead[]>("/api/v1/admin/useful-links"),
+  createAdminUsefulLink: (payload: PinnedResourceLinkMutation) =>
+    apiRequest<PinnedResourceLinkRead>("/api/v1/admin/useful-links", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateAdminUsefulLink: (
+    linkId: string,
+    payload: PinnedResourceLinkMutation,
+  ) =>
+    apiRequest<PinnedResourceLinkRead>(`/api/v1/admin/useful-links/${linkId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  deleteAdminUsefulLink: (linkId: string) =>
+    apiRequest<void>(`/api/v1/admin/useful-links/${linkId}`, {
+      method: "DELETE",
     }),
   adminRoadmaps: () => apiRequest<AdminRoadmapRead[]>("/api/v1/admin/roadmaps"),
   adminRoadmapSummaries: () =>
@@ -544,6 +728,31 @@ export const api = {
       `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}/topics/${topicId}`,
       { method: "PUT", body: JSON.stringify(payload) },
     ),
+  uploadAdminRoadmapTopicMedia: (
+    roadmapId: string,
+    sectionId: string,
+    topicId: string,
+    file: File,
+    metadata: ContentMediaUploadMetadata,
+    options?: UploadOptions,
+  ) =>
+    uploadProtectedContentMedia(
+      `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}/topics/${topicId}/media/upload-url`,
+      `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}/topics/${topicId}/media/finalize`,
+      file,
+      metadata,
+      options,
+    ),
+  deleteAdminRoadmapTopicMedia: (
+    roadmapId: string,
+    sectionId: string,
+    topicId: string,
+    mediaId: string,
+  ) =>
+    apiRequest<void>(
+      `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}/topics/${topicId}/media/${mediaId}`,
+      { method: "DELETE" },
+    ),
   adminRoadmap: (id: string) =>
     apiRequest<AdminRoadmapRead>(`/api/v1/admin/roadmaps/${id}`),
   createAdminRoadmap: (payload: AdminRoadmapCreate) =>
@@ -585,6 +794,10 @@ export const api = {
     apiRequest<KnowledgeTopicDetail>(`/api/v1/knowledge/topics/${slug}`),
   knowledgeEntry: (slug: string) =>
     apiRequest<KnowledgeEntryDetail>(`/api/v1/knowledge/entries/${slug}`),
+  knowledgeMediaPlayback: (entrySlug: string, mediaId: string) =>
+    apiRequest<ContentMediaPlayback>(
+      `/api/v1/knowledge/entries/${encodeURIComponent(entrySlug)}/media/${mediaId}/playback`,
+    ).then((result) => ({ ...result, url: resolveApiUrl(result.url) })),
   knowledgeSearch: (query: string) =>
     apiRequest<KnowledgeSearchResult[]>(
       `/api/v1/knowledge/search?q=${encodeURIComponent(query)}`,
@@ -627,6 +840,29 @@ export const api = {
     apiRequest<AdminKnowledgeEntryRead>(
       `/api/v1/admin/knowledge/topics/${topicId}/entries/${entryId}`,
       { method: "PUT", body: JSON.stringify(payload) },
+    ),
+  uploadAdminKnowledgeMedia: (
+    topicId: string,
+    entryId: string,
+    file: File,
+    metadata: ContentMediaUploadMetadata,
+    options?: UploadOptions,
+  ) =>
+    uploadProtectedContentMedia(
+      `/api/v1/admin/knowledge/topics/${topicId}/entries/${entryId}/media/upload-url`,
+      `/api/v1/admin/knowledge/topics/${topicId}/entries/${entryId}/media/finalize`,
+      file,
+      metadata,
+      options,
+    ),
+  deleteAdminKnowledgeMedia: (
+    topicId: string,
+    entryId: string,
+    mediaId: string,
+  ) =>
+    apiRequest<void>(
+      `/api/v1/admin/knowledge/topics/${topicId}/entries/${entryId}/media/${mediaId}`,
+      { method: "DELETE" },
     ),
   adminKnowledgeTopic: (id: string) =>
     apiRequest<AdminKnowledgeTopicRead>(`/api/v1/admin/knowledge/topics/${id}`),

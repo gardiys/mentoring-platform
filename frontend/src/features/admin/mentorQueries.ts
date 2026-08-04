@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
-import type { AdminMentorMutation } from "../../types/api";
+import type {
+  AdminMentorMutation,
+  AdminMentorProfileMutation,
+} from "../../types/api";
 import { adminStudentKeys } from "./studentQueries";
 
 export const adminMentorKeys = {
@@ -39,6 +42,18 @@ function useMentorMutation<T>(mutationFn: (value: T) => Promise<unknown>) {
 export function useCreateAdminMentor() {
   return useMentorMutation((payload: AdminMentorMutation) =>
     api.createAdminMentor(payload),
+  );
+}
+
+export function useUpdateAdminMentorProfile() {
+  return useMentorMutation(
+    ({
+      mentorId,
+      payload,
+    }: {
+      mentorId: string;
+      payload: AdminMentorProfileMutation;
+    }) => api.updateAdminMentorProfile(mentorId, payload),
   );
 }
 

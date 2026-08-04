@@ -11,6 +11,7 @@ from app.mentors.admin_schemas import (
     AdminMentorDirectionsMutation,
     AdminMentorListItem,
     AdminMentorMutation,
+    AdminMentorProfileMutation,
     AdminStudentMentorMutation,
 )
 from app.mentors.admin_service import (
@@ -20,6 +21,7 @@ from app.mentors.admin_service import (
     list_mentor_candidates,
     promote_student_to_mentor,
     reassign_student,
+    update_admin_mentor_profile,
     update_mentor_directions,
 )
 
@@ -47,6 +49,16 @@ async def admin_create_mentor(
     payload: AdminMentorMutation, session: Session, _admin: AdminUser
 ) -> AdminMentorListItem:
     return await create_admin_mentor(session, payload)
+
+
+@router.patch("/{mentor_id}/profile", response_model=AdminMentorListItem)
+async def admin_update_mentor_profile(
+    mentor_id: UUID,
+    payload: AdminMentorProfileMutation,
+    session: Session,
+    _admin: AdminUser,
+) -> AdminMentorListItem:
+    return await update_admin_mentor_profile(session, mentor_id, payload)
 
 
 @router.post("/{student_id}/promote", response_model=AdminMentorListItem)

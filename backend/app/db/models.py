@@ -47,6 +47,7 @@ from app.knowledge.models import (
     KnowledgeTopic,
     KnowledgeTopicTrack,
 )
+from app.media.models import ProtectedContentMedia
 from app.mentors.models import (
     MentorDocumentKind,
     MentorStudent,
@@ -60,6 +61,12 @@ from app.mentors.models import (
 )
 from app.progress.models import ProgressStatus, TopicProgress
 from app.roadmaps.models import Roadmap, RoadmapEnrollment, RoadmapSection, Topic
+from app.schedule.models import (
+    MentorProfile,
+    PinnedResourceLink,
+    ScheduleEvent,
+    ScheduleEventKind,
+)
 from app.tracks.models import LearningTrack, LearningTrackEnrollment, LearningTrackRoadmap
 from app.users.models import User, UserRole
 
@@ -73,12 +80,17 @@ __all__ = [
     "MentorDocumentKind",
     "MockInterview",
     "MockInterviewStatus",
+    "MentorProfile",
+    "PinnedResourceLink",
+    "ScheduleEvent",
+    "ScheduleEventKind",
     "StudentLearningStatus",
     "StudentStrengthLevel",
     "KnowledgeEntry",
     "KnowledgeEntryKind",
     "KnowledgeTopic",
     "KnowledgeTopicTrack",
+    "ProtectedContentMedia",
     "InterviewCard",
     "InterviewCardOccurrence",
     "InterviewCardFrequency",

@@ -48,6 +48,7 @@ class MentorStudentListItem(BaseModel):
     last_name: str | None
     email: str | None
     telegram_username: str | None
+    is_active: bool
     learning_status: StudentLearningStatus
     strength_level: StudentStrengthLevel | None
     roadmaps: list[StudentRoadmapSummary]
@@ -161,6 +162,7 @@ class MentorStudentDetail(BaseModel):
     last_name: str | None
     email: str | None
     telegram_username: str | None
+    is_active: bool
     learning_status: StudentLearningStatus
     strength_level: StudentStrengthLevel | None
     roadmaps: list[RoadmapDetail]

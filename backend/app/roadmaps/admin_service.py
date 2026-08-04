@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import api_error
+from app.media.presenters import content_media_reads
 from app.roadmaps.admin_schemas import (
     AdminRoadmapCreate,
     AdminRoadmapOutline,
@@ -49,6 +50,7 @@ def _to_read(roadmap: Roadmap) -> AdminRoadmapRead:
                         position=topic.position,
                         estimated_minutes=topic.estimated_minutes,
                         is_published=topic.is_published,
+                        media=content_media_reads(topic.media),
                     )
                     for topic in sorted(section.topics, key=lambda item: item.position)
                 ],
@@ -64,7 +66,11 @@ async def get_admin_roadmap_model(
     statement = (
         select(Roadmap)
         .where(Roadmap.id == roadmap_id)
-        .options(selectinload(Roadmap.sections).selectinload(RoadmapSection.topics))
+        .options(
+            selectinload(Roadmap.sections)
+            .selectinload(RoadmapSection.topics)
+            .selectinload(Topic.media)
+        )
     )
     if lock:
         statement = statement.with_for_update()
@@ -79,7 +85,11 @@ async def list_admin_roadmaps(session: AsyncSession) -> list[AdminRoadmapRead]:
         await session.scalars(
             select(Roadmap)
             .order_by(Roadmap.position, Roadmap.title)
-            .options(selectinload(Roadmap.sections).selectinload(RoadmapSection.topics))
+            .options(
+                selectinload(Roadmap.sections)
+                .selectinload(RoadmapSection.topics)
+                .selectinload(Topic.media)
+            )
         )
     ).all()
     return [_to_read(roadmap) for roadmap in roadmaps]
@@ -251,7 +261,11 @@ def _apply_section(section: RoadmapSection, payload: AdminSectionMutation) -> No
 async def get_admin_topic(
     session: AsyncSession, roadmap_id: UUID, section_id: UUID, topic_id: UUID
 ) -> AdminTopicRead:
-    topic = await session.get(Topic, topic_id)
+    topic = await session.scalar(
+        select(Topic)
+        .where(Topic.id == topic_id)
+        .options(selectinload(Topic.media))
+    )
     section = await session.get(RoadmapSection, section_id)
     if (
         topic is None
@@ -283,6 +297,7 @@ def _topic_read(topic: Topic) -> AdminTopicRead:
         position=topic.position,
         estimated_minutes=topic.estimated_minutes,
         is_published=topic.is_published,
+        media=content_media_reads(topic.media),
     )
 
 
@@ -314,8 +329,7 @@ async def create_admin_topic(
     except IntegrityError:
         await session.rollback()
         api_error(409, "topic_conflict", "Topic contains conflicting values")
-    await session.refresh(topic)
-    return _topic_read(topic)
+    return await get_admin_topic(session, roadmap_id, section_id, topic.id)
 
 
 async def update_admin_topic(
@@ -341,8 +355,7 @@ async def update_admin_topic(
     except IntegrityError:
         await session.rollback()
         api_error(409, "topic_conflict", "Topic contains conflicting values")
-    await session.refresh(topic)
-    return _topic_read(topic)
+    return await get_admin_topic(session, roadmap_id, section_id, topic.id)
 
 
 async def _validate_unique_slugs(
@@ -411,7 +424,7 @@ async def create_roadmap(session: AsyncSession, payload: AdminRoadmapCreate) -> 
     except IntegrityError:
         await session.rollback()
         api_error(409, "roadmap_conflict", "Roadmap contains conflicting values")
-    return _to_read(roadmap)
+    return await get_admin_roadmap(session, roadmap.id)
 
 
 async def update_roadmap(
@@ -486,4 +499,4 @@ async def update_roadmap(
     except IntegrityError:
         await session.rollback()
         api_error(409, "roadmap_conflict", "Roadmap contains conflicting values")
-    return _to_read(roadmap)
+    return await get_admin_roadmap(session, roadmap.id)

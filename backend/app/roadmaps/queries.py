@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.media.presenters import content_media_reads
 from app.progress.models import ProgressStatus, TopicProgress
 from app.progress.service import get_progress_counts
 from app.roadmaps.models import Roadmap, RoadmapEnrollment, RoadmapSection, Topic
@@ -235,7 +236,10 @@ async def get_topic_model(session: AsyncSession, topic_id: UUID) -> Topic | None
         await session.scalar(
             select(Topic)
             .where(Topic.id == topic_id, Topic.is_published.is_(True))
-            .options(selectinload(Topic.section).selectinload(RoadmapSection.roadmap))
+            .options(
+                selectinload(Topic.section).selectinload(RoadmapSection.roadmap),
+                selectinload(Topic.media),
+            )
         ),
     )
 
@@ -250,6 +254,7 @@ async def build_topic_detail(session: AsyncSession, topic: Topic, user_id: UUID)
         description=topic.description,
         content_markdown=topic.content_markdown,
         estimated_minutes=topic.estimated_minutes,
+        media=content_media_reads(topic.media),
         roadmap=TopicContext(id=roadmap.id, slug=roadmap.slug, title=roadmap.title),
         section=TopicContext(id=topic.section.id, title=topic.section.title),
         status=progress.status if progress else ProgressStatus.NOT_STARTED,

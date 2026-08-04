@@ -27,6 +27,7 @@ import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { ProgressBar } from "../components/ProgressBar";
+import { TelegramChatLink } from "../components/TelegramChatLink";
 import { TopicStatusBadge } from "../components/TopicStatusBadge";
 import {
   useCompleteMockInterview,
@@ -418,50 +419,56 @@ export function MentorStudentPage() {
             : undefined
         }
       >
-        <Group align="flex-end">
-          <Select
-            label="Текущий статус"
-            data={statusOptions}
-            value={learningStatus}
-            onChange={(value) =>
-              value && setLearningStatus(value as StudentLearningStatus)
-            }
-            style={{ flex: 1 }}
-          />
-          <Select
-            label="Уровень"
-            placeholder="Не выставлен"
-            clearable
-            data={levelOptions}
-            value={strengthLevel}
-            onChange={(value) =>
-              setStrengthLevel(value as StudentStrengthLevel | null)
-            }
-            style={{ flex: 1 }}
-          />
-          <Button
-            loading={updateState.isPending}
-            onClick={() =>
-              updateState.mutate(
-                { learningStatus, strengthLevel },
-                {
-                  onSuccess: () =>
-                    notifications.show({
-                      color: "green",
-                      message: "Статус обновлён",
-                    }),
-                  onError: (error) =>
-                    notifications.show({
-                      color: "red",
-                      message: error.message,
-                    }),
-                },
-              )
-            }
-          >
-            Сохранить
-          </Button>
-        </Group>
+        <Stack>
+          <div>
+            <Text className="technical-label">Связь с учеником</Text>
+            <TelegramChatLink username={student.telegram_username} />
+          </div>
+          <Group align="flex-end">
+            <Select
+              label="Текущий статус"
+              data={statusOptions}
+              value={learningStatus}
+              onChange={(value) =>
+                value && setLearningStatus(value as StudentLearningStatus)
+              }
+              style={{ flex: 1 }}
+            />
+            <Select
+              label="Уровень"
+              placeholder="Не выставлен"
+              clearable
+              data={levelOptions}
+              value={strengthLevel}
+              onChange={(value) =>
+                setStrengthLevel(value as StudentStrengthLevel | null)
+              }
+              style={{ flex: 1 }}
+            />
+            <Button
+              loading={updateState.isPending}
+              onClick={() =>
+                updateState.mutate(
+                  { learningStatus, strengthLevel },
+                  {
+                    onSuccess: () =>
+                      notifications.show({
+                        color: "green",
+                        message: "Статус обновлён",
+                      }),
+                    onError: (error) =>
+                      notifications.show({
+                        color: "red",
+                        message: error.message,
+                      }),
+                  },
+                )
+              }
+            >
+              Сохранить
+            </Button>
+          </Group>
+        </Stack>
       </Card>
 
       <SimpleGrid cols={{ base: 1, sm: 3 }}>

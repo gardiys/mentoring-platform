@@ -85,6 +85,14 @@ class Topic(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     section = relationship("RoadmapSection", back_populates="topics")
     progress = relationship("TopicProgress", back_populates="topic")
+    media = relationship(
+        "ProtectedContentMedia",
+        back_populates="roadmap_topic",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ProtectedContentMedia.position, ProtectedContentMedia.created_at",
+        lazy="selectin",
+    )
 
 
 class RoadmapEnrollment(Base):
