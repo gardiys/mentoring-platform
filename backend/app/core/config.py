@@ -46,7 +46,7 @@ class Settings(BaseSettings):
         le=604_800,
     )
     interview_stream_ticket_ttl_seconds: int = Field(default=600, ge=60, le=3_600)
-    media_stream_redirect_ttl_seconds: int = Field(default=60, ge=30, le=300)
+    media_stream_redirect_ttl_seconds: int = Field(default=900, ge=60, le=3_600)
     content_video_max_bytes: int = Field(
         default=5_368_709_120,
         ge=1_048_576,

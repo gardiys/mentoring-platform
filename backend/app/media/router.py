@@ -496,8 +496,5 @@ async def _stream_media(
     return direct_private_media_response(
         store,
         upload,
-        expires_in=min(
-            settings.media_stream_redirect_ttl_seconds,
-            settings.interview_stream_ticket_ttl_seconds,
-        ),
+        expires_in=settings.media_stream_redirect_ttl_seconds,
     )

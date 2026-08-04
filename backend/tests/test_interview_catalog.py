@@ -245,10 +245,10 @@ async def test_students_browse_company_tracks_files_and_comments(
     assert "httponly" in media.headers["set-cookie"].lower()
     assert stream.status_code == 307
     assert stream.headers["location"].startswith("https://s3.example.test/")
-    assert stream.headers["location"].endswith("?mode=inline&ttl=60")
+    assert stream.headers["location"].endswith("?mode=inline&ttl=900")
     assert stream.headers["cache-control"] == "private, no-store, max-age=0"
     assert any(
-        inline is True and expires_in == 60
+        inline is True and expires_in == 900
         for _upload, inline, expires_in in fake_store.playback_urls
     )
     assert copied_to_another_browser.status_code == 401

@@ -263,7 +263,7 @@ export function AdminContentMediaManager({
 
             <FileInput
               label="Аудио- или видеофайл"
-              description="MP4/WebM для видео, MP3/M4A/WAV для аудио. Видео — до 5 ГБ, аудио — до 500 МБ."
+              description="Для гарантированного воспроизведения: MP4 (H.264/AAC, Fast Start) или WebM (VP8/VP9). Видео — до 5 ГБ, аудио — до 500 МБ."
               placeholder="Выберите файл"
               accept={ACCEPTED_MEDIA}
               clearable

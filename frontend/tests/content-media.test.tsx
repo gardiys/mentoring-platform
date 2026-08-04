@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -548,6 +548,45 @@ it("лениво открывает защищённое видео статьи
   await waitFor(() => expect(playback).toHaveBeenCalledTimes(2), {
     timeout: 1_600,
   });
+});
+
+it("один раз автоматически обновляет доступ при сбое видео", async () => {
+  const entry: KnowledgeEntryDetail = {
+    id: adminEntry.id,
+    kind: adminEntry.kind,
+    slug: adminEntry.slug,
+    title: adminEntry.title,
+    summary: adminEntry.summary,
+    content_markdown: adminEntry.content_markdown,
+    topic: { id: "topic-id", slug: "python", title: "Python" },
+    media: [media],
+    updated_at: adminEntry.updated_at,
+  };
+  vi.spyOn(api, "knowledgeEntry").mockResolvedValue(entry);
+  const playback = vi.spyOn(api, "knowledgeMediaPlayback").mockResolvedValue({
+    url: "http://localhost:8000/api/v1/knowledge/stream",
+    expires_in: 600,
+  });
+
+  renderPage(
+    <KnowledgeEntryPage />,
+    `/knowledge/entries/${entry.slug}`,
+    "/knowledge/entries/:entrySlug",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Открыть запись" }),
+  );
+  const firstPlayer = await screen.findByLabelText("Видео: Разбор asyncio");
+  fireEvent.error(firstPlayer);
+
+  await waitFor(() => expect(playback).toHaveBeenCalledTimes(2));
+  const renewedPlayer = await screen.findByLabelText("Видео: Разбор asyncio");
+  expect(renewedPlayer).not.toBe(firstPlayer);
+  fireEvent.error(renewedPlayer);
+  expect(
+    await screen.findByText("Запись не удалось воспроизвести"),
+  ).toBeInTheDocument();
 });
 
 it("открывает защищённое аудио в теме роадмапа", async () => {

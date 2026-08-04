@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -146,9 +146,9 @@ it("ищет компании в каталоге", async () => {
 
 it("показывает треки, запись, файлы и отправляет комментарий", async () => {
   vi.spyOn(api, "interviewCatalogCompany").mockResolvedValue(detail);
-  vi.spyOn(api, "interviewCatalogStageMedia").mockResolvedValue(
-    "https://s3.example.test/interview.mp4?inline=true",
-  );
+  const loadMedia = vi
+    .spyOn(api, "interviewCatalogStageMedia")
+    .mockResolvedValue("https://s3.example.test/interview.mp4?inline=true");
   const createComment = vi
     .spyOn(api, "createInterviewCatalogComment")
     .mockReturnValue(new Promise(() => undefined));
@@ -201,6 +201,11 @@ it("показывает треки, запись, файлы и отправл�
   expect(api.interviewCatalogStageMedia).toHaveBeenCalledWith(
     detail.tracks[0]!.stages[0]!.id,
   );
+  const firstPlayer = document.querySelector("video[controls]");
+  expect(firstPlayer).not.toBeNull();
+  fireEvent.error(firstPlayer!);
+  await waitFor(() => expect(loadMedia).toHaveBeenCalledTimes(2));
+  expect(document.querySelector("video[controls]")).not.toBe(firstPlayer);
 
   await userEvent.type(
     screen.getByRole("textbox", { name: "Ваш комментарий" }),

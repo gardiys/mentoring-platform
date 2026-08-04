@@ -11,7 +11,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "../api/endpoints";
@@ -102,6 +102,10 @@ function CatalogStage({
 }) {
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const [playerLoading, setPlayerLoading] = useState(false);
+  const [playerReloadKey, setPlayerReloadKey] = useState(0);
+  const resumeTimeRef = useRef(0);
+  const resumePlaybackRef = useRef(false);
+  const automaticRecoveryAttemptedRef = useRef(false);
   const [comment, setComment] = useState("");
   const commentMutation = useCreateInterviewCatalogComment(companyId);
   const deleteMutation = useDeleteInterviewCatalogComment(companyId);
@@ -109,15 +113,19 @@ function CatalogStage({
     ? mediaKind(stage.media.content_type, stage.media.filename)
     : null;
 
-  const togglePlayer = async () => {
-    if (playerUrl) {
-      setPlayerUrl(null);
-      return;
+  const requestPlayerUrl = async (element?: HTMLMediaElement) => {
+    if (element) {
+      resumeTimeRef.current = Number.isFinite(element.currentTime)
+        ? element.currentTime
+        : 0;
+      resumePlaybackRef.current = !element.paused && !element.ended;
     }
     setPlayerLoading(true);
     try {
       setPlayerUrl(await api.interviewCatalogStageMedia(stage.id));
+      setPlayerReloadKey((current) => current + 1);
     } catch (error) {
+      if (element) setPlayerUrl(null);
       notifications.show({
         color: "red",
         message:
@@ -126,6 +134,47 @@ function CatalogStage({
     } finally {
       setPlayerLoading(false);
     }
+  };
+
+  const togglePlayer = async () => {
+    if (playerUrl) {
+      setPlayerUrl(null);
+      automaticRecoveryAttemptedRef.current = false;
+      return;
+    }
+    automaticRecoveryAttemptedRef.current = false;
+    await requestPlayerUrl();
+  };
+
+  const handlePlayerError = (element: HTMLMediaElement) => {
+    if (!automaticRecoveryAttemptedRef.current) {
+      automaticRecoveryAttemptedRef.current = true;
+      void requestPlayerUrl(element);
+      return;
+    }
+    setPlayerUrl(null);
+    notifications.show({
+      color: "yellow",
+      message:
+        storedMediaKind === "video"
+          ? "Не удалось воспроизвести запись. Проверьте, что видео использует MP4 H.264/AAC с Fast Start или WebM VP8/VP9."
+          : "Не удалось воспроизвести аудио. Проверьте формат записи.",
+    });
+  };
+
+  const handleLoadedMetadata = (element: HTMLMediaElement) => {
+    const resumeTime = resumeTimeRef.current;
+    const shouldResume = resumePlaybackRef.current;
+    resumeTimeRef.current = 0;
+    resumePlaybackRef.current = false;
+    if (resumeTime > 0 && Number.isFinite(element.duration)) {
+      try {
+        element.currentTime = Math.min(resumeTime, element.duration);
+      } catch {
+        // Some browsers expose metadata before the first seekable range.
+      }
+    }
+    if (shouldResume) void element.play().catch(() => undefined);
   };
 
   const submitComment = () => {
@@ -197,6 +246,7 @@ function CatalogStage({
                 }}
               >
                 <video
+                  key={playerReloadKey}
                   controls
                   controlsList="nodownload noremoteplayback"
                   disablePictureInPicture
@@ -205,13 +255,12 @@ function CatalogStage({
                   src={playerUrl}
                   onContextMenu={(event) => event.preventDefault()}
                   onDragStart={(event) => event.preventDefault()}
-                  onError={() => {
-                    setPlayerUrl(null);
-                    notifications.show({
-                      color: "yellow",
-                      message:
-                        "Сессия просмотра завершилась. Нажмите «Посмотреть», чтобы продолжить.",
-                    });
+                  onError={(event) => handlePlayerError(event.currentTarget)}
+                  onLoadedMetadata={(event) =>
+                    handleLoadedMetadata(event.currentTarget)
+                  }
+                  onCanPlay={() => {
+                    automaticRecoveryAttemptedRef.current = false;
                   }}
                   style={{
                     display: "block",
@@ -241,18 +290,18 @@ function CatalogStage({
             )}
             {playerUrl && storedMediaKind === "audio" && (
               <audio
+                key={playerReloadKey}
                 controls
                 controlsList="nodownload noremoteplayback"
                 preload="metadata"
                 src={playerUrl}
                 onContextMenu={(event) => event.preventDefault()}
-                onError={() => {
-                  setPlayerUrl(null);
-                  notifications.show({
-                    color: "yellow",
-                    message:
-                      "Не удалось воспроизвести аудио. Нажмите «Прослушать», чтобы повторить.",
-                  });
+                onError={(event) => handlePlayerError(event.currentTarget)}
+                onLoadedMetadata={(event) =>
+                  handleLoadedMetadata(event.currentTarget)
+                }
+                onCanPlay={() => {
+                  automaticRecoveryAttemptedRef.current = false;
                 }}
                 style={{ width: "100%" }}
               />

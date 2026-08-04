@@ -265,9 +265,9 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
     assert "httponly" in playback.headers["set-cookie"].lower()
     assert stream.status_code == 307
     assert stream.headers["location"].startswith("https://s3.example.test/")
-    assert stream.headers["location"].endswith("?mode=inline&ttl=60")
+    assert stream.headers["location"].endswith("?mode=inline&ttl=900")
     assert stream.headers["cache-control"] == "private, no-store, max-age=0"
-    assert fake_store.playback_urls[-1][1:] == (True, 60)
+    assert fake_store.playback_urls[-1][1:] == (True, 900)
     assert copied_ticket.status_code == 401
     assert browser_fetch.status_code == 403
     assert browser_fetch.json()["detail"]["code"] == "content_media_player_required"
@@ -408,7 +408,7 @@ async def test_roadmap_media_private_upload_and_track_scoped_playback(
     assert wrong_direction.status_code == 404
     assert playback.status_code == 200, playback.text
     assert stream.status_code == 307
-    assert stream.headers["location"].endswith("?mode=inline&ttl=60")
+    assert stream.headers["location"].endswith("?mode=inline&ttl=900")
     assert fake_store.playback_urls[-1][0].content_type == "audio/mpeg"
 
     deleted = await client.delete(
