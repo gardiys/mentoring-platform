@@ -14,10 +14,10 @@ from app.interviews.intelligence_jobs import (
     WorkerSettings,
     _bounded_poll_delay,
     _deadline_reached,
-    _recovery_job_name,
     _retry_delay,
 )
 from app.interviews.intelligence_models import IntelligenceProcessingStatus
+from app.interviews.intelligence_recovery import intelligence_recovery_job_name
 from tests.conftest import TestSession
 
 
@@ -81,6 +81,10 @@ def test_jobs_are_routed_to_independent_provider_queues() -> None:
     )
     assert (
         intelligence_queue.intelligence_queue_name("generate_answer_reviews")
+        == intelligence_queue.OPENAI_QUEUE_NAME
+    )
+    assert (
+        intelligence_queue.intelligence_queue_name("refresh_interview_question_embeddings")
         == intelligence_queue.OPENAI_QUEUE_NAME
     )
     with pytest.raises(ValueError, match="Unknown interview intelligence job"):
@@ -147,6 +151,7 @@ def test_worker_keeps_deterministic_ids_reusable_and_runs_reconciliation() -> No
     assert AIWorkerSettings.max_jobs == intelligence_jobs.settings.openai_max_concurrency
     assert AIWorkerSettings.job_timeout == intelligence_jobs.settings.openai_job_timeout_seconds
     assert AIWorkerSettings.cron_jobs == []
+    assert intelligence_jobs.refresh_interview_question_embeddings in AIWorkerSettings.functions
     assert (
         AIWorkerSettings.health_check_interval
         == intelligence_jobs.WORKER_HEALTH_CHECK_INTERVAL_SECONDS
@@ -154,53 +159,75 @@ def test_worker_keeps_deterministic_ids_reusable_and_runs_reconciliation() -> No
 
 
 @pytest.mark.parametrize(
-    ("status", "speaker", "extracted", "expected"),
+    ("status", "provider_job_id", "speaker", "extracted", "expected"),
     [
-        (IntelligenceProcessingStatus.UPLOADED, False, False, "submit_transcription"),
+        (IntelligenceProcessingStatus.UPLOADED, None, False, False, "submit_transcription"),
         (
             IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED,
+            "provider-job",
+            False,
+            False,
+            "poll_transcription",
+        ),
+        (
+            IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED,
+            None,
+            False,
+            False,
+            "submit_transcription",
+        ),
+        (
+            IntelligenceProcessingStatus.TRANSCRIBING,
+            "provider-job",
             False,
             False,
             "poll_transcription",
         ),
         (
             IntelligenceProcessingStatus.TRANSCRIBING,
+            None,
             False,
             False,
-            "poll_transcription",
+            "submit_transcription",
         ),
         (
             IntelligenceProcessingStatus.TRANSCRIPT_READY,
+            "provider-job",
             False,
             False,
             "process_transcription_result",
         ),
         (
             IntelligenceProcessingStatus.ANALYZING,
+            None,
             True,
             False,
             "extract_interview_structure",
         ),
         (
             IntelligenceProcessingStatus.ANALYZING,
+            None,
             True,
             True,
             "generate_answer_reviews",
         ),
-        (IntelligenceProcessingStatus.ANALYZING, False, False, None),
-        (IntelligenceProcessingStatus.READY, True, True, None),
-        (IntelligenceProcessingStatus.FAILED, True, True, None),
+        (IntelligenceProcessingStatus.ANALYZING, None, False, False, None),
+        (IntelligenceProcessingStatus.AWAITING_CANDIDATE_SPEAKER, None, True, True, None),
+        (IntelligenceProcessingStatus.READY, None, True, True, None),
+        (IntelligenceProcessingStatus.FAILED, None, True, True, None),
     ],
 )
 def test_recovery_maps_only_actionable_states(
     status: IntelligenceProcessingStatus,
+    provider_job_id: str | None,
     speaker: bool,
     extracted: bool,
     expected: str | None,
 ) -> None:
     assert (
-        _recovery_job_name(
+        intelligence_recovery_job_name(
             status,
+            transcription_provider_job_id=provider_job_id,
             candidate_speaker_selected=speaker,
             extraction_completed=extracted,
         )

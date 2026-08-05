@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -277,6 +278,11 @@ class IntelligenceQuestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "interview_id", "sequence_number", name="uq_intelligence_question_sequence"
         ),
         Index("ix_intelligence_questions_interview_start", "interview_id", "question_start_ms"),
+        Index(
+            "ix_intelligence_questions_published_card",
+            "published_card_id",
+            postgresql_where=text("published_card_id IS NOT NULL"),
+        ),
         CheckConstraint("confidence >= 0 AND confidence <= 1", name="confidence_range"),
     )
 
@@ -287,6 +293,10 @@ class IntelligenceQuestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    question_embedding: Mapped[list[float] | None] = mapped_column(ARRAY(Float), nullable=True)
+    question_embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    question_embedding_dimensions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    question_embedding_source_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     question_start_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
     question_end_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     answer_start_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

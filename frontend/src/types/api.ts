@@ -493,6 +493,10 @@ export interface IntelligenceInterviewSummary {
   interview_type: IntelligenceInterviewType;
   interviewed_at: string;
   processing_status: IntelligenceProcessingStatus;
+  failed_stage: string | null;
+  processing_error_code: string | null;
+  processing_error_message: string | null;
+  can_requeue_processing: boolean;
   duration_ms: number | null;
   question_count: number;
   suggested_review_count: number;
@@ -501,6 +505,34 @@ export interface IntelligenceInterviewSummary {
   reviewed_by_user_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface IntelligenceOperationsWorker {
+  status: "healthy" | "unhealthy" | "unknown";
+  heartbeat: string | null;
+  heartbeat_ttl_seconds: number | null;
+}
+
+export interface AdminIntelligenceOperations {
+  generated_at: string;
+  total: number;
+  by_status: Record<IntelligenceProcessingStatus, number>;
+  active: number;
+  failed: number;
+  ready: number;
+  oldest_active_at: string | null;
+  oldest_active_age_seconds: number | null;
+  launches_today: number;
+  failure_codes_24h: Array<{ code: string; count: number }>;
+  queues: {
+    available: boolean;
+    transcription_depth: number | null;
+    openai_depth: number | null;
+  };
+  workers?: {
+    transcription: IntelligenceOperationsWorker;
+    openai: IntelligenceOperationsWorker;
+  };
 }
 
 export interface IntelligenceInterviewPage {
@@ -534,7 +566,22 @@ export interface AdminQuestionModerationDetail extends AdminQuestionModerationSu
   matched_card_category: string | null;
   matched_card_question: string | null;
   matched_card_asked_count: number | null;
+  card_candidates: AdminQuestionModerationCardCandidate[];
   deck_options: AdminQuestionModerationDeckOption[];
+}
+
+export interface AdminQuestionModerationCardCandidate {
+  id: string;
+  deck_id: string;
+  deck_title: string;
+  category: string;
+  question_markdown: string;
+  matched_text: string;
+  asked_count: number;
+  frequency: "frequent" | "occasional";
+  similarity: number;
+  match_type: "exact" | "similar";
+  matched_source: "card" | "approved_alias";
 }
 
 export interface AdminQuestionModerationDeckOption {

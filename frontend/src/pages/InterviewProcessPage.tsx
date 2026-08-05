@@ -298,7 +298,9 @@ function StageMedia({
                   ? "Открыть AI-разбор"
                   : stage.ai_analysis_status === "failed"
                     ? "Открыть ошибку AI-разбора"
-                    : "AI-разбор выполняется"}
+                    : stage.ai_analysis_status === "uploaded"
+                      ? "AI-разбор ожидает запуска"
+                      : "AI-разбор выполняется"}
               </Button>
             ) : stage.ai_analysis_requested_at ? (
               <Button disabled variant="light">

@@ -8,9 +8,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import api_error
+from app.interviews.card_frequency import (
+    card_frequency_mode,
+    effective_card_frequency,
+    effective_frequent_predicate,
+    frequent_occurrence_threshold,
+    refresh_card_frequency,
+)
 from app.interviews.models import (
     InterviewCard,
     InterviewCardFrequency,
+    InterviewCardFrequencyMode,
     InterviewCardProgress,
     InterviewDeck,
     InterviewReviewRating,
@@ -231,7 +239,7 @@ async def get_study_session(
     }
     rows.sort(
         key=lambda row: (
-            frequency_order[row[0].frequency],
+            frequency_order[effective_card_frequency(row[0])],
             1 if row[1] is None else 0,
             row[1].due_at if row[1] is not None else now,
             row[0].position,
@@ -245,7 +253,7 @@ async def get_study_session(
             companies=card.companies,
             question_markdown=card.question_markdown,
             answer_markdown=card.answer_markdown,
-            frequency=card.frequency,
+            frequency=effective_card_frequency(card),
             is_new=progress is None,
             repetitions=progress.repetitions if progress is not None else 0,
         )
@@ -261,9 +269,7 @@ async def get_interview_topics(
     session: AsyncSession, user: User, deck_slug: str
 ) -> list[InterviewTopicOption]:
     deck, _track = await _public_deck_model(session, deck_slug, user)
-    frequent_count = func.count(InterviewCard.id).filter(
-        InterviewCard.frequency == InterviewCardFrequency.FREQUENT
-    )
+    frequent_count = func.count(InterviewCard.id).filter(effective_frequent_predicate())
     rows = (
         await session.execute(
             select(
@@ -441,7 +447,10 @@ def _admin_card_read(card: InterviewCard) -> AdminInterviewCardRead:
         source_occurrence=card.source_occurrence,
         question_markdown=card.question_markdown,
         answer_markdown=card.answer_markdown,
-        frequency=card.frequency,
+        frequency=effective_card_frequency(card),
+        frequency_override=card.frequency_override,
+        frequency_mode=card_frequency_mode(card),
+        frequency_threshold=frequent_occurrence_threshold(),
         position=card.position,
         is_published=card.is_published,
         asked_count=card.asked_count,
@@ -487,9 +496,7 @@ async def get_admin_interview_deck(session: AsyncSession, deck_id: UUID) -> Admi
 async def list_admin_interview_deck_summaries(
     session: AsyncSession,
 ) -> list[AdminInterviewDeckSummary]:
-    frequent_count = func.count(InterviewCard.id).filter(
-        InterviewCard.frequency == InterviewCardFrequency.FREQUENT
-    )
+    frequent_count = func.count(InterviewCard.id).filter(effective_frequent_predicate())
     rows = (
         await session.execute(
             select(
@@ -598,7 +605,10 @@ async def list_admin_interview_cards(
                 slug=card.slug,
                 category=card.category,
                 question_preview=card.question_markdown[:180],
-                frequency=card.frequency,
+                frequency=effective_card_frequency(card),
+                frequency_override=card.frequency_override,
+                frequency_mode=card_frequency_mode(card),
+                frequency_threshold=frequent_occurrence_threshold(),
                 position=card.position,
                 is_published=card.is_published,
                 asked_count=card.asked_count,
@@ -693,12 +703,20 @@ async def _validate_admin_payload(
 
 
 def _apply_card(card: InterviewCard, payload: AdminInterviewCardMutation) -> None:
+    if card.question_markdown != payload.question_markdown:
+        card.question_embedding = None
+        card.question_embedding_model = None
+        card.question_embedding_dimensions = None
+        card.question_embedding_source_hash = None
     card.slug = payload.slug
     card.category = payload.category
     card.companies = payload.companies
     card.question_markdown = payload.question_markdown
     card.answer_markdown = payload.answer_markdown
-    card.frequency = payload.frequency
+    card.frequency_override = (
+        payload.frequency if payload.frequency_mode is InterviewCardFrequencyMode.MANUAL else None
+    )
+    refresh_card_frequency(card)
     card.position = payload.position
     card.is_published = payload.is_published
 

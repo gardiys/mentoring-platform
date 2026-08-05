@@ -17,7 +17,7 @@ from app.interviews.intelligence_models import (
     IntelligenceReviewStatus,
     IntelligenceSpeakerRole,
 )
-from app.interviews.models import InterviewCardFrequency
+from app.interviews.models import InterviewCardFrequency, InterviewCardFrequencyMode
 
 
 class IntelligenceInterviewCreate(BaseModel):
@@ -46,6 +46,10 @@ class IntelligenceInterviewSummary(BaseModel):
     interview_type: IntelligenceInterviewType
     interviewed_at: datetime
     processing_status: IntelligenceProcessingStatus
+    failed_stage: IntelligenceAttemptStage | None
+    processing_error_code: str | None
+    processing_error_message: str | None
+    can_requeue_processing: bool
     duration_ms: int | None
     question_count: int
     suggested_review_count: int
@@ -231,7 +235,16 @@ class IntelligenceQuestionModerationMutation(BaseModel):
     deck_id: UUID | None = None
     category: str | None = Field(default=None, min_length=1, max_length=240)
     create_category: bool = False
+    target_card_id: UUID | None = None
+    create_new_card: bool = False
     frequency: InterviewCardFrequency = InterviewCardFrequency.OCCASIONAL
+    frequency_mode: InterviewCardFrequencyMode = InterviewCardFrequencyMode.MANUAL
+
+    @model_validator(mode="after")
+    def validate_card_destination(self) -> "IntelligenceQuestionModerationMutation":
+        if self.target_card_id is not None and self.create_new_card:
+            raise ValueError("Choose an existing card or create a new one, not both")
+        return self
 
 
 class IntelligenceWebhookPayload(BaseModel):
@@ -273,6 +286,20 @@ class AdminQuestionModerationDeckOption(BaseModel):
     categories: list[str]
 
 
+class AdminQuestionModerationCardCandidate(BaseModel):
+    id: UUID
+    deck_id: UUID
+    deck_title: str
+    category: str
+    question_markdown: str
+    asked_count: int
+    frequency: InterviewCardFrequency
+    similarity: float = Field(ge=0, le=1)
+    match_type: Literal["exact", "similar"]
+    matched_source: Literal["card", "approved_alias"]
+    matched_text: str
+
+
 class AdminQuestionModerationDetail(AdminQuestionModerationSummary):
     candidate_answer: str | None
     suggested_answer: str | None
@@ -281,6 +308,7 @@ class AdminQuestionModerationDetail(AdminQuestionModerationSummary):
     matched_card_category: str | None
     matched_card_question: str | None
     matched_card_asked_count: int | None
+    card_candidates: list[AdminQuestionModerationCardCandidate]
     deck_options: list[AdminQuestionModerationDeckOption]
 
 
@@ -339,6 +367,6 @@ class IntelligenceReviewQueueFilter(BaseModel):
 
     @model_validator(mode="after")
     def validate_status(self) -> "IntelligenceReviewQueueFilter":
-        if self.status not in {"needs_review", "reviewed", "processing", "all"}:
+        if self.status not in {"requested", "needs_review", "reviewed", "processing", "all"}:
             raise ValueError("Unknown review queue filter")
         return self

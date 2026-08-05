@@ -31,6 +31,21 @@ const question: AdminQuestionModerationDetail = {
   matched_card_category: "Python",
   matched_card_question: "## Как работает GIL в Python?",
   matched_card_asked_count: 7,
+  card_candidates: [
+    {
+      id: "40000000-0000-4000-8000-000000000001",
+      deck_id: deckId,
+      deck_title: "Backend",
+      category: "Python",
+      question_markdown: "## Как работает GIL в Python?",
+      matched_text: "## Как работает GIL в Python?",
+      asked_count: 7,
+      frequency: "frequent",
+      similarity: 1,
+      match_type: "exact",
+      matched_source: "card",
+    },
+  ],
   deck_options: [
     {
       id: deckId,
@@ -60,7 +75,7 @@ it("показывает отдельную таблицу вопросов дл
   );
 });
 
-it("предупреждает, когда вопрос уже существует", async () => {
+it("автоматически выбирает только точное совпадение с основной карточкой", async () => {
   vi.spyOn(api, "adminQuestionModerationDetail").mockResolvedValue(question);
 
   renderPage(
@@ -72,16 +87,222 @@ it("предупреждает, когда вопрос уже существу�
   expect(
     await screen.findByText("Найдена существующая карточка"),
   ).toBeInTheDocument();
+  expect(screen.getByText("Спросили раз: 7")).toBeInTheDocument();
   expect(
-    screen.getByText(/Уже зафиксировано появлений: 7/),
+    screen.getByRole("button", { name: "Связать с карточкой" }),
   ).toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: "Учесть ещё одно появление" }),
+    screen.getByRole("radio", {
+      name: "Связать с карточкой: Как работает GIL в Python?",
+    }),
+  ).toBeChecked();
+  expect(screen.getByDisplayValue(question.question_text)).toBeEnabled();
+  expect(
+    screen.queryByRole("radio", {
+      name: "Создать новую карточку, это другой вопрос",
+    }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("textbox", {
+      name: /Проверенный ответ для обратной стороны карточки/,
+    }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Набор карточек")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Существующая тема")).not.toBeInTheDocument();
+});
+
+it("требует явного подтверждения точного совпадения с алиасом", async () => {
+  const candidate = {
+    ...question.card_candidates[0]!,
+    matched_source: "approved_alias" as const,
+    matched_text: "Объясни принцип работы GIL",
+  };
+  const aliasQuestion: AdminQuestionModerationDetail = {
+    ...question,
+    matched_card_id: null,
+    matched_card_deck_id: null,
+    matched_card_category: null,
+    matched_card_question: null,
+    matched_card_asked_count: null,
+    card_candidates: [candidate],
+  };
+  vi.spyOn(api, "adminQuestionModerationDetail").mockResolvedValue(
+    aliasQuestion,
+  );
+
+  renderPage(
+    <AdminInterviewQuestionModerationEditPage />,
+    `/admin/interview-question-moderation/${aliasQuestion.question_id}`,
+    "/admin/interview-question-moderation/:questionId",
+  );
+
+  expect(
+    await screen.findByText("Точно совпало с подтверждённым вариантом"),
   ).toBeInTheDocument();
-  expect(screen.getByLabelText("Набор карточек")).toHaveValue("Backend");
-  expect(screen.getByLabelText("Набор карточек")).toBeDisabled();
-  expect(screen.getByLabelText("Тема")).toHaveValue("Python");
-  expect(screen.getByLabelText("Тема")).toBeDisabled();
+  expect(
+    screen.getByText("Совпавшая формулировка: «Объясни принцип работы GIL»"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("radio", {
+      name: "Связать с карточкой: Как работает GIL в Python?",
+    }),
+  ).not.toBeChecked();
+  expect(
+    screen.getByRole("button", { name: "Выберите действие" }),
+  ).toBeDisabled();
+});
+
+it("связывает похожий вопрос только после явного подтверждения", async () => {
+  const user = userEvent.setup();
+  const candidateId = "40000000-0000-4000-8000-000000000099";
+  const similarQuestion: AdminQuestionModerationDetail = {
+    ...question,
+    question_id: "10000000-0000-4000-8000-000000000099",
+    question_text:
+      "Чем ты пользовался Kafka или RabbitMQ? Знаешь, в чём разница?",
+    matched_card_id: null,
+    matched_card_deck_id: null,
+    matched_card_category: null,
+    matched_card_question: null,
+    matched_card_asked_count: null,
+    card_candidates: [
+      {
+        id: candidateId,
+        deck_id: deckId,
+        deck_title: "Backend",
+        category: "Брокеры сообщений",
+        question_markdown: "## Расскажи, в чём отличия Kafka и RabbitMQ?",
+        matched_text: "Kafka и RabbitMQ — в чём разница?",
+        asked_count: 12,
+        frequency: "frequent",
+        similarity: 0.87,
+        match_type: "similar",
+        matched_source: "approved_alias",
+      },
+    ],
+  };
+  vi.spyOn(api, "adminQuestionModerationDetail").mockResolvedValue(
+    similarQuestion,
+  );
+  const moderate = vi
+    .spyOn(api, "moderateIntelligenceQuestion")
+    .mockReturnValue(new Promise(() => undefined));
+
+  renderPage(
+    <AdminInterviewQuestionModerationEditPage />,
+    `/admin/interview-question-moderation/${similarQuestion.question_id}`,
+    "/admin/interview-question-moderation/:questionId",
+  );
+
+  expect(await screen.findByText("Возможные совпадения")).toBeInTheDocument();
+  expect(screen.getByText("Похожий вопрос · 87%")).toBeInTheDocument();
+  expect(screen.getByText("Спросили раз: 12")).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Выберите действие" }),
+  ).toBeDisabled();
+
+  const correctedQuestion = "Чем отличаются Kafka и RabbitMQ?";
+  const questionInput = screen.getByRole("textbox", { name: /Вопрос/ });
+  const answerInput = screen.getByRole("textbox", {
+    name: /Проверенный ответ для обратной стороны карточки/,
+  });
+  await user.clear(questionInput);
+  await user.type(questionInput, correctedQuestion);
+  await user.clear(answerInput);
+  await user.type(answerInput, "Этот ответ не должен попасть в карточку");
+
+  await user.click(
+    screen.getByRole("radio", {
+      name: "Связать с карточкой: Расскажи, в чём отличия Kafka и RabbitMQ?",
+    }),
+  );
+  expect(screen.getByRole("textbox", { name: /Вопрос/ })).toHaveValue(
+    correctedQuestion,
+  );
+  expect(
+    screen.queryByRole("textbox", {
+      name: /Проверенный ответ для обратной стороны карточки/,
+    }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Связать с карточкой" }));
+
+  await waitFor(() =>
+    expect(moderate).toHaveBeenCalledWith(
+      similarQuestion.interview_id,
+      similarQuestion.question_id,
+      {
+        action: "approve",
+        target_card_id: candidateId,
+        question_markdown: correctedQuestion,
+      },
+    ),
+  );
+  expect(moderate.mock.calls[0]?.[2]).not.toHaveProperty("answer_markdown");
+});
+
+it("позволяет явно создать новую карточку вместо похожей", async () => {
+  const user = userEvent.setup();
+  const similarQuestion: AdminQuestionModerationDetail = {
+    ...question,
+    question_id: "10000000-0000-4000-8000-000000000098",
+    question_text: "Когда стоит применять очередь сообщений?",
+    matched_card_id: null,
+    matched_card_deck_id: null,
+    matched_card_category: null,
+    matched_card_question: null,
+    matched_card_asked_count: null,
+    card_candidates: [
+      {
+        id: "40000000-0000-4000-8000-000000000098",
+        deck_id: deckId,
+        deck_title: "Backend",
+        category: "Python",
+        question_markdown: "## Какие гарантии доставки есть у RabbitMQ?",
+        matched_text: "Какие гарантии доставки есть у RabbitMQ?",
+        asked_count: 2,
+        frequency: "occasional",
+        similarity: 0.68,
+        match_type: "similar",
+        matched_source: "card",
+      },
+    ],
+  };
+  vi.spyOn(api, "adminQuestionModerationDetail").mockResolvedValue(
+    similarQuestion,
+  );
+  const moderate = vi
+    .spyOn(api, "moderateIntelligenceQuestion")
+    .mockReturnValue(new Promise(() => undefined));
+
+  renderPage(
+    <AdminInterviewQuestionModerationEditPage />,
+    `/admin/interview-question-moderation/${similarQuestion.question_id}`,
+    "/admin/interview-question-moderation/:questionId",
+  );
+
+  await user.click(
+    await screen.findByRole("radio", {
+      name: "Создать новую карточку, это другой вопрос",
+    }),
+  );
+  expect(await screen.findByDisplayValue("Backend")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Создать карточку" }));
+
+  await waitFor(() =>
+    expect(moderate).toHaveBeenCalledWith(
+      similarQuestion.interview_id,
+      similarQuestion.question_id,
+      expect.objectContaining({
+        action: "approve",
+        create_new_card: true,
+        frequency_mode: "automatic",
+        deck_id: deckId,
+        category: "Python",
+      }),
+    ),
+  );
+  expect(moderate.mock.calls[0]?.[2]).not.toHaveProperty("target_card_id");
+  expect(moderate.mock.calls[0]?.[2]).not.toHaveProperty("frequency");
 });
 
 it("публикует новый вопрос в выбранную существующую тему", async () => {
@@ -96,6 +317,7 @@ it("публикует новый вопрос в выбранную сущес�
     matched_card_category: null,
     matched_card_question: null,
     matched_card_asked_count: null,
+    card_candidates: [],
   };
   vi.spyOn(api, "adminQuestionModerationDetail").mockResolvedValue(newQuestion);
   const moderate = vi
@@ -121,6 +343,8 @@ it("публикует новый вопрос в выбранную сущес�
         deck_id: deckId,
         category: "Python",
         create_category: false,
+        create_new_card: true,
+        frequency_mode: "automatic",
       }),
     ),
   );
@@ -138,6 +362,7 @@ it("создаёт новую тему только после явного вы
     matched_card_category: null,
     matched_card_question: null,
     matched_card_asked_count: null,
+    card_candidates: [],
   };
   vi.spyOn(api, "adminQuestionModerationDetail").mockResolvedValue(newQuestion);
   const moderate = vi
@@ -170,6 +395,8 @@ it("создаёт новую тему только после явного вы
         deck_id: deckId,
         category: "Concurrency",
         create_category: true,
+        create_new_card: true,
+        frequency_mode: "automatic",
       }),
     ),
   );

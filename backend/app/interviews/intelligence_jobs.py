@@ -58,6 +58,9 @@ from app.interviews.intelligence_queue import (
     TRANSCRIPTION_QUEUE_NAME,
     enqueue_intelligence_job,
 )
+from app.interviews.intelligence_recovery import (
+    intelligence_recovery_job_name as _recovery_job_name,
+)
 from app.interviews.intelligence_service import safe_processing_message
 from app.interviews.media_guardrails import (
     MediaGuardrailError,
@@ -67,7 +70,12 @@ from app.interviews.media_guardrails import (
     probe_media_async,
     stage_media_file,
 )
-from app.interviews.models import InterviewProcessStage, InterviewStageComment
+from app.interviews.models import (
+    InterviewProcess,
+    InterviewProcessStage,
+    InterviewStageComment,
+)
+from app.interviews.question_embeddings import refresh_track_question_embeddings
 from app.interviews.uploads import (
     InterviewStorageReadError,
     InterviewUploadStore,
@@ -138,6 +146,7 @@ async def reconcile_intelligence_jobs(ctx: dict[str, Any]) -> None:
                 select(
                     IntelligenceInterview.id,
                     IntelligenceInterview.processing_status,
+                    IntelligenceInterview.transcription_provider_job_id,
                     IntelligenceInterview.candidate_speaker_id,
                     completed_extraction.label("completed_extraction"),
                 )
@@ -147,38 +156,27 @@ async def reconcile_intelligence_jobs(ctx: dict[str, Any]) -> None:
         ).all()
 
     scheduled = 0
-    for interview_id, status, candidate_speaker_id, extraction_completed in rows:
+    for (
+        interview_id,
+        status,
+        transcription_provider_job_id,
+        candidate_speaker_id,
+        extraction_completed,
+    ) in rows:
         function = _recovery_job_name(
             status,
+            transcription_provider_job_id=transcription_provider_job_id,
             candidate_speaker_selected=candidate_speaker_id is not None,
             extraction_completed=bool(extraction_completed),
         )
         if function is None:
             continue
+        if function == "generate_answer_reviews":
+            await _enqueue(ctx, "refresh_interview_question_embeddings", str(interview_id))
         await _enqueue(ctx, function, str(interview_id))
         scheduled += 1
     if scheduled:
         logger.info("Reconciled interview processing jobs count=%s", scheduled)
-
-
-def _recovery_job_name(
-    status: IntelligenceProcessingStatus,
-    *,
-    candidate_speaker_selected: bool,
-    extraction_completed: bool,
-) -> str | None:
-    if status is IntelligenceProcessingStatus.UPLOADED:
-        return "submit_transcription"
-    if status in {
-        IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED,
-        IntelligenceProcessingStatus.TRANSCRIBING,
-    }:
-        return "poll_transcription"
-    if status is IntelligenceProcessingStatus.TRANSCRIPT_READY:
-        return "process_transcription_result"
-    if status is IntelligenceProcessingStatus.ANALYZING and candidate_speaker_selected:
-        return "generate_answer_reviews" if extraction_completed else "extract_interview_structure"
-    return None
 
 
 async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
@@ -464,6 +462,7 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
             )
         )
         if existing_questions:
+            await _enqueue(ctx, "refresh_interview_question_embeddings", interview_id)
             await _enqueue(ctx, "generate_answer_reviews", interview_id)
             return
         attempt = await _start_attempt(
@@ -575,7 +574,67 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
         interview.processing_status = IntelligenceProcessingStatus.ANALYZING
         _complete_attempt(attempt)
         await session.commit()
+    await _enqueue(ctx, "refresh_interview_question_embeddings", interview_id)
     await _enqueue(ctx, "generate_answer_reviews", interview_id)
+
+
+async def refresh_interview_question_embeddings(ctx: dict[str, Any], interview_id: str) -> None:
+    """Refresh cached question vectors without affecting the main AI pipeline state."""
+
+    parsed_id = UUID(interview_id)
+    async with async_session_factory() as session:
+        interview = await session.get(IntelligenceInterview, parsed_id)
+        if interview is None:
+            return
+        stage = await session.get(InterviewProcessStage, interview.stage_id)
+        process = await session.get(InterviewProcess, stage.process_id) if stage else None
+        if process is None:
+            logger.warning(
+                "Question embedding refresh skipped interview_id=%s reason=process_missing",
+                parsed_id,
+            )
+            return
+        questions = list(
+            await session.scalars(
+                select(IntelligenceQuestion)
+                .where(IntelligenceQuestion.interview_id == parsed_id)
+                .order_by(IntelligenceQuestion.sequence_number, IntelligenceQuestion.id)
+            )
+        )
+        if not questions:
+            return
+        try:
+            refresh = await refresh_track_question_embeddings(
+                session,
+                _ai(ctx),
+                process.track_id,
+                questions,
+            )
+        except InterviewAIError as error:
+            await session.rollback()
+            will_retry = _will_retry(ctx, error.retryable)
+            logger.warning(
+                "Question embedding refresh failed interview_id=%s code=%s retryable=%s",
+                parsed_id,
+                error.code,
+                will_retry,
+            )
+            if will_retry:
+                raise Retry(defer=_retry_delay(ctx, 60)) from error
+            return
+        for usage in refresh.usages:
+            session.add(
+                IntelligenceAIUsage(
+                    interview_id=interview.id,
+                    provider=_ai(ctx).name,
+                    model=usage.model,
+                    operation="embedding",
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    provider_request_id=usage.provider_request_id,
+                )
+            )
+        await session.commit()
 
 
 async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> None:
@@ -1174,6 +1233,7 @@ class WorkerSettings:
         arq_func(poll_transcription, max_tries=POLL_MAX_TRIES),
         process_transcription_result,
         extract_interview_structure,
+        refresh_interview_question_embeddings,
         generate_answer_reviews,
     ]
     cron_jobs = [
@@ -1216,7 +1276,11 @@ class TranscriptionWorkerSettings:
 
 
 class AIWorkerSettings:
-    functions = [extract_interview_structure, generate_answer_reviews]
+    functions = [
+        extract_interview_structure,
+        refresh_interview_question_embeddings,
+        generate_answer_reviews,
+    ]
     cron_jobs: list[Any] = []
     on_startup = ai_startup
     on_shutdown = ai_shutdown

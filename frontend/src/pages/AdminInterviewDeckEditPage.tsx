@@ -234,6 +234,11 @@ function DeckEditor({ deck }: { deck: AdminInterviewDeckSummary }) {
                               ? "Частый"
                               : "Обычный"}
                           </Badge>
+                          <Text size="xs" c="dimmed" mt={4}>
+                            {card.frequency_mode === "automatic"
+                              ? `Автоматически · порог ${card.frequency_threshold}`
+                              : "Задано вручную"}
+                          </Text>
                         </Table.Td>
                         <Table.Td>{card.asked_count}</Table.Td>
                         <Table.Td>

@@ -34,6 +34,7 @@ import type {
   AdminMentorMutation,
   AdminMentorProfileMutation,
   AdminInterviewProcessPage,
+  AdminIntelligenceOperations,
   AdminTopicCreate,
   AdminTopicRead,
   AdminTrackMutation,
@@ -241,6 +242,15 @@ export const api = {
     apiRequest<IntelligenceInterviewDetail>(`/api/v1/interviews/${id}`),
   intelligenceInterviewProcessing: (id: string) =>
     apiRequest<IntelligenceProcessing>(`/api/v1/interviews/${id}/processing`),
+  adminIntelligenceOperations: () =>
+    apiRequest<AdminIntelligenceOperations>(
+      "/api/v1/admin/interviews/ai-operations",
+    ),
+  adminRequeueIntelligenceInterview: (id: string) =>
+    apiRequest<IntelligenceInterviewDetail>(
+      `/api/v1/admin/interviews/ai-operations/${id}/requeue`,
+      { method: "POST" },
+    ),
   startInterviewStageAnalysis: (processId: string, stageId: string) =>
     apiRequest<IntelligenceInterviewDetail>(
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/ai-analysis`,
@@ -262,7 +272,8 @@ export const api = {
   deleteIntelligenceInterview: (id: string) =>
     apiRequest<void>(`/api/v1/interviews/${id}`, { method: "DELETE" }),
   mentorIntelligenceInterviews: (
-    reviewStatus: "needs_review" | "reviewed" | "processing" | "all",
+    reviewStatus:
+      "requested" | "needs_review" | "reviewed" | "processing" | "all",
     options: { limit?: number; offset?: number } = {},
   ) =>
     apiRequest<IntelligenceInterviewPage>(
@@ -301,6 +312,9 @@ export const api = {
       category?: string;
       create_category?: boolean;
       frequency?: "frequent" | "occasional";
+      target_card_id?: string;
+      create_new_card?: boolean;
+      frequency_mode?: "automatic" | "manual";
     },
   ) =>
     apiRequest<IntelligenceInterviewDetail>(

@@ -22,6 +22,7 @@ export const intelligenceKeys = {
     ] as const,
   moderationDetail: (id: string) =>
     ["interviews", "intelligence", "moderation", id] as const,
+  operations: ["interviews", "intelligence", "operations"] as const,
 };
 
 export function useAdminQuestionModeration(
@@ -51,21 +52,31 @@ export function useIntelligenceInterviews(enabled = true, page = 1) {
       api.intelligenceInterviews({ limit: 6, offset: (page - 1) * 6 }),
     enabled,
     placeholderData: (previous) => previous,
-    refetchInterval: (query) =>
-      query.state.data?.items.some(
-        (item) =>
-          !["ready", "failed", "awaiting_candidate_speaker"].includes(
-            item.processing_status,
-          ),
+    refetchInterval: (query) => {
+      const items = query.state.data?.items ?? [];
+      if (
+        items.some(
+          (item) =>
+            ![
+              "uploaded",
+              "ready",
+              "failed",
+              "awaiting_candidate_speaker",
+            ].includes(item.processing_status),
+        )
       )
-        ? 5_000
-        : false,
+        return 5_000;
+      return items.some((item) => item.processing_status === "uploaded")
+        ? 30_000
+        : false;
+    },
   });
 }
 
 export function useMentorIntelligenceInterviews(
-  status: "needs_review" | "reviewed" | "processing" | "all",
+  status: "requested" | "needs_review" | "reviewed" | "processing" | "all",
   page = 1,
+  enabled = true,
 ) {
   return useQuery({
     queryKey: intelligenceKeys.list("mentor", status, page),
@@ -74,6 +85,7 @@ export function useMentorIntelligenceInterviews(
         limit: 10,
         offset: (page - 1) * 10,
       }),
+    enabled,
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[3] === status ? previous : undefined,
     refetchInterval: (query) =>
@@ -83,8 +95,19 @@ export function useMentorIntelligenceInterviews(
             item.processing_status,
           ),
       )
-        ? 5_000
+        ? status === "requested"
+          ? 15_000
+          : 5_000
         : 15_000,
+  });
+}
+
+export function useAdminIntelligenceOperations(enabled: boolean) {
+  return useQuery({
+    queryKey: intelligenceKeys.operations,
+    queryFn: api.adminIntelligenceOperations,
+    enabled,
+    refetchInterval: 15_000,
   });
 }
 
@@ -106,6 +129,7 @@ export function useIntelligenceInterview(id: string) {
     enabled: Boolean(id) && shouldPoll,
     refetchInterval: (query) => {
       const processingStatus = query.state.data?.status;
+      if (processingStatus === "uploaded") return 30_000;
       return processingStatus &&
         !["ready", "failed", "awaiting_candidate_speaker"].includes(
           processingStatus,
@@ -172,6 +196,12 @@ export function useSelectIntelligenceCandidate() {
 export function useRetryIntelligenceInterview() {
   return useIntelligenceMutation((id: string) =>
     api.retryIntelligenceInterview(id),
+  );
+}
+
+export function useAdminRequeueIntelligenceInterview() {
+  return useIntelligenceMutation((id: string) =>
+    api.adminRequeueIntelligenceInterview(id),
   );
 }
 

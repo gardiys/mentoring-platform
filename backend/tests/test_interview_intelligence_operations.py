@@ -3,9 +3,14 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import func, select
 
 from app.core.config import get_settings
-from app.interviews import intelligence_operations_service
+from app.interviews import (
+    intelligence_operations_router,
+    intelligence_operations_service,
+    intelligence_service,
+)
 from app.interviews.intelligence_models import (
     IntelligenceAIAdmission,
     IntelligenceAttemptStage,
@@ -86,7 +91,10 @@ class FakeRedis:
             raise self.close_error
 
 
-async def seed_operations_data(seeded: SeededData, now: datetime) -> None:
+async def seed_operations_data(
+    seeded: SeededData,
+    now: datetime,
+) -> dict[IntelligenceProcessingStatus, IntelligenceInterview]:
     timezone = ZoneInfo(get_settings().interview_ai_quota_timezone)
     local_start = now.astimezone(timezone).replace(hour=0, minute=0, second=0, microsecond=0)
     today = local_start.astimezone(UTC)
@@ -204,6 +212,7 @@ async def seed_operations_data(seeded: SeededData, now: datetime) -> None:
             ]
         )
         await session.commit()
+        return {interview.processing_status: interview for interview in interviews}
 
 
 @pytest.mark.asyncio
@@ -281,6 +290,186 @@ async def test_admin_ai_operations_returns_pipeline_aggregates(
             "heartbeat_ttl_seconds": 15,
         },
     }
+
+
+@pytest.mark.asyncio
+async def test_admin_requeues_uploaded_processing_without_quota_or_state_changes(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    interviews = await seed_operations_data(seeded, datetime.now(UTC))
+    uploaded_id = interviews[IntelligenceProcessingStatus.UPLOADED].id
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, uploaded_id)
+        assert interview is not None
+        interview.failed_stage = IntelligenceAttemptStage.TRANSCRIPTION_SUBMIT
+        interview.processing_error_code = "TRANSCRIPTION_TEMPORARY_ERROR"
+        interview.processing_error_message = "Повторная попытка ожидает worker."
+        await session.commit()
+        admissions_before = int(
+            await session.scalar(select(func.count(IntelligenceAIAdmission.id))) or 0
+        )
+
+    requested = await client.get(
+        "/api/v1/mentor/interviews?status=requested",
+        headers=auth(seeded.admin_id),
+    )
+    assert requested.status_code == 200, requested.text
+    assert requested.json()["total"] == 1
+    requested_item = requested.json()["items"][0]
+    assert requested_item["id"] == str(uploaded_id)
+    assert requested_item["failed_stage"] == "transcription_submit"
+    assert requested_item["processing_error_code"] == "TRANSCRIPTION_TEMPORARY_ERROR"
+    assert requested_item["processing_error_message"] == "Повторная попытка ожидает worker."
+    assert requested_item["can_requeue_processing"] is True
+
+    for user_id in (seeded.student_id, seeded.mentor_id):
+        forbidden = await client.post(
+            f"/api/v1/admin/interviews/ai-operations/{uploaded_id}/requeue",
+            headers=auth(user_id),
+        )
+        assert forbidden.status_code == 403
+
+    async def capacity_must_not_run(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Operational requeue must not check launch capacity")
+
+    enqueued: list[tuple[str, str]] = []
+
+    async def enqueue(function: str, interview_id: str) -> str:
+        enqueued.append((function, interview_id))
+        return f"job:{function}:{interview_id}"
+
+    monkeypatch.setattr(
+        intelligence_service,
+        "_ensure_ai_analysis_capacity",
+        capacity_must_not_run,
+    )
+    monkeypatch.setattr(
+        intelligence_operations_router,
+        "enqueue_intelligence_job",
+        enqueue,
+    )
+    requeued = await client.post(
+        f"/api/v1/admin/interviews/ai-operations/{uploaded_id}/requeue",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert requeued.status_code == 200, requeued.text
+    assert enqueued == [("submit_transcription", str(uploaded_id))]
+    body = requeued.json()
+    assert body["processing_status"] == "uploaded"
+    assert body["failed_stage"] == "transcription_submit"
+    assert body["processing_error_code"] == "TRANSCRIPTION_TEMPORARY_ERROR"
+    assert body["processing_error_message"] == "Повторная попытка ожидает worker."
+    assert body["can_requeue_processing"] is True
+
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, uploaded_id)
+        admissions_after = int(
+            await session.scalar(select(func.count(IntelligenceAIAdmission.id))) or 0
+        )
+        assert interview is not None
+        assert interview.processing_status is IntelligenceProcessingStatus.UPLOADED
+        assert interview.failed_stage is IntelligenceAttemptStage.TRANSCRIPTION_SUBMIT
+        assert interview.processing_error_code == "TRANSCRIPTION_TEMPORARY_ERROR"
+        assert interview.processing_error_message == "Повторная попытка ожидает worker."
+        assert admissions_after == admissions_before
+
+
+@pytest.mark.asyncio
+async def test_admin_requeue_enqueue_failure_leaves_database_unchanged(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    interviews = await seed_operations_data(seeded, datetime.now(UTC))
+    uploaded_id = interviews[IntelligenceProcessingStatus.UPLOADED].id
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, uploaded_id)
+        assert interview is not None
+        interview.failed_stage = IntelligenceAttemptStage.TRANSCRIPTION_SUBMIT
+        interview.processing_error_code = "TRANSCRIPTION_TEMPORARY_ERROR"
+        interview.processing_error_message = "Temporary failure"
+        await session.commit()
+        admissions_before = int(
+            await session.scalar(select(func.count(IntelligenceAIAdmission.id))) or 0
+        )
+
+    async def unavailable(_function: str, _interview_id: str) -> str:
+        raise ConnectionError("Redis is unavailable")
+
+    monkeypatch.setattr(
+        intelligence_operations_router,
+        "enqueue_intelligence_job",
+        unavailable,
+    )
+    response = await client.post(
+        f"/api/v1/admin/interviews/ai-operations/{uploaded_id}/requeue",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "interview_processing_unavailable"
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, uploaded_id)
+        admissions_after = int(
+            await session.scalar(select(func.count(IntelligenceAIAdmission.id))) or 0
+        )
+        assert interview is not None
+        assert interview.processing_status is IntelligenceProcessingStatus.UPLOADED
+        assert interview.failed_stage is IntelligenceAttemptStage.TRANSCRIPTION_SUBMIT
+        assert interview.processing_error_code == "TRANSCRIPTION_TEMPORARY_ERROR"
+        assert interview.processing_error_message == "Temporary failure"
+        assert admissions_after == admissions_before
+
+
+@pytest.mark.parametrize(
+    ("processing_status", "expected_code"),
+    [
+        (
+            IntelligenceProcessingStatus.DRAFT,
+            "interview_processing_not_started",
+        ),
+        (
+            IntelligenceProcessingStatus.AWAITING_CANDIDATE_SPEAKER,
+            "interview_candidate_speaker_required",
+        ),
+        (
+            IntelligenceProcessingStatus.READY,
+            "interview_processing_already_completed",
+        ),
+        (
+            IntelligenceProcessingStatus.FAILED,
+            "interview_processing_retry_required",
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_admin_requeue_rejects_nonrecoverable_statuses(
+    client: AsyncClient,
+    seeded: SeededData,
+    processing_status: IntelligenceProcessingStatus,
+    expected_code: str,
+) -> None:
+    interviews = await seed_operations_data(seeded, datetime.now(UTC))
+    if processing_status in interviews:
+        interview_id = interviews[processing_status].id
+    else:
+        interview_id = interviews[IntelligenceProcessingStatus.UPLOADED].id
+        async with TestSession() as session:
+            interview = await session.get(IntelligenceInterview, interview_id)
+            assert interview is not None
+            interview.processing_status = processing_status
+            await session.commit()
+
+    response = await client.post(
+        f"/api/v1/admin/interviews/ai-operations/{interview_id}/requeue",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == expected_code
 
 
 @pytest.mark.asyncio

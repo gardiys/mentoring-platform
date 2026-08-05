@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import logging
+import math
+import re
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -172,6 +175,12 @@ class AISummaryResult:
     usage: AIUsageResult
 
 
+@dataclass(frozen=True)
+class AIEmbeddingResult:
+    embeddings: list[list[float]]
+    usage: AIUsageResult
+
+
 class InterviewAIError(RuntimeError):
     def __init__(self, code: str, message: str, *, retryable: bool) -> None:
         super().__init__(message)
@@ -182,6 +191,8 @@ class InterviewAIError(RuntimeError):
 
 class InterviewAIProvider(Protocol):
     name: str
+    embedding_model: str
+    embedding_dimensions: int
 
     async def extract(self, transcript: str) -> AIExtractionResult: ...
 
@@ -197,12 +208,16 @@ class InterviewAIProvider(Protocol):
 
     async def summarize(self, transcript: str) -> AISummaryResult: ...
 
+    async def embed(self, texts: list[str]) -> AIEmbeddingResult: ...
+
     async def close(self) -> None: ...
 
 
 class FakeInterviewAIProvider:
     name = "fake"
     model = "fake-interview-v1"
+    embedding_model = "fake-embedding-v1"
+    embedding_dimensions = 64
 
     def __init__(self) -> None:
         self.review_calls: list[dict[str, object]] = []
@@ -314,6 +329,26 @@ class FakeInterviewAIProvider:
             usage=AIUsageResult(None, "fake-light-v1", 160, 90),
         )
 
+    async def embed(self, texts: list[str]) -> AIEmbeddingResult:
+        return AIEmbeddingResult(
+            embeddings=[self._fake_embedding(text) for text in texts],
+            usage=AIUsageResult(
+                None,
+                self.embedding_model,
+                sum(max(1, len(text.split())) for text in texts),
+                0,
+            ),
+        )
+
+    def _fake_embedding(self, text: str) -> list[float]:
+        vector = [0.0] * self.embedding_dimensions
+        for token in re.findall(r"[\w+#.-]+", text.casefold()):
+            digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+            index = int.from_bytes(digest[:4], "big") % self.embedding_dimensions
+            vector[index] += 1.0 if digest[4] & 1 else -1.0
+        norm = math.sqrt(sum(value * value for value in vector))
+        return [value / norm for value in vector] if norm else vector
+
     async def close(self) -> None:
         return None
 
@@ -334,6 +369,8 @@ class OpenAIInterviewAIProvider:
         self.extraction_model = extraction_model
         self.analysis_model = settings.openai_analysis_model
         self.light_review_model = settings.openai_light_review_model or extraction_model
+        self.embedding_model = settings.openai_embedding_model
+        self.embedding_dimensions = settings.openai_embedding_dimensions
         self.extraction_max_output_tokens = settings.openai_extraction_max_output_tokens
         self.review_max_output_tokens = settings.openai_review_max_output_tokens
         self.summary_max_output_tokens = settings.openai_summary_max_output_tokens
@@ -432,6 +469,48 @@ class OpenAIInterviewAIProvider:
                     retryable=False,
                 )
             return AISummaryResult(parsed, self._usage(response, self.light_review_model))
+        except InterviewAIError:
+            raise
+        except Exception as error:
+            raise self._translate_error(error) from error
+
+    async def embed(self, texts: list[str]) -> AIEmbeddingResult:
+        if not texts:
+            return AIEmbeddingResult(
+                embeddings=[],
+                usage=AIUsageResult(None, self.embedding_model, 0, 0),
+            )
+        try:
+            response = await self.client.embeddings.create(
+                model=self.embedding_model,
+                input=texts,
+                dimensions=self.embedding_dimensions,
+                encoding_format="float",
+            )
+            ordered = sorted(response.data, key=lambda item: item.index)
+            if [item.index for item in ordered] != list(range(len(texts))):
+                raise InterviewAIError(
+                    "OPENAI_INVALID_RESPONSE",
+                    "OpenAI returned invalid embedding indexes",
+                    retryable=False,
+                )
+            embeddings = [list(item.embedding) for item in ordered]
+            if len(embeddings) != len(texts):
+                raise InterviewAIError(
+                    "OPENAI_INVALID_RESPONSE",
+                    "OpenAI returned an incomplete embedding batch",
+                    retryable=False,
+                )
+            usage = response.usage
+            return AIEmbeddingResult(
+                embeddings=embeddings,
+                usage=AIUsageResult(
+                    provider_request_id=getattr(response, "id", None),
+                    model=str(getattr(response, "model", None) or self.embedding_model),
+                    input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+                    output_tokens=0,
+                ),
+            )
         except InterviewAIError:
             raise
         except Exception as error:

@@ -4,6 +4,7 @@ import asyncio
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from arq.constants import health_check_key_suffix
@@ -12,14 +13,17 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.errors import api_error
 from app.interviews.intelligence_models import (
     IntelligenceAIAdmission,
+    IntelligenceAttemptStage,
     IntelligenceAttemptStatus,
     IntelligenceInterview,
     IntelligenceProcessingAttempt,
     IntelligenceProcessingStatus,
 )
 from app.interviews.intelligence_queue import OPENAI_QUEUE_NAME, TRANSCRIPTION_QUEUE_NAME
+from app.interviews.intelligence_recovery import intelligence_recovery_job_name
 from app.interviews.intelligence_schemas import (
     AdminIntelligenceOperationsRead,
     IntelligenceOperationsFailureCodeRead,
@@ -45,6 +49,65 @@ OPENAI_HEALTH_CHECK_KEY = OPENAI_QUEUE_NAME + health_check_key_suffix
 class IntelligenceRedisMetrics:
     queues: IntelligenceOperationsQueueRead
     workers: IntelligenceOperationsWorkersRead
+
+
+async def prepare_admin_intelligence_requeue(
+    session: AsyncSession,
+    interview_id: UUID,
+) -> tuple[IntelligenceInterview, str]:
+    interview = await session.get(IntelligenceInterview, interview_id)
+    if interview is None:
+        api_error(404, "intelligence_interview_not_found", "Interview was not found")
+
+    extraction_completed = bool(
+        await session.scalar(
+            select(IntelligenceProcessingAttempt.id)
+            .where(
+                IntelligenceProcessingAttempt.interview_id == interview.id,
+                IntelligenceProcessingAttempt.stage == IntelligenceAttemptStage.AI_EXTRACT,
+                IntelligenceProcessingAttempt.status == IntelligenceAttemptStatus.COMPLETED,
+            )
+            .limit(1)
+        )
+    )
+    job_name = intelligence_recovery_job_name(
+        interview.processing_status,
+        transcription_provider_job_id=interview.transcription_provider_job_id,
+        candidate_speaker_selected=interview.candidate_speaker_id is not None,
+        extraction_completed=extraction_completed,
+    )
+    if job_name is not None:
+        return interview, job_name
+
+    if interview.processing_status is IntelligenceProcessingStatus.FAILED:
+        api_error(
+            409,
+            "interview_processing_retry_required",
+            "Use the failed-stage retry action for this interview",
+        )
+    if interview.processing_status is IntelligenceProcessingStatus.READY:
+        api_error(
+            409,
+            "interview_processing_already_completed",
+            "Interview processing has already completed",
+        )
+    if interview.processing_status is IntelligenceProcessingStatus.DRAFT:
+        api_error(
+            409,
+            "interview_processing_not_started",
+            "Upload the interview recording before starting processing",
+        )
+    if interview.processing_status is IntelligenceProcessingStatus.AWAITING_CANDIDATE_SPEAKER:
+        api_error(
+            409,
+            "interview_candidate_speaker_required",
+            "Select the candidate speaker before continuing processing",
+        )
+    api_error(
+        409,
+        "interview_processing_requeue_not_available",
+        "Interview processing cannot be requeued from its current state",
+    )
 
 
 def _quota_day_bounds(now: datetime) -> tuple[datetime, datetime]:

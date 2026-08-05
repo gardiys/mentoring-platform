@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from arq import Retry
 from httpx import AsyncClient
 from sqlalchemy import event, func, select
 
@@ -14,7 +15,7 @@ from app.interviews import (
     intelligence_service,
     journal_router,
 )
-from app.interviews.intelligence_ai import FakeInterviewAIProvider
+from app.interviews.intelligence_ai import FakeInterviewAIProvider, InterviewAIError
 from app.interviews.intelligence_models import (
     IntelligenceAIAdmission,
     IntelligenceAIUsage,
@@ -44,6 +45,7 @@ from app.interviews.intelligence_service import select_candidate_speaker
 from app.interviews.media_guardrails import MediaProbe, MediaStreamProbe, StagingGuard
 from app.interviews.models import (
     InterviewCard,
+    InterviewCardFrequency,
     InterviewCardOccurrence,
     InterviewCardProgress,
     InterviewDeck,
@@ -761,6 +763,15 @@ async def test_fake_processing_pipeline_reaches_ready(
     )
 
     await intelligence_jobs.extract_interview_structure(context, str(interview_id))
+    assert (
+        "refresh_interview_question_embeddings",
+        (str(interview_id),),
+    ) in queue.jobs
+    assert ("generate_answer_reviews", (str(interview_id),)) in queue.jobs
+    await intelligence_jobs.refresh_interview_question_embeddings(context, str(interview_id))
+    # Duplicate delivery is a no-op: current vectors are reused and usage is
+    # not counted twice.
+    await intelligence_jobs.refresh_interview_question_embeddings(context, str(interview_id))
     await intelligence_jobs.generate_answer_reviews(context, str(interview_id))
 
     response = await client.get(
@@ -793,8 +804,22 @@ async def test_fake_processing_pipeline_reaches_ready(
                 .order_by(IntelligenceAIUsage.operation)
             )
         )
+        extracted_questions = list(
+            await session.scalars(
+                select(IntelligenceQuestion)
+                .where(IntelligenceQuestion.interview_id == interview_id)
+                .order_by(IntelligenceQuestion.sequence_number)
+            )
+        )
+    assert "embedding" in operations
+    assert operations.count("embedding") == 1
     assert "technical_evaluation" in operations
     assert "light_evaluation" in operations
+    assert all(question.question_embedding for question in extracted_questions)
+    assert all(
+        question.question_embedding_model == fake_ai.embedding_model
+        for question in extracted_questions
+    )
     journal = await client.get(
         f"/api/v1/interviews/journal/tracks/{detail['process_id']}",
         headers=auth(seeded.student_id),
@@ -1044,6 +1069,9 @@ async def test_fake_processing_pipeline_reaches_ready(
         missed_question = await session.get(IntelligenceQuestion, missed_question_id)
         assert missed_question is not None and missed_question.published_card_id is not None
         assert missed_question.category == "Career Growth"
+        missed_card = await session.get(InterviewCard, missed_question.published_card_id)
+        assert missed_card is not None
+        assert missed_card.frequency_override is InterviewCardFrequency.OCCASIONAL
         progress = await session.get(
             InterviewCardProgress,
             {
@@ -1070,6 +1098,84 @@ async def test_fake_processing_pipeline_reaches_ready(
     )
     assert [item["id"] for item in reviewed.json()["items"]] == [str(interview_id)]
     assert str(interview_id) not in [item["id"] for item in needs_review.json()["items"]]
+
+
+@pytest.mark.asyncio
+async def test_question_embedding_job_retries_without_failing_interview(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created, _, _ = await create_analysis_from_journal(
+        client,
+        seeded,
+        monkeypatch,
+        company_name="Embedding retry",
+    )
+    interview_id = UUID(created.json()["id"])
+    async with TestSession() as session:
+        session.add(
+            IntelligenceQuestion(
+                interview_id=interview_id,
+                sequence_number=1,
+                question_text="Чем Kafka отличается от RabbitMQ?",
+                question_start_ms=1_000,
+                question_end_ms=2_000,
+                answer_start_ms=None,
+                answer_end_ms=None,
+                question_utterance_ids=[],
+                answer_utterance_ids=[],
+                category="message brokers",
+                question_kind=IntelligenceQuestionKind.TECHNICAL,
+                difficulty=IntelligenceDifficulty.MIDDLE,
+                confidence=0.95,
+            )
+        )
+        await session.commit()
+
+    monkeypatch.setattr(intelligence_jobs, "async_session_factory", TestSession)
+    provider = FakeInterviewAIProvider()
+
+    async def unavailable(_texts: list[str]) -> object:
+        raise InterviewAIError(
+            "OPENAI_RATE_LIMIT",
+            "Embedding provider is temporarily unavailable",
+            retryable=True,
+        )
+
+    monkeypatch.setattr(provider, "embed", unavailable)
+    context: dict[str, Any] = {
+        "ai_provider": provider,
+        "job_try": 2,
+        "job_id": f"embedding:{interview_id}",
+    }
+
+    with pytest.raises(Retry) as raised:
+        await intelligence_jobs.refresh_interview_question_embeddings(context, str(interview_id))
+
+    assert 60_000 <= raised.value.defer_score <= 120_000
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        question = await session.scalar(
+            select(IntelligenceQuestion).where(IntelligenceQuestion.interview_id == interview_id)
+        )
+        usage_count = int(
+            await session.scalar(
+                select(func.count(IntelligenceAIUsage.id)).where(
+                    IntelligenceAIUsage.interview_id == interview_id,
+                    IntelligenceAIUsage.operation == "embedding",
+                )
+            )
+            or 0
+        )
+    assert interview is not None
+    assert interview.processing_status is IntelligenceProcessingStatus.UPLOADED
+    assert interview.processing_error_code is None
+    assert question is not None and question.question_embedding is None
+    assert usage_count == 0
+
+    context["job_try"] = intelligence_jobs.MAX_JOB_TRIES
+    await intelligence_jobs.refresh_interview_question_embeddings(context, str(interview_id))
 
 
 @pytest.mark.asyncio

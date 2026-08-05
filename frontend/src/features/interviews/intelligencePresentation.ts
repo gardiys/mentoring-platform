@@ -8,7 +8,7 @@ export const intelligenceStatusLabels: Record<
   string
 > = {
   draft: "Ожидает загрузки",
-  uploaded: "Файл загружен",
+  uploaded: "Ожидает запуска обработки",
   transcription_submitted: "Отправлено в распознавание",
   transcribing: "Распознаём речь",
   transcript_ready: "Расшифровка готова",

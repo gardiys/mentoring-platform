@@ -1,10 +1,17 @@
+import math
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import httpx
+import pytest
 from openai import RateLimitError
 from openai.lib._pydantic import to_strict_json_schema
 
 from app.interviews.intelligence_ai import (
     LIGHT_REVIEW_PROMPT,
     TECHNICAL_REVIEW_PROMPT,
+    FakeInterviewAIProvider,
+    InterviewAIError,
     OpenAIInterviewAIProvider,
     ReviewOutput,
     transcript_chunks,
@@ -92,3 +99,79 @@ def test_transcript_chunks_enforce_a_character_budget_and_keep_progressing() -> 
 
     assert chunks == ["a" * 60, "b" * 60, "c" * 60]
     assert all(len(chunk) <= 100 for chunk in chunks)
+
+
+@pytest.mark.asyncio
+async def test_fake_embeddings_are_deterministic_and_normalized() -> None:
+    first_provider = FakeInterviewAIProvider()
+    second_provider = FakeInterviewAIProvider()
+
+    first = await first_provider.embed(["Kafka и RabbitMQ", "Python GIL"])
+    repeated = await first_provider.embed(["Kafka и RabbitMQ"])
+    from_another_instance = await second_provider.embed(["Kafka и RabbitMQ"])
+
+    assert first.embeddings[0] == repeated.embeddings[0]
+    assert first.embeddings[0] == from_another_instance.embeddings[0]
+    assert first.embeddings[0] != first.embeddings[1]
+    assert all(len(vector) == first_provider.embedding_dimensions for vector in first.embeddings)
+    assert all(
+        math.isclose(math.sqrt(sum(value * value for value in vector)), 1.0)
+        for vector in first.embeddings
+    )
+    assert first.usage.model == first_provider.embedding_model
+    assert first.usage.output_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_openai_embedding_request_uses_configured_model_and_dimensions() -> None:
+    create = AsyncMock(
+        return_value=SimpleNamespace(
+            id="emb-123",
+            model="text-embedding-3-small",
+            data=[
+                SimpleNamespace(index=1, embedding=[0.0, 1.0]),
+                SimpleNamespace(index=0, embedding=[1.0, 0.0]),
+            ],
+            usage=SimpleNamespace(prompt_tokens=7),
+        )
+    )
+    provider = object.__new__(OpenAIInterviewAIProvider)
+    provider.embedding_model = "text-embedding-3-small"
+    provider.embedding_dimensions = 2
+    provider.client = SimpleNamespace(embeddings=SimpleNamespace(create=create))
+
+    result = await provider.embed(["первый вопрос", "второй вопрос"])
+
+    create.assert_awaited_once_with(
+        model="text-embedding-3-small",
+        input=["первый вопрос", "второй вопрос"],
+        dimensions=2,
+        encoding_format="float",
+    )
+    assert result.embeddings == [[1.0, 0.0], [0.0, 1.0]]
+    assert result.usage.provider_request_id == "emb-123"
+    assert result.usage.model == "text-embedding-3-small"
+    assert result.usage.input_tokens == 7
+    assert result.usage.output_tokens == 0
+
+
+@pytest.mark.asyncio
+async def test_openai_embedding_response_rejects_duplicate_indexes() -> None:
+    provider = object.__new__(OpenAIInterviewAIProvider)
+    provider.embedding_model = "text-embedding-3-small"
+    provider.embedding_dimensions = 2
+    provider.client = SimpleNamespace(
+        embeddings=SimpleNamespace(
+            create=AsyncMock(
+                return_value=SimpleNamespace(
+                    data=[
+                        SimpleNamespace(index=0, embedding=[1.0, 0.0]),
+                        SimpleNamespace(index=0, embedding=[0.0, 1.0]),
+                    ]
+                )
+            )
+        )
+    )
+
+    with pytest.raises(InterviewAIError, match="invalid embedding indexes"):
+        await provider.embed(["первый", "второй"])

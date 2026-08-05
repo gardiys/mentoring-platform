@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 PROD_COMPOSE := docker compose -f infra/docker-compose.prod.yml --env-file .env.production
 first_name ?= Администратор
 
-.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara check-s3-multipart prod-check-s3-multipart ensure-test-db prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings check-s3-multipart prod-check-s3-multipart ensure-test-db prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -34,6 +34,13 @@ check-nexara:
 
 prod-check-nexara:
 	$(PROD_COMPOSE) run --rm --no-deps intelligence-worker python -m app.check_nexara
+
+backfill-question-embeddings: docker-migrate
+	$(COMPOSE) run --rm --build --no-deps intelligence-ai-worker python -m app.backfill_question_embeddings
+
+prod-backfill-question-embeddings: prod-migrate
+	$(PROD_COMPOSE) build intelligence-ai-worker
+	$(PROD_COMPOSE) run --rm --no-deps intelligence-ai-worker python -m app.backfill_question_embeddings
 
 check-s3-multipart:
 	$(COMPOSE) up -d --wait minio

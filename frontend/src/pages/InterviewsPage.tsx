@@ -126,7 +126,9 @@ export function InterviewsPage() {
                           ? "✓ Разобрано"
                           : interview.processing_status === "failed"
                             ? "Ошибка"
-                            : "● Анализируется"}
+                            : interview.processing_status === "uploaded"
+                              ? "Ожидает запуска"
+                              : "● Анализируется"}
                       </Text>
                     </Group>
                     <Title order={3}>{interview.company_name}</Title>

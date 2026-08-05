@@ -1155,6 +1155,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/interviews/ai-operations/{interview_id}/requeue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Requeue Ai Processing */
+        post: operations["admin_requeue_ai_processing_api_v1_admin_interviews_ai_operations__interview_id__requeue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/topics": {
         parameters: {
             query?: never;
@@ -2678,6 +2695,8 @@ export interface components {
             answer_markdown: string;
             /** @default occasional */
             frequency: components["schemas"]["InterviewCardFrequency"];
+            /** @default manual */
+            frequency_mode: components["schemas"]["InterviewCardFrequencyMode"];
             /**
              * Position
              * @default 0
@@ -2722,6 +2741,10 @@ export interface components {
             /** Answer Markdown */
             answer_markdown: string;
             frequency: components["schemas"]["InterviewCardFrequency"];
+            frequency_override: components["schemas"]["InterviewCardFrequency"] | null;
+            frequency_mode: components["schemas"]["InterviewCardFrequencyMode"];
+            /** Frequency Threshold */
+            frequency_threshold: number;
             /** Position */
             position: number;
             /** Is Published */
@@ -2748,6 +2771,10 @@ export interface components {
             /** Question Preview */
             question_preview: string;
             frequency: components["schemas"]["InterviewCardFrequency"];
+            frequency_override: components["schemas"]["InterviewCardFrequency"] | null;
+            frequency_mode: components["schemas"]["InterviewCardFrequencyMode"];
+            /** Frequency Threshold */
+            frequency_threshold: number;
             /** Position */
             position: number;
             /** Is Published */
@@ -3244,6 +3271,42 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** AdminQuestionModerationCardCandidate */
+        AdminQuestionModerationCardCandidate: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Deck Id
+             * Format: uuid
+             */
+            deck_id: string;
+            /** Deck Title */
+            deck_title: string;
+            /** Category */
+            category: string;
+            /** Question Markdown */
+            question_markdown: string;
+            /** Asked Count */
+            asked_count: number;
+            frequency: components["schemas"]["InterviewCardFrequency"];
+            /** Similarity */
+            similarity: number;
+            /**
+             * Match Type
+             * @enum {string}
+             */
+            match_type: "exact" | "similar";
+            /**
+             * Matched Source
+             * @enum {string}
+             */
+            matched_source: "card" | "approved_alias";
+            /** Matched Text */
+            matched_text: string;
+        };
         /** AdminQuestionModerationDeckOption */
         AdminQuestionModerationDeckOption: {
             /**
@@ -3307,6 +3370,8 @@ export interface components {
             matched_card_question: string | null;
             /** Matched Card Asked Count */
             matched_card_asked_count: number | null;
+            /** Card Candidates */
+            card_candidates: components["schemas"]["AdminQuestionModerationCardCandidate"][];
             /** Deck Options */
             deck_options: components["schemas"]["AdminQuestionModerationDeckOption"][];
         };
@@ -4229,6 +4294,13 @@ export interface components {
              */
             interviewed_at: string;
             processing_status: components["schemas"]["IntelligenceProcessingStatus"];
+            failed_stage: components["schemas"]["IntelligenceAttemptStage"] | null;
+            /** Processing Error Code */
+            processing_error_code: string | null;
+            /** Processing Error Message */
+            processing_error_message: string | null;
+            /** Can Requeue Processing */
+            can_requeue_processing: boolean;
             /** Duration Ms */
             duration_ms: number | null;
             /** Question Count */
@@ -4335,6 +4407,13 @@ export interface components {
              */
             interviewed_at: string;
             processing_status: components["schemas"]["IntelligenceProcessingStatus"];
+            failed_stage: components["schemas"]["IntelligenceAttemptStage"] | null;
+            /** Processing Error Code */
+            processing_error_code: string | null;
+            /** Processing Error Message */
+            processing_error_message: string | null;
+            /** Can Requeue Processing */
+            can_requeue_processing: boolean;
             /** Duration Ms */
             duration_ms: number | null;
             /** Question Count */
@@ -4517,8 +4596,17 @@ export interface components {
              * @default false
              */
             create_category: boolean;
+            /** Target Card Id */
+            target_card_id?: string | null;
+            /**
+             * Create New Card
+             * @default false
+             */
+            create_new_card: boolean;
             /** @default occasional */
             frequency: components["schemas"]["InterviewCardFrequency"];
+            /** @default manual */
+            frequency_mode: components["schemas"]["InterviewCardFrequencyMode"];
         };
         /**
          * IntelligenceQuestionModerationStatus
@@ -4716,6 +4804,11 @@ export interface components {
          * @enum {string}
          */
         InterviewCardFrequency: "frequent" | "occasional";
+        /**
+         * InterviewCardFrequencyMode
+         * @enum {string}
+         */
+        InterviewCardFrequencyMode: "automatic" | "manual";
         /** InterviewCardStudy */
         InterviewCardStudy: {
             /**
@@ -8738,7 +8831,7 @@ export interface operations {
     mentor_interviews_api_v1_mentor_interviews_get: {
         parameters: {
             query?: {
-                status?: "needs_review" | "reviewed" | "processing" | "all";
+                status?: "requested" | "needs_review" | "reviewed" | "processing" | "all";
                 limit?: number;
                 offset?: number;
             };
@@ -9178,6 +9271,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminIntelligenceOperationsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_requeue_ai_processing_api_v1_admin_interviews_ai_operations__interview_id__requeue_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                interview_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntelligenceInterviewDetail"];
                 };
             };
             /** @description Validation Error */

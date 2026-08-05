@@ -13,6 +13,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import get_settings
 from app.core.errors import api_error
+from app.interviews.card_frequency import effective_card_frequency, refresh_card_frequency
 from app.interviews.companies import resolve_company
 from app.interviews.intelligence_models import (
     IntelligenceAIAdmission,
@@ -32,7 +33,9 @@ from app.interviews.intelligence_models import (
     IntelligenceSpeakerRole,
     IntelligenceUtterance,
 )
+from app.interviews.intelligence_recovery import intelligence_recovery_job_name
 from app.interviews.intelligence_schemas import (
+    AdminQuestionModerationCardCandidate,
     AdminQuestionModerationDeckOption,
     AdminQuestionModerationDetail,
     AdminQuestionModerationPage,
@@ -55,6 +58,7 @@ from app.interviews.intelligence_schemas import (
 )
 from app.interviews.models import (
     InterviewCard,
+    InterviewCardFrequencyMode,
     InterviewCardOccurrence,
     InterviewCardProgress,
     InterviewDeck,
@@ -63,6 +67,13 @@ from app.interviews.models import (
     InterviewProcessStatus,
     InterviewStageType,
     InterviewTopicSelection,
+)
+from app.interviews.question_embeddings import embedding_source_hash
+from app.interviews.question_matching import (
+    QuestionCandidate,
+    QuestionVariant,
+    RankedQuestionCandidate,
+    rank_question_candidates,
 )
 from app.mentors.models import MentorStudent
 from app.tracks.access import has_track_access
@@ -183,8 +194,7 @@ async def _ensure_ai_analysis_capacity(
     day_start, day_end = _quota_day_bounds(now)
     launched_today = int(
         await session.scalar(
-            select(func.count(IntelligenceAIAdmission.id))
-            .where(
+            select(func.count(IntelligenceAIAdmission.id)).where(
                 IntelligenceAIAdmission.requester_user_id == user.id,
                 IntelligenceAIAdmission.requested_at >= day_start,
                 IntelligenceAIAdmission.requested_at < day_end,
@@ -431,7 +441,11 @@ async def list_intelligence_interviews(
                 ),
             )
         )
-    if queue_filter == "processing":
+    if queue_filter == "requested":
+        statement = statement.where(
+            IntelligenceInterview.processing_status == IntelligenceProcessingStatus.UPLOADED
+        )
+    elif queue_filter == "processing":
         statement = statement.where(
             IntelligenceInterview.processing_status.not_in(
                 [IntelligenceProcessingStatus.READY, IntelligenceProcessingStatus.FAILED]
@@ -513,6 +527,18 @@ async def intelligence_summary(
         interview_type=interview.interview_type,
         interviewed_at=stage.scheduled_at,
         processing_status=interview.processing_status,
+        failed_stage=interview.failed_stage,
+        processing_error_code=interview.processing_error_code,
+        processing_error_message=interview.processing_error_message,
+        can_requeue_processing=(
+            intelligence_recovery_job_name(
+                interview.processing_status,
+                transcription_provider_job_id=interview.transcription_provider_job_id,
+                candidate_speaker_selected=interview.candidate_speaker_id is not None,
+                extraction_completed=False,
+            )
+            is not None
+        ),
         duration_ms=interview.duration_ms,
         question_count=question_count,
         suggested_review_count=review_counts.get(IntelligenceReviewStatus.SUGGESTED, 0),
@@ -1071,13 +1097,6 @@ async def moderate_intelligence_question(
     elif payload.action == "approve":
         if reviewer.role is not UserRole.ADMIN:
             api_error(403, "admin_access_required", "Only an admin can publish a question")
-        question_text = (payload.question_markdown or question.question_text).strip()
-        answer_text = (payload.answer_markdown or "").strip()
-        category = _normalize_card_category(payload.category or question.category)
-        if not answer_text:
-            api_error(422, "interview_card_answer_required", "A verified answer is required")
-        if not category:
-            api_error(422, "interview_card_category_required", "A topic is required")
         stage = await session.get(InterviewProcessStage, interview.stage_id)
         if stage is None:
             api_error(409, "interview_process_missing", "Interview process was not found")
@@ -1097,27 +1116,106 @@ async def moderate_intelligence_question(
         )
         if not decks:
             api_error(409, "interview_deck_missing", "Publish a question deck for this direction")
-        cards = list(
+        all_cards = list(
             await session.scalars(
                 select(InterviewCard)
-                .where(InterviewCard.deck_id.in_([deck.id for deck in decks]))
+                .where(
+                    InterviewCard.deck_id.in_([deck.id for deck in decks]),
+                )
                 .order_by(InterviewCard.position, InterviewCard.id)
                 .with_for_update()
             )
         )
-        normalized_question = _normalize_card_question(question_text)
-        card = next(
+        cards = [card for card in all_cards if card.is_published]
+        aliases = await _approved_question_aliases(session, [card.id for card in cards])
+        question_text = (payload.question_markdown or question.question_text).strip()
+        ranked_candidates = _rank_cards(
+            question,
+            cards,
+            aliases,
+            question_text=question_text,
+        )
+        exact_candidate = next(
             (
-                item
-                for deck_item in decks
-                for item in cards
-                if item.deck_id == deck_item.id
-                if _normalize_card_question(item.question_markdown) == normalized_question
+                candidate
+                for candidate in ranked_candidates
+                if candidate.match_type == "exact" and candidate.matched_source == "card"
             ),
             None,
         )
+
+        existing_occurrence = await session.scalar(
+            select(InterviewCardOccurrence)
+            .where(InterviewCardOccurrence.source_question_id == question.id)
+            .with_for_update()
+        )
+        existing_card_id = question.published_card_id or (
+            existing_occurrence.card_id if existing_occurrence is not None else None
+        )
+        requested_card_id: UUID | None
+        if existing_card_id is not None:
+            if payload.create_new_card:
+                api_error(
+                    409,
+                    "interview_question_already_published",
+                    "The question is already linked to an existing card",
+                )
+            if payload.target_card_id is not None and payload.target_card_id != existing_card_id:
+                api_error(
+                    409,
+                    "interview_question_already_published",
+                    "The question is already linked to another card",
+                )
+            if exact_candidate is not None and exact_candidate.card_id != existing_card_id:
+                api_error(
+                    409,
+                    "interview_question_exact_match_conflict",
+                    "The corrected question exactly matches another card",
+                )
+            requested_card_id = existing_card_id
+        else:
+            if exact_candidate is not None and payload.create_new_card:
+                api_error(
+                    409,
+                    "interview_card_exact_match_exists",
+                    "An identical published question card already exists",
+                )
+            requested_card_id = payload.target_card_id or (
+                exact_candidate.card_id
+                if exact_candidate is not None and not payload.create_new_card
+                else None
+            )
+            if requested_card_id is None and ranked_candidates and not payload.create_new_card:
+                api_error(
+                    422,
+                    "interview_card_destination_required",
+                    "Choose a similar existing card or explicitly create a new one",
+                )
+        card = next((item for item in cards if item.id == requested_card_id), None)
+        if requested_card_id is not None and card is None:
+            error_code = (
+                "interview_question_card_unavailable"
+                if existing_card_id is not None
+                else "interview_card_not_available"
+            )
+            api_error(
+                409 if existing_card_id is not None else 422,
+                error_code,
+                (
+                    "The linked question card is no longer available"
+                    if existing_card_id is not None
+                    else "Choose a published question card from this direction"
+                ),
+            )
+
         deck = next((item for item in decks if card and item.id == card.deck_id), None)
         if card is None:
+            answer_text = (payload.answer_markdown or "").strip()
+            category = _normalize_card_category(payload.category or question.category)
+            if not answer_text:
+                api_error(422, "interview_card_answer_required", "A verified answer is required")
+            if not category:
+                api_error(422, "interview_card_category_required", "A topic is required")
             deck = (
                 next((item for item in decks if item.id == payload.deck_id), None)
                 if payload.deck_id is not None
@@ -1129,7 +1227,7 @@ async def moderate_intelligence_question(
                     "interview_deck_not_available",
                     "Choose a published question deck for this direction",
                 )
-            deck_cards = [item for item in cards if item.deck_id == deck.id]
+            deck_cards = [item for item in all_cards if item.deck_id == deck.id]
             category_key = category.casefold()
             existing_category = next(
                 (
@@ -1162,21 +1260,45 @@ async def moderate_intelligence_question(
                 question_markdown=question_text,
                 answer_markdown=answer_text,
                 frequency=payload.frequency,
+                frequency_override=(
+                    payload.frequency
+                    if payload.frequency_mode is InterviewCardFrequencyMode.MANUAL
+                    else None
+                ),
                 position=max_position + 1,
                 is_published=True,
                 asked_count=0,
+                question_embedding=question.question_embedding,
+                question_embedding_model=question.question_embedding_model,
+                question_embedding_dimensions=question.question_embedding_dimensions,
+                question_embedding_source_hash=question.question_embedding_source_hash,
             )
+            refresh_card_frequency(card)
             session.add(card)
             await session.flush()
         assert deck is not None
         category = card.category
+        if question.question_text != question_text:
+            question.question_text = question_text
+            question.question_embedding = None
+            question.question_embedding_model = None
+            question.question_embedding_dimensions = None
+            question.question_embedding_source_hash = None
+            if card.slug == f"ai-{question.id.hex}":
+                card.question_embedding = None
+                card.question_embedding_model = None
+                card.question_embedding_dimensions = None
+                card.question_embedding_source_hash = None
         question.category = category
-        occurrence = await session.scalar(
-            select(InterviewCardOccurrence).where(
-                InterviewCardOccurrence.source_question_id == question.id
+        interview_occurrence = await session.scalar(
+            select(InterviewCardOccurrence)
+            .where(
+                InterviewCardOccurrence.card_id == card.id,
+                InterviewCardOccurrence.interview_id == interview.id,
             )
+            .with_for_update()
         )
-        if occurrence is None:
+        if existing_occurrence is None and interview_occurrence is None:
             session.add(
                 InterviewCardOccurrence(
                     card_id=card.id,
@@ -1190,6 +1312,7 @@ async def moderate_intelligence_question(
             )
             card.asked_count = (card.asked_count or 0) + 1
             card.companies = _merge_company_name(card.companies, process.company_name)
+        refresh_card_frequency(card)
         question.moderation_status = IntelligenceQuestionModerationStatus.APPROVED
         question.admin_reviewed_by_user_id = reviewer.id
         question.admin_reviewed_at = now
@@ -1358,20 +1481,27 @@ async def get_admin_question_moderation(
             .order_by(IntelligenceAnswerReview.created_at.desc())
         )
         suggested_answer = review.suggested_better_answer if review is not None else None
-    matched_card = await _matching_card(session, process.track_id, question.question_text)
+    card_candidates = await _question_card_candidates(session, process.track_id, question)
+    exact_candidate = next(
+        (candidate for candidate in card_candidates if candidate.match_type == "exact"),
+        None,
+    )
     deck_options = await _moderation_deck_options(session, process.track_id)
     summary = _admin_question_summary(question, interview, stage, process, track, student)
     return AdminQuestionModerationDetail(
         **summary.model_dump(),
         candidate_answer=answer.answer_text if answer is not None else None,
         suggested_answer=suggested_answer,
-        matched_card_id=matched_card.id if matched_card is not None else None,
-        matched_card_deck_id=matched_card.deck_id if matched_card is not None else None,
-        matched_card_category=matched_card.category if matched_card is not None else None,
+        matched_card_id=exact_candidate.id if exact_candidate is not None else None,
+        matched_card_deck_id=(exact_candidate.deck_id if exact_candidate is not None else None),
+        matched_card_category=(exact_candidate.category if exact_candidate is not None else None),
         matched_card_question=(
-            matched_card.question_markdown if matched_card is not None else None
+            exact_candidate.question_markdown if exact_candidate is not None else None
         ),
-        matched_card_asked_count=(matched_card.asked_count if matched_card is not None else None),
+        matched_card_asked_count=(
+            exact_candidate.asked_count if exact_candidate is not None else None
+        ),
+        card_candidates=card_candidates,
         deck_options=deck_options,
     )
 
@@ -1401,28 +1531,160 @@ def _admin_question_summary(
     )
 
 
-async def _matching_card(
-    session: AsyncSession, track_id: UUID, question_text: str
-) -> InterviewCard | None:
-    normalized = _normalize_card_question(question_text)
-    cards = await session.scalars(
-        select(InterviewCard)
-        .join(InterviewDeck, InterviewDeck.id == InterviewCard.deck_id)
-        .where(
-            InterviewDeck.track_id == track_id,
-            InterviewDeck.is_published.is_(True),
+async def _question_card_candidates(
+    session: AsyncSession,
+    track_id: UUID,
+    question: IntelligenceQuestion,
+) -> list[AdminQuestionModerationCardCandidate]:
+    rows = (
+        await session.execute(
+            select(InterviewCard, InterviewDeck)
+            .join(InterviewDeck, InterviewDeck.id == InterviewCard.deck_id)
+            .where(
+                InterviewDeck.track_id == track_id,
+                InterviewDeck.is_published.is_(True),
+                InterviewCard.is_published.is_(True),
+            )
+            .order_by(
+                InterviewDeck.position,
+                InterviewDeck.created_at,
+                InterviewCard.position,
+                InterviewCard.id,
+            )
         )
-        .order_by(
-            InterviewDeck.position,
-            InterviewDeck.created_at,
-            InterviewCard.position,
-            InterviewCard.id,
+    ).all()
+    cards = [card for card, _deck in rows]
+    aliases = await _approved_question_aliases(session, [card.id for card in cards])
+    ranked = _rank_cards(question, cards, aliases)
+    cards_by_id = {card.id: card for card in cards}
+    decks_by_id = {deck.id: deck for _card, deck in rows}
+    return [
+        AdminQuestionModerationCardCandidate(
+            id=card.id,
+            deck_id=card.deck_id,
+            deck_title=decks_by_id[card.deck_id].title,
+            category=card.category,
+            question_markdown=card.question_markdown,
+            asked_count=card.asked_count,
+            frequency=effective_card_frequency(card),
+            similarity=candidate.similarity,
+            match_type=candidate.match_type,
+            matched_source=(
+                "approved_alias" if candidate.matched_source == "approved_alias" else "card"
+            ),
+            matched_text=candidate.matched_text,
+        )
+        for candidate in ranked
+        if (card := cards_by_id.get(candidate.card_id)) is not None
+    ]
+
+
+async def _approved_question_aliases(
+    session: AsyncSession,
+    card_ids: list[UUID],
+) -> list[IntelligenceQuestion]:
+    if not card_ids:
+        return []
+    return list(
+        await session.scalars(
+            select(IntelligenceQuestion)
+            .where(
+                IntelligenceQuestion.published_card_id.in_(card_ids),
+                IntelligenceQuestion.moderation_status
+                == IntelligenceQuestionModerationStatus.APPROVED,
+            )
+            .order_by(IntelligenceQuestion.created_at, IntelligenceQuestion.id)
         )
     )
-    return next(
-        (card for card in cards if _normalize_card_question(card.question_markdown) == normalized),
-        None,
+
+
+def _rank_cards(
+    question: IntelligenceQuestion,
+    cards: list[InterviewCard],
+    aliases: list[IntelligenceQuestion],
+    *,
+    question_text: str | None = None,
+) -> list[RankedQuestionCandidate]:
+    effective_question_text = question_text or question.question_text
+    aliases_by_card: dict[UUID, list[IntelligenceQuestion]] = defaultdict(list)
+    for alias in aliases:
+        if alias.published_card_id is not None:
+            aliases_by_card[alias.published_card_id].append(alias)
+    query_embedding = _compatible_embedding(
+        question.question_embedding,
+        question.question_embedding_model,
+        question.question_embedding_dimensions,
+        question.question_embedding_source_hash,
+        effective_question_text,
+        question.question_embedding_model,
+        question.question_embedding_dimensions,
     )
+    candidates = [
+        QuestionCandidate(
+            card_id=card.id,
+            asked_count=card.asked_count,
+            variants=(
+                QuestionVariant(
+                    text=card.question_markdown,
+                    embedding=_compatible_embedding(
+                        card.question_embedding,
+                        card.question_embedding_model,
+                        card.question_embedding_dimensions,
+                        card.question_embedding_source_hash,
+                        card.question_markdown,
+                        question.question_embedding_model,
+                        question.question_embedding_dimensions,
+                    ),
+                    source="card",
+                ),
+                *(
+                    QuestionVariant(
+                        text=alias.question_text,
+                        embedding=_compatible_embedding(
+                            alias.question_embedding,
+                            alias.question_embedding_model,
+                            alias.question_embedding_dimensions,
+                            alias.question_embedding_source_hash,
+                            alias.question_text,
+                            question.question_embedding_model,
+                            question.question_embedding_dimensions,
+                        ),
+                        source="approved_alias",
+                    )
+                    for alias in aliases_by_card[card.id]
+                ),
+            ),
+        )
+        for card in cards
+    ]
+    return rank_question_candidates(
+        effective_question_text,
+        query_embedding,
+        candidates,
+        limit=5,
+    )
+
+
+def _compatible_embedding(
+    embedding: list[float] | None,
+    model: str | None,
+    dimensions: int | None,
+    source_hash: str | None,
+    source_text: str,
+    query_model: str | None,
+    query_dimensions: int | None,
+) -> tuple[float, ...] | None:
+    if (
+        embedding is None
+        or model is None
+        or dimensions is None
+        or source_hash != embedding_source_hash(source_text)
+        or model != query_model
+        or dimensions != query_dimensions
+        or len(embedding) != dimensions
+    ):
+        return None
+    return tuple(embedding)
 
 
 async def _moderation_deck_options(
@@ -1460,13 +1722,6 @@ async def _moderation_deck_options(
         )
         for deck in decks
     ]
-
-
-def _normalize_card_question(value: str) -> str:
-    normalized = unicodedata.normalize("NFKC", value).strip()
-    normalized = re.sub(r"^#{1,6}\s*", "", normalized)
-    normalized = re.sub(r"\s+", " ", normalized).casefold().replace("ё", "е")
-    return normalized.rstrip(" ?!.,;:")
 
 
 def _normalize_card_category(value: str) -> str:

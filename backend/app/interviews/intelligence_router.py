@@ -226,7 +226,7 @@ async def delete_interview(
 async def mentor_interviews(
     session: Session,
     mentor: MentorUser,
-    review_filter: Literal["needs_review", "reviewed", "processing", "all"] = Query(
+    review_filter: Literal["requested", "needs_review", "reviewed", "processing", "all"] = Query(
         default="needs_review", alias="status"
     ),
     limit: int = Query(default=20, ge=1, le=100),

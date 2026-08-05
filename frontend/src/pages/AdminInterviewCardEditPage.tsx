@@ -5,6 +5,7 @@ import {
   Card,
   Group,
   NumberInput,
+  SegmentedControl,
   Select,
   Stack,
   Switch,
@@ -48,7 +49,8 @@ function CardForm({
     question_markdown: card?.question_markdown ?? "## Вопрос",
     answer_markdown:
       card?.answer_markdown ?? "Краткий, но содержательный ответ.",
-    frequency: card?.frequency ?? "frequent",
+    frequency: card?.frequency_override ?? card?.frequency ?? "frequent",
+    frequency_mode: card?.frequency_mode ?? "manual",
     position: card?.position ?? 0,
     is_published: card?.is_published ?? false,
   });
@@ -171,14 +173,48 @@ function CardForm({
                 }))
               }
             />
+            <Stack gap="xs">
+              <Text fw={500} size="sm">
+                Как определяется частотность
+              </Text>
+              <SegmentedControl
+                aria-label="Как определяется частотность"
+                fullWidth
+                value={form.frequency_mode}
+                data={[
+                  { value: "automatic", label: "Автоматически" },
+                  { value: "manual", label: "Вручную" },
+                ]}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    frequency_mode:
+                      value === "automatic" ? "automatic" : "manual",
+                  }))
+                }
+              />
+              <Text size="sm" c="dimmed">
+                {form.frequency_mode === "automatic"
+                  ? card
+                    ? `Карточка станет частой после ${card.frequency_threshold} разных собеседований. Сейчас: ${card.asked_count}.`
+                    : "Счётчик начнёт работать после появления карточки в разборах собеседований."
+                  : "Вы сами задаёте приоритет карточки и он не меняется от счётчика."}
+              </Text>
+            </Stack>
             <Group grow align="flex-start">
               <Select
                 label="Частота"
+                description={
+                  form.frequency_mode === "automatic"
+                    ? "Рассчитывается по числу разных собеседований"
+                    : "Ручной приоритет показа карточки"
+                }
                 data={[
                   { value: "frequent", label: "Частый" },
                   { value: "occasional", label: "Обычный" },
                 ]}
                 value={form.frequency}
+                disabled={form.frequency_mode === "automatic"}
                 onChange={(value) =>
                   setForm((current) => ({
                     ...current,

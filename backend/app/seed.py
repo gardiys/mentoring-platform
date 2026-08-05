@@ -298,6 +298,7 @@ async def seed() -> None:
                         question_markdown=question,
                         answer_markdown=answer,
                         frequency=frequency,
+                        frequency_override=frequency,
                         position=position,
                         is_published=True,
                     )
@@ -351,6 +352,7 @@ async def seed() -> None:
                         question_markdown=question,
                         answer_markdown=answer,
                         frequency=frequency,
+                        frequency_override=frequency,
                         position=position,
                         is_published=True,
                     )

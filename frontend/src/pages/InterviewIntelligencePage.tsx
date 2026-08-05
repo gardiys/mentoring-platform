@@ -22,6 +22,8 @@ import { PageHeader } from "../components/PageHeader";
 import { useMe } from "../features/auth/queries";
 import {
   useAddIntelligenceComment,
+  useAdminIntelligenceOperations,
+  useAdminRequeueIntelligenceInterview,
   useCompleteIntelligenceReview,
   useDeleteIntelligenceInterview,
   useGenerateIntelligenceOverview,
@@ -270,6 +272,7 @@ export function InterviewIntelligencePage() {
   const me = useMe();
   const selectCandidate = useSelectIntelligenceCandidate();
   const retry = useRetryIntelligenceInterview();
+  const requeue = useAdminRequeueIntelligenceInterview();
   const remove = useDeleteIntelligenceInterview();
   const addComment = useAddIntelligenceComment();
   const completeReview = useCompleteIntelligenceReview();
@@ -282,6 +285,7 @@ export function InterviewIntelligencePage() {
   } | null>(null);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
   const mediaRef = useRef<HTMLMediaElement>(null);
+  const operations = useAdminIntelligenceOperations(me.data?.role === "admin");
   const intelligenceMediaKind = media
     ? mediaKind(media.content_type, query.data?.media_filename)
     : null;
@@ -390,6 +394,57 @@ export function InterviewIntelligencePage() {
               }
             >
               Повторить этап
+            </Button>
+          </Stack>
+        </Alert>
+      )}
+
+      {interview.processing_status !== "failed" &&
+        interview.processing_error_message && (
+          <Alert color="yellow" title="Последняя ошибка обработки">
+            <Text>{interview.processing_error_message}</Text>
+            {interview.processing_error_code && (
+              <Text size="xs" c="dimmed" mt={4}>
+                Код: {interview.processing_error_code}
+              </Text>
+            )}
+          </Alert>
+        )}
+
+      {me.data.role === "admin" && interview.can_requeue_processing && (
+        <Alert
+          color={interview.processing_status === "uploaded" ? "yellow" : "blue"}
+          title={
+            interview.processing_status === "uploaded"
+              ? "Разбор ожидает запуска"
+              : "Текущий этап можно вернуть в очередь"
+          }
+        >
+          <Stack gap="sm">
+            <Text>
+              {interview.processing_status === "uploaded"
+                ? "Файл уже загружен. Запустите обработку вручную, если задача не была подхвачена воркером."
+                : "Используйте ручной запуск, если статус давно не меняется."}
+            </Text>
+            <Button
+              w="fit-content"
+              variant="light"
+              disabled={operations.data?.queues.available === false}
+              loading={requeue.isPending}
+              onClick={() =>
+                requeue.mutate(interview.id, {
+                  onSuccess: () =>
+                    notifications.show({
+                      color: "green",
+                      message: "Текущий этап AI-разбора поставлен в очередь",
+                    }),
+                  onError: notifyMutationError,
+                })
+              }
+            >
+              {interview.processing_status === "uploaded"
+                ? "Запустить AI-разбор"
+                : "Вернуть этап в очередь"}
             </Button>
           </Stack>
         </Alert>

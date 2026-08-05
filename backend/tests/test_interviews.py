@@ -1,6 +1,9 @@
+from uuid import UUID
+
 from httpx import AsyncClient
 
-from tests.conftest import SeededData, auth
+from app.interviews.models import InterviewCard, InterviewCardFrequency
+from tests.conftest import SeededData, TestSession, auth
 
 
 def deck_payload(track_id: str) -> dict:
@@ -262,3 +265,90 @@ async def test_admin_card_table_is_paginated_and_updates_one_card(
     assert updated.status_code == 200
     assert updated.json()["answer_markdown"] == "Точечно обновлённый ответ."
     assert len(detail.json()["cards"]) == 2
+
+
+async def test_admin_card_frequency_supports_automatic_and_manual_modes(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    deck = await create_deck(client, seeded)
+    assert all(card["frequency_mode"] == "manual" for card in deck["cards"])
+
+    payload = {
+        "slug": "python-auto-frequency",
+        "category": "Основы Python",
+        "companies": None,
+        "question_markdown": "## Автоматический вопрос",
+        "answer_markdown": "Ответ",
+        "frequency": "frequent",
+        "frequency_mode": "automatic",
+        "position": 2,
+        "is_published": True,
+    }
+    created = await client.post(
+        f"/api/v1/admin/interviews/decks/{deck['id']}/cards",
+        headers=auth(seeded.admin_id),
+        json=payload,
+    )
+    assert created.status_code == 201, created.text
+    automatic = created.json()
+    assert automatic["frequency"] == "occasional"
+    assert automatic["frequency_override"] is None
+    assert automatic["frequency_mode"] == "automatic"
+    assert automatic["frequency_threshold"] == 3
+
+    payload.update(
+        id=automatic["id"],
+        frequency="frequent",
+        frequency_mode="manual",
+    )
+    manually_updated = await client.put(
+        f"/api/v1/admin/interviews/decks/{deck['id']}/cards/{automatic['id']}",
+        headers=auth(seeded.admin_id),
+        json=payload,
+    )
+    assert manually_updated.status_code == 200, manually_updated.text
+    manual = manually_updated.json()
+    assert manual["frequency"] == "frequent"
+    assert manual["frequency_override"] == "frequent"
+    assert manual["frequency_mode"] == "manual"
+
+    payload.update(frequency_mode="automatic")
+    recalculated = await client.put(
+        f"/api/v1/admin/interviews/decks/{deck['id']}/cards/{automatic['id']}",
+        headers=auth(seeded.admin_id),
+        json=payload,
+    )
+    assert recalculated.status_code == 200, recalculated.text
+    assert recalculated.json()["frequency"] == "occasional"
+    assert recalculated.json()["frequency_override"] is None
+
+    async with TestSession() as session:
+        card = await session.get(InterviewCard, UUID(automatic["id"]))
+        assert card is not None
+        card.asked_count = 3
+        # Simulate a materialized value that became stale after a threshold change.
+        card.frequency = InterviewCardFrequency.OCCASIONAL
+        await session.commit()
+
+    dynamically_recalculated = await client.get(
+        f"/api/v1/admin/interviews/decks/{deck['id']}/cards/{automatic['id']}",
+        headers=auth(seeded.admin_id),
+    )
+    assert dynamically_recalculated.status_code == 200
+    assert dynamically_recalculated.json()["frequency"] == "frequent"
+
+    summaries = await client.get(
+        "/api/v1/admin/interviews/decks/summaries",
+        headers=auth(seeded.admin_id),
+    )
+    assert summaries.status_code == 200
+    summary = next(item for item in summaries.json() if item["id"] == deck["id"])
+    assert summary["frequent_count"] == 2
+
+    topics = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/topics",
+        headers=auth(seeded.student_id),
+    )
+    assert topics.status_code == 200
+    basics = next(item for item in topics.json() if item["name"] == "Основы Python")
+    assert basics["frequent_cards"] == 2

@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.interviews.intelligence_models import IntelligenceProcessingStatus
 from app.interviews.models import (
     InterviewCardFrequency,
+    InterviewCardFrequencyMode,
     InterviewProcessStatus,
     InterviewReviewRating,
     InterviewStageType,
@@ -99,6 +100,7 @@ class AdminInterviewCardMutation(BaseModel):
     question_markdown: str = Field(min_length=1)
     answer_markdown: str = Field(min_length=1)
     frequency: InterviewCardFrequency = InterviewCardFrequency.OCCASIONAL
+    frequency_mode: InterviewCardFrequencyMode = InterviewCardFrequencyMode.MANUAL
     position: int = Field(default=0, ge=0)
     is_published: bool = False
 
@@ -149,6 +151,9 @@ class AdminInterviewCardRead(BaseModel):
     question_markdown: str
     answer_markdown: str
     frequency: InterviewCardFrequency
+    frequency_override: InterviewCardFrequency | None
+    frequency_mode: InterviewCardFrequencyMode
+    frequency_threshold: int
     position: int
     is_published: bool
     asked_count: int
@@ -182,6 +187,9 @@ class AdminInterviewCardSummary(BaseModel):
     category: str
     question_preview: str
     frequency: InterviewCardFrequency
+    frequency_override: InterviewCardFrequency | None
+    frequency_mode: InterviewCardFrequencyMode
+    frequency_threshold: int
     position: int
     is_published: bool
     asked_count: int

@@ -11,7 +11,13 @@ OPENAI_QUEUE_NAME = "arq:queue:interview-openai"
 TRANSCRIPTION_FUNCTIONS = frozenset(
     {"submit_transcription", "poll_transcription", "process_transcription_result"}
 )
-OPENAI_FUNCTIONS = frozenset({"extract_interview_structure", "generate_answer_reviews"})
+OPENAI_FUNCTIONS = frozenset(
+    {
+        "extract_interview_structure",
+        "refresh_interview_question_embeddings",
+        "generate_answer_reviews",
+    }
+)
 
 
 def intelligence_queue_name(function: str) -> str:

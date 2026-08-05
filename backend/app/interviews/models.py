@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -29,6 +30,11 @@ from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 class InterviewCardFrequency(StrEnum):
     FREQUENT = "frequent"
     OCCASIONAL = "occasional"
+
+
+class InterviewCardFrequencyMode(StrEnum):
+    AUTOMATIC = "automatic"
+    MANUAL = "manual"
 
 
 class InterviewReviewRating(StrEnum):
@@ -107,11 +113,21 @@ class InterviewCard(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         nullable=False,
     )
+    frequency_override: Mapped[InterviewCardFrequency | None] = mapped_column(
+        Enum(
+            InterviewCardFrequency,
+            name="interview_card_frequency",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=True,
+    )
+    question_embedding: Mapped[list[float] | None] = mapped_column(ARRAY(Float), nullable=True)
+    question_embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    question_embedding_dimensions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    question_embedding_source_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    asked_count: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", nullable=False
-    )
+    asked_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     deck = relationship("InterviewDeck", back_populates="cards")
     occurrences = relationship(
@@ -130,6 +146,13 @@ class InterviewCardOccurrence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         Index("ix_interview_card_occurrences_card_asked", "card_id", "asked_at"),
         Index("ix_interview_card_occurrences_company", "company_id"),
+        Index(
+            "uq_interview_card_occurrences_card_interview",
+            "card_id",
+            "interview_id",
+            unique=True,
+            postgresql_where=text("interview_id IS NOT NULL"),
+        ),
     )
 
     card_id: Mapped[UUID] = mapped_column(

@@ -4,10 +4,12 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
 import { AdminInterviewDeckForm } from "../src/features/admin/AdminInterviewDeckForm";
+import { AdminInterviewCardEditPage } from "../src/pages/AdminInterviewCardEditPage";
 import { InterviewStudyPage } from "../src/pages/InterviewStudyPage";
 import { InterviewsPage } from "../src/pages/InterviewsPage";
 import type {
   AdminInterviewDeckRead,
+  AdminInterviewCardRead,
   AdminTrackRead,
   InterviewDeckListItem,
   InterviewStudySession,
@@ -90,6 +92,30 @@ const adminDeck: AdminInterviewDeckRead = {
   position: 0,
   is_published: true,
   cards: [],
+};
+
+const automaticCard: AdminInterviewCardRead = {
+  id: "61000000-0000-4000-8000-000000000002",
+  slug: "python-asyncio",
+  category: "Асинхронность",
+  companies: null,
+  source_number: null,
+  source_occurrence: null,
+  question_markdown: "## Что такое event loop?",
+  answer_markdown: "Цикл событий планирует выполнение корутин.",
+  frequency: "occasional",
+  frequency_override: null,
+  frequency_mode: "automatic",
+  frequency_threshold: 3,
+  position: 0,
+  is_published: true,
+  asked_count: 2,
+  updated_at: "2026-08-05T00:00:00Z",
+};
+
+const automaticAdminDeck: AdminInterviewDeckRead = {
+  ...adminDeck,
+  cards: [automaticCard],
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -273,8 +299,90 @@ it("администратор добавляет частую карточку 
           slug: "python-gil",
           category: "Общее",
           frequency: "frequent",
+          frequency_mode: "manual",
         }),
       ],
+    }),
+  );
+});
+
+it("сохраняет автоматический режим частотности карточки", async () => {
+  vi.spyOn(api, "adminTracks").mockResolvedValue([adminTrack]);
+  const update = vi
+    .spyOn(api, "updateAdminInterviewDeck")
+    .mockReturnValue(new Promise(() => undefined));
+  renderPage(<AdminInterviewDeckForm deck={automaticAdminDeck} />);
+
+  expect(
+    screen.getByText("Частой после 3 разных собеседований. Сейчас: 2."),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("radiogroup", {
+      name: "Как определяется частотность карточки 1",
+    }),
+  ).toBeInTheDocument();
+  expect(
+    screen
+      .getAllByLabelText("Частота на собеседованиях")
+      .some(
+        (element) => element instanceof HTMLInputElement && element.disabled,
+      ),
+  ).toBe(true);
+
+  await userEvent.click(
+    screen.getByRole("button", { name: "Сохранить колоду" }),
+  );
+
+  expect(update).toHaveBeenCalledWith(
+    automaticAdminDeck.id,
+    expect.objectContaining({
+      cards: [
+        expect.objectContaining({
+          frequency: "occasional",
+          frequency_mode: "automatic",
+        }),
+      ],
+    }),
+  );
+});
+
+it("не переводит автоматическую карточку в ручной режим при отдельном редактировании", async () => {
+  vi.spyOn(api, "adminInterviewCard").mockResolvedValue(automaticCard);
+  const update = vi
+    .spyOn(api, "updateAdminInterviewCard")
+    .mockReturnValue(new Promise(() => undefined));
+  renderPage(
+    <AdminInterviewCardEditPage />,
+    `/admin/interviews/${adminDeck.id}/cards/${automaticCard.id}/edit`,
+    "/admin/interviews/:deckId/cards/:cardId/edit",
+  );
+
+  expect(
+    await screen.findByText(
+      "Карточка станет частой после 3 разных собеседований. Сейчас: 2.",
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("radiogroup", {
+      name: "Как определяется частотность",
+    }),
+  ).toBeInTheDocument();
+  expect(
+    screen
+      .getAllByLabelText("Частота")
+      .some(
+        (element) => element instanceof HTMLInputElement && element.disabled,
+      ),
+  ).toBe(true);
+
+  await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(update).toHaveBeenCalledWith(
+    adminDeck.id,
+    automaticCard.id,
+    expect.objectContaining({
+      frequency: "occasional",
+      frequency_mode: "automatic",
     }),
   );
 });

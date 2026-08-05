@@ -6,6 +6,7 @@ import {
   Divider,
   Group,
   NumberInput,
+  SegmentedControl,
   Select,
   Stack,
   Switch,
@@ -51,6 +52,7 @@ function emptyCard(position: number): AdminInterviewCardMutation {
     question_markdown: "## Вопрос",
     answer_markdown: "Краткий, но содержательный ответ.",
     frequency: "frequent",
+    frequency_mode: "manual",
     position,
     is_published: false,
   };
@@ -71,7 +73,8 @@ function toMutation(deck: AdminInterviewDeckRead): AdminInterviewDeckMutation {
       companies: card.companies,
       question_markdown: card.question_markdown,
       answer_markdown: card.answer_markdown,
-      frequency: card.frequency,
+      frequency: card.frequency_override ?? card.frequency,
+      frequency_mode: card.frequency_mode ?? "manual",
       position: card.position,
       is_published: card.is_published,
     })),
@@ -373,14 +376,52 @@ export function AdminInterviewDeckForm({ deck }: Props) {
                   })
                 }
               />
+              <Stack gap="xs">
+                <Text fw={500} size="sm">
+                  Как определяется частотность
+                </Text>
+                <SegmentedControl
+                  aria-label={`Как определяется частотность карточки ${index + 1}`}
+                  fullWidth
+                  value={card.frequency_mode}
+                  data={[
+                    { value: "automatic", label: "Автоматически" },
+                    { value: "manual", label: "Вручную" },
+                  ]}
+                  onChange={(value) =>
+                    updateCard(index, {
+                      frequency_mode:
+                        value === "automatic" ? "automatic" : "manual",
+                    })
+                  }
+                />
+                <Text size="sm" c="dimmed">
+                  {card.frequency_mode === "automatic"
+                    ? (() => {
+                        const source = deck?.cards.find(
+                          (item) => item.id === card.id,
+                        );
+                        return source
+                          ? `Частой после ${source.frequency_threshold} разных собеседований. Сейчас: ${source.asked_count}.`
+                          : "Счётчик начнёт работать после появления карточки в разборах собеседований.";
+                      })()
+                    : "Приоритет задаётся вручную и не меняется от счётчика."}
+                </Text>
+              </Stack>
               <Group grow align="flex-end">
                 <Select
                   label="Частота на собеседованиях"
+                  description={
+                    card.frequency_mode === "automatic"
+                      ? "Рассчитывается автоматически"
+                      : "Ручной приоритет карточки"
+                  }
                   data={[
                     { value: "frequent", label: "Часто задают" },
                     { value: "occasional", label: "Задают реже" },
                   ]}
                   value={card.frequency}
+                  disabled={card.frequency_mode === "automatic"}
                   allowDeselect={false}
                   onChange={(value) =>
                     updateCard(index, {

@@ -147,6 +147,8 @@ class Settings(BaseSettings):
     openai_analysis_model: str | None = None
     openai_extraction_model: str | None = None
     openai_light_review_model: str | None = None
+    openai_embedding_model: str = "text-embedding-3-small"
+    openai_embedding_dimensions: int = Field(default=256, ge=1, le=3_072)
     openai_proxy_url: SecretStr | None = None
     openai_timeout_seconds: float = Field(default=120, ge=10, le=600)
     # ARQ owns observable retries and persists every attempt; avoid nested SDK retries.
@@ -157,6 +159,7 @@ class Settings(BaseSettings):
     openai_review_max_output_tokens: int = Field(default=4_000, ge=256, le=16_000)
     openai_summary_max_output_tokens: int = Field(default=4_000, ge=256, le=16_000)
     interview_ai_extraction_confidence_threshold: float = Field(default=0.65, ge=0, le=1)
+    interview_card_frequent_min_occurrences: int = Field(default=3, ge=1, le=10_000)
     interview_ai_enabled: bool = True
     interview_ai_daily_limit: int = Field(default=3, ge=1, le=100)
     interview_ai_max_active_per_user: int = Field(default=1, ge=1, le=10)
@@ -292,6 +295,11 @@ class Settings(BaseSettings):
     @classmethod
     def empty_string_is_none(cls, value: object) -> object:
         return None if value == "" else value
+
+    @field_validator("openai_embedding_model", mode="before")
+    @classmethod
+    def empty_embedding_model_uses_default(cls, value: object) -> object:
+        return "text-embedding-3-small" if value == "" else value
 
 
 @lru_cache
