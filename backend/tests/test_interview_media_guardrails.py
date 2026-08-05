@@ -32,6 +32,7 @@ from app.interviews.uploads import (
     SAFE_OFFER_CONTENT_TYPES,
     CompletedMultipartUploadPart,
     InterviewUploadStore,
+    StoredUpload,
 )
 
 
@@ -128,6 +129,16 @@ class FakeMultipartPublicClient:
         return f"https://s3.example.test/part/{Params['PartNumber']}"
 
 
+class FakeObjectMetadataClient:
+    def __init__(self, size: int) -> None:
+        self.size = size
+        self.requests: list[dict[str, Any]] = []
+
+    def head_object(self, **kwargs: Any) -> dict[str, int]:
+        self.requests.append(kwargs)
+        return {"ContentLength": self.size}
+
+
 def multipart_upload_store() -> tuple[
     InterviewUploadStore,
     FakeMultipartClient,
@@ -165,6 +176,46 @@ def test_presigned_post_cannot_upload_more_than_the_declared_size() -> None:
         {"Content-Type": "video/mp4"},
         ["content-length-range", 1, 1_234],
     ]
+
+
+@pytest.mark.parametrize(
+    ("storage_key", "expected_bucket", "expected_key", "client_name"),
+    [
+        ("media/user/recording", "interview-files", "media/user/recording", "internal"),
+        (
+            "external:https://s3.firstvds.ru:443/interviews/archive/recording.mp3",
+            "interviews",
+            "archive/recording.mp3",
+            "legacy",
+        ),
+    ],
+)
+async def test_resolve_upload_size_uses_authenticated_storage_metadata(
+    storage_key: str,
+    expected_bucket: str,
+    expected_key: str,
+    client_name: str,
+) -> None:
+    internal_client = FakeObjectMetadataClient(2_048)
+    legacy_client = FakeObjectMetadataClient(2_048)
+    store = object.__new__(InterviewUploadStore)
+    store.bucket = "interview-files"
+    store.client = internal_client
+    store.legacy_client = legacy_client
+    upload = StoredUpload(
+        storage_key=storage_key,
+        filename="recording.mp3",
+        content_type="audio/mpeg",
+        size=0,
+    )
+
+    resolved = await store.resolve_upload_size(upload)
+
+    selected_client = internal_client if client_name == "internal" else legacy_client
+    other_client = legacy_client if client_name == "internal" else internal_client
+    assert resolved.size == 2_048
+    assert selected_client.requests == [{"Bucket": expected_bucket, "Key": expected_key}]
+    assert other_client.requests == []
 
 
 async def test_multipart_upload_writes_directly_to_final_key_and_is_idempotent() -> None:

@@ -254,7 +254,6 @@ async def start_stage_ai_analysis(
         stage.media_storage_key is None
         or stage.media_filename is None
         or stage.media_content_type is None
-        or stage.media_size is None
     ):
         api_error(409, "interview_recording_required", "Upload an interview recording first")
     if not stage.media_content_type.startswith(("audio/", "video/")):
@@ -1770,6 +1769,7 @@ def safe_processing_message(code: str) -> str:
         "UNSUPPORTED_MEDIA_TYPE": "Формат записи не поддерживается.",
         "UNSUPPORTED_MEDIA_CODEC": "Кодек записи не поддерживается.",
         "MEDIA_DURATION_EXCEEDED": "Запись превышает допустимую продолжительность.",
+        "MEDIA_FILE_TOO_LARGE": "Запись превышает допустимый размер файла.",
         "OPENAI_PROXY_ERROR": "Не удалось подключиться к сервису анализа.",
         "OPENAI_AUTH_ERROR": "Сервис анализа временно недоступен.",
         "OPENAI_QUOTA_EXCEEDED": "Квота сервиса анализа исчерпана. Обратитесь к администратору.",

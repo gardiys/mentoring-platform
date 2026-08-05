@@ -199,7 +199,6 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
             or stage.media_storage_key is None
             or stage.media_filename is None
             or stage.media_content_type is None
-            or stage.media_size is None
         ):
             await _fail(
                 session,
@@ -218,11 +217,21 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
             storage_key=stage.media_storage_key,
             filename=stage.media_filename,
             content_type=stage.media_content_type,
-            size=stage.media_size,
+            size=stage.media_size or 0,
         )
         try:
             provider = _transcription(ctx)
             if provider.requires_file_upload:
+                upload = await _store(ctx).resolve_upload_size(upload)
+                if stage.media_size != upload.size:
+                    stage.media_size = upload.size
+                maximum_bytes = _media_size_limit(upload.content_type)
+                if upload.size <= 0:
+                    raise MediaGuardrailError("invalid_media_file", "Interview recording is empty")
+                if upload.size > maximum_bytes:
+                    raise MediaGuardrailError(
+                        "media_file_too_large", "Interview recording is too large"
+                    )
                 async with stage_media_file(
                     _staging_guard(ctx),
                     filename=upload.filename,
@@ -1191,6 +1200,15 @@ def _store(ctx: dict[str, Any]) -> InterviewUploadStore:
 
 def _staging_root() -> Path:
     return Path(settings.interview_staging_directory)
+
+
+def _media_size_limit(content_type: str) -> int:
+    normalized = content_type.split(";", 1)[0].strip().lower()
+    if normalized.startswith("video/"):
+        return settings.interview_video_max_bytes
+    if normalized.startswith("audio/"):
+        return settings.interview_audio_max_bytes
+    raise MediaGuardrailError("unsupported_media_type", "Interview recording is not audio or video")
 
 
 def _configure_media_staging(ctx: dict[str, Any]) -> None:

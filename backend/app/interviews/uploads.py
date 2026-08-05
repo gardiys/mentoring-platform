@@ -698,6 +698,36 @@ class InterviewUploadStore:
                 "Could not stage interview object for processing"
             ) from error
 
+    async def resolve_upload_size(self, upload: StoredUpload) -> StoredUpload:
+        """Return an upload with the authoritative object size from storage.
+
+        Legacy interview imports could not know the remote object size and stored
+        zero in the database. Re-read S3 metadata before allocating local staging
+        space so workers neither trust stale database metadata nor bypass the
+        recording-size limits.
+        """
+        external_location = self._external_media_location(upload.storage_key)
+        client = self.legacy_client if external_location is not None else self.client
+        bucket, key = external_location or (self.bucket, upload.storage_key)
+        try:
+            head = await anyio.to_thread.run_sync(
+                lambda: client.head_object(Bucket=bucket, Key=key)
+            )
+        except (BotoCoreError, ClientError) as error:
+            logger.error(
+                "Could not read interview object metadata bucket=%s key=%s",
+                bucket,
+                key,
+            )
+            raise InterviewStorageReadError("Could not read interview object metadata") from error
+        try:
+            actual_size = int(head.get("ContentLength", 0))
+        except (TypeError, ValueError) as error:
+            raise InterviewStorageReadError(
+                "Interview object metadata contains an invalid size"
+            ) from error
+        return replace(upload, size=actual_size)
+
     async def upload_path(
         self,
         source: Path,

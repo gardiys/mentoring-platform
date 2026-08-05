@@ -52,6 +52,7 @@ from app.interviews.models import (
     InterviewProcessStage,
     InterviewTopicSelection,
 )
+from app.interviews.uploads import InterviewStorageReadError, StoredUpload
 from app.tracks.models import LearningTrackEnrollment
 from app.users.models import User, UserRole
 from tests.conftest import SeededData, TestSession, auth, test_engine
@@ -73,9 +74,28 @@ class StubUploadStore:
 
 
 class StagedUploadStore(StubUploadStore):
+    def __init__(self, actual_size: int = 1_024) -> None:
+        self.actual_size = actual_size
+        self.download_called = False
+
+    async def resolve_upload_size(self, upload: StoredUpload) -> StoredUpload:
+        return StoredUpload(
+            storage_key=upload.storage_key,
+            filename=upload.filename,
+            content_type=upload.content_type,
+            size=self.actual_size,
+        )
+
     async def download_to_path(self, upload: object, destination: Path) -> None:
         del upload
-        destination.write_bytes(b"x" * 1_024)
+        self.download_called = True
+        destination.write_bytes(b"x" * self.actual_size)
+
+
+class UnavailableMetadataUploadStore(StagedUploadStore):
+    async def resolve_upload_size(self, upload: StoredUpload) -> StoredUpload:
+        del upload
+        raise InterviewStorageReadError("S3 HEAD failed")
 
 
 class FileUploadTranscriptionProvider(FakeTranscriptionProvider):
@@ -103,6 +123,8 @@ async def create_analysis_from_journal(
     company_name: str = "Nexara",
     owner_id: UUID | None = None,
     track_id: UUID | None = None,
+    media_size: int | None = 1_024,
+    media_storage_key: str = "interview-media/student/recording",
 ) -> tuple[Any, UUID, UUID]:
     async def fake_enqueue(_: UUID) -> None:
         return None
@@ -130,10 +152,10 @@ async def create_analysis_from_journal(
     async with TestSession() as session:
         stage = await session.get(InterviewProcessStage, stage_id)
         assert stage is not None
-        stage.media_storage_key = "interview-media/student/recording"
+        stage.media_storage_key = media_storage_key
         stage.media_filename = "recording.mp3"
         stage.media_content_type = "audio/mpeg"
-        stage.media_size = 1_024
+        stage.media_size = media_size
         await session.commit()
     created = await client.post(
         f"/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}/ai-analysis",
@@ -1221,6 +1243,127 @@ async def test_file_upload_is_probed_and_staging_is_cleaned_before_transcription
         assert interview is not None
         assert interview.duration_ms == 42_000
     assert interview.processing_status is IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED
+
+
+@pytest.mark.parametrize("stored_size", [None, 0, 1, 4_096])
+@pytest.mark.asyncio
+async def test_file_transcription_repairs_missing_or_stale_legacy_media_size(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    stored_size: int | None,
+) -> None:
+    created, _, stage_id = await create_analysis_from_journal(
+        client,
+        seeded,
+        monkeypatch,
+        company_name=f"Legacy media size {stored_size}",
+        media_size=stored_size,
+        media_storage_key=("external:https://s3.firstvds.ru:443/interviews/legacy/recording.mp3"),
+    )
+    assert created.status_code == 201, created.text
+    interview_id = UUID(created.json()["id"])
+    provider = FileUploadTranscriptionProvider()
+
+    async def fake_probe(*_args: object, **_kwargs: object) -> MediaProbe:
+        return MediaProbe(
+            format_names=("mp3",),
+            duration_seconds=10,
+            streams=(MediaStreamProbe(kind="audio", codec="mp3", duration_seconds=10),),
+        )
+
+    monkeypatch.setattr(intelligence_jobs, "async_session_factory", TestSession)
+    monkeypatch.setattr(intelligence_jobs, "probe_media_async", fake_probe)
+    monkeypatch.setattr(intelligence_jobs.settings, "interview_staging_directory", str(tmp_path))
+    context: dict[str, Any] = {
+        "redis": RecordingRedis(),
+        "transcription_provider": provider,
+        "upload_store": StagedUploadStore(actual_size=1_024),
+        "media_staging_guard": StagingGuard(max_concurrency=1, min_free_bytes=0),
+    }
+
+    await intelligence_jobs.submit_transcription(context, str(interview_id))
+
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        stage = await session.get(InterviewProcessStage, stage_id)
+    assert interview is not None
+    assert stage is not None
+    assert interview.processing_status is IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED
+    assert stage.media_size == 1_024
+
+
+@pytest.mark.asyncio
+async def test_file_transcription_rejects_actual_object_over_limit_before_download(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    created, _, stage_id = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Oversized stored media", media_size=0
+    )
+    interview_id = UUID(created.json()["id"])
+    provider = FileUploadTranscriptionProvider()
+    upload_store = StagedUploadStore(
+        actual_size=intelligence_jobs.settings.interview_audio_max_bytes + 1
+    )
+    monkeypatch.setattr(intelligence_jobs, "async_session_factory", TestSession)
+    monkeypatch.setattr(intelligence_jobs.settings, "interview_staging_directory", str(tmp_path))
+    context: dict[str, Any] = {
+        "redis": RecordingRedis(),
+        "transcription_provider": provider,
+        "upload_store": upload_store,
+        "media_staging_guard": StagingGuard(max_concurrency=1, min_free_bytes=0),
+    }
+
+    await intelligence_jobs.submit_transcription(context, str(interview_id))
+
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        stage = await session.get(InterviewProcessStage, stage_id)
+    assert interview is not None
+    assert stage is not None
+    assert interview.processing_status is IntelligenceProcessingStatus.FAILED
+    assert interview.processing_error_code == "MEDIA_FILE_TOO_LARGE"
+    assert stage.media_size == intelligence_jobs.settings.interview_audio_max_bytes + 1
+    assert upload_store.download_called is False
+    assert provider.submitted_path is None
+
+
+@pytest.mark.asyncio
+async def test_file_transcription_records_storage_metadata_failure_without_value_error(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    created, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Unavailable metadata", media_size=None
+    )
+    interview_id = UUID(created.json()["id"])
+    provider = FileUploadTranscriptionProvider()
+    upload_store = UnavailableMetadataUploadStore()
+    monkeypatch.setattr(intelligence_jobs, "async_session_factory", TestSession)
+    monkeypatch.setattr(intelligence_jobs.settings, "interview_staging_directory", str(tmp_path))
+    context: dict[str, Any] = {
+        "redis": RecordingRedis(),
+        "transcription_provider": provider,
+        "upload_store": upload_store,
+        "media_staging_guard": StagingGuard(max_concurrency=1, min_free_bytes=0),
+        "job_try": intelligence_jobs.MAX_JOB_TRIES,
+    }
+
+    await intelligence_jobs.submit_transcription(context, str(interview_id))
+
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+    assert interview is not None
+    assert interview.processing_status is IntelligenceProcessingStatus.FAILED
+    assert interview.processing_error_code == "STORAGE_ERROR"
+    assert upload_store.download_called is False
+    assert provider.submitted_path is None
 
 
 @pytest.mark.parametrize(
