@@ -1,4 +1,5 @@
 import { getDevUserId } from "../features/auth/devAuth";
+import { getTelegramInitData } from "../platform/telegramSdk";
 
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -154,7 +155,7 @@ function isErrorDetail(value: unknown): value is { detail: ErrorDetail } {
 function authenticatedHeaders(init?: RequestInit): Headers {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
-  const telegramInitData = window.Telegram?.WebApp?.initData;
+  const telegramInitData = getTelegramInitData();
   if (telegramInitData) {
     headers.set("Authorization", `tma ${telegramInitData}`);
   } else if (import.meta.env.DEV) {

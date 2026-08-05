@@ -10,9 +10,26 @@ import { clearDevUserId, setDevUserId } from "../src/features/auth/devAuth";
 afterEach(() => {
   vi.useRealTimers();
   delete window.Telegram;
+  window.sessionStorage.removeItem("__telegram__initParams");
+  window.history.replaceState({}, "", "/");
   clearDevUserId();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+it("использует подписанный initData из Mini App URL до загрузки SDK", async () => {
+  const fetchMock = successfulFetch();
+  window.history.replaceState(
+    {},
+    "",
+    "/#tgWebAppData=query_id%3Draw%26hash%3Dsigned&tgWebAppPlatform=android",
+  );
+
+  await apiRequest("/api/v1/me");
+
+  const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+  expect(headers.get("Authorization")).toBe("tma query_id=raw&hash=signed");
+  expect(headers.has("X-Dev-User-Id")).toBe(false);
 });
 
 function successfulFetch() {

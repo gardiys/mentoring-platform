@@ -213,6 +213,8 @@ make migrate
 
 Mini App передаёт `Telegram.WebApp.initData` как `Authorization: tma <initData>`. Backend сверяет HMAC-SHA-256 с bot token и проверяет `auth_date`. Непроверенный `initDataUnsafe` не используется. Войти может только Telegram-пользователь, которому бот заранее выдал доступ после оплаты.
 
+Обычный браузер не загружает SDK с `telegram.org`: это исключает долгую блокировку страницы в сетях, где Telegram недоступен. При запуске внутри Mini App frontend распознаёт параметры `tgWebApp*` и асинхронно подключает закреплённую копию SDK со своего домена (`/vendor/telegram-web-app-2026-07-14.js`). Ожидание ограничено тремя секундами, а подписанный `tgWebAppData` остаётся доступен для авторизации даже при ошибке загрузки SDK. Происхождение и контрольная сумма локальной копии описаны в `frontend/public/vendor/README.md`.
+
 ## Вход через обычный браузер
 
 Браузерная авторизация использует Telegram OpenID Connect Authorization Code Flow с PKCE. В `@BotFather` откройте Bot Settings → Web Login и добавьте оба Allowed URL:

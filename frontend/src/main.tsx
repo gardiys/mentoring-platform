@@ -15,11 +15,20 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./app/App";
 import { AppProviders } from "./app/providers";
+import { loadTelegramSdk } from "./platform/telegramSdk";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <AppProviders>
-      <App />
-    </AppProviders>
-  </StrictMode>,
-);
+async function bootstrap() {
+  // A regular browser does not request Telegram SDK at all. A Mini App loads
+  // the pinned same-origin copy before platform selection; the timeout keeps a
+  // broken asset from leaving the root blank indefinitely.
+  await loadTelegramSdk();
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <AppProviders>
+        <App />
+      </AppProviders>
+    </StrictMode>,
+  );
+}
+
+void bootstrap();
