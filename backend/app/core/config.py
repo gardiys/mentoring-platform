@@ -161,7 +161,7 @@ class Settings(BaseSettings):
     interview_ai_extraction_confidence_threshold: float = Field(default=0.65, ge=0, le=1)
     interview_card_frequent_min_occurrences: int = Field(default=3, ge=1, le=10_000)
     interview_ai_enabled: bool = True
-    interview_ai_daily_limit: int = Field(default=3, ge=1, le=100)
+    interview_ai_daily_limit: int = Field(default=1, ge=1, le=100)
     interview_ai_max_active_per_user: int = Field(default=1, ge=1, le=10)
     interview_ai_global_active_limit: int = Field(default=50, ge=1, le=10_000)
     interview_ai_quota_timezone: str = "Europe/Moscow"

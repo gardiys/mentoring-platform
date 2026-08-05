@@ -18,13 +18,14 @@ import { PageHeader } from "../components/PageHeader";
 import { ProtectedContentMediaList } from "../components/ProtectedContentMediaList";
 import { TopicStatusBadge } from "../components/TopicStatusBadge";
 import { useUpdateProgress } from "../features/progress/mutations";
-import { useTopic } from "../features/roadmaps/queries";
+import { useRoadmap, useTopic } from "../features/roadmaps/queries";
 import { usePlatform } from "../platform/usePlatform";
 import type { ProgressStatus } from "../types/api";
 
 export function TopicPage() {
   const { topicId = "" } = useParams();
   const query = useTopic(topicId);
+  const roadmapQuery = useRoadmap(query.data?.roadmap.slug ?? "");
   const platform = usePlatform();
   const mutation = useUpdateProgress(topicId, query.data?.roadmap.slug ?? "");
 
@@ -47,6 +48,18 @@ export function TopicPage() {
         }),
     });
   };
+
+  const orderedTopics =
+    roadmapQuery.data?.sections.flatMap((section) => section.topics) ?? [];
+  const currentTopicIndex = orderedTopics.findIndex(
+    (topic) => topic.id === query.data.id,
+  );
+  const previousTopic =
+    currentTopicIndex > 0 ? orderedTopics[currentTopicIndex - 1] : null;
+  const nextTopic =
+    currentTopicIndex >= 0 && currentTopicIndex < orderedTopics.length - 1
+      ? orderedTopics[currentTopicIndex + 1]
+      : null;
 
   return (
     <Stack>
@@ -130,6 +143,40 @@ export function TopicPage() {
             onClick={() => changeStatus("not_started")}
           >
             Снять отметку
+          </Button>
+        )}
+      </Group>
+      <Group gap="md" wrap="wrap" className="roadmap-step-navigation">
+        {previousTopic && (
+          <Button
+            component={Link}
+            to={`/topics/${previousTopic.id}`}
+            variant="light"
+            size="md"
+            title={previousTopic.title}
+            className="roadmap-step-button roadmap-step-button-previous"
+          >
+            ← Предыдущий шаг
+          </Button>
+        )}
+        <Button
+          component={Link}
+          to={`/roadmaps/${query.data.roadmap.slug}`}
+          variant="subtle"
+          size="md"
+          className="roadmap-step-back-link"
+        >
+          К роадмапу
+        </Button>
+        {nextTopic && (
+          <Button
+            component={Link}
+            to={`/topics/${nextTopic.id}`}
+            size="md"
+            title={nextTopic.title}
+            className="roadmap-step-button roadmap-step-button-next"
+          >
+            Следующий шаг →
           </Button>
         )}
       </Group>

@@ -30,16 +30,36 @@ const ratings: Array<{
   label: string;
   hint: string;
   color: string;
+  description: string;
 }> = [
-  { rating: "again", label: "Не помню", hint: "через 10 минут", color: "red" },
-  { rating: "hard", label: "Сложно", hint: "через 1 день", color: "orange" },
+  {
+    rating: "again",
+    label: "Не помню",
+    hint: "через 10 минут",
+    description: "Нужен быстрый повтор",
+    color: "red",
+  },
+  {
+    rating: "hard",
+    label: "Сложно",
+    hint: "через 1 день",
+    description: "Нужно повторить чаще",
+    color: "orange",
+  },
   {
     rating: "good",
     label: "Помню",
     hint: "примерно 2 дня",
+    description: "Дальше через регулярный повтор",
     color: "brandBlue",
   },
-  { rating: "easy", label: "Легко", hint: "примерно 4 дня", color: "green" },
+  {
+    rating: "easy",
+    label: "Легко",
+    hint: "примерно 4 дня",
+    description: "Редкий пересмотр",
+    color: "green",
+  },
 ];
 
 export function InterviewStudyPage() {
@@ -167,7 +187,7 @@ export function InterviewStudyPage() {
               </div>
               {!revealed ? (
                 <Button
-                  size="lg"
+                  size="xl"
                   onClick={() => setRevealedCardId(card.id)}
                   className="reveal-answer-button"
                 >
@@ -196,14 +216,16 @@ export function InterviewStudyPage() {
               <Text ta="center" c="dimmed" mb="sm">
                 Насколько легко вы вспомнили ответ?
               </Text>
-              <Group grow align="stretch" className="interview-rating-grid">
+              <div className="interview-rating-grid">
                 {ratings.map((item) => (
                   <Button
                     key={item.rating}
                     color={item.color}
                     variant={item.rating === "good" ? "filled" : "light"}
                     loading={review.isPending}
+                    size="xl"
                     onClick={() => rate(item.rating)}
+                    className="interview-rating-button"
                     h="auto"
                     py="sm"
                   >
@@ -212,10 +234,13 @@ export function InterviewStudyPage() {
                       <Text component="span" size="xs" fw={400}>
                         {item.hint}
                       </Text>
+                      <Text component="span" size="xs" c="dimmed" fw={500}>
+                        {item.description}
+                      </Text>
                     </Stack>
                   </Button>
                 ))}
-              </Group>
+              </div>
             </div>
           )}
         </Stack>

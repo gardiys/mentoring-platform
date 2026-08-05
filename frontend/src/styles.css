@@ -275,6 +275,37 @@ a {
 .reveal-answer-button {
   align-self: center;
   min-width: min(100%, 260px);
+  min-height: 3.35rem;
+  font-size: 1rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.8rem 1.25rem;
+}
+
+.interview-rating-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.interview-rating-button {
+  min-height: 4.1rem;
+  min-width: 0;
+  width: 100%;
+  max-width: none;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 0.95rem;
+  padding: 0.45rem 0.35rem;
+}
+
+.interview-rating-button .mantine-Button-label {
+  overflow: visible;
+  white-space: normal;
+}
+
+.interview-rating-button .mantine-Text-root {
+  line-height: 1.15;
 }
 
 .interview-complete-card {
@@ -286,7 +317,12 @@ a {
 @media (max-width: 48em) {
   .interview-rating-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+  }
+
+  .interview-rating-button {
+    min-height: 4.4rem;
   }
 }
 
@@ -440,6 +476,19 @@ a {
   border-radius: 1.1rem;
 }
 
+.roadmap-step-navigation {
+  margin-top: 0.25rem;
+}
+
+.roadmap-step-button {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.roadmap-step-back-link {
+  width: fit-content;
+}
+
 .brand-accordion .mantine-Accordion-item {
   margin-bottom: 0.75rem;
   overflow: hidden;
@@ -452,6 +501,129 @@ a {
   padding: 1.1rem 1.25rem;
   font-family: Unbounded, sans-serif;
   font-weight: 600;
+}
+
+.analysis-accordion .mantine-Accordion-item {
+  position: relative;
+  max-width: 100%;
+  margin-bottom: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 96% 8%,
+      color-mix(in srgb, var(--brand-blue) 10%, transparent),
+      transparent 9rem
+    ),
+    color-mix(in srgb, var(--brand-sand) 65%, var(--brand-warm));
+  box-shadow: 0 12px 36px rgb(25 53 95 / 6%);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.analysis-accordion .mantine-Accordion-item::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  content: "";
+  background: var(--brand-blue);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.analysis-accordion .mantine-Accordion-item[data-active] {
+  border-color: color-mix(in srgb, var(--brand-blue) 55%, var(--brand-border));
+  box-shadow: 0 18px 44px rgb(25 53 95 / 10%);
+}
+
+.analysis-accordion .mantine-Accordion-item[data-active]::before {
+  opacity: 1;
+}
+
+.analysis-accordion .mantine-Accordion-control {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 5rem;
+  padding: 1rem 1.25rem;
+  color: var(--brand-text);
+}
+
+.analysis-accordion .mantine-Accordion-control:hover {
+  background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
+}
+
+.analysis-accordion .mantine-Accordion-label {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.analysis-accordion .mantine-Accordion-chevron {
+  display: grid;
+  flex: 0 0 auto;
+  width: 1.75rem;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  margin-left: 0.65rem;
+  place-items: center;
+  color: var(--brand-blue);
+  background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-blue) 25%, transparent);
+  border-radius: 50%;
+}
+
+.analysis-accordion .mantine-Accordion-panel {
+  border-top: 1px solid var(--brand-border);
+}
+
+.analysis-accordion .mantine-Accordion-content {
+  padding: 1.25rem;
+}
+
+.analysis-section-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.analysis-section-heading-copy {
+  min-width: 0;
+}
+
+.analysis-section-title {
+  font-size: clamp(1.1rem, 2.5vw, 1.45rem);
+}
+
+.analysis-section-summary {
+  flex: 0 0 auto;
+  color: var(--brand-blue);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
+}
+
+@media (max-width: 36em) {
+  .analysis-accordion .mantine-Accordion-control {
+    min-height: 4.5rem;
+    padding: 0.85rem 0.9rem;
+  }
+
+  .analysis-accordion .mantine-Accordion-chevron {
+    width: 1.6rem;
+    min-width: 1.6rem;
+    height: 1.6rem;
+    margin-left: 0.45rem;
+  }
+
+  .analysis-accordion .mantine-Accordion-content {
+    padding: 1rem 0.9rem;
+  }
+
+  .analysis-section-summary {
+    height: 1.6rem;
+    font-size: 0.62rem;
+  }
 }
 
 .topic-row {

@@ -344,7 +344,7 @@ async def test_processing_poll_is_authorized_lightweight_and_returns_progress(
 
 
 @pytest.mark.asyncio
-async def test_student_and_mentor_are_limited_to_three_ai_analysis_launches_per_day(
+async def test_student_and_mentor_are_limited_to_one_ai_analysis_launch_per_day(
     client: AsyncClient,
     seeded: SeededData,
     monkeypatch: pytest.MonkeyPatch,
@@ -354,7 +354,7 @@ async def test_student_and_mentor_are_limited_to_three_ai_analysis_launches_per_
         (seeded.mentor_id, "Mentor quota"),
     ):
         created_ids: list[UUID] = []
-        for sequence in range(3):
+        for sequence in range(1):
             created, _, _ = await create_analysis_from_journal(
                 client,
                 seeded,
@@ -632,7 +632,7 @@ async def test_daily_ai_quota_is_atomic_for_simultaneous_requests(
         )
     )
 
-    assert sorted(response.status_code for response in responses) == [201, 201, 201, 429]
+    assert sorted(response.status_code for response in responses) == [201, 429, 429, 429]
     rejected = next(response for response in responses if response.status_code == 429)
     assert rejected.json()["detail"]["code"] == "interview_ai_daily_limit_reached"
 
@@ -1476,6 +1476,27 @@ async def test_transcription_retry_resubmits_when_provider_job_cannot_be_resumed
         assert interview is not None
         assert interview.transcription_provider_job_id is None
         assert interview.transcription_provider_payload is None
+
+
+@pytest.mark.asyncio
+async def test_student_cannot_delete_own_intelligence_interview(
+    client: AsyncClient, seeded: SeededData, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    created, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Protected student analysis"
+    )
+    interview_id = UUID(created.json()["id"])
+
+    deleted = await client.delete(
+        f"/api/v1/interviews/{interview_id}", headers=auth(seeded.student_id)
+    )
+
+    assert deleted.status_code == 403
+    assert deleted.json()["detail"]["code"] == "student_intelligence_delete_forbidden"
+    existing = await client.get(
+        f"/api/v1/interviews/{interview_id}", headers=auth(seeded.student_id)
+    )
+    assert existing.status_code == 200
 
 
 @pytest.mark.asyncio

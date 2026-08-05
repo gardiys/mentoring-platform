@@ -372,6 +372,50 @@ async def list_admin_processes(
     )
 
 
+async def delete_admin_process(session: AsyncSession, process_id: UUID) -> list[str]:
+    process = await session.get(InterviewProcess, process_id)
+    if process is None:
+        api_error(404, "interview_process_not_found", "Interview process was not found")
+
+    stage_rows = (
+        await session.execute(
+            select(
+                InterviewProcessStage.id,
+                InterviewProcessStage.media_storage_key,
+            ).where(InterviewProcessStage.process_id == process.id)
+        )
+    ).all()
+    stage_ids = [stage_id for stage_id, _media_key in stage_rows]
+    attachment_keys: list[str] = []
+    normalized_audio_keys: list[str] = []
+    if stage_ids:
+        attachment_keys = list(
+            await session.scalars(
+                select(InterviewProcessStageAttachment.storage_key).where(
+                    InterviewProcessStageAttachment.stage_id.in_(stage_ids)
+                )
+            )
+        )
+        normalized_audio_keys = list(
+            await session.scalars(
+                select(IntelligenceInterview.normalized_audio_key).where(
+                    IntelligenceInterview.stage_id.in_(stage_ids),
+                    IntelligenceInterview.normalized_audio_key.is_not(None),
+                )
+            )
+        )
+
+    storage_keys = [
+        process.offer_storage_key,
+        *(media_key for _stage_id, media_key in stage_rows),
+        *attachment_keys,
+        *normalized_audio_keys,
+    ]
+    await session.delete(process)
+    await session.commit()
+    return list(dict.fromkeys(key for key in storage_keys if key))
+
+
 async def process_detail(
     session: AsyncSession, user: User, process_id: UUID
 ) -> InterviewProcessDetail:

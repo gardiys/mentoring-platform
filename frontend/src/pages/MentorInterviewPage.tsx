@@ -9,12 +9,14 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useDeleteAdminInterviewProcess } from "../features/admin/interviewQueries";
+import { useMe } from "../features/auth/queries";
 import {
   useCreateMentorInterviewFeedback,
   useMentorInterview,
@@ -236,7 +238,10 @@ function MentorStage({
 
 export function MentorInterviewPage() {
   const { studentId = "", processId = "" } = useParams();
+  const navigate = useNavigate();
+  const me = useMe();
   const query = useMentorInterview(studentId, processId);
+  const deleteProcess = useDeleteAdminInterviewProcess();
   if (query.isPending) return <LoadingState />;
   if (query.isError)
     return (
@@ -324,6 +329,47 @@ export function MentorInterviewPage() {
             }
           />
         ))
+      )}
+      {me.data?.role === "admin" && (
+        <Card withBorder style={{ borderColor: "var(--mantine-color-red-6)" }}>
+          <Group justify="space-between" align="center">
+            <div>
+              <Text fw={700}>Удалить трек собеседований</Text>
+              <Text size="sm" c="dimmed">
+                Будут удалены этапы, файлы, комментарии и связанные AI-разборы.
+              </Text>
+            </div>
+            <Button
+              color="red"
+              variant="light"
+              loading={deleteProcess.isPending}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `Удалить трек «${process.company_name}» без возможности восстановления?`,
+                  )
+                )
+                  return;
+                deleteProcess.mutate(process.id, {
+                  onSuccess: () => {
+                    notifications.show({
+                      color: "green",
+                      message: "Трек собеседований удалён",
+                    });
+                    navigate(`/mentor/students/${studentId}`, { replace: true });
+                  },
+                  onError: (error) =>
+                    notifications.show({
+                      color: "red",
+                      message: error.message,
+                    }),
+                });
+              }}
+            >
+              Удалить трек
+            </Button>
+          </Group>
+        </Card>
       )}
     </Stack>
   );

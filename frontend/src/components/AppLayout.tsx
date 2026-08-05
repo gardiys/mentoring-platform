@@ -37,7 +37,7 @@ const roleLabels = {
 export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure();
   const { toggleColorScheme } = useMantineColorScheme();
-  const colorScheme = useComputedColorScheme("light");
+  const colorScheme = useComputedColorScheme("dark");
   const location = useLocation();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -127,7 +127,16 @@ export function AppLayout() {
               variant="light"
               size="lg"
               onClick={toggleColorScheme}
-              aria-label="Переключить тему"
+              aria-label={
+                colorScheme === "dark"
+                  ? "Включить светлую тему"
+                  : "Включить тёмную тему"
+              }
+              title={
+                colorScheme === "dark"
+                  ? "Включить светлую тему"
+                  : "Включить тёмную тему"
+              }
               className="theme-toggle"
             >
               {colorScheme === "dark" ? "☀" : "◐"}

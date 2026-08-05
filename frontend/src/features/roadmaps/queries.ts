@@ -17,6 +17,7 @@ export function useRoadmap(slug: string) {
   return useQuery({
     queryKey: roadmapKeys.detail(slug),
     queryFn: () => api.roadmap(slug),
+    enabled: Boolean(slug),
   });
 }
 

@@ -4,8 +4,12 @@ from uuid import UUID, uuid4
 from httpx import AsyncClient
 from pytest import MonkeyPatch
 
-from app.interviews import journal_router
-from app.interviews.models import InterviewProcessStage, InterviewProcessStageAttachment
+from app.interviews import admin_process_router, journal_router
+from app.interviews.models import (
+    InterviewProcess,
+    InterviewProcessStage,
+    InterviewProcessStageAttachment,
+)
 from app.interviews.upload_cleanup import delete_upload_if_unreferenced
 from app.interviews.uploads import (
     MultipartUploadIntent,
@@ -150,6 +154,69 @@ async def test_admin_creates_and_opens_own_interview_track(
     assert detail.status_code == 200
     assert detail.json()["company_name"] == "AcmeTech"
     assert detail.json()["track_slug"] == "go"
+
+
+async def test_only_admin_can_delete_interview_track_and_its_files(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    store = FakeInterviewUploadStore()
+    monkeypatch.setattr(admin_process_router, "store", store)
+    created = await create_process(client, seeded, "Удаляемая компания")
+    process_id = UUID(str(created["id"]))
+    stage_response = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process_id}/stages",
+        headers=auth(seeded.student_id),
+        json=stage_payload(),
+    )
+    assert stage_response.status_code == 200
+    stage_id = UUID(stage_response.json()["stages"][0]["id"])
+
+    async with TestSession() as session:
+        process = await session.get(InterviewProcess, process_id)
+        stage = await session.get(InterviewProcessStage, stage_id)
+        assert process is not None
+        assert stage is not None
+        process.offer_storage_key = "offers/test-offer.pdf"
+        process.offer_filename = "offer.pdf"
+        process.offer_content_type = "application/pdf"
+        process.offer_size = 128
+        stage.media_storage_key = "interview-media/test-recording.mp3"
+        stage.media_filename = "recording.mp3"
+        stage.media_content_type = "audio/mpeg"
+        stage.media_size = 256
+        attachment = InterviewProcessStageAttachment(
+            stage_id=stage.id,
+            storage_key="interview-attachments/test-notes.pdf",
+            filename="notes.pdf",
+            content_type="application/pdf",
+            size=64,
+        )
+        session.add(attachment)
+        await session.commit()
+        attachment_id = attachment.id
+
+    forbidden = await client.delete(
+        f"/api/v1/admin/interviews/processes/{process_id}",
+        headers=auth(seeded.student_id),
+    )
+    assert forbidden.status_code == 403
+
+    deleted = await client.delete(
+        f"/api/v1/admin/interviews/processes/{process_id}",
+        headers=auth(seeded.admin_id),
+    )
+    assert deleted.status_code == 204, deleted.text
+    assert set(store.deleted) == {
+        "offers/test-offer.pdf",
+        "interview-media/test-recording.mp3",
+        "interview-attachments/test-notes.pdf",
+    }
+    async with TestSession() as session:
+        assert await session.get(InterviewProcess, process_id) is None
+        assert await session.get(InterviewProcessStage, stage_id) is None
+        assert await session.get(InterviewProcessStageAttachment, attachment_id) is None
 
 
 async def test_mentor_creates_own_track_only_in_assigned_direction_and_publishes_to_catalog(

@@ -49,6 +49,14 @@ export function RoadmapPage() {
       <ErrorState error={query.error} retry={() => void query.refetch()} />
     );
 
+  const initiallyOpenedSections = query.data.sections
+    .filter(
+      (section) =>
+        section.topics.length === 0 ||
+        section.topics.some((topic) => topic.status !== "completed"),
+    )
+    .map((section) => section.id);
+
   return (
     <Stack gap="xl">
       <PageHeader
@@ -107,7 +115,7 @@ export function RoadmapPage() {
       </Paper>
       <Accordion
         multiple
-        defaultValue={query.data.sections.map((section) => section.id)}
+        defaultValue={initiallyOpenedSections}
         className="brand-accordion"
       >
         {query.data.sections.map((section) => {

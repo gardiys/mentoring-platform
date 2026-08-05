@@ -1178,6 +1178,10 @@ export const api = {
       `/api/v1/admin/interviews/processes?${params}`,
     );
   },
+  deleteAdminInterviewProcess: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/interviews/processes/${id}`, {
+      method: "DELETE",
+    }),
   adminInterviewDeckSummaries: () =>
     apiRequest<AdminInterviewDeckSummary[]>(
       "/api/v1/admin/interviews/decks/summaries",

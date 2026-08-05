@@ -207,8 +207,8 @@ async def _ensure_ai_analysis_capacity(
             429,
             "interview_ai_daily_limit_reached",
             (
-                f"The daily limit of {settings.interview_ai_daily_limit} AI analyses "
-                "has been reached. It resets at midnight Moscow time"
+                f"Дневной лимит — {settings.interview_ai_daily_limit} AI-разбор. "
+                "Новый запуск будет доступен после 00:00 по московскому времени."
             ),
         )
 
@@ -1054,6 +1054,12 @@ async def delete_intelligence_interview(
     session: AsyncSession, user: User, interview_id: UUID
 ) -> list[str]:
     interview = await get_intelligence_interview(session, user, interview_id, owner_only=True)
+    if user.role is UserRole.STUDENT:
+        api_error(
+            403,
+            "student_intelligence_delete_forbidden",
+            "Удалить AI-разбор может только ментор или администратор.",
+        )
     if user.role is not UserRole.ADMIN and interview.student_id != user.id:
         api_error(404, "intelligence_interview_not_found", "Interview was not found")
     keys = [interview.normalized_audio_key] if interview.normalized_audio_key else []

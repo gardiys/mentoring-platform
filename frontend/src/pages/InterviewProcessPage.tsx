@@ -16,7 +16,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError, type UploadStatus } from "../api/client";
 import { api } from "../api/endpoints";
@@ -24,6 +24,8 @@ import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { UploadProgressPanel } from "../components/UploadProgressPanel";
+import { useDeleteAdminInterviewProcess } from "../features/admin/interviewQueries";
+import { useMe } from "../features/auth/queries";
 import {
   useCancelInterviewOffer,
   useCreateInterviewStage,
@@ -577,7 +579,10 @@ function StageAttachments({
 
 export function InterviewProcessPage() {
   const { processId = "" } = useParams();
+  const navigate = useNavigate();
+  const me = useMe();
   const query = useInterviewProcess(processId);
+  const deleteProcess = useDeleteAdminInterviewProcess();
   const stageMutation = useCreateInterviewStage();
   const outcomeMutation = useSetInterviewProcessOutcome();
   const recruiterMutation = useSetInterviewProcessRecruiters();
@@ -1100,6 +1105,48 @@ export function InterviewProcessPage() {
               Загрузить файл
             </Button>
           </Stack>
+        </Card>
+      )}
+
+      {me.data?.role === "admin" && (
+        <Card withBorder style={{ borderColor: "var(--mantine-color-red-6)" }}>
+          <Group justify="space-between" align="center">
+            <div>
+              <Text fw={700}>Удалить трек собеседований</Text>
+              <Text size="sm" c="dimmed">
+                Будут удалены этапы, файлы, комментарии и связанные AI-разборы.
+              </Text>
+            </div>
+            <Button
+              color="red"
+              variant="light"
+              loading={deleteProcess.isPending}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `Удалить трек «${process.company_name}» без возможности восстановления?`,
+                  )
+                )
+                  return;
+                deleteProcess.mutate(process.id, {
+                  onSuccess: () => {
+                    notifications.show({
+                      color: "green",
+                      message: "Трек собеседований удалён",
+                    });
+                    navigate("/interviews", { replace: true });
+                  },
+                  onError: (error) =>
+                    notifications.show({
+                      color: "red",
+                      message: error.message,
+                    }),
+                });
+              }}
+            >
+              Удалить трек
+            </Button>
+          </Group>
         </Card>
       )}
     </Stack>

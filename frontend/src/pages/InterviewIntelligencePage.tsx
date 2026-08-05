@@ -1,4 +1,5 @@
 import {
+  Accordion,
   Alert,
   Badge,
   Button,
@@ -12,7 +13,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/endpoints";
@@ -61,6 +62,59 @@ function timestamp(milliseconds: number | null) {
   if (milliseconds === null) return "—";
   const seconds = Math.floor(milliseconds / 1_000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function AnalysisSection({
+  title,
+  eyebrow,
+  summary,
+  defaultOpened = false,
+  children,
+}: {
+  title: string;
+  eyebrow?: string;
+  summary?: string;
+  defaultOpened?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Accordion
+      variant="separated"
+      radius="md"
+      chevronPosition="right"
+      className="brand-accordion analysis-accordion"
+      defaultValue={defaultOpened ? "content" : null}
+    >
+      <Accordion.Item value="content">
+        <Accordion.Control>
+          <Group
+            justify="space-between"
+            align="center"
+            wrap="wrap"
+            gap="xs"
+            className="analysis-section-heading"
+          >
+            <div className="analysis-section-heading-copy">
+              {eyebrow && <Text className="technical-label">{eyebrow}</Text>}
+              <Title order={2} className="analysis-section-title">
+                {title}
+              </Title>
+            </div>
+            {summary && (
+              <Badge
+                variant="light"
+                size="lg"
+                className="analysis-section-summary"
+              >
+                {summary}
+              </Badge>
+            )}
+          </Group>
+        </Accordion.Control>
+        <Accordion.Panel>{children}</Accordion.Panel>
+      </Accordion.Item>
+    </Accordion>
+  );
 }
 
 function QuestionCard({
@@ -305,7 +359,8 @@ export function InterviewIntelligencePage() {
   const interview = query.data;
   const canReview = me.data.role === "mentor" || me.data.role === "admin";
   const canDelete =
-    me.data.role === "admin" || interview.student_id === me.data.id;
+    me.data.role !== "student" &&
+    (me.data.role === "admin" || interview.student_id === me.data.id);
 
   const deleteInterview = () => {
     if (
@@ -558,9 +613,11 @@ export function InterviewIntelligencePage() {
       )}
 
       {interview.transcript.length > 0 && (
-        <Card withBorder>
-          <Stack>
-            <Title order={2}>Расшифровка</Title>
+        <AnalysisSection
+          title="Расшифровка"
+          summary={`Реплик: ${interview.transcript.length}`}
+        >
+          <Stack gap={0}>
             {interview.transcript.map((item) => (
               <button
                 key={item.id}
@@ -583,16 +640,16 @@ export function InterviewIntelligencePage() {
               </button>
             ))}
           </Stack>
-        </Card>
+        </AnalysisSection>
       )}
 
       {interview.overview && (
-        <Card withBorder>
+        <AnalysisSection
+          eyebrow="Итог AI-разбора"
+          title="Общее резюме"
+          defaultOpened
+        >
           <Stack gap="md">
-            <div>
-              <Text className="technical-label">Итог AI-разбора</Text>
-              <Title order={2}>Общее резюме</Title>
-            </div>
             <Text style={{ whiteSpace: "pre-wrap" }}>
               {interview.overview.overall_summary}
             </Text>
@@ -680,7 +737,7 @@ export function InterviewIntelligencePage() {
               </Alert>
             )}
           </Stack>
-        </Card>
+        </AnalysisSection>
       )}
 
       {canReview &&
@@ -710,38 +767,46 @@ export function InterviewIntelligencePage() {
         )}
 
       {interview.questions.length > 0 && (
-        <Stack>
-          <Title order={2}>Вопросы и ответы</Title>
-          {interview.questions.map((question) => (
-            <QuestionCard
-              key={question.id}
-              question={question}
-              reviewerRole={me.data.role}
-              interviewId={interview.id}
-            />
-          ))}
-        </Stack>
+        <AnalysisSection
+          title="Вопросы и ответы"
+          summary={`Вопросов: ${interview.questions.length}`}
+        >
+          <Stack>
+            {interview.questions.map((question) => (
+              <QuestionCard
+                key={question.id}
+                question={question}
+                reviewerRole={me.data.role}
+                interviewId={interview.id}
+              />
+            ))}
+          </Stack>
+        </AnalysisSection>
       )}
 
       {interview.mentor_comments.length > 0 && (
-        <Stack>
-          <Title order={2}>Фидбек ментора</Title>
-          {interview.mentor_comments.map((item) => (
-            <Card
-              key={item.id}
-              withBorder
-              style={{ borderColor: "var(--mantine-color-blue-6)" }}
-            >
-              <Text style={{ whiteSpace: "pre-wrap" }}>{item.text}</Text>
-              <Text size="xs" c="dimmed" mt="xs">
-                {item.mentor_name}
-                {item.mentor_telegram_username
-                  ? ` · @${item.mentor_telegram_username}`
-                  : ""}
-              </Text>
-            </Card>
-          ))}
-        </Stack>
+        <AnalysisSection
+          title="Фидбек ментора"
+          summary={`Комментариев: ${interview.mentor_comments.length}`}
+        >
+          <Stack>
+            {interview.mentor_comments.map((item) => (
+              <Card
+                key={item.id}
+                withBorder
+                style={{ borderColor: "var(--mantine-color-blue-6)" }}
+              >
+                <Text style={{ whiteSpace: "pre-wrap" }}>{item.text}</Text>
+                <Text size="xs" c="dimmed" mt="xs">
+                  {item.mentor_name}
+                  {item.mentor_telegram_username
+                    ? ` · @${item.mentor_telegram_username}`
+                    : ""}
+                </Text>
+              </Card>
+            ))}
+          </Stack>
+        </AnalysisSection>
       )}
 
       {canReview && (

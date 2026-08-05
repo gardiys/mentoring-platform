@@ -1,4 +1,3 @@
-import { useMantineColorScheme } from "@mantine/core";
 import { type PropsWithChildren, useEffect, useMemo } from "react";
 
 import { BrowserPlatformAdapter } from "./BrowserPlatformAdapter";
@@ -11,7 +10,6 @@ import {
 } from "./telegramSdk";
 
 export function PlatformProvider({ children }: PropsWithChildren) {
-  const { setColorScheme } = useMantineColorScheme();
   const adapter = useMemo<PlatformAdapter>(
     () =>
       isTelegramLaunchContext()
@@ -20,21 +18,15 @@ export function PlatformProvider({ children }: PropsWithChildren) {
     [],
   );
   useEffect(() => {
-    let unsubscribeTheme: () => void = () => undefined;
     const initialize = () => {
-      unsubscribeTheme();
       adapter.initialize();
-      const scheme = adapter.getColorScheme();
-      if (scheme) setColorScheme(scheme);
-      unsubscribeTheme = adapter.onThemeChange(setColorScheme);
     };
     initialize();
     window.addEventListener(TELEGRAM_SDK_READY_EVENT, initialize);
     return () => {
       window.removeEventListener(TELEGRAM_SDK_READY_EVENT, initialize);
-      unsubscribeTheme();
     };
-  }, [adapter, setColorScheme]);
+  }, [adapter]);
   return (
     <PlatformContext.Provider value={adapter}>
       {children}
