@@ -25,6 +25,13 @@ const media: ProtectedContentMediaRead = {
   size: 1024,
   title: "Разбор asyncio",
   position: 3,
+  processing_status: "ready",
+  playback_available: true,
+  normalization_attempts: 0,
+  normalization_started_at: null,
+  normalization_completed_at: null,
+  normalization_error_code: null,
+  normalization_error_message: null,
   created_at: "2026-08-04T10:00:00Z",
 };
 
@@ -394,6 +401,54 @@ it("администратор видит, загружает и удаляет 
   expect(remove).toHaveBeenCalledWith("topic-id", adminEntry.id, media.id);
 });
 
+it("администратор видит ошибку подготовки видео и может запустить её повторно", async () => {
+  const failedMedia: ProtectedContentMediaRead = {
+    ...media,
+    processing_status: "failed",
+    playback_available: false,
+    normalization_error_code: "invalid_media",
+    normalization_error_message: "Файл не является корректным видео.",
+  };
+  const entryRequest = vi
+    .spyOn(api, "adminKnowledgeEntry")
+    .mockResolvedValueOnce({
+      ...adminEntry,
+      media: [failedMedia],
+    })
+    .mockReturnValue(new Promise(() => undefined));
+  const retry = vi
+    .spyOn(api, "retryAdminContentMediaNormalization")
+    .mockResolvedValue({
+      ...failedMedia,
+      processing_status: "queued",
+      playback_available: false,
+      normalization_error_code: null,
+      normalization_error_message: null,
+    });
+
+  renderPage(
+    <AdminKnowledgeEntryEditPage />,
+    `/admin/knowledge/topic-id/entries/${adminEntry.id}/edit`,
+    "/admin/knowledge/:topicId/entries/:entryId/edit",
+  );
+
+  expect(await screen.findByText("Ошибка подготовки")).toBeInTheDocument();
+  expect(screen.getByText(/Код: invalid_media/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/Файл не является корректным видео/),
+  ).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Подготовить снова" }),
+  );
+
+  expect(retry).toHaveBeenCalledWith(media.id);
+  expect(await screen.findByText("В очереди")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Подготовить снова" }),
+  ).not.toBeInTheDocument();
+  expect(entryRequest.mock.calls.length).toBeGreaterThanOrEqual(2);
+});
+
 it("разрешает учебное видео больше 2 ГБ в пределах нового лимита 5 ГБ", async () => {
   vi.spyOn(api, "adminKnowledgeEntry").mockResolvedValue({
     ...adminEntry,
@@ -436,6 +491,41 @@ it("разрешает учебное видео больше 2 ГБ в пред
   );
 });
 
+it("разрешает MOV и передаёт его на автоматическую подготовку", async () => {
+  vi.spyOn(api, "adminKnowledgeEntry").mockResolvedValue({
+    ...adminEntry,
+    media: [],
+  });
+  const upload = vi
+    .spyOn(api, "uploadAdminKnowledgeMedia")
+    .mockReturnValue(new Promise(() => undefined));
+  renderPage(
+    <AdminKnowledgeEntryEditPage />,
+    `/admin/knowledge/topic-id/entries/${adminEntry.id}/edit`,
+    "/admin/knowledge/:topicId/entries/:entryId/edit",
+  );
+
+  await screen.findByText("Вложений пока нет.");
+  const fileInput =
+    document.querySelector<HTMLInputElement>('input[type="file"]');
+  expect(fileInput).not.toBeNull();
+  const file = new File(["video"], "lesson.mov", {
+    type: "video/quicktime",
+  });
+  await userEvent.upload(fileInput!, file);
+  await userEvent.click(
+    screen.getByRole("button", { name: "Загрузить медиа" }),
+  );
+
+  expect(upload).toHaveBeenCalledWith(
+    "topic-id",
+    adminEntry.id,
+    file,
+    { title: null, position: 0 },
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+});
+
 it("не отправляет неподдерживаемый или пустой media-файл", async () => {
   vi.spyOn(api, "adminKnowledgeEntry").mockResolvedValue({
     ...adminEntry,
@@ -453,6 +543,21 @@ it("не отправляет неподдерживаемый или пусто
   const fileInput =
     document.querySelector<HTMLInputElement>('input[type="file"]');
   expect(fileInput).not.toBeNull();
+  expect(fileInput!.accept).toContain("video/mp4");
+  expect(fileInput!.accept).toContain("video/quicktime");
+  expect(fileInput!.accept).not.toContain("video/webm");
+  expect(fileInput!.accept).not.toContain("video/x-matroska");
+
+  for (const unsupported of [
+    new File(["video"], "archive.mkv", { type: "video/x-matroska" }),
+    new File(["video"], "browser.webm", { type: "video/webm" }),
+  ]) {
+    await userEvent.upload(fileInput!, unsupported, { applyAccept: false });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Загрузить медиа" }),
+    );
+  }
+  expect(upload).not.toHaveBeenCalled();
 
   await userEvent.upload(
     fileInput!,
@@ -548,6 +653,185 @@ it("лениво открывает защищённое видео статьи
   await waitFor(() => expect(playback).toHaveBeenCalledTimes(2), {
     timeout: 1_600,
   });
+});
+
+it("сохраняет воспроизведение legacy media без полей нового контракта", async () => {
+  const legacyMedia = { ...media } as unknown as Record<string, unknown>;
+  delete legacyMedia.processing_status;
+  delete legacyMedia.playback_available;
+  const entry: KnowledgeEntryDetail = {
+    id: adminEntry.id,
+    kind: adminEntry.kind,
+    slug: adminEntry.slug,
+    title: adminEntry.title,
+    summary: adminEntry.summary,
+    content_markdown: adminEntry.content_markdown,
+    topic: { id: "topic-id", slug: "python", title: "Python" },
+    media: [legacyMedia as unknown as ProtectedContentMediaRead],
+    updated_at: adminEntry.updated_at,
+  };
+  vi.spyOn(api, "knowledgeEntry").mockResolvedValue(entry);
+  const playback = vi.spyOn(api, "knowledgeMediaPlayback").mockResolvedValue({
+    url: "http://localhost:8000/api/v1/knowledge/legacy-stream",
+    expires_in: 600,
+  });
+
+  renderPage(
+    <KnowledgeEntryPage />,
+    `/knowledge/entries/${entry.slug}`,
+    "/knowledge/entries/:entrySlug",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Открыть запись" }),
+  );
+  expect(
+    await screen.findByLabelText("Видео: Разбор asyncio"),
+  ).toBeInTheDocument();
+  expect(playback).toHaveBeenCalledWith(entry.slug, media.id);
+});
+
+it("не падает и не открывает media с неизвестным будущим статусом", async () => {
+  const unknownMedia = {
+    ...media,
+    processing_status: "future_processing_state",
+  } as unknown as Record<string, unknown>;
+  delete unknownMedia.playback_available;
+  const entry: KnowledgeEntryDetail = {
+    id: adminEntry.id,
+    kind: adminEntry.kind,
+    slug: adminEntry.slug,
+    title: adminEntry.title,
+    summary: adminEntry.summary,
+    content_markdown: adminEntry.content_markdown,
+    topic: { id: "topic-id", slug: "python", title: "Python" },
+    media: [unknownMedia as unknown as ProtectedContentMediaRead],
+    updated_at: adminEntry.updated_at,
+  };
+  vi.spyOn(api, "knowledgeEntry").mockResolvedValue(entry);
+  const playback = vi.spyOn(api, "knowledgeMediaPlayback");
+
+  renderPage(
+    <KnowledgeEntryPage />,
+    `/knowledge/entries/${entry.slug}`,
+    "/knowledge/entries/:entrySlug",
+  );
+
+  expect((await screen.findAllByText("Временно недоступно")).length).toBe(2);
+  expect(
+    screen.getByRole("button", { name: "Временно недоступно" }),
+  ).toBeDisabled();
+  expect(playback).not.toHaveBeenCalled();
+});
+
+it("показывает статус подготовки, но разрешает открыть legacy-оригинал", async () => {
+  const queuedLegacyMedia: ProtectedContentMediaRead = {
+    ...media,
+    processing_status: "queued",
+    playback_available: true,
+  };
+  const entry: KnowledgeEntryDetail = {
+    id: adminEntry.id,
+    kind: adminEntry.kind,
+    slug: adminEntry.slug,
+    title: adminEntry.title,
+    summary: adminEntry.summary,
+    content_markdown: adminEntry.content_markdown,
+    topic: { id: "topic-id", slug: "python", title: "Python" },
+    media: [queuedLegacyMedia],
+    updated_at: adminEntry.updated_at,
+  };
+  vi.spyOn(api, "knowledgeEntry").mockResolvedValue(entry);
+  const playback = vi.spyOn(api, "knowledgeMediaPlayback").mockResolvedValue({
+    url: "http://localhost:8000/api/v1/knowledge/original-stream",
+    expires_in: 600,
+  });
+
+  renderPage(
+    <KnowledgeEntryPage />,
+    `/knowledge/entries/${entry.slug}`,
+    "/knowledge/entries/:entrySlug",
+  );
+
+  expect(await screen.findByText("Ожидает подготовки")).toBeInTheDocument();
+  expect(
+    screen.getByText(/можно смотреть исходную запись/),
+  ).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Открыть запись" }));
+  expect(
+    await screen.findByLabelText("Видео: Разбор asyncio"),
+  ).toBeInTheDocument();
+  expect(playback).toHaveBeenCalledWith(entry.slug, media.id);
+});
+
+it("не открывает видео статьи, пока платформа подготавливает его", async () => {
+  const queuedMedia: ProtectedContentMediaRead = {
+    ...media,
+    processing_status: "queued",
+    playback_available: false,
+  };
+  const entry: KnowledgeEntryDetail = {
+    id: adminEntry.id,
+    kind: adminEntry.kind,
+    slug: adminEntry.slug,
+    title: adminEntry.title,
+    summary: adminEntry.summary,
+    content_markdown: adminEntry.content_markdown,
+    topic: { id: "topic-id", slug: "python", title: "Python" },
+    media: [queuedMedia],
+    updated_at: adminEntry.updated_at,
+  };
+  vi.spyOn(api, "knowledgeEntry").mockResolvedValue(entry);
+  const playback = vi.spyOn(api, "knowledgeMediaPlayback");
+
+  renderPage(
+    <KnowledgeEntryPage />,
+    `/knowledge/entries/${entry.slug}`,
+    "/knowledge/entries/:entrySlug",
+  );
+
+  expect((await screen.findAllByText("Ожидает подготовки")).length).toBe(2);
+  expect(
+    screen.getByText(/Видео ожидает подготовки для быстрой загрузки/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Ожидает подготовки" }),
+  ).toBeDisabled();
+  expect(playback).not.toHaveBeenCalled();
+});
+
+it("показывает ученику понятный статус при ошибке подготовки видео", async () => {
+  const failedMedia: ProtectedContentMediaRead = {
+    ...media,
+    processing_status: "failed",
+    playback_available: false,
+    normalization_error_code: "normalization_failed",
+    normalization_error_message: "Внутренняя ошибка подготовки.",
+  };
+  const entry: KnowledgeEntryDetail = {
+    id: adminEntry.id,
+    kind: adminEntry.kind,
+    slug: adminEntry.slug,
+    title: adminEntry.title,
+    summary: adminEntry.summary,
+    content_markdown: adminEntry.content_markdown,
+    topic: { id: "topic-id", slug: "python", title: "Python" },
+    media: [failedMedia],
+    updated_at: adminEntry.updated_at,
+  };
+  vi.spyOn(api, "knowledgeEntry").mockResolvedValue(entry);
+
+  renderPage(
+    <KnowledgeEntryPage />,
+    `/knowledge/entries/${entry.slug}`,
+    "/knowledge/entries/:entrySlug",
+  );
+
+  expect((await screen.findAllByText("Временно недоступно")).length).toBe(2);
+  expect(
+    screen.getByText(/Администратор может запустить подготовку повторно/),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/normalization_failed/)).not.toBeInTheDocument();
 });
 
 it("один раз автоматически обновляет доступ при сбое видео", async () => {

@@ -22,6 +22,8 @@ from uuid import UUID, uuid4
 
 import anyio
 import boto3
+from boto3.exceptions import S3UploadFailedError
+from boto3.s3.transfer import TransferConfig
 from botocore.client import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -38,6 +40,13 @@ MULTIPART_UPLOAD_ABORT_URL = "/api/v1/uploads/multipart/abort"
 S3_MULTIPART_MIN_PART_BYTES = 5 * 1024 * 1024
 S3_MULTIPART_MAX_PARTS = 10_000
 MULTIPART_HEAD_RECONCILIATION_DELAYS = (0.0, 0.25, 1.0, 2.0)
+WORKER_UPLOAD_HEAD_RECONCILIATION_DELAYS = (0.0, 0.25, 1.0, 2.0)
+WORKER_UPLOAD_TRANSFER_CONFIG = TransferConfig(
+    multipart_threshold=64 * 1024 * 1024,
+    multipart_chunksize=64 * 1024 * 1024,
+    max_concurrency=2,
+    use_threads=True,
+)
 MULTIPART_ACTIVE_UPLOAD_LIST_PAGES = 4
 SAFE_RASTER_IMAGE_CONTENT_TYPES = (
     "image/avif",
@@ -134,6 +143,10 @@ class OpenedDownload:
 
 class InterviewStorageReadError(RuntimeError):
     """A private interview object could not be staged for external processing."""
+
+
+class InterviewStorageWriteError(RuntimeError):
+    """A worker could not persist or remove an internally generated object."""
 
 
 class LegacyTranscodeCapacityError(RuntimeError):
@@ -684,6 +697,125 @@ class InterviewUploadStore:
             raise InterviewStorageReadError(
                 "Could not stage interview object for processing"
             ) from error
+
+    async def upload_path(
+        self,
+        source: Path,
+        *,
+        storage_key: str,
+        content_type: str,
+        expected_size: int,
+    ) -> None:
+        """Upload a worker-produced file and verify its persisted S3 metadata.
+
+        Browser uploads are finalized through the multipart API above.  This
+        method is intentionally narrower: it only accepts a regular local file
+        and an internal key, and is used by background media processors.
+        """
+        path = PurePosixPath(storage_key)
+        if (
+            not storage_key
+            or path.is_absolute()
+            or ".." in path.parts
+            or self._external_media_location(storage_key) is not None
+        ):
+            raise ValueError("storage_key must be a safe internal object key")
+        normalized_content_type = content_type.split(";", 1)[0].strip().lower()
+        if not normalized_content_type:
+            raise ValueError("content_type is required")
+        try:
+            source_stat = source.lstat()
+        except OSError as error:
+            raise InterviewStorageWriteError("Generated media file is unavailable") from error
+        if (
+            stat.S_ISLNK(source_stat.st_mode)
+            or not stat.S_ISREG(source_stat.st_mode)
+            or expected_size <= 0
+            or source_stat.st_size != expected_size
+        ):
+            raise InterviewStorageWriteError("Generated media file metadata is invalid")
+
+        try:
+            await anyio.to_thread.run_sync(
+                lambda: self.client.upload_file(
+                    str(source),
+                    self.bucket,
+                    storage_key,
+                    ExtraArgs={"ContentType": normalized_content_type},
+                    Config=WORKER_UPLOAD_TRANSFER_CONFIG,
+                )
+            )
+            head: dict[str, Any] | None = None
+            for attempt, delay in enumerate(
+                WORKER_UPLOAD_HEAD_RECONCILIATION_DELAYS,
+                start=1,
+            ):
+                if delay:
+                    await anyio.sleep(delay)
+                try:
+                    head = dict(
+                        await anyio.to_thread.run_sync(
+                            lambda: self.client.head_object(
+                                Bucket=self.bucket,
+                                Key=storage_key,
+                            )
+                        )
+                    )
+                    break
+                except ClientError as error:
+                    missing = error.response.get("Error", {}).get("Code") in {
+                        "404",
+                        "NoSuchKey",
+                        "NotFound",
+                    }
+                    if missing and attempt < len(WORKER_UPLOAD_HEAD_RECONCILIATION_DELAYS):
+                        continue
+                    raise
+            if head is None:
+                raise InterviewStorageWriteError("Generated media object could not be verified")
+            actual_size = int(head.get("ContentLength", 0))
+            actual_content_type = str(head.get("ContentType", "")).split(";", 1)[0].strip().lower()
+            if actual_size != expected_size or actual_content_type != normalized_content_type:
+                raise InterviewStorageWriteError(
+                    "Generated media object metadata does not match the local file"
+                )
+        except InterviewStorageWriteError:
+            await self.delete_for_processing(storage_key, suppress_errors=True)
+            raise
+        except (BotoCoreError, ClientError, OSError, S3UploadFailedError) as error:
+            logger.error(
+                "Could not upload generated media object bucket=%s key=%s error=%s",
+                self.bucket,
+                storage_key,
+                error,
+            )
+            await self.delete_for_processing(storage_key, suppress_errors=True)
+            raise InterviewStorageWriteError("Could not persist generated media object") from error
+
+    async def delete_for_processing(
+        self,
+        storage_key: str | None,
+        *,
+        suppress_errors: bool = False,
+    ) -> bool:
+        """Delete an internal object without translating failures to HTTP errors."""
+        if storage_key is None or self._external_media_location(storage_key) is not None:
+            return True
+        try:
+            await anyio.to_thread.run_sync(
+                lambda: self.client.delete_object(Bucket=self.bucket, Key=storage_key)
+            )
+        except (BotoCoreError, ClientError) as error:
+            logger.error(
+                "Could not delete worker media object bucket=%s key=%s error=%s",
+                self.bucket,
+                storage_key,
+                error,
+            )
+            if suppress_errors:
+                return False
+            raise InterviewStorageWriteError("Could not delete generated media object") from error
+        return True
 
     async def open_download(
         self,

@@ -9,6 +9,7 @@ import type {
   AdminRoadmapUpdate,
   AdminTrackMutation,
 } from "../../types/api";
+import { hasPreparingContentMedia } from "../../utils/contentMedia";
 
 export const adminRoadmapKeys = {
   all: ["admin", "roadmaps"] as const,
@@ -58,6 +59,8 @@ export function useAdminRoadmapTopic(
     queryKey: adminRoadmapKeys.topic(roadmapId, sectionId, topicId ?? "new"),
     queryFn: () => api.adminRoadmapTopic(roadmapId, sectionId, topicId!),
     enabled: Boolean(topicId),
+    refetchInterval: (query) =>
+      hasPreparingContentMedia(query.state.data?.media) ? 5_000 : false,
   });
 }
 

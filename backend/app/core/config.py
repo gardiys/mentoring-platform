@@ -52,6 +52,58 @@ class Settings(BaseSettings):
         ge=1_048_576,
         le=10_737_418_240,
     )
+    content_media_normalization_directory: str = "/var/lib/mentoring/content-media-normalization"
+    content_media_normalization_max_concurrency: int = Field(default=1, ge=1, le=2)
+    content_media_normalization_min_free_bytes: int = Field(
+        default=2_147_483_648,
+        ge=0,
+        le=53_687_091_200,
+    )
+    content_media_normalization_max_reserved_bytes: int = Field(
+        default=12_884_901_888,
+        ge=1_048_576,
+        le=107_374_182_400,
+    )
+    content_media_normalization_output_overhead_bytes: int = Field(
+        default=536_870_912,
+        ge=16_777_216,
+        le=5_368_709_120,
+    )
+    content_media_normalization_cleanup_age_seconds: int = Field(
+        default=86_400,
+        ge=3_600,
+        le=604_800,
+    )
+    content_media_normalization_timeout_seconds: int = Field(
+        default=14_400,
+        ge=300,
+        le=43_200,
+    )
+    content_media_normalization_stale_seconds: int = Field(
+        default=18_000,
+        ge=600,
+        le=86_400,
+    )
+    content_media_normalization_job_expires_seconds: int = Field(
+        default=604_800,
+        ge=3_600,
+        le=2_592_000,
+    )
+    content_media_normalization_source_delete_grace_seconds: int = Field(
+        default=86_400,
+        ge=900,
+        le=604_800,
+    )
+    content_media_normalization_max_duration_seconds: int = Field(
+        default=43_200,
+        ge=60,
+        le=86_400,
+    )
+    content_media_normalization_probe_timeout_seconds: float = Field(
+        default=120,
+        ge=5,
+        le=600,
+    )
     interview_video_max_bytes: int = Field(default=2_147_483_648, ge=1_048_576, le=5_368_709_120)
     interview_audio_max_bytes: int = Field(default=524_288_000, ge=1_048_576, le=2_147_483_648)
     interview_offer_max_bytes: int = Field(default=20_971_520, ge=1_048_576, le=104_857_600)
@@ -170,6 +222,13 @@ class Settings(BaseSettings):
             raise ValueError("INTERVIEW_LEGACY_TRANSCODE_DIRECTORY must be an absolute path")
         return value
 
+    @field_validator("content_media_normalization_directory")
+    @classmethod
+    def validate_content_media_normalization_directory(cls, value: str) -> str:
+        if not value.strip() or not Path(value).is_absolute():
+            raise ValueError("CONTENT_MEDIA_NORMALIZATION_DIRECTORY must be an absolute path")
+        return value
+
     @model_validator(mode="after")
     def validate_intelligence_job_lifetimes(self) -> "Settings":
         if self.s3_multipart_presign_ttl_seconds > self.s3_multipart_session_ttl_seconds:
@@ -193,6 +252,31 @@ class Settings(BaseSettings):
             raise ValueError(
                 "INTERVIEW_LEGACY_TRANSCODE_MAX_RESERVED_BYTES must be at least twice "
                 "INTERVIEW_AUDIO_MAX_BYTES"
+            )
+        required_normalization_bytes = (
+            self.content_video_max_bytes * 2
+            + self.content_media_normalization_output_overhead_bytes
+        )
+        if self.content_media_normalization_max_reserved_bytes < required_normalization_bytes:
+            raise ValueError(
+                "CONTENT_MEDIA_NORMALIZATION_MAX_RESERVED_BYTES must cover two copies of "
+                "CONTENT_VIDEO_MAX_BYTES plus CONTENT_MEDIA_NORMALIZATION_OUTPUT_OVERHEAD_BYTES"
+            )
+        if (
+            self.content_media_normalization_cleanup_age_seconds
+            <= self.content_media_normalization_timeout_seconds
+        ):
+            raise ValueError(
+                "CONTENT_MEDIA_NORMALIZATION_CLEANUP_AGE_SECONDS must exceed "
+                "CONTENT_MEDIA_NORMALIZATION_TIMEOUT_SECONDS"
+            )
+        if (
+            self.content_media_normalization_stale_seconds
+            <= self.content_media_normalization_timeout_seconds
+        ):
+            raise ValueError(
+                "CONTENT_MEDIA_NORMALIZATION_STALE_SECONDS must exceed "
+                "CONTENT_MEDIA_NORMALIZATION_TIMEOUT_SECONDS"
             )
         return self
 

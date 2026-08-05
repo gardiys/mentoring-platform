@@ -21,6 +21,7 @@ from app.interviews.upload_router import router as private_uploads_router
 from app.knowledge.admin_router import router as admin_knowledge_router
 from app.knowledge.router import router as knowledge_router
 from app.media.router import (
+    admin_content_media_router,
     admin_knowledge_media_router,
     admin_roadmap_media_router,
     knowledge_media_router,
@@ -69,6 +70,7 @@ app.include_router(knowledge_router, prefix="/api/v1")
 app.include_router(admin_knowledge_router, prefix="/api/v1")
 app.include_router(knowledge_media_router, prefix="/api/v1")
 app.include_router(admin_knowledge_media_router, prefix="/api/v1")
+app.include_router(admin_content_media_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(roadmaps_router, prefix="/api/v1")
 app.include_router(mentors_router, prefix="/api/v1")

@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.media.models import ContentMediaProcessingStatus
+
 
 class ContentMediaKind(StrEnum):
     AUDIO = "audio"
@@ -95,6 +97,13 @@ class ProtectedContentMediaRead(BaseModel):
     size: int
     title: str | None
     position: int
+    processing_status: ContentMediaProcessingStatus
+    normalization_attempts: int
+    normalization_started_at: datetime | None
+    normalization_completed_at: datetime | None
+    normalization_error_code: str | None
+    normalization_error_message: str | None
+    playback_available: bool
     created_at: datetime
 
 

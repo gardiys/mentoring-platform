@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 PROD_COMPOSE := docker compose -f infra/docker-compose.prod.yml --env-file .env.production
 first_name ?= Администратор
 
-.PHONY: install up down backend frontend worker worker-ai migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara check-s3-multipart prod-check-s3-multipart ensure-test-db prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara check-s3-multipart prod-check-s3-multipart ensure-test-db prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -25,6 +25,9 @@ worker:
 
 worker-ai:
 	cd backend && poetry run arq app.interviews.intelligence_jobs.AIWorkerSettings
+
+worker-media:
+	cd backend && poetry run arq app.media.normalization_jobs.ContentMediaWorkerSettings
 
 check-nexara:
 	cd backend && poetry run python -m app.check_nexara
@@ -98,10 +101,10 @@ prod-migrate: prod-volume-check prod-config
 	$(PROD_COMPOSE) run --rm --no-deps migrate
 
 prod-up: prod-volume-check prod-config
-	$(PROD_COMPOSE) build migrate backend intelligence-worker intelligence-ai-worker frontend
+	$(PROD_COMPOSE) build migrate backend intelligence-worker intelligence-ai-worker content-media-worker frontend
 	$(PROD_COMPOSE) up -d --wait --wait-timeout 120 postgres redis
 	$(PROD_COMPOSE) run --rm migrate
-	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 180 backend intelligence-worker intelligence-ai-worker frontend
+	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 180 backend intelligence-worker intelligence-ai-worker content-media-worker frontend
 	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 60 caddy
 	$(PROD_COMPOSE) ps
 

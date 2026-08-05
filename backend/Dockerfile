@@ -8,10 +8,14 @@ COPY --from=media-tools /ffprobe /usr/local/bin/ffprobe
 COPY --from=media-tools /ffmpeg /usr/local/bin/ffmpeg
 RUN groupadd --system --gid 10001 mentoring \
     && useradd --system --uid 10001 --gid mentoring --home-dir /nonexistent mentoring \
-    && mkdir -p /tmp/interview-staging /var/lib/mentoring/interview-legacy-transcode \
+    && mkdir -p \
+        /tmp/interview-staging \
+        /var/lib/mentoring/interview-legacy-transcode \
+        /var/lib/mentoring/content-media-normalization \
     && chown mentoring:mentoring \
         /tmp/interview-staging \
-        /var/lib/mentoring/interview-legacy-transcode
+        /var/lib/mentoring/interview-legacy-transcode \
+        /var/lib/mentoring/content-media-normalization
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 

@@ -203,6 +203,7 @@ function TopicForm({
         }
         upload={media.upload}
         remove={media.remove}
+        retry={media.retry}
       />
     </Stack>
   );

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
+import { hasPreparingContentMedia } from "../../utils/contentMedia";
 
 export const roadmapKeys = {
   all: ["roadmaps"] as const,
@@ -37,5 +38,7 @@ export function useTopic(id: string) {
   return useQuery({
     queryKey: roadmapKeys.topic(id),
     queryFn: () => api.topic(id),
+    refetchInterval: (query) =>
+      hasPreparingContentMedia(query.state.data?.media) ? 5_000 : false,
   });
 }

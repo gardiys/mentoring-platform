@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import api_error
 from app.knowledge.models import KnowledgeEntry
 from app.knowledge.service import get_public_entry
-from app.media.models import ProtectedContentMedia
+from app.media.models import ContentMediaProcessingStatus, ProtectedContentMedia
 from app.media.presenters import content_media_read
 from app.media.schemas import ContentMediaUploadFinalize, ProtectedContentMediaRead
 from app.media.storage import StoredUpload
@@ -18,6 +18,8 @@ from app.roadmaps.models import RoadmapSection, Topic
 from app.roadmaps.queries import get_topic_model, has_roadmap_access, roadmap_in_tracks
 from app.tracks.access import accessible_track_ids
 from app.users.models import User, UserRole
+
+NORMALIZABLE_CONTENT_MEDIA_TYPES = frozenset({"video/mp4", "video/quicktime"})
 
 
 async def require_admin_knowledge_entry(
@@ -78,6 +80,7 @@ async def attach_knowledge_media(
         size=upload.size,
         title=payload.title or None,
         position=payload.position,
+        **_initial_normalization_values(upload),
     )
     session.add(media)
     try:
@@ -118,6 +121,7 @@ async def attach_roadmap_media(
         size=upload.size,
         title=payload.title or None,
         position=payload.position,
+        **_initial_normalization_values(upload),
     )
     session.add(media)
     try:
@@ -146,6 +150,16 @@ async def _existing_media(
             select(ProtectedContentMedia).where(ProtectedContentMedia.storage_key == storage_key)
         ),
     )
+
+
+def _initial_normalization_values(upload: StoredUpload) -> dict[str, object]:
+    content_type = upload.content_type.split(";", 1)[0].strip().lower()
+    if content_type not in NORMALIZABLE_CONTENT_MEDIA_TYPES:
+        return {"processing_status": ContentMediaProcessingStatus.READY}
+    return {
+        "processing_status": ContentMediaProcessingStatus.QUEUED,
+        "normalization_source_key": upload.storage_key,
+    }
 
 
 async def _knowledge_media(
@@ -192,7 +206,7 @@ async def delete_knowledge_media(
     topic_id: UUID,
     entry_id: UUID,
     media_id: UUID,
-) -> str:
+) -> tuple[str, ...]:
     entry = await require_admin_knowledge_entry(session, topic_id, entry_id)
     media = await _knowledge_media(
         session,
@@ -200,10 +214,10 @@ async def delete_knowledge_media(
         media_id=media_id,
         lock=True,
     )
-    storage_key = media.storage_key
+    storage_keys = _media_storage_keys(media)
     await session.delete(media)
     await session.commit()
-    return storage_key
+    return storage_keys
 
 
 async def delete_roadmap_media(
@@ -213,7 +227,7 @@ async def delete_roadmap_media(
     section_id: UUID,
     topic_id: UUID,
     media_id: UUID,
-) -> str:
+) -> tuple[str, ...]:
     topic = await require_admin_roadmap_topic(
         session,
         roadmap_id,
@@ -226,10 +240,18 @@ async def delete_roadmap_media(
         media_id=media_id,
         lock=True,
     )
-    storage_key = media.storage_key
+    storage_keys = _media_storage_keys(media)
     await session.delete(media)
     await session.commit()
-    return storage_key
+    return storage_keys
+
+
+def _media_storage_keys(media: ProtectedContentMedia) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            key for key in (media.storage_key, media.normalization_source_key) if key is not None
+        )
+    )
 
 
 async def knowledge_media_for_user(

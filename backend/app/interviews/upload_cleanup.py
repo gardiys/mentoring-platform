@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import select, union_all
+from sqlalchemy import or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.interviews.models import (
@@ -46,7 +46,12 @@ async def delete_upload_if_unreferenced(
         ),
         select(MentorStudentDocument.id).where(MentorStudentDocument.storage_key == storage_key),
         select(MockInterview.id).where(MockInterview.media_storage_key == storage_key),
-        select(ProtectedContentMedia.id).where(ProtectedContentMedia.storage_key == storage_key),
+        select(ProtectedContentMedia.id).where(
+            or_(
+                ProtectedContentMedia.storage_key == storage_key,
+                ProtectedContentMedia.normalization_source_key == storage_key,
+            )
+        ),
     ).limit(1)
     try:
         referenced_id = await session.scalar(references)

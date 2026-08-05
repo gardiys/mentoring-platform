@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from httpx import AsyncClient
@@ -6,7 +7,8 @@ from pytest import MonkeyPatch
 from app.core.errors import api_error
 from app.interviews.uploads import StoredUpload, UploadIntent
 from app.media import router as media_router
-from tests.conftest import SeededData, auth
+from app.media.models import ContentMediaProcessingStatus, ProtectedContentMedia
+from tests.conftest import SeededData, TestSession, auth
 
 
 class FakePrivateMediaStore:
@@ -120,6 +122,11 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
 ) -> None:
     fake_store = FakePrivateMediaStore()
     monkeypatch.setattr(media_router, "store", fake_store)
+
+    async def fake_enqueue(_media_id: str) -> str:
+        return "content-media-normalization:test"
+
+    monkeypatch.setattr(media_router, "enqueue_content_media_normalization", fake_enqueue)
     topic_id, entry_id, entry_slug = await create_knowledge_entry(client, seeded)
     upload_path = f"/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry_id}/media/upload-url"
     finalize_path = f"/api/v1/admin/knowledge/topics/{topic_id}/entries/{entry_id}/media/finalize"
@@ -138,6 +145,11 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
         upload_path,
         headers=auth(seeded.admin_id),
         json={**upload_payload, "filename": "notes.pdf", "content_type": "application/pdf"},
+    )
+    unsupported_video = await client.post(
+        upload_path,
+        headers=auth(seeded.admin_id),
+        json={**upload_payload, "filename": "lesson.webm", "content_type": "video/webm"},
     )
     larger_than_interview_limit = await client.post(
         upload_path,
@@ -162,6 +174,8 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
     assert student_upload.status_code == 403
     assert invalid_type.status_code == 415
     assert invalid_type.json()["detail"]["code"] == "unsupported_content_media_type"
+    assert unsupported_video.status_code == 415
+    assert unsupported_video.json()["detail"]["code"] == "unsupported_content_media_type"
     assert (
         media_router.settings.content_video_max_bytes
         > media_router.settings.interview_video_max_bytes
@@ -207,6 +221,8 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
     media_id = finalized.json()["id"]
     assert finalized.json()["kind"] == "video"
     assert finalized.json()["title"] == "Разбор event loop"
+    assert finalized.json()["processing_status"] == "queued"
+    assert finalized.json()["playback_available"] is False
     assert "storage_key" not in finalized.json()
     assert "url" not in finalized.json()
 
@@ -226,6 +242,72 @@ async def test_knowledge_media_private_upload_playback_scope_and_delete(
         f"/api/v1/knowledge/entries/{entry_slug}/media/{media_id}/playback",
         headers=auth(seeded.other_mentor_id),
     )
+
+    async with TestSession() as session:
+        media = await session.get(ProtectedContentMedia, UUID(media_id))
+        assert media is not None
+        media.processing_status = ContentMediaProcessingStatus.FAILED
+        media.normalization_completed_at = datetime.now(UTC)
+        media.normalization_error_code = "NORMALIZATION_FAILED"
+        media.normalization_error_message = "Видео не удалось подготовить"
+        await session.commit()
+
+    failed_playback = await client.get(
+        f"/api/v1/knowledge/entries/{entry_slug}/media/{media_id}/playback",
+        headers=auth(seeded.student_id),
+    )
+    student_retry = await client.post(
+        f"/api/v1/admin/content-media/{media_id}/normalization/retry",
+        headers=auth(seeded.student_id),
+    )
+    retried = await client.post(
+        f"/api/v1/admin/content-media/{media_id}/normalization/retry",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert failed_playback.status_code == 409
+    assert failed_playback.json()["detail"]["code"] == "content_media_normalization_failed"
+    assert student_retry.status_code == 403
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["processing_status"] == "queued"
+    assert retried.json()["normalization_error_code"] is None
+
+    preparing_playback = await client.get(
+        f"/api/v1/knowledge/entries/{entry_slug}/media/{media_id}/playback",
+        headers=auth(seeded.student_id),
+    )
+    assert preparing_playback.status_code == 409
+    assert preparing_playback.json()["detail"]["code"] == "content_media_preparing"
+
+    # Migration-queued videos were already visible before normalization was
+    # introduced. Keep their original object playable while the worker repairs
+    # it; newly uploaded videos above remain blocked until validation finishes.
+    async with TestSession() as session:
+        media = await session.get(ProtectedContentMedia, UUID(media_id))
+        assert media is not None
+        media.allow_original_playback_during_normalization = True
+        await session.commit()
+
+    backfill_playback = await client.get(
+        f"/api/v1/knowledge/entries/{entry_slug}/media/{media_id}/playback",
+        headers=auth(seeded.student_id),
+    )
+    assert backfill_playback.status_code == 200, backfill_playback.text
+    backfill_stream = await client.get(
+        backfill_playback.json()["url"],
+        headers={"Range": "bytes=0-", "Sec-Fetch-Dest": "video"},
+    )
+    assert backfill_stream.status_code == 307
+
+    # The dedicated worker publishes only a fully validated object. Simulate
+    # that atomic state transition here; worker behavior has focused tests.
+    async with TestSession() as session:
+        media = await session.get(ProtectedContentMedia, UUID(media_id))
+        assert media is not None
+        media.processing_status = ContentMediaProcessingStatus.READY
+        media.normalization_source_key = None
+        await session.commit()
+
     playback = await client.get(
         f"/api/v1/knowledge/entries/{entry_slug}/media/{media_id}/playback",
         headers=auth(seeded.student_id),

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
+import { hasPreparingContentMedia } from "../../utils/contentMedia";
 
 export const knowledgeKeys = {
   topics: ["knowledge", "topics"] as const,
@@ -27,6 +28,8 @@ export function useKnowledgeEntry(slug: string) {
   return useQuery({
     queryKey: knowledgeKeys.entry(slug),
     queryFn: () => api.knowledgeEntry(slug),
+    refetchInterval: (query) =>
+      hasPreparingContentMedia(query.state.data?.media) ? 5_000 : false,
   });
 }
 

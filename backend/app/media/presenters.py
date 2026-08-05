@@ -18,6 +18,13 @@ def content_media_read(media: ProtectedContentMedia) -> ProtectedContentMediaRea
         size=media.size,
         title=media.title,
         position=media.position,
+        processing_status=media.processing_status,
+        normalization_attempts=media.normalization_attempts,
+        normalization_started_at=media.normalization_started_at,
+        normalization_completed_at=media.normalization_completed_at,
+        normalization_error_code=media.normalization_error_code,
+        normalization_error_message=media.normalization_error_message,
+        playback_available=media.playback_available,
         created_at=media.created_at,
     )
 

@@ -69,7 +69,23 @@ export function useAdminKnowledgeMedia(topicId: string, entryId?: string) {
     },
     onSuccess: refresh,
   });
-  return { upload, remove };
+  const retry = useMutation({
+    mutationFn: (mediaId: string) =>
+      api.retryAdminContentMediaNormalization(mediaId),
+    onSuccess: (item) => {
+      if (entryId) {
+        queryClient.setQueryData<AdminKnowledgeEntryRead>(
+          adminKnowledgeKeys.entry(topicId, entryId),
+          (current) =>
+            current
+              ? { ...current, media: mediaWithItem(current.media, item) }
+              : current,
+        );
+      }
+      refresh();
+    },
+  });
+  return { upload, remove, retry };
 }
 
 function mediaWithItem(
@@ -142,7 +158,23 @@ export function useAdminRoadmapTopicMedia(
     },
     onSuccess: refresh,
   });
-  return { upload, remove };
+  const retry = useMutation({
+    mutationFn: (mediaId: string) =>
+      api.retryAdminContentMediaNormalization(mediaId),
+    onSuccess: (item) => {
+      if (topicId) {
+        queryClient.setQueryData<AdminTopicRead>(
+          adminRoadmapKeys.topic(roadmapId, sectionId, topicId),
+          (current) =>
+            current
+              ? { ...current, media: mediaWithItem(current.media, item) }
+              : current,
+        );
+      }
+      refresh();
+    },
+  });
+  return { upload, remove, retry };
 }
 
 export function useProtectedContentMediaPlayback(

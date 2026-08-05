@@ -361,14 +361,26 @@ def probe_media(
         str(path),
     ]
     try:
-        result = subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            stdin=subprocess.DEVNULL,
-            timeout=timeout_seconds,
-            env=MEDIA_TOOL_ENVIRONMENT,
-        )
+        # Keep diagnostics and JSON outside process memory. Malformed media can
+        # otherwise make ffprobe fill an unbounded PIPE before the size check.
+        with tempfile.TemporaryFile(mode="w+b", dir=path.parent) as probe_output:
+            result = subprocess.run(
+                command,
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=probe_output,
+                stderr=subprocess.DEVNULL,
+                timeout=timeout_seconds,
+                env=MEDIA_TOOL_ENVIRONMENT,
+            )
+            probe_output.seek(0, 2)
+            output_size = probe_output.tell()
+            if result.returncode != 0 or output_size > MAX_FFPROBE_OUTPUT_BYTES:
+                raise MediaGuardrailError(
+                    "invalid_media_file", "Media container could not be inspected"
+                )
+            probe_output.seek(0)
+            output = probe_output.read(MAX_FFPROBE_OUTPUT_BYTES + 1)
     except subprocess.TimeoutExpired as error:
         raise MediaGuardrailError("media_probe_timeout", "Media inspection timed out") from error
     except (FileNotFoundError, OSError) as error:
@@ -376,10 +388,8 @@ def probe_media(
             "media_probe_unavailable", "Media inspection is unavailable"
         ) from error
 
-    if result.returncode != 0 or len(result.stdout) > MAX_FFPROBE_OUTPUT_BYTES:
-        raise MediaGuardrailError("invalid_media_file", "Media container could not be inspected")
     try:
-        payload = json.loads(result.stdout)
+        payload = json.loads(output)
     except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as error:
         raise MediaGuardrailError(
             "invalid_media_file", "Media probe returned invalid data"

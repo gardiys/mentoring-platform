@@ -891,6 +891,11 @@ export const api = {
       `/api/v1/admin/knowledge/topics/${topicId}/entries/${entryId}/media/${mediaId}`,
       { method: "DELETE" },
     ),
+  retryAdminContentMediaNormalization: (mediaId: string) =>
+    apiRequest<ProtectedContentMediaRead>(
+      `/api/v1/admin/content-media/${mediaId}/normalization/retry`,
+      { method: "POST" },
+    ),
   adminKnowledgeTopic: (id: string) =>
     apiRequest<AdminKnowledgeTopicRead>(`/api/v1/admin/knowledge/topics/${id}`),
   createAdminKnowledgeTopic: (payload: AdminKnowledgeTopicMutation) =>

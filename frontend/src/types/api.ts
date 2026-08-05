@@ -4,6 +4,8 @@ import type { StorageUploadIntent } from "../api/client";
 type Schemas = components["schemas"];
 
 export type ContentMediaKind = "audio" | "video";
+export type ContentMediaProcessingStatus =
+  "queued" | "processing" | "ready" | "failed";
 
 export interface ProtectedContentMediaRead {
   id: string;
@@ -13,6 +15,13 @@ export interface ProtectedContentMediaRead {
   size: number;
   title: string | null;
   position: number;
+  processing_status: ContentMediaProcessingStatus;
+  playback_available: boolean;
+  normalization_attempts: number;
+  normalization_started_at: string | null;
+  normalization_completed_at: string | null;
+  normalization_error_code: string | null;
+  normalization_error_message: string | null;
   created_at: string;
 }
 

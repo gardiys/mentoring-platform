@@ -208,6 +208,7 @@ function EntryForm({
         }
         upload={media.upload}
         remove={media.remove}
+        retry={media.retry}
       />
     </Stack>
   );

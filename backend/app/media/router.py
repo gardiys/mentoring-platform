@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Annotated, Literal
 from uuid import UUID
@@ -16,7 +17,9 @@ from app.db.session import get_db_session
 from app.interviews.upload_cleanup import delete_upload_if_unreferenced
 from app.interviews.uploads import CompletedMultipartUploadPart
 from app.media.delivery import direct_private_media_response
-from app.media.models import ProtectedContentMedia
+from app.media.models import ContentMediaProcessingStatus, ProtectedContentMedia
+from app.media.normalization_queue import enqueue_content_media_normalization
+from app.media.presenters import content_media_read
 from app.media.protected_stream import (
     create_bound_stream_ticket,
     read_bound_stream_ticket,
@@ -52,6 +55,10 @@ admin_roadmap_media_router = APIRouter(
     prefix="/admin/roadmaps",
     tags=["admin-roadmap-media"],
 )
+admin_content_media_router = APIRouter(
+    prefix="/admin/content-media",
+    tags=["admin-content-media"],
+)
 knowledge_media_router = APIRouter(prefix="/knowledge", tags=["knowledge-media"])
 roadmap_media_router = APIRouter(tags=["roadmap-media"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
@@ -60,6 +67,7 @@ store = PrivateMediaStore(settings)
 STREAM_COOKIE = "protected_content_media_stream"
 RANGE_PATTERN = re.compile(r"bytes=(?:\d+-\d*|-\d+)")
 MediaScope = Literal["knowledge", "roadmap"]
+logger = logging.getLogger(__name__)
 
 
 def _stream_secret() -> str:
@@ -195,13 +203,15 @@ async def admin_finalize_knowledge_media(
         resource=f"knowledge-media:{topic_id}:{entry_id}",
     )
     try:
-        return await attach_knowledge_media(
+        media = await attach_knowledge_media(
             session,
             entry_id=entry.id,
             uploaded_by_user_id=admin.id,
             upload=upload,
             payload=payload,
         )
+        await _enqueue_normalization_if_needed(media)
+        return media
     except Exception:
         await delete_upload_if_unreferenced(session, store, upload.storage_key)
         raise
@@ -219,13 +229,14 @@ async def admin_delete_knowledge_media(
     session: Session,
     _admin: AdminUser,
 ) -> Response:
-    storage_key = await delete_knowledge_media(
+    storage_keys = await delete_knowledge_media(
         session,
         topic_id=topic_id,
         entry_id=entry_id,
         media_id=media_id,
     )
-    await store.delete(storage_key)
+    for storage_key in storage_keys:
+        await store.delete(storage_key)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -276,13 +287,15 @@ async def admin_finalize_roadmap_media(
         resource=f"roadmap-media:{roadmap_id}:{section_id}:{topic_id}",
     )
     try:
-        return await attach_roadmap_media(
+        media = await attach_roadmap_media(
             session,
             topic_id=topic.id,
             uploaded_by_user_id=admin.id,
             upload=upload,
             payload=payload,
         )
+        await _enqueue_normalization_if_needed(media)
+        return media
     except Exception:
         await delete_upload_if_unreferenced(session, store, upload.storage_key)
         raise
@@ -301,15 +314,73 @@ async def admin_delete_roadmap_media(
     session: Session,
     _admin: AdminUser,
 ) -> Response:
-    storage_key = await delete_roadmap_media(
+    storage_keys = await delete_roadmap_media(
         session,
         roadmap_id=roadmap_id,
         section_id=section_id,
         topic_id=topic_id,
         media_id=media_id,
     )
-    await store.delete(storage_key)
+    for storage_key in storage_keys:
+        await store.delete(storage_key)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def _enqueue_normalization_if_needed(media: ProtectedContentMediaRead) -> None:
+    if media.processing_status is not ContentMediaProcessingStatus.QUEUED:
+        return
+    try:
+        await enqueue_content_media_normalization(str(media.id))
+    except Exception:
+        # The durable queued state is authoritative. The worker reconciler will
+        # enqueue it after Redis or the API connection recovers.
+        logger.exception(
+            "Could not enqueue content-media normalization media_id=%s; "
+            "the worker reconciler will retry",
+            media.id,
+        )
+
+
+@admin_content_media_router.post(
+    "/{media_id}/normalization/retry",
+    response_model=ProtectedContentMediaRead,
+)
+async def retry_content_media_normalization(
+    media_id: UUID,
+    session: Session,
+    _admin: AdminUser,
+) -> ProtectedContentMediaRead:
+    media = await session.get(ProtectedContentMedia, media_id, with_for_update=True)
+    if media is None:
+        api_error(404, "content_media_not_found", "Media attachment was not found")
+    if media.content_type.split(";", 1)[0].strip().lower() not in {
+        "video/mp4",
+        "video/quicktime",
+    }:
+        api_error(
+            409,
+            "content_media_normalization_not_supported",
+            "Only MP4 and MOV videos can be prepared for browser playback",
+        )
+    if media.processing_status is ContentMediaProcessingStatus.READY:
+        api_error(
+            409,
+            "content_media_already_ready",
+            "The video is already ready for playback",
+        )
+    if media.processing_status is ContentMediaProcessingStatus.FAILED:
+        media.processing_status = ContentMediaProcessingStatus.QUEUED
+        media.normalization_source_key = media.storage_key
+        media.normalization_started_at = None
+        media.normalization_completed_at = None
+        media.normalization_error_code = None
+        media.normalization_error_message = None
+        media.normalization_revision += 1
+        await session.commit()
+        await session.refresh(media)
+    response = content_media_read(media)
+    await _enqueue_normalization_if_needed(response)
+    return response
 
 
 def _set_playback_ticket(
@@ -357,12 +428,13 @@ async def knowledge_media_playback(
     request: Request,
     response: Response,
 ) -> ContentMediaPlayback:
-    await knowledge_media_for_user(
+    media = await knowledge_media_for_user(
         session,
         current_user,
         entry_slug=entry_slug,
         media_id=media_id,
     )
+    _require_media_ready(media)
     media_path = f"/api/v1/knowledge/entries/{entry_slug}/media/{media_id}"
     return _set_playback_ticket(
         response=response,
@@ -406,12 +478,13 @@ async def roadmap_media_playback(
     request: Request,
     response: Response,
 ) -> ContentMediaPlayback:
-    await roadmap_media_for_user(
+    media = await roadmap_media_for_user(
         session,
         current_user,
         topic_id=topic_id,
         media_id=media_id,
     )
+    _require_media_ready(media)
     media_path = f"/api/v1/topics/{topic_id}/media/{media_id}"
     return _set_playback_ticket(
         response=response,
@@ -484,6 +557,7 @@ async def _stream_media(
     request: Request,
     media: ProtectedContentMedia,
 ) -> RedirectResponse:
+    _require_media_ready(media)
     range_header = request.headers.get("range")
     if range_header is not None and RANGE_PATTERN.fullmatch(range_header) is None:
         api_error(416, "invalid_content_media_range", "Requested range is invalid")
@@ -497,4 +571,20 @@ async def _stream_media(
         store,
         upload,
         expires_in=settings.media_stream_redirect_ttl_seconds,
+    )
+
+
+def _require_media_ready(media: ProtectedContentMedia) -> None:
+    if media.playback_available:
+        return
+    if media.processing_status is ContentMediaProcessingStatus.FAILED:
+        api_error(
+            409,
+            "content_media_normalization_failed",
+            "The video could not be prepared for playback",
+        )
+    api_error(
+        409,
+        "content_media_preparing",
+        "The video is still being prepared for playback",
     )

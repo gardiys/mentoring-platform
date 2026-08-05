@@ -1414,6 +1414,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/content-media/{media_id}/normalization/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Content Media Normalization */
+        post: operations["retry_content_media_normalization_api_v1_admin_content_media__media_id__normalization_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -4015,6 +4032,11 @@ export interface components {
             /** Expires In */
             expires_in: number;
         };
+        /**
+         * ContentMediaProcessingStatus
+         * @enum {string}
+         */
+        ContentMediaProcessingStatus: "queued" | "processing" | "ready" | "failed";
         /** ContentMediaUploadFinalize */
         ContentMediaUploadFinalize: {
             /** Filename */
@@ -5888,6 +5910,19 @@ export interface components {
             title: string | null;
             /** Position */
             position: number;
+            processing_status: components["schemas"]["ContentMediaProcessingStatus"];
+            /** Normalization Attempts */
+            normalization_attempts: number;
+            /** Normalization Started At */
+            normalization_started_at: string | null;
+            /** Normalization Completed At */
+            normalization_completed_at: string | null;
+            /** Normalization Error Code */
+            normalization_error_code: string | null;
+            /** Normalization Error Message */
+            normalization_error_message: string | null;
+            /** Playback Available */
+            playback_available: boolean;
             /**
              * Created At
              * Format: date-time
@@ -9850,6 +9885,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_content_media_normalization_api_v1_admin_content_media__media_id__normalization_retry_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                media_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedContentMediaRead"];
+                };
             };
             /** @description Validation Error */
             422: {

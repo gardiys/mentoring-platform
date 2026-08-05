@@ -15,6 +15,10 @@ import type {
   ContentMediaPlayback,
   ProtectedContentMediaRead,
 } from "../types/api";
+import {
+  contentMediaPlaybackAvailable,
+  contentMediaProcessingStatus,
+} from "../utils/contentMedia";
 
 interface Props {
   media: ProtectedContentMediaRead[];
@@ -25,6 +29,27 @@ interface Props {
 const MEDIA_ERR_NETWORK = 2;
 const MEDIA_ERR_DECODE = 3;
 const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
+
+const PREPARATION_STATUS = {
+  queued: {
+    color: "yellow",
+    label: "Ожидает подготовки",
+    description: "Видео ожидает подготовки для быстрой загрузки в плеере.",
+  },
+  processing: {
+    color: "blue",
+    label: "Подготавливается",
+    description:
+      "Оптимизируем видео для быстрой загрузки. Обычно это занимает несколько минут.",
+  },
+  ready: { color: "green", label: "Готово", description: null },
+  failed: {
+    color: "red",
+    label: "Временно недоступно",
+    description:
+      "Видео не удалось подготовить. Администратор может запустить подготовку повторно.",
+  },
+} as const;
 
 function playbackFailureMessage(
   element: HTMLMediaElement,
@@ -65,6 +90,10 @@ function ProtectedContentMediaPlayer({
   const resumePlaybackRef = useRef(false);
   const automaticRecoveryAttemptedRef = useRef(false);
   const displayTitle = item.title || item.filename;
+  const processingStatus = contentMediaProcessingStatus(item);
+  const playbackAvailable = contentMediaPlaybackAvailable(item);
+  const isReady = processingStatus === "ready";
+  const preparation = PREPARATION_STATUS[processingStatus];
   const playbackData = playback.data;
   const playbackDataUpdatedAt = playback.dataUpdatedAt;
   const refetchPlayback = playback.refetch;
@@ -149,6 +178,7 @@ function ProtectedContentMediaPlayer({
   };
 
   const togglePlayback = async () => {
+    if (!playbackAvailable) return;
     if (opened) {
       setOpened(false);
       setFailureMessage(null);
@@ -174,6 +204,11 @@ function ProtectedContentMediaPlayer({
             <Badge variant="light">
               {item.kind === "video" ? "Видео" : "Аудио"}
             </Badge>
+            {!isReady && (
+              <Badge color={preparation.color} variant="light">
+                {preparation.label}
+              </Badge>
+            )}
             <Text fw={600}>{displayTitle}</Text>
           </Group>
           <Button
@@ -181,11 +216,27 @@ function ProtectedContentMediaPlayer({
             size="xs"
             variant="light"
             loading={opening}
+            disabled={!playbackAvailable}
             onClick={() => void togglePlayback()}
           >
-            {opened ? "Скрыть запись" : "Открыть запись"}
+            {opened
+              ? "Скрыть запись"
+              : playbackAvailable
+                ? "Открыть запись"
+                : preparation.label}
           </Button>
         </Group>
+
+        {!isReady && preparation.description && (
+          <Text size="sm" c={processingStatus === "failed" ? "red" : "dimmed"}>
+            {preparation.description}
+            {playbackAvailable
+              ? processingStatus === "failed"
+                ? " Исходная запись остаётся доступна для просмотра."
+                : " Пока подготовка идёт, можно смотреть исходную запись."
+              : null}
+          </Text>
+        )}
 
         {opened && opening ? (
           <Text size="sm" c="dimmed">

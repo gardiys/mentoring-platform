@@ -22,6 +22,10 @@ import {
   CONTENT_VIDEO_MAX_BYTES,
   inferFileContentType,
 } from "../utils/media";
+import {
+  contentMediaPlaybackAvailable,
+  contentMediaProcessingStatus,
+} from "../utils/contentMedia";
 import type { ContentMediaUploadVariables } from "../features/media/queries";
 import { UploadProgressPanel } from "./UploadProgressPanel";
 
@@ -34,6 +38,7 @@ interface Props {
     ContentMediaUploadVariables
   >;
   remove: UseMutationResult<void, Error, string>;
+  retry: UseMutationResult<ProtectedContentMediaRead, Error, string>;
 }
 
 const SUPPORTED_AUDIO_TYPES = new Set([
@@ -46,13 +51,7 @@ const SUPPORTED_AUDIO_TYPES = new Set([
   "audio/webm",
   "audio/x-m4a",
 ]);
-const SUPPORTED_VIDEO_TYPES = new Set([
-  "video/mp4",
-  "video/ogg",
-  "video/quicktime",
-  "video/webm",
-  "video/x-matroska",
-]);
+const SUPPORTED_VIDEO_TYPES = new Set(["video/mp4", "video/quicktime"]);
 const MAX_POSITION = 2_147_483_647;
 const ACCEPTED_MEDIA = [
   ...SUPPORTED_AUDIO_TYPES,
@@ -65,10 +64,8 @@ const ACCEPTED_MEDIA = [
   ".ogg",
   ".wav",
   ".weba",
-  ".mkv",
   ".mov",
   ".mp4",
-  ".webm",
 ].join(",");
 
 function formatSize(value: number) {
@@ -85,11 +82,35 @@ function nextMediaPosition(media: ProtectedContentMediaRead[]) {
   );
 }
 
+const PROCESSING_STATUS = {
+  queued: {
+    color: "yellow",
+    label: "В очереди",
+    description: "Видео ожидает подготовки к просмотру.",
+  },
+  processing: {
+    color: "blue",
+    label: "Подготавливается",
+    description: "Оптимизируем видео для быстрой загрузки в плеере.",
+  },
+  ready: {
+    color: "green",
+    label: "Готово",
+    description: null,
+  },
+  failed: {
+    color: "red",
+    label: "Ошибка подготовки",
+    description: "Видео не удалось подготовить к просмотру.",
+  },
+} as const;
+
 export function AdminContentMediaManager({
   media,
   disabledReason,
   upload,
   remove,
+  retry,
 }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -128,7 +149,7 @@ export function AdminContentMediaManager({
       notifications.show({
         color: "red",
         message:
-          "Формат не поддерживается. Используйте MP4/WebM для видео или MP3/M4A/WAV для аудио.",
+          "Формат не поддерживается. Используйте MP4/MOV для видео или MP3/M4A/WAV для аудио.",
       });
       return;
     }
@@ -165,7 +186,7 @@ export function AdminContentMediaManager({
         },
       },
       {
-        onSuccess: () => {
+        onSuccess: (item) => {
           setFile(null);
           setTitle("");
           setPosition(
@@ -174,7 +195,13 @@ export function AdminContentMediaManager({
               Math.max(nextMediaPosition(media), uploadPosition + 1),
             ),
           );
-          notifications.show({ color: "green", message: "Медиа добавлено" });
+          notifications.show({
+            color: "green",
+            message:
+              item.processing_status === "ready"
+                ? "Медиа добавлено"
+                : "Видео загружено и поставлено в очередь на подготовку",
+          });
         },
         onError: (error) =>
           notifications.show({
@@ -197,6 +224,18 @@ export function AdminContentMediaManager({
     remove.mutate(item.id, {
       onSuccess: () =>
         notifications.show({ color: "green", message: "Медиа удалено" }),
+      onError: (error) =>
+        notifications.show({ color: "red", message: error.message }),
+    });
+  };
+
+  const retryNormalization = (item: ProtectedContentMediaRead) => {
+    retry.mutate(item.id, {
+      onSuccess: () =>
+        notifications.show({
+          color: "green",
+          message: "Повторная подготовка видео запущена",
+        }),
       onError: (error) =>
         notifications.show({ color: "red", message: error.message }),
     });
@@ -227,43 +266,88 @@ export function AdminContentMediaManager({
               </Text>
             ) : (
               <Stack gap="xs">
-                {media.map((item) => (
-                  <Group
-                    key={item.id}
-                    justify="space-between"
-                    align="flex-start"
-                    wrap="nowrap"
-                  >
-                    <div>
-                      <Group gap="xs">
-                        <Badge variant="light">
-                          {item.kind === "video" ? "Видео" : "Аудио"}
-                        </Badge>
-                        <Text fw={600}>{item.title || item.filename}</Text>
-                      </Group>
-                      <Text size="xs" c="dimmed" mt={4}>
-                        {item.filename} · {formatSize(item.size)} · позиция{" "}
-                        {item.position}
-                      </Text>
-                    </div>
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="subtle"
-                      color="red"
-                      loading={remove.isPending && remove.variables === item.id}
-                      onClick={() => deleteMedia(item)}
+                {media.map((item) => {
+                  const processingStatus = contentMediaProcessingStatus(item);
+                  const processing = PROCESSING_STATUS[processingStatus];
+                  const playbackAvailable = contentMediaPlaybackAvailable(item);
+                  return (
+                    <Group
+                      key={item.id}
+                      justify="space-between"
+                      align="flex-start"
+                      wrap="nowrap"
                     >
-                      Удалить
-                    </Button>
-                  </Group>
-                ))}
+                      <div>
+                        <Group gap="xs">
+                          <Badge variant="light">
+                            {item.kind === "video" ? "Видео" : "Аудио"}
+                          </Badge>
+                          <Badge color={processing.color} variant="light">
+                            {processing.label}
+                          </Badge>
+                          <Text fw={600}>{item.title || item.filename}</Text>
+                        </Group>
+                        <Text size="xs" c="dimmed" mt={4}>
+                          {item.filename} · {formatSize(item.size)} · позиция{" "}
+                          {item.position}
+                        </Text>
+                        {processing.description && (
+                          <Text
+                            size="xs"
+                            c={processingStatus === "failed" ? "red" : "dimmed"}
+                            mt={4}
+                          >
+                            {processing.description}
+                            {processingStatus !== "ready" && playbackAvailable
+                              ? " Исходная запись доступна ученикам."
+                              : null}
+                            {processingStatus === "failed" &&
+                            item.normalization_error_message
+                              ? ` ${item.normalization_error_message}`
+                              : null}
+                            {processingStatus === "failed" &&
+                            item.normalization_error_code
+                              ? ` Код: ${item.normalization_error_code}.`
+                              : null}
+                          </Text>
+                        )}
+                      </div>
+                      <Group gap="xs" wrap="nowrap">
+                        {processingStatus === "failed" && (
+                          <Button
+                            type="button"
+                            size="xs"
+                            variant="light"
+                            loading={
+                              retry.isPending && retry.variables === item.id
+                            }
+                            onClick={() => retryNormalization(item)}
+                          >
+                            Подготовить снова
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          size="xs"
+                          variant="subtle"
+                          color="red"
+                          loading={
+                            remove.isPending && remove.variables === item.id
+                          }
+                          onClick={() => deleteMedia(item)}
+                        >
+                          Удалить
+                        </Button>
+                      </Group>
+                    </Group>
+                  );
+                })}
               </Stack>
             )}
 
             <FileInput
               label="Аудио- или видеофайл"
-              description="Для гарантированного воспроизведения: MP4 (H.264/AAC, Fast Start) или WebM (VP8/VP9). Видео — до 5 ГБ, аудио — до 500 МБ."
+              description="Видео — до 5 ГБ, аудио — до 500 МБ. После загрузки платформа автоматически подготовит видео для быстрой загрузки в плеере."
               placeholder="Выберите файл"
               accept={ACCEPTED_MEDIA}
               clearable

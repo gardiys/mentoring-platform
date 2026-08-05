@@ -506,12 +506,8 @@ def test_probe_media_checks_real_container_codec_and_duration(
     def fake_run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
         invocation["command"] = command
         invocation["kwargs"] = kwargs
-        return subprocess.CompletedProcess(
-            command,
-            0,
-            stdout=json.dumps(payload).encode(),
-            stderr=b"",
-        )
+        kwargs["stdout"].write(json.dumps(payload).encode())
+        return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setenv("NEXARA_API_KEY", "must-not-leak")
     monkeypatch.setenv("S3_SECRET_ACCESS_KEY", "must-not-leak")
@@ -535,6 +531,7 @@ def test_probe_media_checks_real_container_codec_and_duration(
     assert "NEXARA_API_KEY" not in invocation["kwargs"]["env"]
     assert "S3_SECRET_ACCESS_KEY" not in invocation["kwargs"]["env"]
     assert invocation["kwargs"]["stdin"] is subprocess.DEVNULL
+    assert invocation["kwargs"]["stderr"] is subprocess.DEVNULL
     command = invocation["command"]
     assert "-nostdin" not in command
     assert command[command.index("-protocol_whitelist") + 1] == "file"

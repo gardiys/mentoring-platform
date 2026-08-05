@@ -19,10 +19,7 @@ SAFE_CONTENT_AUDIO_TYPES = (
 )
 SAFE_CONTENT_VIDEO_TYPES = (
     "video/mp4",
-    "video/ogg",
     "video/quicktime",
-    "video/webm",
-    "video/x-matroska",
 )
 
 

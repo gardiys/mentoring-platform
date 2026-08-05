@@ -6,6 +6,7 @@ import type {
   AdminKnowledgeTopicMutation,
   AdminKnowledgeTopicSettingsMutation,
 } from "../../types/api";
+import { hasPreparingContentMedia } from "../../utils/contentMedia";
 
 export const adminKnowledgeKeys = {
   all: ["admin", "knowledge"] as const,
@@ -33,6 +34,8 @@ export function useAdminKnowledgeEntry(topicId: string, entryId?: string) {
     queryKey: adminKnowledgeKeys.entry(topicId, entryId ?? "new"),
     queryFn: () => api.adminKnowledgeEntry(topicId, entryId!),
     enabled: Boolean(entryId),
+    refetchInterval: (query) =>
+      hasPreparingContentMedia(query.state.data?.media) ? 5_000 : false,
   });
 }
 
