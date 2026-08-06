@@ -96,12 +96,13 @@ function TopicForm({
                   label="Название"
                   required
                   value={form.title}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
                     setForm((current) => ({
                       ...current,
-                      title: event.currentTarget.value,
-                    }))
-                  }
+                      title: value,
+                    }));
+                  }}
                 />
                 <TextInput
                   label="Slug"
@@ -112,23 +113,25 @@ function TopicForm({
                       ? "Некорректный slug"
                       : null
                   }
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
                     setForm((current) => ({
                       ...current,
-                      slug: event.currentTarget.value,
-                    }))
-                  }
+                      slug: value,
+                    }));
+                  }}
                 />
               </Group>
               <Textarea
                 label="Краткое описание"
                 value={form.description ?? ""}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
                   setForm((current) => ({
                     ...current,
-                    description: event.currentTarget.value || null,
-                  }))
-                }
+                    description: value || null,
+                  }));
+                }}
               />
               <Textarea
                 label="Содержание (Markdown)"
@@ -136,12 +139,13 @@ function TopicForm({
                 autosize
                 minRows={18}
                 value={form.content_markdown}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
                   setForm((current) => ({
                     ...current,
-                    content_markdown: event.currentTarget.value,
-                  }))
-                }
+                    content_markdown: value,
+                  }));
+                }}
               />
               <Group grow>
                 <NumberInput
@@ -170,12 +174,13 @@ function TopicForm({
                 <Switch
                   label="Тема опубликована"
                   checked={form.is_published}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked;
                     setForm((current) => ({
                       ...current,
-                      is_published: event.currentTarget.checked,
-                    }))
-                  }
+                      is_published: checked,
+                    }));
+                  }}
                 />
               </Group>
               <Group justify="flex-end">

@@ -618,6 +618,43 @@ it("редактор темы роадмапа показывает сущест
   expect(screen.getByText("Аудио")).toBeInTheDocument();
 });
 
+it("редактор темы роадмапа безопасно изменяет и сохраняет материал", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(api, "adminRoadmapTopic").mockResolvedValue(adminTopic);
+  const update = vi.spyOn(api, "updateAdminRoadmapTopic").mockResolvedValue({
+    ...adminTopic,
+    title: "Конкурентность в Go",
+    content_markdown: "# Конкурентность в Go",
+  });
+  renderPage(
+    <AdminRoadmapTopicEditPage />,
+    `/admin/roadmaps/roadmap-id/sections/section-id/topics/${adminTopic.id}/edit`,
+    "/admin/roadmaps/:roadmapId/sections/:sectionId/topics/:topicId/edit",
+  );
+
+  const title = await screen.findByRole("textbox", { name: "Название" });
+  await user.clear(title);
+  await user.type(title, "Конкурентность в Go");
+  const content = screen.getByRole("textbox", {
+    name: "Содержание (Markdown)",
+  });
+  await user.clear(content);
+  await user.type(content, "# Конкурентность в Go");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  await waitFor(() =>
+    expect(update).toHaveBeenCalledWith(
+      "roadmap-id",
+      "section-id",
+      adminTopic.id,
+      expect.objectContaining({
+        title: "Конкурентность в Go",
+        content_markdown: "# Конкурентность в Go",
+      }),
+    ),
+  );
+});
+
 it("лениво открывает защищённое видео статьи и обновляет ticket", async () => {
   const entry: KnowledgeEntryDetail = {
     id: adminEntry.id,

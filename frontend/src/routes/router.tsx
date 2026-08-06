@@ -1,4 +1,3 @@
-import type { ComponentType } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 
 import { AppLayout } from "../components/AppLayout";
@@ -6,16 +5,7 @@ import { LoadingState } from "../components/LoadingState";
 import { ProtectedLayout } from "../components/ProtectedLayout";
 import { RoleGuard } from "../components/RoleGuard";
 import { RouteErrorBoundary } from "../components/RouteErrorBoundary";
-
-function lazyPage<TModule>(
-  loader: () => Promise<TModule>,
-  exportName: keyof TModule,
-) {
-  return async () => {
-    const module = await loader();
-    return { Component: module[exportName] as ComponentType };
-  };
-}
+import { lazyPage } from "./lazyRoute";
 
 const studentRoutes = [
   {
