@@ -1,4 +1,5 @@
 import {
+  Accordion,
   Alert,
   Anchor,
   Badge,
@@ -31,6 +32,8 @@ import {
 import type {
   InterviewCatalogAuthorRead,
   InterviewCatalogStageRead,
+  InterviewCatalogTrackRead,
+  InterviewProcessStatus,
   InterviewStageType,
 } from "../types/api";
 import { mediaKind } from "../utils/media";
@@ -44,6 +47,26 @@ const stageLabels: Record<InterviewStageType, string> = {
   final_interview: "Финальное интервью",
   other: "Иное",
 };
+
+const stageTypeOrder: InterviewStageType[] = [
+  "screening",
+  "technical_screening",
+  "technical_interview",
+  "system_design",
+  "final_interview",
+  "other",
+];
+
+function statusBadgeProps(status: InterviewProcessStatus) {
+  if (status === "active") return { color: "green", label: "Активный" };
+  if (status === "offer")
+    return {
+      color: "brandYellow",
+      label: "Получен оффер",
+      c: "brandNavy.9" as const,
+    };
+  return { color: "gray", label: "Закрыт" };
+}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("ru-RU", {
@@ -99,9 +122,11 @@ async function openFile(request: Promise<string>) {
 
 function CatalogStage({
   companyId,
+  track,
   stage,
 }: {
   companyId: string;
+  track: InterviewCatalogTrackRead;
   stage: InterviewCatalogStageRead;
 }) {
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
@@ -115,9 +140,11 @@ function CatalogStage({
   const commentMutation = useCreateInterviewCatalogComment(companyId);
   const deleteMutation = useDeleteInterviewCatalogComment(companyId);
   const viewMutation = useMarkInterviewCatalogStageViewed();
+  const favoriteMutation = useSetInterviewCatalogFavorite();
   const storedMediaKind = stage.media
     ? mediaKind(stage.media.content_type, stage.media.filename)
     : null;
+  const status = statusBadgeProps(track.status);
 
   const requestPlayerUrl = async (element?: HTMLMediaElement) => {
     if (element) {
@@ -207,14 +234,63 @@ function CatalogStage({
   return (
     <Card withBorder>
       <Stack>
-        <Group justify="space-between" align="flex-start">
+        <Group justify="space-between" align="flex-start" wrap="wrap">
           <div>
-            <Badge variant="light">{stageLabels[stage.stage_type]}</Badge>
+            <Group gap="xs" align="center" wrap="wrap">
+              <Text fw={600}>{formatAuthor(track.author)}</Text>
+              <Badge variant="outline" size="sm">
+                {track.track_title}
+              </Badge>
+              <Badge size="sm" color={status.color} c={status.c}>
+                {status.label}
+              </Badge>
+            </Group>
             <Title order={3} mt="xs">
               {formatDate(stage.scheduled_at)}
             </Title>
+            {track.recruiter_telegram_usernames.length > 0 && (
+              <Group gap="xs" mt={4}>
+                <Text size="xs" c="dimmed">
+                  Рекрутеры:
+                </Text>
+                {track.recruiter_telegram_usernames.map((username) => (
+                  <Anchor
+                    key={username}
+                    href={`https://t.me/${username}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    size="xs"
+                  >
+                    @{username}
+                  </Anchor>
+                ))}
+              </Group>
+            )}
           </div>
           <Stack gap="xs" align="flex-end">
+            <Button
+              size="compact-xs"
+              variant={track.is_favorite ? "filled" : "light"}
+              color="yellow"
+              loading={
+                favoriteMutation.isPending &&
+                favoriteMutation.variables?.processId === track.id
+              }
+              onClick={() =>
+                favoriteMutation.mutate(
+                  { processId: track.id, favorite: !track.is_favorite },
+                  {
+                    onError: (error) =>
+                      notifications.show({
+                        color: "red",
+                        message: error.message,
+                      }),
+                  },
+                )
+              }
+            >
+              {track.is_favorite ? "★ В избранном" : "☆ В избранное"}
+            </Button>
             {stage.is_viewed && stage.last_viewed_at ? (
               <Badge color="brandGreen" variant="light">
                 Просмотрено {formatDate(stage.last_viewed_at)}
@@ -242,6 +318,12 @@ function CatalogStage({
             </Button>
           </Stack>
         </Group>
+
+        {track.close_reason && (
+          <Alert color="gray" title="Результат процесса">
+            {track.close_reason}
+          </Alert>
+        )}
 
         {stage.description ? (
           <Text style={{ whiteSpace: "pre-wrap" }}>{stage.description}</Text>
@@ -513,7 +595,6 @@ export function InterviewCatalogCompanyPage() {
   const [searchParams] = useSearchParams();
   const filters = interviewCatalogFiltersFromParams(searchParams);
   const query = useInterviewCatalogCompany(companyId, filters);
-  const favoriteMutation = useSetInterviewCatalogFavorite();
 
   if (query.isPending) return <LoadingState label="Загружаем собеседования…" />;
   if (query.isError)
@@ -522,13 +603,32 @@ export function InterviewCatalogCompanyPage() {
     );
   const company = query.data;
 
+  const stagesByType = new Map<
+    InterviewStageType,
+    { track: InterviewCatalogTrackRead; stage: InterviewCatalogStageRead }[]
+  >();
+  for (const track of company.tracks) {
+    for (const stage of track.stages) {
+      const bucket = stagesByType.get(stage.stage_type);
+      if (bucket) bucket.push({ track, stage });
+      else stagesByType.set(stage.stage_type, [{ track, stage }]);
+    }
+  }
+  const sections = stageTypeOrder
+    .map((stageType) => ({ stageType, items: stagesByType.get(stageType) ?? [] }))
+    .filter((section) => section.items.length > 0);
+  const totalStages = sections.reduce(
+    (sum, section) => sum + section.items.length,
+    0,
+  );
+
   return (
     <Stack gap="xl">
       <Group justify="space-between" align="flex-end">
         <PageHeader
           eyebrow="Каталог собеседований"
           title={company.name}
-          description={`${company.tracks.length} треков учеников с описаниями, записями и материалами.`}
+          description={`${company.tracks.length} треков учеников · ${totalStages} этапов собеседований.`}
         />
         <Button
           component={Link}
@@ -548,104 +648,35 @@ export function InterviewCatalogCompanyPage() {
         <Card withBorder>
           <Text c="dimmed">Для этой компании пока нет доступных треков.</Text>
         </Card>
+      ) : sections.length === 0 ? (
+        <Card withBorder>
+          <Text c="dimmed">В треках этой компании пока нет этапов.</Text>
+        </Card>
       ) : (
-        company.tracks.map((track) => (
-          <Card key={track.id} withBorder padding="lg">
-            <Stack>
-              <Group justify="space-between" align="flex-start">
-                <div>
-                  <Text className="brand-eyebrow">Автор трека</Text>
-                  <Title order={2}>{formatAuthor(track.author)}</Title>
-                  <Text size="sm" c="dimmed" mt={4}>
-                    Трек создан {formatDate(track.created_at)}
-                  </Text>
-                  <Badge variant="outline" mt="xs">
-                    {track.track_title}
-                  </Badge>
-                  {track.recruiter_telegram_usernames.length > 0 && (
-                    <Group gap="xs" mt="sm">
-                      <Text size="sm" c="dimmed">
-                        Рекрутеры:
-                      </Text>
-                      {track.recruiter_telegram_usernames.map((username) => (
-                        <Anchor
-                          key={username}
-                          href={`https://t.me/${username}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          size="sm"
-                        >
-                          @{username}
-                        </Anchor>
-                      ))}
-                    </Group>
-                  )}
-                </div>
-                <Stack gap="xs" align="flex-end">
-                  <Button
-                    size="compact-xs"
-                    variant={track.is_favorite ? "filled" : "light"}
-                    color="yellow"
-                    loading={
-                      favoriteMutation.isPending &&
-                      favoriteMutation.variables?.processId === track.id
-                    }
-                    onClick={() =>
-                      favoriteMutation.mutate(
-                        { processId: track.id, favorite: !track.is_favorite },
-                        {
-                          onError: (error) =>
-                            notifications.show({
-                              color: "red",
-                              message: error.message,
-                            }),
-                        },
-                      )
-                    }
-                  >
-                    {track.is_favorite ? "★ В избранном" : "☆ В избранное"}
-                  </Button>
-                  <Group gap="xs" wrap="wrap" justify="flex-end">
-                    <Badge
-                      color={
-                        track.status === "active"
-                          ? "green"
-                          : track.status === "offer"
-                            ? "brandYellow"
-                            : "gray"
-                      }
-                      c={track.status === "offer" ? "brandNavy.9" : undefined}
-                    >
-                      {track.status === "active"
-                        ? "Активный"
-                        : track.status === "offer"
-                          ? "Получен оффер"
-                          : "Закрыт"}
-                    </Badge>
-                  </Group>
-                </Stack>
-              </Group>
-              {track.close_reason && (
-                <Alert color="gray" title="Результат процесса">
-                  {track.close_reason}
-                </Alert>
-              )}
-              {track.stages.length === 0 ? (
-                <Text c="dimmed">В этом треке пока нет собеседований.</Text>
-              ) : (
+        <Accordion multiple defaultValue={[]} className="brand-accordion">
+          {sections.map(({ stageType, items }) => (
+            <Accordion.Item key={stageType} value={stageType}>
+              <Accordion.Control>
+                <Group justify="space-between" pr="md">
+                  <Text fw={600}>{stageLabels[stageType]}</Text>
+                  <Badge variant="light">{items.length}</Badge>
+                </Group>
+              </Accordion.Control>
+              <Accordion.Panel>
                 <Stack>
-                  {track.stages.map((stage) => (
+                  {items.map(({ track, stage }) => (
                     <CatalogStage
                       key={stage.id}
                       companyId={companyId}
+                      track={track}
                       stage={stage}
                     />
                   ))}
                 </Stack>
-              )}
-            </Stack>
-          </Card>
-        ))
+              </Accordion.Panel>
+            </Accordion.Item>
+          ))}
+        </Accordion>
       )}
     </Stack>
   );

@@ -169,13 +169,19 @@ it("показывает треки, запись, файлы и отправл�
     "/interviews/catalog/:companyId",
   );
 
+  expect(
+    await screen.findByRole("button", { name: /Техническое интервью/ }),
+  ).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: /Техническое интервью/ }),
+  );
+
   expect(await screen.findByText("Иван · @ivan_backend")).toBeInTheDocument();
   expect(screen.queryByText(/Петров/)).not.toBeInTheDocument();
   expect(screen.getByText("Мария · @maria_go")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "@yandex_hr" })).toHaveAttribute(
-    "href",
-    "https://t.me/yandex_hr",
-  );
+  expect(
+    screen.getByRole("link", { name: "@yandex_hr", hidden: true }),
+  ).toHaveAttribute("href", "https://t.me/yandex_hr");
   expect(api.interviewCatalogCompany).toHaveBeenCalledWith(company.id, {
     query: "",
     authorId: null,
@@ -193,7 +199,9 @@ it("показывает треки, запись, файлы и отправл�
   expect(screen.getByText(/diagram.png/)).toBeInTheDocument();
   expect(screen.getByText(/Полезно повторить/)).toBeInTheDocument();
 
-  await userEvent.click(screen.getByRole("button", { name: "Посмотреть" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Посмотреть", hidden: true }),
+  );
   await waitFor(() => {
     const player = document.querySelector("video[controls]");
     expect(player).not.toBeNull();
@@ -221,11 +229,14 @@ it("показывает треки, запись, файлы и отправл�
   expect(document.querySelector("video[controls]")).not.toBe(firstPlayer);
 
   await userEvent.type(
-    screen.getByRole("textbox", { name: "Ваш комментарий" }),
+    screen.getByRole("textbox", { name: "Ваш комментарий", hidden: true }),
     "Спасибо, очень полезный разбор",
   );
   await userEvent.click(
-    screen.getByRole("button", { name: "Отправить комментарий" }),
+    screen.getByRole("button", {
+      name: "Отправить комментарий",
+      hidden: true,
+    }),
   );
   expect(createComment).toHaveBeenCalledWith(detail.tracks[0]!.stages[0]!.id, {
     body: "Спасибо, очень полезный разбор",
@@ -245,7 +256,10 @@ it("отмечает трек избранным", async () => {
 
   expect(await screen.findByText("Новое")).toBeInTheDocument();
   await userEvent.click(
-    screen.getByRole("button", { name: "☆ В избранное" }),
+    screen.getByRole("button", { name: /Техническое интервью/ }),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "☆ В избранное", hidden: true }),
   );
 
   expect(favorite).toHaveBeenCalledWith(detail.tracks[0]!.id);
@@ -293,7 +307,13 @@ it("отмечает этап просмотренным по нажатию к�
 
   expect(await screen.findByText("Новое")).toBeInTheDocument();
   await userEvent.click(
-    screen.getByRole("button", { name: "Отметить просмотренным" }),
+    screen.getByRole("button", { name: /Техническое интервью/ }),
+  );
+  await userEvent.click(
+    screen.getByRole("button", {
+      name: "Отметить просмотренным",
+      hidden: true,
+    }),
   );
 
   expect(markViewed).toHaveBeenCalledWith(detail.tracks[0]!.stages[0]!.id);
@@ -327,7 +347,12 @@ it("отмечает этап просмотренным при открытии
   );
 
   expect(await screen.findByText("Новое")).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "Посмотреть" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: /Техническое интервью/ }),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Посмотреть", hidden: true }),
+  );
 
   expect(
     await screen.findByText(/Просмотрено 13 августа 2026/),
