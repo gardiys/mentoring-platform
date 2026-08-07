@@ -20,6 +20,10 @@ from app.interviews.catalog_service import (
     list_catalog_authors,
     list_catalog_companies,
     list_catalog_directions,
+    list_catalog_view_history,
+    mark_catalog_stage_viewed,
+    remove_catalog_favorite,
+    set_catalog_favorite,
 )
 from app.interviews.media import ensure_stage_media_browser_playable
 from app.interviews.models import InterviewStageType
@@ -33,6 +37,7 @@ from app.interviews.schemas import (
     InterviewCatalogCommentRead,
     InterviewCatalogCompanyDetail,
     InterviewCatalogCompanyPage,
+    InterviewCatalogHistoryPage,
     InterviewCatalogMediaKind,
     InterviewDirectionOption,
     InterviewDownloadUrl,
@@ -80,6 +85,7 @@ async def catalog_companies(
     has_offer: bool = False,
     media_kind: InterviewCatalogMediaKind | None = None,
     has_ai_review: bool = False,
+    favorites_only: bool = False,
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> InterviewCatalogCompanyPage:
@@ -93,6 +99,7 @@ async def catalog_companies(
         has_offer=has_offer,
         media_kind=media_kind,
         has_ai_review=has_ai_review,
+        favorites_only=favorites_only,
         limit=limit,
         offset=offset,
     )
@@ -109,6 +116,7 @@ async def catalog_company(
     has_offer: bool = False,
     media_kind: InterviewCatalogMediaKind | None = None,
     has_ai_review: bool = False,
+    favorites_only: bool = False,
 ) -> InterviewCatalogCompanyDetail:
     return await catalog_company_detail(
         session,
@@ -120,7 +128,54 @@ async def catalog_company(
         has_offer=has_offer,
         media_kind=media_kind,
         has_ai_review=has_ai_review,
+        favorites_only=favorites_only,
     )
+
+
+@router.put(
+    "/tracks/{process_id}/favorite",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def catalog_favorite_track(
+    process_id: UUID, session: Session, student: CatalogUser
+) -> Response:
+    await set_catalog_favorite(session, student, process_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/tracks/{process_id}/favorite",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def catalog_unfavorite_track(
+    process_id: UUID, session: Session, student: CatalogUser
+) -> Response:
+    await remove_catalog_favorite(session, student, process_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/history", response_model=InterviewCatalogHistoryPage)
+async def catalog_view_history(
+    session: Session,
+    student: CatalogUser,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> InterviewCatalogHistoryPage:
+    return await list_catalog_view_history(session, student, limit=limit, offset=offset)
+
+
+@router.put(
+    "/stages/{stage_id}/view",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def catalog_mark_stage_viewed(
+    stage_id: UUID, session: Session, student: CatalogUser
+) -> Response:
+    await mark_catalog_stage_viewed(session, student, stage_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/stages/{stage_id}/media", response_model=InterviewDownloadUrl)
@@ -139,6 +194,7 @@ async def catalog_stage_media(
         or stage.media_size is None
     ):
         api_error(404, "interview_media_not_found", "Interview media was not found")
+    await mark_catalog_stage_viewed(session, student, stage_id)
     await ensure_stage_media_browser_playable(session, stage, store)
     ticket = create_interview_stream_ticket(
         user_id=student.id,

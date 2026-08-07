@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, case, distinct, exists, func, or_, select
+from sqlalchemy import ColumnElement, and_, case, delete, distinct, exists, func, or_, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -10,6 +12,8 @@ from app.core.errors import api_error
 from app.interviews.companies import suggest_companies
 from app.interviews.models import (
     Company,
+    InterviewCatalogFavorite,
+    InterviewCatalogView,
     InterviewProcess,
     InterviewProcessStage,
     InterviewProcessStageAttachment,
@@ -25,6 +29,8 @@ from app.interviews.schemas import (
     InterviewCatalogCompanyDetail,
     InterviewCatalogCompanyListItem,
     InterviewCatalogCompanyPage,
+    InterviewCatalogHistoryItem,
+    InterviewCatalogHistoryPage,
     InterviewCatalogMediaKind,
     InterviewCatalogStageRead,
     InterviewCatalogTrackRead,
@@ -43,7 +49,9 @@ def _catalog_process_filters(
     stage_type: InterviewStageType | None,
     has_offer: bool,
     media_kind: InterviewCatalogMediaKind | None,
+    current_user_id: UUID,
     has_ai_review: bool = False,
+    favorites_only: bool = False,
 ) -> list[ColumnElement[bool]]:
     conditions: list[ColumnElement[bool]] = []
     if author_id is not None:
@@ -83,6 +91,17 @@ def _catalog_process_filters(
                 .where(
                     ai_stage.process_id == InterviewProcess.id,
                     ai_comment.is_ai_feedback.is_(True),
+                )
+            )
+        )
+    if favorites_only:
+        conditions.append(
+            exists(
+                select(1)
+                .select_from(InterviewCatalogFavorite)
+                .where(
+                    InterviewCatalogFavorite.process_id == InterviewProcess.id,
+                    InterviewCatalogFavorite.user_id == current_user_id,
                 )
             )
         )
@@ -175,6 +194,7 @@ async def list_catalog_companies(
     has_offer: bool = False,
     media_kind: InterviewCatalogMediaKind | None = None,
     has_ai_review: bool = False,
+    favorites_only: bool = False,
     limit: int = 24,
     offset: int = 0,
 ) -> InterviewCatalogCompanyPage:
@@ -185,17 +205,39 @@ async def list_catalog_companies(
         if not candidate_ids:
             return InterviewCatalogCompanyPage(items=[], total=0, limit=limit, offset=offset)
 
+    view_alias = aliased(InterviewCatalogView)
+    favorite_alias = aliased(InterviewCatalogFavorite)
     statement = (
         select(
             Company,
             func.count(distinct(InterviewProcess.id)),
             func.count(InterviewProcessStage.id),
             func.max(InterviewProcessStage.scheduled_at),
+            func.count(
+                distinct(
+                    case((view_alias.stage_id.is_(None), InterviewProcessStage.id))
+                )
+            ),
+            func.bool_or(favorite_alias.process_id.is_not(None)),
         )
         .join(InterviewProcess, InterviewProcess.company_id == Company.id)
         .outerjoin(
             InterviewProcessStage,
             InterviewProcessStage.process_id == InterviewProcess.id,
+        )
+        .outerjoin(
+            view_alias,
+            and_(
+                view_alias.stage_id == InterviewProcessStage.id,
+                view_alias.user_id == current_user.id,
+            ),
+        )
+        .outerjoin(
+            favorite_alias,
+            and_(
+                favorite_alias.process_id == InterviewProcess.id,
+                favorite_alias.user_id == current_user.id,
+            ),
         )
         .group_by(Company.id)
         .where(
@@ -206,7 +248,9 @@ async def list_catalog_companies(
                 stage_type=stage_type,
                 has_offer=has_offer,
                 media_kind=media_kind,
+                current_user_id=current_user.id,
                 has_ai_review=has_ai_review,
+                favorites_only=favorites_only,
             ),
         )
     )
@@ -237,8 +281,17 @@ async def list_catalog_companies(
             track_count=track_count,
             interview_count=interview_count,
             last_interview_at=last_interview_at,
+            unviewed_count=unviewed_count,
+            has_favorite=bool(has_favorite),
         )
-        for company, track_count, interview_count, last_interview_at in rows
+        for (
+            company,
+            track_count,
+            interview_count,
+            last_interview_at,
+            unviewed_count,
+            has_favorite,
+        ) in rows
     ]
     return InterviewCatalogCompanyPage(
         items=items,
@@ -295,6 +348,7 @@ async def catalog_company_detail(
     has_offer: bool = False,
     media_kind: InterviewCatalogMediaKind | None = None,
     has_ai_review: bool = False,
+    favorites_only: bool = False,
 ) -> InterviewCatalogCompanyDetail:
     company = await session.get(Company, company_id)
     if company is None:
@@ -333,13 +387,27 @@ async def catalog_company_detail(
                     stage_type=stage_type,
                     has_offer=has_offer,
                     media_kind=media_kind,
+                    current_user_id=current_user.id,
                     has_ai_review=has_ai_review,
+                    favorites_only=favorites_only,
                 ),
             )
             .order_by(InterviewProcess.updated_at.desc())
         )
     ).all()
     process_ids = [process.id for process, _, _ in process_rows]
+    favorite_process_ids: set[UUID] = (
+        set(
+            await session.scalars(
+                select(InterviewCatalogFavorite.process_id).where(
+                    InterviewCatalogFavorite.user_id == current_user.id,
+                    InterviewCatalogFavorite.process_id.in_(process_ids),
+                )
+            )
+        )
+        if process_ids
+        else set()
+    )
     stages = (
         list(
             await session.scalars(
@@ -355,6 +423,19 @@ async def catalog_company_detail(
         else []
     )
     stage_ids = [stage.id for stage in stages]
+    view_by_stage: dict[UUID, InterviewCatalogView] = (
+        {
+            view.stage_id: view
+            for view in await session.scalars(
+                select(InterviewCatalogView).where(
+                    InterviewCatalogView.user_id == current_user.id,
+                    InterviewCatalogView.stage_id.in_(stage_ids),
+                )
+            )
+        }
+        if stage_ids
+        else {}
+    )
     attachments = (
         list(
             await session.scalars(
@@ -411,6 +492,17 @@ async def catalog_company_detail(
                     _comment(comment, comment_author, current_user)
                     for comment, comment_author in comments_by_stage[stage.id]
                 ],
+                is_viewed=stage.id in view_by_stage,
+                first_viewed_at=(
+                    view_by_stage[stage.id].first_viewed_at
+                    if stage.id in view_by_stage
+                    else None
+                ),
+                last_viewed_at=(
+                    view_by_stage[stage.id].last_viewed_at
+                    if stage.id in view_by_stage
+                    else None
+                ),
             )
             for stage in stages_by_process[process.id]
         ]
@@ -427,6 +519,7 @@ async def catalog_company_detail(
                 created_at=process.created_at,
                 updated_at=process.updated_at,
                 stages=track_stages,
+                is_favorite=process.id in favorite_process_ids,
             )
         )
     return InterviewCatalogCompanyDetail(id=company.id, name=company.name, tracks=tracks)
@@ -449,6 +542,72 @@ async def get_catalog_stage(
     if stage is None:
         api_error(404, "interview_catalog_stage_not_found", "Interview was not found")
     return stage
+
+
+async def mark_catalog_stage_viewed(
+    session: AsyncSession, current_user: User, stage_id: UUID
+) -> None:
+    stage = await get_catalog_stage(session, current_user, stage_id)
+    now = datetime.now(UTC)
+    await session.execute(
+        insert(InterviewCatalogView)
+        .values(
+            user_id=current_user.id,
+            stage_id=stage.id,
+            first_viewed_at=now,
+            last_viewed_at=now,
+        )
+        .on_conflict_do_update(
+            index_elements=[InterviewCatalogView.user_id, InterviewCatalogView.stage_id],
+            set_={"last_viewed_at": now},
+        )
+    )
+    await session.commit()
+
+
+async def list_catalog_view_history(
+    session: AsyncSession,
+    current_user: User,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+) -> InterviewCatalogHistoryPage:
+    statement = (
+        select(
+            InterviewCatalogView,
+            InterviewProcessStage,
+            InterviewProcess,
+            LearningTrack,
+            Company,
+        )
+        .join(InterviewProcessStage, InterviewProcessStage.id == InterviewCatalogView.stage_id)
+        .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
+        .join(LearningTrack, LearningTrack.id == InterviewProcess.track_id)
+        .join(Company, Company.id == InterviewProcess.company_id)
+        .where(InterviewCatalogView.user_id == current_user.id)
+        .order_by(InterviewCatalogView.last_viewed_at.desc())
+    )
+    total = int(
+        await session.scalar(select(func.count()).select_from(statement.order_by(None).subquery()))
+        or 0
+    )
+    rows = (await session.execute(statement.limit(limit).offset(offset))).all()
+    items = [
+        InterviewCatalogHistoryItem(
+            stage_id=stage.id,
+            process_id=process.id,
+            company_id=company.id,
+            company_name=company.name,
+            track_title=track.title,
+            stage_type=stage.stage_type,
+            scheduled_at=stage.scheduled_at,
+            description=stage.description,
+            first_viewed_at=view.first_viewed_at,
+            last_viewed_at=view.last_viewed_at,
+        )
+        for view, stage, process, track, company in rows
+    ]
+    return InterviewCatalogHistoryPage(items=items, total=total, limit=limit, offset=offset)
 
 
 async def get_catalog_attachment(
@@ -499,4 +658,47 @@ async def delete_catalog_comment(
         api_error(404, "interview_comment_not_found", "Comment was not found")
     await get_catalog_stage(session, current_user, comment.stage_id)
     await session.delete(comment)
+    await session.commit()
+
+
+async def get_catalog_process(
+    session: AsyncSession, current_user: User, process_id: UUID
+) -> InterviewProcess:
+    process = await session.scalar(
+        select(InterviewProcess).where(
+            InterviewProcess.id == process_id,
+            *_direction_filters(current_user),
+        )
+    )
+    if process is None:
+        api_error(404, "interview_catalog_track_not_found", "Interview track was not found")
+    return process
+
+
+async def set_catalog_favorite(
+    session: AsyncSession, current_user: User, process_id: UUID
+) -> None:
+    await get_catalog_process(session, current_user, process_id)
+    await session.execute(
+        insert(InterviewCatalogFavorite)
+        .values(user_id=current_user.id, process_id=process_id)
+        .on_conflict_do_nothing(
+            index_elements=[
+                InterviewCatalogFavorite.user_id,
+                InterviewCatalogFavorite.process_id,
+            ]
+        )
+    )
+    await session.commit()
+
+
+async def remove_catalog_favorite(
+    session: AsyncSession, current_user: User, process_id: UUID
+) -> None:
+    await session.execute(
+        delete(InterviewCatalogFavorite).where(
+            InterviewCatalogFavorite.user_id == current_user.id,
+            InterviewCatalogFavorite.process_id == process_id,
+        )
+    )
     await session.commit()

@@ -36,6 +36,7 @@ export function interviewCatalogFiltersFromParams(
     hasOffer: params.get("has_offer") === "true",
     mediaKind: mediaKind && mediaKinds.has(mediaKind) ? mediaKind : null,
     hasAiReview: params.get("has_ai_review") === "true",
+    favoritesOnly: params.get("favorites_only") === "true",
   };
 }
 
@@ -55,10 +56,13 @@ export const interviewCatalogKeys = {
       filters.hasOffer,
       filters.mediaKind,
       filters.hasAiReview,
+      filters.favoritesOnly,
       page,
     ] as const,
   companyRoot: (companyId: string) =>
     ["interviews", "catalog", "company", companyId] as const,
+  history: (limit: number, offset: number) =>
+    ["interviews", "catalog", "history", limit, offset] as const,
   company: (companyId: string, filters: InterviewCatalogFilters) =>
     [
       ...interviewCatalogKeys.companyRoot(companyId),
@@ -68,6 +72,7 @@ export const interviewCatalogKeys = {
       filters.hasOffer,
       filters.mediaKind,
       filters.hasAiReview,
+      filters.favoritesOnly,
     ] as const,
 };
 
@@ -134,6 +139,45 @@ export function useDeleteInterviewCatalogComment(companyId: string) {
       await queryClient.invalidateQueries({
         queryKey: interviewCatalogKeys.companyRoot(companyId),
       });
+    },
+  });
+}
+
+export function useMarkInterviewCatalogStageViewed() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (stageId: string) =>
+      api.markInterviewCatalogStageViewed(stageId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: interviewCatalogKeys.all });
+    },
+  });
+}
+
+export function useInterviewCatalogHistory(page: number) {
+  const limit = 50;
+  return useQuery({
+    queryKey: interviewCatalogKeys.history(limit, (page - 1) * limit),
+    queryFn: () =>
+      api.interviewCatalogHistory({ limit, offset: (page - 1) * limit }),
+  });
+}
+
+export function useSetInterviewCatalogFavorite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      processId,
+      favorite,
+    }: {
+      processId: string;
+      favorite: boolean;
+    }) =>
+      favorite
+        ? api.favoriteInterviewCatalogTrack(processId)
+        : api.unfavoriteInterviewCatalogTrack(processId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: interviewCatalogKeys.all });
     },
   });
 }

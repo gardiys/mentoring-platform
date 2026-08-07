@@ -11,6 +11,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
@@ -20,9 +21,12 @@ import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import {
   interviewCatalogFiltersFromParams,
+  interviewCatalogKeys,
   useCreateInterviewCatalogComment,
   useDeleteInterviewCatalogComment,
   useInterviewCatalogCompany,
+  useMarkInterviewCatalogStageViewed,
+  useSetInterviewCatalogFavorite,
 } from "../features/interviews/catalogQueries";
 import type {
   InterviewCatalogAuthorRead,
@@ -107,8 +111,10 @@ function CatalogStage({
   const resumePlaybackRef = useRef(false);
   const automaticRecoveryAttemptedRef = useRef(false);
   const [comment, setComment] = useState("");
+  const queryClient = useQueryClient();
   const commentMutation = useCreateInterviewCatalogComment(companyId);
   const deleteMutation = useDeleteInterviewCatalogComment(companyId);
+  const viewMutation = useMarkInterviewCatalogStageViewed();
   const storedMediaKind = stage.media
     ? mediaKind(stage.media.content_type, stage.media.filename)
     : null;
@@ -124,6 +130,9 @@ function CatalogStage({
     try {
       setPlayerUrl(await api.interviewCatalogStageMedia(stage.id));
       setPlayerReloadKey((current) => current + 1);
+      await queryClient.invalidateQueries({
+        queryKey: interviewCatalogKeys.all,
+      });
     } catch (error) {
       if (element) setPlayerUrl(null);
       notifications.show({
@@ -205,6 +214,33 @@ function CatalogStage({
               {formatDate(stage.scheduled_at)}
             </Title>
           </div>
+          <Stack gap="xs" align="flex-end">
+            {stage.is_viewed && stage.last_viewed_at ? (
+              <Badge color="brandGreen" variant="light">
+                Просмотрено {formatDate(stage.last_viewed_at)}
+              </Badge>
+            ) : (
+              <Badge color="brandBlue" variant="light">
+                Новое
+              </Badge>
+            )}
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              loading={viewMutation.isPending}
+              onClick={() =>
+                viewMutation.mutate(stage.id, {
+                  onError: (error) =>
+                    notifications.show({
+                      color: "red",
+                      message: error.message,
+                    }),
+                })
+              }
+            >
+              Отметить просмотренным
+            </Button>
+          </Stack>
         </Group>
 
         {stage.description ? (
@@ -477,6 +513,7 @@ export function InterviewCatalogCompanyPage() {
   const [searchParams] = useSearchParams();
   const filters = interviewCatalogFiltersFromParams(searchParams);
   const query = useInterviewCatalogCompany(companyId, filters);
+  const favoriteMutation = useSetInterviewCatalogFavorite();
 
   if (query.isPending) return <LoadingState label="Загружаем собеседования…" />;
   if (query.isError)
@@ -544,22 +581,49 @@ export function InterviewCatalogCompanyPage() {
                     </Group>
                   )}
                 </div>
-                <Badge
-                  color={
-                    track.status === "active"
-                      ? "green"
-                      : track.status === "offer"
-                        ? "brandYellow"
-                        : "gray"
-                  }
-                  c={track.status === "offer" ? "brandNavy.9" : undefined}
-                >
-                  {track.status === "active"
-                    ? "Активный"
-                    : track.status === "offer"
-                      ? "Получен оффер"
-                      : "Закрыт"}
-                </Badge>
+                <Stack gap="xs" align="flex-end">
+                  <Button
+                    size="compact-xs"
+                    variant={track.is_favorite ? "filled" : "light"}
+                    color="yellow"
+                    loading={
+                      favoriteMutation.isPending &&
+                      favoriteMutation.variables?.processId === track.id
+                    }
+                    onClick={() =>
+                      favoriteMutation.mutate(
+                        { processId: track.id, favorite: !track.is_favorite },
+                        {
+                          onError: (error) =>
+                            notifications.show({
+                              color: "red",
+                              message: error.message,
+                            }),
+                        },
+                      )
+                    }
+                  >
+                    {track.is_favorite ? "★ В избранном" : "☆ В избранное"}
+                  </Button>
+                  <Group gap="xs" wrap="wrap" justify="flex-end">
+                    <Badge
+                      color={
+                        track.status === "active"
+                          ? "green"
+                          : track.status === "offer"
+                            ? "brandYellow"
+                            : "gray"
+                      }
+                      c={track.status === "offer" ? "brandNavy.9" : undefined}
+                    >
+                      {track.status === "active"
+                        ? "Активный"
+                        : track.status === "offer"
+                          ? "Получен оффер"
+                          : "Закрыт"}
+                    </Badge>
+                  </Group>
+                </Stack>
               </Group>
               {track.close_reason && (
                 <Alert color="gray" title="Результат процесса">

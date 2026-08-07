@@ -64,6 +64,7 @@ import type {
   InterviewCatalogCompanyDetail,
   InterviewCatalogCompanyPage,
   InterviewCatalogFilters,
+  InterviewCatalogHistoryPage,
   IntelligenceInterviewDetail,
   IntelligenceInterviewPage,
   IntelligenceProcessing,
@@ -1106,6 +1107,7 @@ export const api = {
     if (filters.hasOffer) params.set("has_offer", "true");
     if (filters.mediaKind) params.set("media_kind", filters.mediaKind);
     if (filters.hasAiReview) params.set("has_ai_review", "true");
+    if (filters.favoritesOnly) params.set("favorites_only", "true");
     const query = params.toString();
     return apiRequest<InterviewCatalogCompanyPage>(
       `/api/v1/interviews/catalog/companies${query ? `?${query}` : ""}`,
@@ -1122,9 +1124,33 @@ export const api = {
     if (filters.hasOffer) params.set("has_offer", "true");
     if (filters.mediaKind) params.set("media_kind", filters.mediaKind);
     if (filters.hasAiReview) params.set("has_ai_review", "true");
+    if (filters.favoritesOnly) params.set("favorites_only", "true");
     const query = params.toString();
     return apiRequest<InterviewCatalogCompanyDetail>(
       `/api/v1/interviews/catalog/companies/${companyId}${query ? `?${query}` : ""}`,
+    );
+  },
+  favoriteInterviewCatalogTrack: (processId: string) =>
+    apiRequest<void>(`/api/v1/interviews/catalog/tracks/${processId}/favorite`, {
+      method: "PUT",
+    }),
+  unfavoriteInterviewCatalogTrack: (processId: string) =>
+    apiRequest<void>(`/api/v1/interviews/catalog/tracks/${processId}/favorite`, {
+      method: "DELETE",
+    }),
+  markInterviewCatalogStageViewed: (stageId: string) =>
+    apiRequest<void>(`/api/v1/interviews/catalog/stages/${stageId}/view`, {
+      method: "PUT",
+    }),
+  interviewCatalogHistory: (
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = new URLSearchParams({
+      limit: String(options.limit ?? 50),
+      offset: String(options.offset ?? 0),
+    });
+    return apiRequest<InterviewCatalogHistoryPage>(
+      `/api/v1/interviews/catalog/history?${params.toString()}`,
     );
   },
   interviewCatalogDirections: () =>

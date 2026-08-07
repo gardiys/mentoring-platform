@@ -196,6 +196,10 @@ export type InterviewCatalogCommentRead =
 export type InterviewCatalogCommentMutation =
   Schemas["InterviewCatalogCommentMutation"];
 export type InterviewCatalogMediaKind = Schemas["InterviewCatalogMediaKind"];
+export type InterviewCatalogHistoryItem =
+  Schemas["InterviewCatalogHistoryItem"];
+export type InterviewCatalogHistoryPage =
+  Schemas["InterviewCatalogHistoryPage"];
 
 export interface InterviewCatalogFilters {
   query: string;
@@ -205,6 +209,7 @@ export interface InterviewCatalogFilters {
   hasOffer: boolean;
   mediaKind: InterviewCatalogMediaKind | null;
   hasAiReview: boolean;
+  favoritesOnly: boolean;
 }
 
 export type StudentLearningStatus =

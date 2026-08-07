@@ -17,6 +17,8 @@ const company: InterviewCatalogCompanyListItem = {
   track_count: 2,
   interview_count: 4,
   last_interview_at: "2026-08-12T12:00:00Z",
+  unviewed_count: 1,
+  has_favorite: false,
 };
 const pythonTrackId = "30000000-0000-4000-8000-000000000001";
 const authorId = "20000000-0000-4000-8000-000000000001";
@@ -40,12 +42,16 @@ const detail: InterviewCatalogCompanyDetail = {
       close_reason: "Позиция была заморожена",
       created_at: "2026-08-01T10:00:00Z",
       updated_at: "2026-08-12T12:00:00Z",
+      is_favorite: false,
       stages: [
         {
           id: "71000000-0000-4000-8000-000000000001",
           stage_type: "technical_interview",
           scheduled_at: "2026-08-10T12:00:00Z",
           description: "Алгоритмы, Python и проектирование API",
+          is_viewed: false,
+          first_viewed_at: null,
+          last_viewed_at: null,
           media: {
             filename: "interview.mp4",
             content_type: "video/mp4",
@@ -136,6 +142,7 @@ it("ищет компании в каталоге", async () => {
         hasOffer: true,
         mediaKind: "any",
         hasAiReview: true,
+        favoritesOnly: false,
       },
       { limit: 24, offset: 0 },
     ),
@@ -177,6 +184,7 @@ it("показывает треки, запись, файлы и отправл�
     hasOffer: false,
     mediaKind: null,
     hasAiReview: false,
+    favoritesOnly: false,
   });
   expect(
     screen.getByText("Алгоритмы, Python и проектирование API"),
@@ -222,4 +230,106 @@ it("показывает треки, запись, файлы и отправл�
   expect(createComment).toHaveBeenCalledWith(detail.tracks[0]!.stages[0]!.id, {
     body: "Спасибо, очень полезный разбор",
   });
+});
+
+it("отмечает трек избранным", async () => {
+  vi.spyOn(api, "interviewCatalogCompany").mockResolvedValue(detail);
+  const favorite = vi
+    .spyOn(api, "favoriteInterviewCatalogTrack")
+    .mockResolvedValue(undefined);
+  renderPage(
+    <InterviewCatalogCompanyPage />,
+    `/interviews/catalog/${company.id}`,
+    "/interviews/catalog/:companyId",
+  );
+
+  expect(await screen.findByText("Новое")).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: "☆ В избранное" }),
+  );
+
+  expect(favorite).toHaveBeenCalledWith(detail.tracks[0]!.id);
+});
+
+it("показывает дату последнего просмотра у уже просмотренного этапа", async () => {
+  vi.spyOn(api, "interviewCatalogCompany").mockResolvedValue({
+    ...detail,
+    tracks: [
+      {
+        ...detail.tracks[0]!,
+        stages: [
+          {
+            ...detail.tracks[0]!.stages[0]!,
+            is_viewed: true,
+            first_viewed_at: "2026-08-05T09:00:00Z",
+            last_viewed_at: "2026-08-13T09:00:00Z",
+          },
+        ],
+      },
+    ],
+  });
+  renderPage(
+    <InterviewCatalogCompanyPage />,
+    `/interviews/catalog/${company.id}`,
+    "/interviews/catalog/:companyId",
+  );
+
+  expect(
+    await screen.findByText(/Просмотрено 13 августа 2026/),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Новое")).not.toBeInTheDocument();
+});
+
+it("отмечает этап просмотренным по нажатию кнопки", async () => {
+  vi.spyOn(api, "interviewCatalogCompany").mockResolvedValue(detail);
+  const markViewed = vi
+    .spyOn(api, "markInterviewCatalogStageViewed")
+    .mockResolvedValue(undefined);
+  renderPage(
+    <InterviewCatalogCompanyPage />,
+    `/interviews/catalog/${company.id}`,
+    "/interviews/catalog/:companyId",
+  );
+
+  expect(await screen.findByText("Новое")).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Отметить просмотренным" }),
+  );
+
+  expect(markViewed).toHaveBeenCalledWith(detail.tracks[0]!.stages[0]!.id);
+});
+
+it("отмечает этап просмотренным при открытии записи", async () => {
+  const companySpy = vi.spyOn(api, "interviewCatalogCompany");
+  companySpy.mockResolvedValueOnce(detail).mockResolvedValueOnce({
+    ...detail,
+    tracks: [
+      {
+        ...detail.tracks[0]!,
+        stages: [
+          {
+            ...detail.tracks[0]!.stages[0]!,
+            is_viewed: true,
+            first_viewed_at: "2026-08-13T09:00:00Z",
+            last_viewed_at: "2026-08-13T09:00:00Z",
+          },
+        ],
+      },
+    ],
+  });
+  vi.spyOn(api, "interviewCatalogStageMedia").mockResolvedValue(
+    "https://s3.example.test/interview.mp4?inline=true",
+  );
+  renderPage(
+    <InterviewCatalogCompanyPage />,
+    "/interviews/catalog/73000000-0000-4000-8000-000000000001",
+    "/interviews/catalog/:companyId",
+  );
+
+  expect(await screen.findByText("Новое")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Посмотреть" }));
+
+  expect(
+    await screen.findByText(/Просмотрено 13 августа 2026/),
+  ).toBeInTheDocument();
 });

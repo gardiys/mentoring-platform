@@ -406,3 +406,36 @@ class InterviewStageComment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("intelligence_interviews.id", ondelete="CASCADE"),
         nullable=True,
     )
+
+
+class InterviewCatalogView(Base):
+    __tablename__ = "interview_catalog_views"
+    __table_args__ = (Index("ix_interview_catalog_views_user", "user_id", "last_viewed_at"),)
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    stage_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("interview_process_stages.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    first_viewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_viewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class InterviewCatalogFavorite(Base):
+    __tablename__ = "interview_catalog_favorites"
+    __table_args__ = (Index("ix_interview_catalog_favorites_user", "user_id", "created_at"),)
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    process_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("interview_processes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

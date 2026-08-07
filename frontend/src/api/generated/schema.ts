@@ -243,6 +243,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/interviews/catalog/tracks/{process_id}/favorite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Catalog Favorite Track */
+        put: operations["catalog_favorite_track_api_v1_interviews_catalog_tracks__process_id__favorite_put"];
+        post?: never;
+        /** Catalog Unfavorite Track */
+        delete: operations["catalog_unfavorite_track_api_v1_interviews_catalog_tracks__process_id__favorite_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog View History */
+        get: operations["catalog_view_history_api_v1_interviews_catalog_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/stages/{stage_id}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Catalog Mark Stage Viewed */
+        put: operations["catalog_mark_stage_viewed_api_v1_interviews_catalog_stages__stage_id__view_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/interviews/catalog/stages/{stage_id}/media": {
         parameters: {
             query?: never;
@@ -775,6 +827,23 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/interviews/processes/{process_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Admin Delete Interview Process */
+        delete: operations["admin_delete_interview_process_api_v1_admin_interviews_processes__process_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2214,7 +2283,8 @@ export interface paths {
         /** Admin Update Roadmap */
         put: operations["admin_update_roadmap_api_v1_admin_roadmaps__roadmap_id__put"];
         post?: never;
-        delete?: never;
+        /** Admin Delete Roadmap */
+        delete: operations["admin_delete_roadmap_api_v1_admin_roadmaps__roadmap_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4909,11 +4979,72 @@ export interface components {
             interview_count: number;
             /** Last Interview At */
             last_interview_at: string | null;
+            /**
+             * Unviewed Count
+             * @default 0
+             */
+            unviewed_count: number;
+            /**
+             * Has Favorite
+             * @default false
+             */
+            has_favorite: boolean;
         };
         /** InterviewCatalogCompanyPage */
         InterviewCatalogCompanyPage: {
             /** Items */
             items: components["schemas"]["InterviewCatalogCompanyListItem"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** InterviewCatalogHistoryItem */
+        InterviewCatalogHistoryItem: {
+            /**
+             * Stage Id
+             * Format: uuid
+             */
+            stage_id: string;
+            /**
+             * Process Id
+             * Format: uuid
+             */
+            process_id: string;
+            /**
+             * Company Id
+             * Format: uuid
+             */
+            company_id: string;
+            /** Company Name */
+            company_name: string;
+            /** Track Title */
+            track_title: string;
+            stage_type: components["schemas"]["InterviewStageType"];
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+            /** Description */
+            description: string | null;
+            /**
+             * First Viewed At
+             * Format: date-time
+             */
+            first_viewed_at: string;
+            /**
+             * Last Viewed At
+             * Format: date-time
+             */
+            last_viewed_at: string;
+        };
+        /** InterviewCatalogHistoryPage */
+        InterviewCatalogHistoryPage: {
+            /** Items */
+            items: components["schemas"]["InterviewCatalogHistoryItem"][];
             /** Total */
             total: number;
             /** Limit */
@@ -4946,6 +5077,15 @@ export interface components {
             attachments: components["schemas"]["InterviewStageAttachmentRead"][];
             /** Comments */
             comments: components["schemas"]["InterviewCatalogCommentRead"][];
+            /**
+             * Is Viewed
+             * @default false
+             */
+            is_viewed: boolean;
+            /** First Viewed At */
+            first_viewed_at?: string | null;
+            /** Last Viewed At */
+            last_viewed_at?: string | null;
         };
         /** InterviewCatalogTrackRead */
         InterviewCatalogTrackRead: {
@@ -4981,6 +5121,11 @@ export interface components {
             updated_at: string;
             /** Stages */
             stages: components["schemas"]["InterviewCatalogStageRead"][];
+            /**
+             * Is Favorite
+             * @default false
+             */
+            is_favorite: boolean;
         };
         /** InterviewCompletedMultipartPart */
         InterviewCompletedMultipartPart: {
@@ -6799,6 +6944,8 @@ export interface operations {
                 stage_type?: components["schemas"]["InterviewStageType"] | null;
                 has_offer?: boolean;
                 media_kind?: components["schemas"]["InterviewCatalogMediaKind"] | null;
+                has_ai_review?: boolean;
+                favorites_only?: boolean;
                 limit?: number;
                 offset?: number;
             };
@@ -6841,6 +6988,8 @@ export interface operations {
                 stage_type?: components["schemas"]["InterviewStageType"] | null;
                 has_offer?: boolean;
                 media_kind?: components["schemas"]["InterviewCatalogMediaKind"] | null;
+                has_ai_review?: boolean;
+                favorites_only?: boolean;
             };
             header?: {
                 authorization?: string | null;
@@ -6863,6 +7012,145 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InterviewCatalogCompanyDetail"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_favorite_track_api_v1_interviews_catalog_tracks__process_id__favorite_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_unfavorite_track_api_v1_interviews_catalog_tracks__process_id__favorite_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_view_history_api_v1_interviews_catalog_history_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCatalogHistoryPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_mark_stage_viewed_api_v1_interviews_catalog_stages__stage_id__view_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -8416,6 +8704,40 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AdminInterviewProcessPage"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_interview_process_api_v1_admin_interviews_processes__process_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -12027,6 +12349,40 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AdminRoadmapRead"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_roadmap_api_v1_admin_roadmaps__roadmap_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                roadmap_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

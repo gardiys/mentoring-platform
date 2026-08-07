@@ -68,7 +68,8 @@ export function InterviewCatalogPage() {
     currentFilters.stageType ||
     currentFilters.hasOffer ||
     currentFilters.mediaKind ||
-    currentFilters.hasAiReview,
+    currentFilters.hasAiReview ||
+    currentFilters.favoritesOnly,
   );
 
   const updateFilter = (name: string, value: string | null) => {
@@ -92,9 +93,18 @@ export function InterviewCatalogPage() {
           title="Каталог компаний"
           description="Изучайте реальные этапы собеседований, записи, материалы и обратную связь учеников."
         />
-        <Button component={Link} to="/interviews" variant="subtle">
-          ← К собеседованиям
-        </Button>
+        <Group gap="xs">
+          <Button
+            component={Link}
+            to="/interviews/catalog/history"
+            variant="subtle"
+          >
+            История просмотров
+          </Button>
+          <Button component={Link} to="/interviews" variant="subtle">
+            ← К собеседованиям
+          </Button>
+        </Group>
       </Group>
 
       <Card withBorder>
@@ -177,6 +187,16 @@ export function InterviewCatalogPage() {
                   )
                 }
               />
+              <Switch
+                label="Только избранное"
+                checked={currentFilters.favoritesOnly}
+                onChange={(event) =>
+                  updateFilter(
+                    "favorites_only",
+                    event.currentTarget.checked ? "true" : null,
+                  )
+                }
+              />
               <Button
                 size="compact-sm"
                 variant="subtle"
@@ -218,7 +238,19 @@ export function InterviewCatalogPage() {
                     {company.interview_count} интервью
                   </Text>
                 </Group>
-                <Title order={2}>{company.name}</Title>
+                <Group justify="space-between" align="flex-start">
+                  <Title order={2}>{company.name}</Title>
+                  {company.has_favorite && (
+                    <Text size="lg" title="Есть избранные треки" aria-hidden>
+                      ★
+                    </Text>
+                  )}
+                </Group>
+                {company.unviewed_count > 0 && (
+                  <Badge color="brandBlue" variant="light">
+                    {company.unviewed_count} новых
+                  </Badge>
+                )}
                 <Text c="dimmed" size="sm">
                   {company.last_interview_at
                     ? `Последнее интервью: ${formatDate(company.last_interview_at)}`

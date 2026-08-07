@@ -467,6 +467,9 @@ class InterviewCatalogStageRead(BaseModel):
     media: InterviewAttachmentRead | None
     attachments: list[InterviewStageAttachmentRead]
     comments: list[InterviewCatalogCommentRead]
+    is_viewed: bool = False
+    first_viewed_at: datetime | None = None
+    last_viewed_at: datetime | None = None
 
 
 class InterviewCatalogTrackRead(BaseModel):
@@ -481,6 +484,7 @@ class InterviewCatalogTrackRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     stages: list[InterviewCatalogStageRead]
+    is_favorite: bool = False
 
 
 class InterviewCatalogCompanyListItem(BaseModel):
@@ -489,6 +493,8 @@ class InterviewCatalogCompanyListItem(BaseModel):
     track_count: int
     interview_count: int
     last_interview_at: datetime | None
+    unviewed_count: int = 0
+    has_favorite: bool = False
 
 
 class InterviewCatalogCompanyPage(BaseModel):
@@ -502,3 +508,23 @@ class InterviewCatalogCompanyDetail(BaseModel):
     id: UUID
     name: str
     tracks: list[InterviewCatalogTrackRead]
+
+
+class InterviewCatalogHistoryItem(BaseModel):
+    stage_id: UUID
+    process_id: UUID
+    company_id: UUID
+    company_name: str
+    track_title: str
+    stage_type: InterviewStageType
+    scheduled_at: datetime
+    description: str | None
+    first_viewed_at: datetime
+    last_viewed_at: datetime
+
+
+class InterviewCatalogHistoryPage(BaseModel):
+    items: list[InterviewCatalogHistoryItem]
+    total: int
+    limit: int
+    offset: int

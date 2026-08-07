@@ -501,3 +501,257 @@ async def test_catalog_filters_by_ai_review(client: AsyncClient, seeded: SeededD
     }
     assert filtered_out_detail.json()["tracks"] == []
     assert len(matching_detail.json()["tracks"]) == 1
+
+
+async def test_catalog_opening_company_does_not_mark_stages_viewed(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={"company_name": "History Corp", "track_id": str(seeded.python_track_id)},
+    )
+    await client.post(
+        f"/api/v1/interviews/journal/tracks/{process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "technical_interview",
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "description": "First stage",
+        },
+    )
+
+    listing = await client.get(
+        "/api/v1/interviews/catalog/companies?q=History",
+        headers=auth(seeded.mentor_id),
+    )
+    company_id = listing.json()["items"][0]["id"]
+    detail = await client.get(
+        f"/api/v1/interviews/catalog/companies/{company_id}",
+        headers=auth(seeded.mentor_id),
+    )
+    detail_again = await client.get(
+        f"/api/v1/interviews/catalog/companies/{company_id}",
+        headers=auth(seeded.mentor_id),
+    )
+    listing_after = await client.get(
+        "/api/v1/interviews/catalog/companies?q=History",
+        headers=auth(seeded.mentor_id),
+    )
+
+    stage = detail.json()["tracks"][0]["stages"][0]
+    stage_again = detail_again.json()["tracks"][0]["stages"][0]
+    assert listing.json()["items"][0]["unviewed_count"] == 1
+    assert stage["is_viewed"] is False
+    assert stage["first_viewed_at"] is None
+    assert stage_again["is_viewed"] is False
+    assert listing_after.json()["items"][0]["unviewed_count"] == 1
+
+
+async def test_catalog_opening_media_marks_stage_viewed(
+    client: AsyncClient, seeded: SeededData, monkeypatch: MonkeyPatch
+) -> None:
+    fake_store = FakeCatalogStore()
+    monkeypatch.setattr(catalog_router, "store", fake_store)
+    process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={"company_name": "Media Corp", "track_id": str(seeded.python_track_id)},
+    )
+    stage = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "technical_interview",
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "description": "Stage with a recording",
+        },
+    )
+    stage_id = stage.json()["stages"][0]["id"]
+    async with TestSession() as session:
+        stage_model = await session.get(InterviewProcessStage, stage_id)
+        assert stage_model is not None
+        stage_model.media_storage_key = f"media/{seeded.student_id}/recording"
+        stage_model.media_filename = "interview.mp4"
+        stage_model.media_content_type = "video/mp4"
+        stage_model.media_size = 1024
+        await session.commit()
+
+    listing_before = await client.get(
+        "/api/v1/interviews/catalog/companies?q=Media",
+        headers=auth(seeded.mentor_id),
+    )
+    company_id = listing_before.json()["items"][0]["id"]
+    opened = await client.get(
+        f"/api/v1/interviews/catalog/stages/{stage_id}/media",
+        headers=auth(seeded.mentor_id),
+    )
+    detail_after = await client.get(
+        f"/api/v1/interviews/catalog/companies/{company_id}",
+        headers=auth(seeded.mentor_id),
+    )
+    listing_after = await client.get(
+        "/api/v1/interviews/catalog/companies?q=Media",
+        headers=auth(seeded.mentor_id),
+    )
+
+    stage_after = detail_after.json()["tracks"][0]["stages"][0]
+    assert opened.status_code == 200
+    assert listing_before.json()["items"][0]["unviewed_count"] == 1
+    assert stage_after["is_viewed"] is True
+    assert stage_after["first_viewed_at"] == stage_after["last_viewed_at"]
+    assert listing_after.json()["items"][0]["unviewed_count"] == 0
+
+
+async def test_catalog_explicit_view_button_marks_stage_viewed(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={"company_name": "Button Corp", "track_id": str(seeded.python_track_id)},
+    )
+    stage = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "technical_interview",
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "description": "Stage without a recording",
+        },
+    )
+    stage_id = stage.json()["stages"][0]["id"]
+
+    marked = await client.put(
+        f"/api/v1/interviews/catalog/stages/{stage_id}/view",
+        headers=auth(seeded.mentor_id),
+    )
+    marked_again = await client.put(
+        f"/api/v1/interviews/catalog/stages/{stage_id}/view",
+        headers=auth(seeded.mentor_id),
+    )
+    forbidden = await client.put(
+        f"/api/v1/interviews/catalog/stages/{stage_id}/view",
+        headers=auth(seeded.other_mentor_id),
+    )
+
+    assert marked.status_code == 204
+    assert marked_again.status_code == 204
+    assert forbidden.status_code == 404
+
+
+async def test_catalog_view_history_lists_viewed_stages(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={"company_name": "Timeline Systems", "track_id": str(seeded.python_track_id)},
+    )
+    first_stage = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "screening",
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "description": "Screening call",
+        },
+    )
+    second_stage = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "final_interview",
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "description": "Final round",
+        },
+    )
+    first_stage_id = first_stage.json()["stages"][0]["id"]
+    second_stage_id = next(
+        item["id"]
+        for item in second_stage.json()["stages"]
+        if item["description"] == "Final round"
+    )
+
+    empty_history = await client.get(
+        "/api/v1/interviews/catalog/history", headers=auth(seeded.mentor_id)
+    )
+    await client.put(
+        f"/api/v1/interviews/catalog/stages/{first_stage_id}/view",
+        headers=auth(seeded.mentor_id),
+    )
+    await client.put(
+        f"/api/v1/interviews/catalog/stages/{second_stage_id}/view",
+        headers=auth(seeded.mentor_id),
+    )
+    history = await client.get(
+        "/api/v1/interviews/catalog/history", headers=auth(seeded.mentor_id)
+    )
+    other_student_history = await client.get(
+        "/api/v1/interviews/catalog/history", headers=auth(seeded.student_id)
+    )
+
+    assert empty_history.json()["items"] == []
+    assert history.json()["total"] == 2
+    assert [item["stage_id"] for item in history.json()["items"]] == [
+        second_stage_id,
+        first_stage_id,
+    ]
+    assert history.json()["items"][0]["company_name"] == "Timeline Systems"
+    assert history.json()["items"][0]["track_title"] == "Python"
+    assert other_student_history.json()["items"] == []
+
+
+async def test_catalog_favorite_track(client: AsyncClient, seeded: SeededData) -> None:
+    process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={"company_name": "Favorite Systems", "track_id": str(seeded.python_track_id)},
+    )
+    process_id = process.json()["id"]
+    other_process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={"company_name": "Ignored Systems", "track_id": str(seeded.python_track_id)},
+    )
+
+    unauthorized_favorite = await client.put(
+        f"/api/v1/interviews/catalog/tracks/{uuid4()}/favorite",
+        headers=auth(seeded.mentor_id),
+    )
+    favorited = await client.put(
+        f"/api/v1/interviews/catalog/tracks/{process_id}/favorite",
+        headers=auth(seeded.mentor_id),
+    )
+    listing = await client.get(
+        "/api/v1/interviews/catalog/companies", headers=auth(seeded.mentor_id)
+    )
+    favorites_only_listing = await client.get(
+        "/api/v1/interviews/catalog/companies?favorites_only=true",
+        headers=auth(seeded.mentor_id),
+    )
+    unfavorited = await client.delete(
+        f"/api/v1/interviews/catalog/tracks/{process_id}/favorite",
+        headers=auth(seeded.mentor_id),
+    )
+    favorites_only_after_removal = await client.get(
+        "/api/v1/interviews/catalog/companies?favorites_only=true",
+        headers=auth(seeded.mentor_id),
+    )
+
+    listed_names = {item["name"] for item in listing.json()["items"]}
+    favorite_flags = {
+        item["name"]: item["has_favorite"] for item in listing.json()["items"]
+    }
+
+    assert unauthorized_favorite.status_code == 404
+    assert favorited.status_code == 204
+    assert {"Favorite Systems", "Ignored Systems"} <= listed_names
+    assert favorite_flags["Favorite Systems"] is True
+    assert favorite_flags["Ignored Systems"] is False
+    assert {item["name"] for item in favorites_only_listing.json()["items"]} == {
+        "Favorite Systems"
+    }
+    assert unfavorited.status_code == 204
+    assert favorites_only_after_removal.json()["items"] == []
+    assert other_process.status_code == 201
