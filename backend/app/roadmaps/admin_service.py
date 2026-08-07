@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import api_error
+from app.media.models import ProtectedContentMedia
 from app.media.presenters import content_media_reads
 from app.roadmaps.admin_schemas import (
     AdminRoadmapCreate,
@@ -500,3 +501,30 @@ async def update_roadmap(
         await session.rollback()
         api_error(409, "roadmap_conflict", "Roadmap contains conflicting values")
     return await get_admin_roadmap(session, roadmap.id)
+
+
+async def delete_roadmap(session: AsyncSession, roadmap_id: UUID) -> list[str]:
+    roadmap = await session.get(Roadmap, roadmap_id, with_for_update=True)
+    if roadmap is None:
+        api_error(404, "roadmap_not_found", "Roadmap was not found")
+
+    media_rows = (
+        await session.execute(
+            select(
+                ProtectedContentMedia.storage_key,
+                ProtectedContentMedia.normalization_source_key,
+            )
+            .join(Topic, Topic.id == ProtectedContentMedia.roadmap_topic_id)
+            .join(RoadmapSection, RoadmapSection.id == Topic.section_id)
+            .where(RoadmapSection.roadmap_id == roadmap_id)
+        )
+    ).all()
+    storage_keys = [
+        key
+        for storage_key, normalization_source_key in media_rows
+        for key in (storage_key, normalization_source_key)
+    ]
+
+    await session.delete(roadmap)
+    await session.commit()
+    return list(dict.fromkeys(key for key in storage_keys if key))

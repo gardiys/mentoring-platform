@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from httpx import AsyncClient
 
 from tests.conftest import SeededData, auth
@@ -146,6 +148,59 @@ async def test_editor_rejects_removal_of_persisted_topic(
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "roadmap_structure_removal_not_supported"
+
+
+async def test_only_admin_can_delete_roadmap(client: AsyncClient, seeded: SeededData) -> None:
+    student_response = await client.delete(
+        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}", headers=auth(seeded.student_id)
+    )
+    mentor_response = await client.delete(
+        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}", headers=auth(seeded.mentor_id)
+    )
+
+    assert student_response.status_code == 403
+    assert mentor_response.status_code == 403
+
+    still_there = await client.get(
+        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}", headers=auth(seeded.admin_id)
+    )
+    assert still_there.status_code == 200
+
+
+async def test_admin_deletes_roadmap_and_cascades_student_progress(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await client.put(
+        f"/api/v1/me/topics/{seeded.topic_ids[0]}/progress",
+        headers=auth(seeded.student_id),
+        json={"status": "completed"},
+    )
+
+    response = await client.delete(
+        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}", headers=auth(seeded.admin_id)
+    )
+    assert response.status_code == 204
+
+    missing = await client.get(
+        f"/api/v1/admin/roadmaps/{seeded.roadmap_id}", headers=auth(seeded.admin_id)
+    )
+    assert missing.status_code == 404
+
+    topic_gone = await client.get(
+        f"/api/v1/topics/{seeded.topic_ids[0]}", headers=auth(seeded.student_id)
+    )
+    assert topic_gone.status_code == 404
+
+    student_roadmaps = await client.get("/api/v1/roadmaps", headers=auth(seeded.student_id))
+    assert "python-backend" not in {item["slug"] for item in student_roadmaps.json()}
+
+
+async def test_deleting_missing_roadmap_returns_404(client: AsyncClient, seeded: SeededData) -> None:
+    response = await client.delete(
+        f"/api/v1/admin/roadmaps/{uuid4()}", headers=auth(seeded.admin_id)
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "roadmap_not_found"
 
 
 async def test_admin_outline_omits_markdown_and_updates_one_topic(

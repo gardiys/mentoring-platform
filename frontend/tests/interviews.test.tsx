@@ -263,11 +263,18 @@ it("не выдаёт карточки до выбора пройденной т
   );
 
   expect(await screen.findByText("Сначала выберите темы")).toBeInTheDocument();
+  await userEvent.click(screen.getByText("Выберите темы"));
   await userEvent.click(
-    screen.getByRole("checkbox", { name: /Конкурентность в Python/ }),
+    // jsdom cannot measure element height, so Mantine's Collapse never
+    // reports the panel as visible here even though it is open — query
+    // with hidden: true to look past that testing-environment limitation.
+    screen.getByRole("checkbox", {
+      name: /Конкурентность в Python/,
+      hidden: true,
+    }),
   );
   await userEvent.click(
-    screen.getByRole("button", { name: "Сохранить выбор" }),
+    screen.getByRole("button", { name: "Сохранить выбор", hidden: true }),
   );
 
   expect(update).toHaveBeenCalledWith("python-interview", [

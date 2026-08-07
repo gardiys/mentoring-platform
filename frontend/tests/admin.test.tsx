@@ -84,6 +84,26 @@ it("AdminRoadmapsPage показывает черновики", async () => {
   expect(screen.getByText("Черновик")).toBeInTheDocument();
 });
 
+it("удаляет роадмап только после подтверждения", async () => {
+  vi.spyOn(api, "adminRoadmapSummaries").mockResolvedValue([summary]);
+  const remove = vi
+    .spyOn(api, "deleteAdminRoadmap")
+    .mockReturnValue(new Promise(() => undefined));
+  vi.spyOn(window, "confirm")
+    .mockReturnValueOnce(false)
+    .mockReturnValueOnce(true);
+
+  renderPage(<AdminRoadmapsPage />);
+
+  const deleteButton = await screen.findByRole("button", { name: "Удалить" });
+  await userEvent.click(deleteButton);
+  expect(remove).not.toHaveBeenCalled();
+
+  await userEvent.click(deleteButton);
+  expect(remove).toHaveBeenCalledOnce();
+  expect(remove.mock.calls[0]?.[0]).toBe(summary.id);
+});
+
 it("конструктор отправляет вложенный roadmap", async () => {
   const create = vi
     .spyOn(api, "createAdminRoadmap")

@@ -122,6 +122,19 @@ export function useUpdateAdminRoadmapSettings() {
   });
 }
 
+export function useDeleteAdminRoadmap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteAdminRoadmap(id),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: adminRoadmapKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ["roadmaps"] }),
+      ]);
+    },
+  });
+}
+
 export function useSaveAdminRoadmapSection() {
   const queryClient = useQueryClient();
   return useMutation({

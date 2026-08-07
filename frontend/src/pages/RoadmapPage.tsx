@@ -121,6 +121,15 @@ export function RoadmapPage() {
           const completed =
             section.topics.length > 0 &&
             section.topics.every((topic) => topic.status === "completed");
+          const lastCompletedAt = completed
+            ? section.topics.reduce<string | null>((latest, topic) => {
+                if (!topic.last_completed_at) return latest;
+                if (!latest || topic.last_completed_at > latest) {
+                  return topic.last_completed_at;
+                }
+                return latest;
+              }, null)
+            : null;
           const overdue =
             !completed &&
             section.deadline_at !== null &&
@@ -133,9 +142,22 @@ export function RoadmapPage() {
                   pr="md"
                   className="roadmap-section-heading"
                 >
-                  <Text fw={600} className="roadmap-section-title">
-                    {section.title}
-                  </Text>
+                  <Group gap="xs" className="min-width-zero">
+                    <Text fw={600} className="roadmap-section-title">
+                      {section.title}
+                    </Text>
+                    {completed && (
+                      <Badge
+                        color="brandGreen"
+                        variant="filled"
+                        leftSection="✓"
+                      >
+                        {lastCompletedAt
+                          ? `Завершено ${formatDate(lastCompletedAt)}`
+                          : "Завершено"}
+                      </Badge>
+                    )}
+                  </Group>
                   {section.duration_days && (
                     <Group
                       gap="xs"
@@ -168,11 +190,11 @@ export function RoadmapPage() {
                       <Group justify="space-between">
                         <div className="topic-row-main">
                           <Text fw={600}>{topic.title}</Text>
-                          {topic.first_completed_at && (
+                          {topic.last_completed_at && (
                             <Text size="xs" c="dimmed">
                               Завершено{" "}
                               {new Date(
-                                topic.first_completed_at,
+                                topic.last_completed_at,
                               ).toLocaleString("ru-RU")}
                             </Text>
                           )}

@@ -806,6 +806,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
+  deleteAdminRoadmap: (id: string) =>
+    apiRequest<void>(`/api/v1/admin/roadmaps/${id}`, { method: "DELETE" }),
   adminTracks: () => apiRequest<AdminTrackRead[]>("/api/v1/admin/tracks"),
   adminTrack: (id: string) =>
     apiRequest<AdminTrackRead>(`/api/v1/admin/tracks/${id}`),

@@ -30,9 +30,14 @@ class Roadmap(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     sections = relationship(
-        "RoadmapSection", back_populates="roadmap", order_by="RoadmapSection.position"
+        "RoadmapSection",
+        back_populates="roadmap",
+        order_by="RoadmapSection.position",
+        passive_deletes=True,
     )
-    enrollments = relationship("RoadmapEnrollment", back_populates="roadmap")
+    enrollments = relationship(
+        "RoadmapEnrollment", back_populates="roadmap", passive_deletes=True
+    )
 
 
 class RoadmapSection(UUIDPrimaryKeyMixin, TimestampMixin, Base):

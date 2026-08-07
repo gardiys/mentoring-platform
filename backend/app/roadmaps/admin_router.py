@@ -1,11 +1,13 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import AdminUser
+from app.core.config import get_settings
 from app.db.session import get_db_session
+from app.media.storage import PrivateMediaStore
 from app.roadmaps.admin_schemas import (
     AdminRoadmapCreate,
     AdminRoadmapOutline,
@@ -22,6 +24,7 @@ from app.roadmaps.admin_service import (
     create_admin_section,
     create_admin_topic,
     create_roadmap,
+    delete_roadmap,
     get_admin_roadmap,
     get_admin_roadmap_outline,
     get_admin_section,
@@ -36,6 +39,7 @@ from app.roadmaps.admin_service import (
 
 router = APIRouter(prefix="/admin/roadmaps", tags=["admin-roadmaps"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
+store = PrivateMediaStore(get_settings())
 
 
 @router.get("", response_model=list[AdminRoadmapRead])
@@ -161,3 +165,11 @@ async def admin_update_roadmap(
     _admin: AdminUser,
 ) -> AdminRoadmapRead:
     return await update_roadmap(session, roadmap_id, payload)
+
+
+@router.delete("/{roadmap_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+async def admin_delete_roadmap(roadmap_id: UUID, session: Session, _admin: AdminUser) -> Response:
+    storage_keys = await delete_roadmap(session, roadmap_id)
+    for storage_key in storage_keys:
+        await store.delete(storage_key)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

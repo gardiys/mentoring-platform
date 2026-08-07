@@ -8,20 +8,41 @@ import {
   Text,
   Title,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
-import { useAdminRoadmaps } from "../features/admin/queries";
+import {
+  useAdminRoadmaps,
+  useDeleteAdminRoadmap,
+} from "../features/admin/queries";
+import type { AdminRoadmapSummary } from "../types/api";
 
 export function AdminRoadmapsPage() {
   const query = useAdminRoadmaps();
+  const deleteRoadmap = useDeleteAdminRoadmap();
   if (query.isPending) return <LoadingState label="Загружаем роадмапы…" />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />
     );
+
+  const remove = (roadmap: AdminRoadmapSummary) => {
+    if (
+      !window.confirm(
+        `Удалить роадмап «${roadmap.title}»? Это также удалит весь прогресс учеников по нему и отменить это будет нельзя.`,
+      )
+    )
+      return;
+    deleteRoadmap.mutate(roadmap.id, {
+      onSuccess: () =>
+        notifications.show({ color: "green", message: "Роадмап удалён" }),
+      onError: (error) =>
+        notifications.show({ color: "red", message: error.message }),
+    });
+  };
 
   return (
     <Stack gap="xl">
@@ -68,13 +89,27 @@ export function AdminRoadmapsPage() {
                   <Text size="sm">
                     {roadmap.section_count} разделов · {roadmap.topic_count} тем
                   </Text>
-                  <Button
-                    component={Link}
-                    to={`/admin/roadmaps/${roadmap.id}/edit`}
-                    variant="light"
-                  >
-                    Редактировать
-                  </Button>
+                  <Group gap="xs">
+                    <Button
+                      component={Link}
+                      to={`/admin/roadmaps/${roadmap.id}/edit`}
+                      variant="light"
+                      flex={1}
+                    >
+                      Редактировать
+                    </Button>
+                    <Button
+                      variant="subtle"
+                      color="red"
+                      loading={
+                        deleteRoadmap.isPending &&
+                        deleteRoadmap.variables === roadmap.id
+                      }
+                      onClick={() => remove(roadmap)}
+                    >
+                      Удалить
+                    </Button>
+                  </Group>
                 </Stack>
               </Card>
             );
