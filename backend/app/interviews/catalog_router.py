@@ -79,6 +79,7 @@ async def catalog_companies(
     stage_type: InterviewStageType | None = None,
     has_offer: bool = False,
     media_kind: InterviewCatalogMediaKind | None = None,
+    has_ai_review: bool = False,
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> InterviewCatalogCompanyPage:
@@ -91,6 +92,7 @@ async def catalog_companies(
         stage_type=stage_type,
         has_offer=has_offer,
         media_kind=media_kind,
+        has_ai_review=has_ai_review,
         limit=limit,
         offset=offset,
     )
@@ -106,6 +108,7 @@ async def catalog_company(
     stage_type: InterviewStageType | None = None,
     has_offer: bool = False,
     media_kind: InterviewCatalogMediaKind | None = None,
+    has_ai_review: bool = False,
 ) -> InterviewCatalogCompanyDetail:
     return await catalog_company_detail(
         session,
@@ -116,6 +119,7 @@ async def catalog_company(
         stage_type=stage_type,
         has_offer=has_offer,
         media_kind=media_kind,
+        has_ai_review=has_ai_review,
     )
 
 

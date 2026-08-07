@@ -35,6 +35,7 @@ export function interviewCatalogFiltersFromParams(
     stageType: stageType && stageTypes.has(stageType) ? stageType : null,
     hasOffer: params.get("has_offer") === "true",
     mediaKind: mediaKind && mediaKinds.has(mediaKind) ? mediaKind : null,
+    hasAiReview: params.get("has_ai_review") === "true",
   };
 }
 
@@ -53,6 +54,7 @@ export const interviewCatalogKeys = {
       filters.stageType,
       filters.hasOffer,
       filters.mediaKind,
+      filters.hasAiReview,
       page,
     ] as const,
   companyRoot: (companyId: string) =>
@@ -65,6 +67,7 @@ export const interviewCatalogKeys = {
       filters.stageType,
       filters.hasOffer,
       filters.mediaKind,
+      filters.hasAiReview,
     ] as const,
 };
 

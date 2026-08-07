@@ -204,6 +204,7 @@ export interface InterviewCatalogFilters {
   stageType: InterviewStageType | null;
   hasOffer: boolean;
   mediaKind: InterviewCatalogMediaKind | null;
+  hasAiReview: boolean;
 }
 
 export type StudentLearningStatus =

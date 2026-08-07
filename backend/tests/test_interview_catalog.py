@@ -10,6 +10,7 @@ from app.interviews.models import (
     InterviewProcessStage,
     InterviewProcessStageAttachment,
     InterviewProcessStatus,
+    InterviewStageComment,
 )
 from app.interviews.uploads import StoredUpload
 from app.tracks.models import LearningTrackEnrollment
@@ -426,3 +427,77 @@ async def test_admin_sees_all_catalog_directions_and_interview_tracks(
     assert processes.json()["items"][0]["id"] == created.json()["id"]
     assert processes.json()["items"][0]["author"]["id"] == str(seeded.student_id)
     assert processes.json()["items"][0]["company_id"] == companies.json()["items"][0]["id"]
+
+
+async def test_catalog_filters_by_ai_review(client: AsyncClient, seeded: SeededData) -> None:
+    reviewed_process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={"company_name": "Aurora Systems", "track_id": str(seeded.python_track_id)},
+    )
+    plain_process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={"company_name": "Borealis Labs", "track_id": str(seeded.python_track_id)},
+    )
+    reviewed_stage = await client.post(
+        f"/api/v1/interviews/journal/tracks/{reviewed_process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "technical_interview",
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "description": "Stage with an AI breakdown",
+        },
+    )
+    await client.post(
+        f"/api/v1/interviews/journal/tracks/{plain_process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "technical_interview",
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "description": "Stage without any AI breakdown",
+        },
+    )
+    reviewed_stage_id = reviewed_stage.json()["stages"][0]["id"]
+    async with TestSession() as session:
+        session.add(
+            InterviewStageComment(
+                stage_id=reviewed_stage_id,
+                user_id=None,
+                body="AI-сгенерированный разбор собеседования",
+                is_ai_feedback=True,
+            )
+        )
+        await session.commit()
+
+    listing = await client.get(
+        "/api/v1/interviews/catalog/companies?has_ai_review=true",
+        headers=auth(seeded.student_id),
+    )
+    unfiltered_listing = await client.get(
+        "/api/v1/interviews/catalog/companies",
+        headers=auth(seeded.student_id),
+    )
+    reviewed_company_id = listing.json()["items"][0]["id"]
+    plain_company_id = next(
+        item["id"]
+        for item in unfiltered_listing.json()["items"]
+        if item["name"] == "Borealis Labs"
+    )
+    filtered_out_detail = await client.get(
+        f"/api/v1/interviews/catalog/companies/{plain_company_id}?has_ai_review=true",
+        headers=auth(seeded.student_id),
+    )
+    matching_detail = await client.get(
+        f"/api/v1/interviews/catalog/companies/{reviewed_company_id}?has_ai_review=true",
+        headers=auth(seeded.student_id),
+    )
+
+    assert listing.status_code == 200
+    assert {item["name"] for item in listing.json()["items"]} == {"Aurora Systems"}
+    assert {item["name"] for item in unfiltered_listing.json()["items"]} >= {
+        "Aurora Systems",
+        "Borealis Labs",
+    }
+    assert filtered_out_detail.json()["tracks"] == []
+    assert len(matching_detail.json()["tracks"]) == 1

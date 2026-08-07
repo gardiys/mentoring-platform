@@ -43,6 +43,7 @@ def _catalog_process_filters(
     stage_type: InterviewStageType | None,
     has_offer: bool,
     media_kind: InterviewCatalogMediaKind | None,
+    has_ai_review: bool = False,
 ) -> list[ColumnElement[bool]]:
     conditions: list[ColumnElement[bool]] = []
     if author_id is not None:
@@ -71,6 +72,20 @@ def _catalog_process_filters(
                 [matching_stage.media_storage_key.is_not(None), media_content_filter]
             )
         conditions.append(exists(select(1).select_from(matching_stage).where(*stage_conditions)))
+    if has_ai_review:
+        ai_stage = aliased(InterviewProcessStage)
+        ai_comment = aliased(InterviewStageComment)
+        conditions.append(
+            exists(
+                select(1)
+                .select_from(ai_comment)
+                .join(ai_stage, ai_stage.id == ai_comment.stage_id)
+                .where(
+                    ai_stage.process_id == InterviewProcess.id,
+                    ai_comment.is_ai_feedback.is_(True),
+                )
+            )
+        )
     return conditions
 
 
@@ -159,6 +174,7 @@ async def list_catalog_companies(
     stage_type: InterviewStageType | None = None,
     has_offer: bool = False,
     media_kind: InterviewCatalogMediaKind | None = None,
+    has_ai_review: bool = False,
     limit: int = 24,
     offset: int = 0,
 ) -> InterviewCatalogCompanyPage:
@@ -190,6 +206,7 @@ async def list_catalog_companies(
                 stage_type=stage_type,
                 has_offer=has_offer,
                 media_kind=media_kind,
+                has_ai_review=has_ai_review,
             ),
         )
     )
@@ -277,6 +294,7 @@ async def catalog_company_detail(
     stage_type: InterviewStageType | None = None,
     has_offer: bool = False,
     media_kind: InterviewCatalogMediaKind | None = None,
+    has_ai_review: bool = False,
 ) -> InterviewCatalogCompanyDetail:
     company = await session.get(Company, company_id)
     if company is None:
@@ -315,6 +333,7 @@ async def catalog_company_detail(
                     stage_type=stage_type,
                     has_offer=has_offer,
                     media_kind=media_kind,
+                    has_ai_review=has_ai_review,
                 ),
             )
             .order_by(InterviewProcess.updated_at.desc())

@@ -67,7 +67,8 @@ export function InterviewCatalogPage() {
     currentFilters.trackId ||
     currentFilters.stageType ||
     currentFilters.hasOffer ||
-    currentFilters.mediaKind,
+    currentFilters.mediaKind ||
+    currentFilters.hasAiReview,
   );
 
   const updateFilter = (name: string, value: string | null) => {
@@ -162,6 +163,16 @@ export function InterviewCatalogPage() {
                 onChange={(event) =>
                   updateFilter(
                     "has_offer",
+                    event.currentTarget.checked ? "true" : null,
+                  )
+                }
+              />
+              <Switch
+                label="Только с AI разбором"
+                checked={currentFilters.hasAiReview}
+                onChange={(event) =>
+                  updateFilter(
+                    "has_ai_review",
                     event.currentTarget.checked ? "true" : null,
                   )
                 }

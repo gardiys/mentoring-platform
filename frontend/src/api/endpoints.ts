@@ -1105,6 +1105,7 @@ export const api = {
     if (filters.stageType) params.set("stage_type", filters.stageType);
     if (filters.hasOffer) params.set("has_offer", "true");
     if (filters.mediaKind) params.set("media_kind", filters.mediaKind);
+    if (filters.hasAiReview) params.set("has_ai_review", "true");
     const query = params.toString();
     return apiRequest<InterviewCatalogCompanyPage>(
       `/api/v1/interviews/catalog/companies${query ? `?${query}` : ""}`,
@@ -1120,6 +1121,7 @@ export const api = {
     if (filters.stageType) params.set("stage_type", filters.stageType);
     if (filters.hasOffer) params.set("has_offer", "true");
     if (filters.mediaKind) params.set("media_kind", filters.mediaKind);
+    if (filters.hasAiReview) params.set("has_ai_review", "true");
     const query = params.toString();
     return apiRequest<InterviewCatalogCompanyDetail>(
       `/api/v1/interviews/catalog/companies/${companyId}${query ? `?${query}` : ""}`,

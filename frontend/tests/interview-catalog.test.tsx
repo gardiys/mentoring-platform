@@ -122,6 +122,9 @@ it("ищет компании в каталоге", async () => {
   await userEvent.click(
     screen.getByRole("switch", { name: "Только треки с оффером" }),
   );
+  await userEvent.click(
+    screen.getByRole("switch", { name: "Только с AI разбором" }),
+  );
 
   await waitFor(() =>
     expect(list).toHaveBeenCalledWith(
@@ -132,6 +135,7 @@ it("ищет компании в каталоге", async () => {
         stageType: "technical_interview",
         hasOffer: true,
         mediaKind: "any",
+        hasAiReview: true,
       },
       { limit: 24, offset: 0 },
     ),
@@ -140,7 +144,7 @@ it("ищет компании в каталоге", async () => {
     await screen.findByRole("link", { name: "Смотреть собеседования" }),
   ).toHaveAttribute(
     "href",
-    `/interviews/catalog/${company.id}?q=Yandex&track_id=${pythonTrackId}&author_id=${authorId}&stage_type=technical_interview&media_kind=any&has_offer=true`,
+    `/interviews/catalog/${company.id}?q=Yandex&track_id=${pythonTrackId}&author_id=${authorId}&stage_type=technical_interview&media_kind=any&has_offer=true&has_ai_review=true`,
   );
 });
 
@@ -172,6 +176,7 @@ it("показывает треки, запись, файлы и отправл�
     stageType: null,
     hasOffer: false,
     mediaKind: null,
+    hasAiReview: false,
   });
   expect(
     screen.getByText("Алгоритмы, Python и проектирование API"),
