@@ -42,7 +42,6 @@ const detail: InterviewCatalogCompanyDetail = {
       close_reason: "Позиция была заморожена",
       created_at: "2026-08-01T10:00:00Z",
       updated_at: "2026-08-12T12:00:00Z",
-      is_favorite: false,
       stages: [
         {
           id: "71000000-0000-4000-8000-000000000001",
@@ -52,6 +51,7 @@ const detail: InterviewCatalogCompanyDetail = {
           is_viewed: false,
           first_viewed_at: null,
           last_viewed_at: null,
+          is_favorite: false,
           media: {
             filename: "interview.mp4",
             content_type: "video/mp4",
@@ -243,10 +243,10 @@ it("показывает треки, запись, файлы и отправл�
   });
 });
 
-it("отмечает трек избранным", async () => {
+it("отмечает конкретный этап избранным", async () => {
   vi.spyOn(api, "interviewCatalogCompany").mockResolvedValue(detail);
   const favorite = vi
-    .spyOn(api, "favoriteInterviewCatalogTrack")
+    .spyOn(api, "favoriteInterviewCatalogStage")
     .mockResolvedValue(undefined);
   renderPage(
     <InterviewCatalogCompanyPage />,
@@ -262,7 +262,47 @@ it("отмечает трек избранным", async () => {
     screen.getByRole("button", { name: "☆ В избранное", hidden: true }),
   );
 
-  expect(favorite).toHaveBeenCalledWith(detail.tracks[0]!.id);
+  expect(favorite).toHaveBeenCalledWith(detail.tracks[0]!.stages[0]!.id);
+});
+
+it("избранное не распространяется на другие этапы того же трека", async () => {
+  vi.spyOn(api, "interviewCatalogCompany").mockResolvedValue({
+    ...detail,
+    tracks: [
+      {
+        ...detail.tracks[0]!,
+        stages: [
+          { ...detail.tracks[0]!.stages[0]!, is_favorite: true },
+          {
+            ...detail.tracks[0]!.stages[0]!,
+            id: "71000000-0000-4000-8000-000000000002",
+            stage_type: "final_interview",
+            description: "Финальный этап",
+            is_favorite: false,
+          },
+        ],
+      },
+    ],
+  });
+  renderPage(
+    <InterviewCatalogCompanyPage />,
+    `/interviews/catalog/${company.id}`,
+    "/interviews/catalog/:companyId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: /Техническое интервью/ }),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: /Финальное интервью/ }),
+  );
+
+  expect(
+    screen.getByRole("button", { name: "★ В избранном", hidden: true }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "☆ В избранное", hidden: true }),
+  ).toBeInTheDocument();
 });
 
 it("показывает дату последнего просмотра у уже просмотренного этапа", async () => {
@@ -357,4 +397,25 @@ it("отмечает этап просмотренным при открытии
   expect(
     await screen.findByText(/Просмотрено 13 августа 2026/),
   ).toBeInTheDocument();
+});
+
+it("раскрывает нужный раздел и подсвечивает этап при переходе по ссылке из истории", async () => {
+  vi.spyOn(api, "interviewCatalogCompany").mockResolvedValue(detail);
+  const targetStageId = detail.tracks[0]!.stages[0]!.id;
+  renderPage(
+    <InterviewCatalogCompanyPage />,
+    `/interviews/catalog/${company.id}?stage=${targetStageId}`,
+    "/interviews/catalog/:companyId",
+  );
+
+  const control = await screen.findByRole("button", {
+    name: /Техническое интервью/,
+  });
+  expect(control).toHaveAttribute("aria-expanded", "true");
+  expect(
+    screen.getByRole("button", { name: "Посмотреть", hidden: true }),
+  ).toBeInTheDocument();
+  expect(document.getElementById(`stage-${targetStageId}`)).toHaveStyle({
+    borderColor: "var(--mantine-color-blue-6)",
+  });
 });

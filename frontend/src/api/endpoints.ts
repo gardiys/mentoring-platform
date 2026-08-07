@@ -1130,12 +1130,12 @@ export const api = {
       `/api/v1/interviews/catalog/companies/${companyId}${query ? `?${query}` : ""}`,
     );
   },
-  favoriteInterviewCatalogTrack: (processId: string) =>
-    apiRequest<void>(`/api/v1/interviews/catalog/tracks/${processId}/favorite`, {
+  favoriteInterviewCatalogStage: (stageId: string) =>
+    apiRequest<void>(`/api/v1/interviews/catalog/stages/${stageId}/favorite`, {
       method: "PUT",
     }),
-  unfavoriteInterviewCatalogTrack: (processId: string) =>
-    apiRequest<void>(`/api/v1/interviews/catalog/tracks/${processId}/favorite`, {
+  unfavoriteInterviewCatalogStage: (stageId: string) =>
+    apiRequest<void>(`/api/v1/interviews/catalog/stages/${stageId}/favorite`, {
       method: "DELETE",
     }),
   markInterviewCatalogStageViewed: (stageId: string) =>

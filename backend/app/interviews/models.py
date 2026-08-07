@@ -431,9 +431,9 @@ class InterviewCatalogFavorite(Base):
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    process_id: Mapped[UUID] = mapped_column(
+    stage_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("interview_processes.id", ondelete="CASCADE"),
+        ForeignKey("interview_process_stages.id", ondelete="CASCADE"),
         primary_key=True,
     )
     created_at: Mapped[datetime] = mapped_column(

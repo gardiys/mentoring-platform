@@ -225,6 +225,16 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
                 upload = await _store(ctx).resolve_upload_size(upload)
                 if stage.media_size != upload.size:
                     stage.media_size = upload.size
+                # Legacy migrated recordings can be filed as .mp3 while actually
+                # being an m4a/ALAC container; correct the declared type before
+                # probing so it isn't rejected as a MEDIA_CONTENT_TYPE_MISMATCH.
+                playable = await _store(ctx).ensure_browser_playable(upload)
+                if playable != upload:
+                    stage.media_storage_key = playable.storage_key
+                    stage.media_filename = playable.filename
+                    stage.media_content_type = playable.content_type
+                    stage.media_size = playable.size
+                    upload = playable
                 maximum_bytes = _media_size_limit(upload.content_type)
                 if upload.size <= 0:
                     raise MediaGuardrailError("invalid_media_file", "Interview recording is empty")

@@ -243,24 +243,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/interviews/catalog/tracks/{process_id}/favorite": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Catalog Favorite Track */
-        put: operations["catalog_favorite_track_api_v1_interviews_catalog_tracks__process_id__favorite_put"];
-        post?: never;
-        /** Catalog Unfavorite Track */
-        delete: operations["catalog_unfavorite_track_api_v1_interviews_catalog_tracks__process_id__favorite_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/interviews/catalog/history": {
         parameters: {
             query?: never;
@@ -290,6 +272,24 @@ export interface paths {
         put: operations["catalog_mark_stage_viewed_api_v1_interviews_catalog_stages__stage_id__view_put"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/catalog/stages/{stage_id}/favorite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Catalog Favorite Stage */
+        put: operations["catalog_favorite_stage_api_v1_interviews_catalog_stages__stage_id__favorite_put"];
+        post?: never;
+        /** Catalog Unfavorite Stage */
+        delete: operations["catalog_unfavorite_stage_api_v1_interviews_catalog_stages__stage_id__favorite_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5086,6 +5086,11 @@ export interface components {
             first_viewed_at?: string | null;
             /** Last Viewed At */
             last_viewed_at?: string | null;
+            /**
+             * Is Favorite
+             * @default false
+             */
+            is_favorite: boolean;
         };
         /** InterviewCatalogTrackRead */
         InterviewCatalogTrackRead: {
@@ -5121,11 +5126,6 @@ export interface components {
             updated_at: string;
             /** Stages */
             stages: components["schemas"]["InterviewCatalogStageRead"][];
-            /**
-             * Is Favorite
-             * @default false
-             */
-            is_favorite: boolean;
         };
         /** InterviewCompletedMultipartPart */
         InterviewCompletedMultipartPart: {
@@ -7024,74 +7024,6 @@ export interface operations {
             };
         };
     };
-    catalog_favorite_track_api_v1_interviews_catalog_tracks__process_id__favorite_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path: {
-                process_id: string;
-            };
-            cookie?: {
-                mentoring_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    catalog_unfavorite_track_api_v1_interviews_catalog_tracks__process_id__favorite_delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path: {
-                process_id: string;
-            };
-            cookie?: {
-                mentoring_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     catalog_view_history_api_v1_interviews_catalog_history_get: {
         parameters: {
             query?: {
@@ -7130,6 +7062,74 @@ export interface operations {
         };
     };
     catalog_mark_stage_viewed_api_v1_interviews_catalog_stages__stage_id__view_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_favorite_stage_api_v1_interviews_catalog_stages__stage_id__favorite_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                stage_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_unfavorite_stage_api_v1_interviews_catalog_stages__stage_id__favorite_delete: {
         parameters: {
             query?: never;
             header?: {

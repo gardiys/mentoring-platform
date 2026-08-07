@@ -405,7 +405,7 @@ class OpenAIInterviewAIProvider:
                 raise InterviewAIError(
                     "OPENAI_INVALID_RESPONSE",
                     "OpenAI returned no structured extraction",
-                    retryable=False,
+                    retryable=True,
                 )
             return AIExtractionResult(parsed, self._usage(response, self.extraction_model))
         except InterviewAIError:
@@ -442,7 +442,7 @@ class OpenAIInterviewAIProvider:
                 raise InterviewAIError(
                     "OPENAI_INVALID_RESPONSE",
                     "OpenAI returned no structured review",
-                    retryable=False,
+                    retryable=True,
                 )
             return AIReviewResult(parsed, self._usage(response, model))
         except InterviewAIError:
@@ -466,7 +466,7 @@ class OpenAIInterviewAIProvider:
                 raise InterviewAIError(
                     "OPENAI_INVALID_RESPONSE",
                     "OpenAI returned no structured interview summary",
-                    retryable=False,
+                    retryable=True,
                 )
             return AISummaryResult(parsed, self._usage(response, self.light_review_model))
         except InterviewAIError:
@@ -492,14 +492,14 @@ class OpenAIInterviewAIProvider:
                 raise InterviewAIError(
                     "OPENAI_INVALID_RESPONSE",
                     "OpenAI returned invalid embedding indexes",
-                    retryable=False,
+                    retryable=True,
                 )
             embeddings = [list(item.embedding) for item in ordered]
             if len(embeddings) != len(texts):
                 raise InterviewAIError(
                     "OPENAI_INVALID_RESPONSE",
                     "OpenAI returned an incomplete embedding batch",
-                    retryable=False,
+                    retryable=True,
                 )
             usage = response.usage
             return AIEmbeddingResult(

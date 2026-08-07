@@ -132,30 +132,6 @@ async def catalog_company(
     )
 
 
-@router.put(
-    "/tracks/{process_id}/favorite",
-    status_code=status.HTTP_204_NO_CONTENT,
-    response_class=Response,
-)
-async def catalog_favorite_track(
-    process_id: UUID, session: Session, student: CatalogUser
-) -> Response:
-    await set_catalog_favorite(session, student, process_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.delete(
-    "/tracks/{process_id}/favorite",
-    status_code=status.HTTP_204_NO_CONTENT,
-    response_class=Response,
-)
-async def catalog_unfavorite_track(
-    process_id: UUID, session: Session, student: CatalogUser
-) -> Response:
-    await remove_catalog_favorite(session, student, process_id)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
 @router.get("/history", response_model=InterviewCatalogHistoryPage)
 async def catalog_view_history(
     session: Session,
@@ -175,6 +151,30 @@ async def catalog_mark_stage_viewed(
     stage_id: UUID, session: Session, student: CatalogUser
 ) -> Response:
     await mark_catalog_stage_viewed(session, student, stage_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put(
+    "/stages/{stage_id}/favorite",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def catalog_favorite_stage(
+    stage_id: UUID, session: Session, student: CatalogUser
+) -> Response:
+    await set_catalog_favorite(session, student, stage_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/stages/{stage_id}/favorite",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def catalog_unfavorite_stage(
+    stage_id: UUID, session: Session, student: CatalogUser
+) -> Response:
+    await remove_catalog_favorite(session, student, stage_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

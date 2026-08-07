@@ -43,7 +43,7 @@ it("показывает историю просмотренных этапов"
   ).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Открыть" })).toHaveAttribute(
     "href",
-    "/interviews/catalog/73000000-0000-4000-8000-000000000001",
+    "/interviews/catalog/73000000-0000-4000-8000-000000000001?stage=71000000-0000-4000-8000-000000000001",
   );
 });
 

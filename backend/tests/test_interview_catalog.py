@@ -702,25 +702,48 @@ async def test_catalog_view_history_lists_viewed_stages(
     assert other_student_history.json()["items"] == []
 
 
-async def test_catalog_favorite_track(client: AsyncClient, seeded: SeededData) -> None:
+async def test_catalog_favorite_stage(client: AsyncClient, seeded: SeededData) -> None:
     process = await client.post(
         "/api/v1/interviews/journal/tracks",
         headers=auth(seeded.student_id),
         json={"company_name": "Favorite Systems", "track_id": str(seeded.python_track_id)},
     )
-    process_id = process.json()["id"]
     other_process = await client.post(
         "/api/v1/interviews/journal/tracks",
         headers=auth(seeded.student_id),
         json={"company_name": "Ignored Systems", "track_id": str(seeded.python_track_id)},
     )
+    favorite_stage = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "screening",
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "description": "Stage to favorite",
+        },
+    )
+    other_stage = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "final_interview",
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "description": "Stage that stays unfavorited",
+        },
+    )
+    favorite_stage_id = favorite_stage.json()["stages"][0]["id"]
+    other_stage_id = next(
+        item["id"]
+        for item in other_stage.json()["stages"]
+        if item["description"] == "Stage that stays unfavorited"
+    )
 
     unauthorized_favorite = await client.put(
-        f"/api/v1/interviews/catalog/tracks/{uuid4()}/favorite",
+        f"/api/v1/interviews/catalog/stages/{uuid4()}/favorite",
         headers=auth(seeded.mentor_id),
     )
     favorited = await client.put(
-        f"/api/v1/interviews/catalog/tracks/{process_id}/favorite",
+        f"/api/v1/interviews/catalog/stages/{favorite_stage_id}/favorite",
         headers=auth(seeded.mentor_id),
     )
     listing = await client.get(
@@ -730,8 +753,23 @@ async def test_catalog_favorite_track(client: AsyncClient, seeded: SeededData) -
         "/api/v1/interviews/catalog/companies?favorites_only=true",
         headers=auth(seeded.mentor_id),
     )
+    company_id = listing.json()["items"][
+        next(
+            index
+            for index, item in enumerate(listing.json()["items"])
+            if item["name"] == "Favorite Systems"
+        )
+    ]["id"]
+    detail = await client.get(
+        f"/api/v1/interviews/catalog/companies/{company_id}",
+        headers=auth(seeded.mentor_id),
+    )
+    favorites_only_detail = await client.get(
+        f"/api/v1/interviews/catalog/companies/{company_id}?favorites_only=true",
+        headers=auth(seeded.mentor_id),
+    )
     unfavorited = await client.delete(
-        f"/api/v1/interviews/catalog/tracks/{process_id}/favorite",
+        f"/api/v1/interviews/catalog/stages/{favorite_stage_id}/favorite",
         headers=auth(seeded.mentor_id),
     )
     favorites_only_after_removal = await client.get(
@@ -743,6 +781,9 @@ async def test_catalog_favorite_track(client: AsyncClient, seeded: SeededData) -
     favorite_flags = {
         item["name"]: item["has_favorite"] for item in listing.json()["items"]
     }
+    stages_by_id = {
+        stage["id"]: stage for stage in detail.json()["tracks"][0]["stages"]
+    }
 
     assert unauthorized_favorite.status_code == 404
     assert favorited.status_code == 204
@@ -752,6 +793,15 @@ async def test_catalog_favorite_track(client: AsyncClient, seeded: SeededData) -
     assert {item["name"] for item in favorites_only_listing.json()["items"]} == {
         "Favorite Systems"
     }
+    favorites_only_item = favorites_only_listing.json()["items"][0]
+    assert favorites_only_item["track_count"] == 1
+    assert favorites_only_item["interview_count"] == 1
+    assert stages_by_id[favorite_stage_id]["is_favorite"] is True
+    assert stages_by_id[other_stage_id]["is_favorite"] is False
+    favorites_only_stage_ids = {
+        stage["id"] for stage in favorites_only_detail.json()["tracks"][0]["stages"]
+    }
+    assert favorites_only_stage_ids == {favorite_stage_id}
     assert unfavorited.status_code == 204
     assert favorites_only_after_removal.json()["items"] == []
     assert other_process.status_code == 201

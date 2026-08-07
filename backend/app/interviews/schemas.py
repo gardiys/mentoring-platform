@@ -470,6 +470,7 @@ class InterviewCatalogStageRead(BaseModel):
     is_viewed: bool = False
     first_viewed_at: datetime | None = None
     last_viewed_at: datetime | None = None
+    is_favorite: bool = False
 
 
 class InterviewCatalogTrackRead(BaseModel):
@@ -484,7 +485,6 @@ class InterviewCatalogTrackRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     stages: list[InterviewCatalogStageRead]
-    is_favorite: bool = False
 
 
 class InterviewCatalogCompanyListItem(BaseModel):

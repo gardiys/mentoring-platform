@@ -92,7 +92,7 @@ async def refresh_embedding_rows(
             raise InterviewAIError(
                 "OPENAI_INVALID_RESPONSE",
                 "Embedding provider returned an incomplete batch",
-                retryable=False,
+                retryable=True,
             )
         for row, embedding, (source_text, _input_text, source_hash) in zip(
             batch,
@@ -106,7 +106,7 @@ async def refresh_embedding_rows(
                 raise InterviewAIError(
                     "OPENAI_INVALID_RESPONSE",
                     "Embedding provider returned an unexpected vector size",
-                    retryable=False,
+                    retryable=True,
                 )
             if session is not None:
                 model = type(row)

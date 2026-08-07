@@ -95,13 +95,73 @@ def _catalog_process_filters(
             )
         )
     if favorites_only:
+        favorite_stage = aliased(InterviewProcessStage)
+        favorite = aliased(InterviewCatalogFavorite)
         conditions.append(
             exists(
                 select(1)
-                .select_from(InterviewCatalogFavorite)
+                .select_from(favorite)
+                .join(favorite_stage, favorite_stage.id == favorite.stage_id)
                 .where(
-                    InterviewCatalogFavorite.process_id == InterviewProcess.id,
-                    InterviewCatalogFavorite.user_id == current_user_id,
+                    favorite_stage.process_id == InterviewProcess.id,
+                    favorite.user_id == current_user_id,
+                )
+            )
+        )
+    return conditions
+
+
+def _catalog_stage_filters(
+    *,
+    stage_type: InterviewStageType | None,
+    media_kind: InterviewCatalogMediaKind | None,
+    current_user_id: UUID,
+    has_ai_review: bool = False,
+    favorites_only: bool = False,
+) -> list[ColumnElement[bool]]:
+    """Narrow which stages of an already-matched track are actually shown.
+
+    _catalog_process_filters decides whether a track qualifies (it has *some*
+    stage matching the filters); this narrows the returned stages to just the
+    ones that match, so e.g. filtering by favorites doesn't dump the whole
+    track's unrelated stages alongside the one the user actually favorited.
+    """
+    conditions: list[ColumnElement[bool]] = []
+    if stage_type is not None:
+        conditions.append(InterviewProcessStage.stage_type == stage_type)
+    if media_kind is not None:
+        media_content_filter = (
+            or_(
+                InterviewProcessStage.media_content_type.like("video/%"),
+                InterviewProcessStage.media_content_type.like("audio/%"),
+            )
+            if media_kind is InterviewCatalogMediaKind.ANY
+            else InterviewProcessStage.media_content_type.like(f"{media_kind.value}/%")
+        )
+        conditions.extend(
+            [InterviewProcessStage.media_storage_key.is_not(None), media_content_filter]
+        )
+    if has_ai_review:
+        ai_comment = aliased(InterviewStageComment)
+        conditions.append(
+            exists(
+                select(1)
+                .select_from(ai_comment)
+                .where(
+                    ai_comment.stage_id == InterviewProcessStage.id,
+                    ai_comment.is_ai_feedback.is_(True),
+                )
+            )
+        )
+    if favorites_only:
+        favorite = aliased(InterviewCatalogFavorite)
+        conditions.append(
+            exists(
+                select(1)
+                .select_from(favorite)
+                .where(
+                    favorite.stage_id == InterviewProcessStage.id,
+                    favorite.user_id == current_user_id,
                 )
             )
         )
@@ -205,20 +265,35 @@ async def list_catalog_companies(
         if not candidate_ids:
             return InterviewCatalogCompanyPage(items=[], total=0, limit=limit, offset=offset)
 
+    stage_match_conditions = _catalog_stage_filters(
+        stage_type=stage_type,
+        media_kind=media_kind,
+        current_user_id=current_user.id,
+        has_ai_review=has_ai_review,
+        favorites_only=favorites_only,
+    )
+    matching_stage_id = (
+        case((and_(*stage_match_conditions), InterviewProcessStage.id))
+        if stage_match_conditions
+        else InterviewProcessStage.id
+    )
+    matching_stage_scheduled_at = (
+        case((and_(*stage_match_conditions), InterviewProcessStage.scheduled_at))
+        if stage_match_conditions
+        else InterviewProcessStage.scheduled_at
+    )
     view_alias = aliased(InterviewCatalogView)
     favorite_alias = aliased(InterviewCatalogFavorite)
     statement = (
         select(
             Company,
             func.count(distinct(InterviewProcess.id)),
-            func.count(InterviewProcessStage.id),
-            func.max(InterviewProcessStage.scheduled_at),
+            func.count(distinct(matching_stage_id)),
+            func.max(matching_stage_scheduled_at),
             func.count(
-                distinct(
-                    case((view_alias.stage_id.is_(None), InterviewProcessStage.id))
-                )
+                distinct(case((view_alias.stage_id.is_(None), matching_stage_id)))
             ),
-            func.bool_or(favorite_alias.process_id.is_not(None)),
+            func.bool_or(favorite_alias.stage_id.is_not(None)),
         )
         .join(InterviewProcess, InterviewProcess.company_id == Company.id)
         .outerjoin(
@@ -235,7 +310,7 @@ async def list_catalog_companies(
         .outerjoin(
             favorite_alias,
             and_(
-                favorite_alias.process_id == InterviewProcess.id,
+                favorite_alias.stage_id == InterviewProcessStage.id,
                 favorite_alias.user_id == current_user.id,
             ),
         )
@@ -266,7 +341,7 @@ async def list_catalog_companies(
         )
     else:
         statement = statement.order_by(
-            func.max(InterviewProcessStage.scheduled_at).desc().nullslast(),
+            func.max(matching_stage_scheduled_at).desc().nullslast(),
             Company.name,
         )
     total = int(
@@ -396,23 +471,20 @@ async def catalog_company_detail(
         )
     ).all()
     process_ids = [process.id for process, _, _ in process_rows]
-    favorite_process_ids: set[UUID] = (
-        set(
-            await session.scalars(
-                select(InterviewCatalogFavorite.process_id).where(
-                    InterviewCatalogFavorite.user_id == current_user.id,
-                    InterviewCatalogFavorite.process_id.in_(process_ids),
-                )
-            )
-        )
-        if process_ids
-        else set()
-    )
     stages = (
         list(
             await session.scalars(
                 select(InterviewProcessStage)
-                .where(InterviewProcessStage.process_id.in_(process_ids))
+                .where(
+                    InterviewProcessStage.process_id.in_(process_ids),
+                    *_catalog_stage_filters(
+                        stage_type=stage_type,
+                        media_kind=media_kind,
+                        current_user_id=current_user.id,
+                        has_ai_review=has_ai_review,
+                        favorites_only=favorites_only,
+                    ),
+                )
                 .order_by(
                     InterviewProcessStage.scheduled_at,
                     InterviewProcessStage.created_at,
@@ -435,6 +507,18 @@ async def catalog_company_detail(
         }
         if stage_ids
         else {}
+    )
+    favorite_stage_ids: set[UUID] = (
+        set(
+            await session.scalars(
+                select(InterviewCatalogFavorite.stage_id).where(
+                    InterviewCatalogFavorite.user_id == current_user.id,
+                    InterviewCatalogFavorite.stage_id.in_(stage_ids),
+                )
+            )
+        )
+        if stage_ids
+        else set()
     )
     attachments = (
         list(
@@ -503,6 +587,7 @@ async def catalog_company_detail(
                     if stage.id in view_by_stage
                     else None
                 ),
+                is_favorite=stage.id in favorite_stage_ids,
             )
             for stage in stages_by_process[process.id]
         ]
@@ -519,7 +604,6 @@ async def catalog_company_detail(
                 created_at=process.created_at,
                 updated_at=process.updated_at,
                 stages=track_stages,
-                is_favorite=process.id in favorite_process_ids,
             )
         )
     return InterviewCatalogCompanyDetail(id=company.id, name=company.name, tracks=tracks)
@@ -661,31 +745,17 @@ async def delete_catalog_comment(
     await session.commit()
 
 
-async def get_catalog_process(
-    session: AsyncSession, current_user: User, process_id: UUID
-) -> InterviewProcess:
-    process = await session.scalar(
-        select(InterviewProcess).where(
-            InterviewProcess.id == process_id,
-            *_direction_filters(current_user),
-        )
-    )
-    if process is None:
-        api_error(404, "interview_catalog_track_not_found", "Interview track was not found")
-    return process
-
-
 async def set_catalog_favorite(
-    session: AsyncSession, current_user: User, process_id: UUID
+    session: AsyncSession, current_user: User, stage_id: UUID
 ) -> None:
-    await get_catalog_process(session, current_user, process_id)
+    stage = await get_catalog_stage(session, current_user, stage_id)
     await session.execute(
         insert(InterviewCatalogFavorite)
-        .values(user_id=current_user.id, process_id=process_id)
+        .values(user_id=current_user.id, stage_id=stage.id)
         .on_conflict_do_nothing(
             index_elements=[
                 InterviewCatalogFavorite.user_id,
-                InterviewCatalogFavorite.process_id,
+                InterviewCatalogFavorite.stage_id,
             ]
         )
     )
@@ -693,12 +763,12 @@ async def set_catalog_favorite(
 
 
 async def remove_catalog_favorite(
-    session: AsyncSession, current_user: User, process_id: UUID
+    session: AsyncSession, current_user: User, stage_id: UUID
 ) -> None:
     await session.execute(
         delete(InterviewCatalogFavorite).where(
             InterviewCatalogFavorite.user_id == current_user.id,
-            InterviewCatalogFavorite.process_id == process_id,
+            InterviewCatalogFavorite.stage_id == stage_id,
         )
     )
     await session.commit()

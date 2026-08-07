@@ -13,7 +13,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { api } from "../api/endpoints";
@@ -124,10 +124,12 @@ function CatalogStage({
   companyId,
   track,
   stage,
+  highlighted,
 }: {
   companyId: string;
   track: InterviewCatalogTrackRead;
   stage: InterviewCatalogStageRead;
+  highlighted?: boolean;
 }) {
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const [playerLoading, setPlayerLoading] = useState(false);
@@ -232,10 +234,26 @@ function CatalogStage({
   };
 
   return (
-    <Card withBorder>
+    <Card
+      id={`stage-${stage.id}`}
+      withBorder
+      style={
+        highlighted
+          ? {
+              borderColor: "var(--mantine-color-blue-6)",
+              boxShadow: "0 0 0 2px var(--mantine-color-blue-3)",
+            }
+          : undefined
+      }
+    >
       <Stack>
-        <Group justify="space-between" align="flex-start" wrap="wrap">
-          <div>
+        <Group
+          justify="space-between"
+          align="flex-start"
+          wrap="nowrap"
+          className="responsive-card-header"
+        >
+          <div className="min-width-zero">
             <Group gap="xs" align="center" wrap="wrap">
               <Text fw={600}>{formatAuthor(track.author)}</Text>
               <Badge variant="outline" size="sm">
@@ -270,15 +288,15 @@ function CatalogStage({
           <Stack gap="xs" align="flex-end">
             <Button
               size="compact-xs"
-              variant={track.is_favorite ? "filled" : "light"}
+              variant={stage.is_favorite ? "filled" : "light"}
               color="yellow"
               loading={
                 favoriteMutation.isPending &&
-                favoriteMutation.variables?.processId === track.id
+                favoriteMutation.variables?.stageId === stage.id
               }
               onClick={() =>
                 favoriteMutation.mutate(
-                  { processId: track.id, favorite: !track.is_favorite },
+                  { stageId: stage.id, favorite: !stage.is_favorite },
                   {
                     onError: (error) =>
                       notifications.show({
@@ -289,7 +307,7 @@ function CatalogStage({
                 )
               }
             >
-              {track.is_favorite ? "★ В избранном" : "☆ В избранное"}
+              {stage.is_favorite ? "★ В избранном" : "☆ В избранное"}
             </Button>
             {stage.is_viewed && stage.last_viewed_at ? (
               <Badge color="brandGreen" variant="light">
@@ -595,6 +613,14 @@ export function InterviewCatalogCompanyPage() {
   const [searchParams] = useSearchParams();
   const filters = interviewCatalogFiltersFromParams(searchParams);
   const query = useInterviewCatalogCompany(companyId, filters);
+  const targetStageId = searchParams.get("stage");
+
+  useEffect(() => {
+    if (!targetStageId || query.isPending) return;
+    document
+      .getElementById(`stage-${targetStageId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [targetStageId, query.isPending]);
 
   if (query.isPending) return <LoadingState label="Загружаем собеседования…" />;
   if (query.isError)
@@ -621,6 +647,13 @@ export function InterviewCatalogCompanyPage() {
     (sum, section) => sum + section.items.length,
     0,
   );
+  const defaultOpenSections = targetStageId
+    ? sections
+        .filter((section) =>
+          section.items.some(({ stage }) => stage.id === targetStageId),
+        )
+        .map((section) => section.stageType)
+    : [];
 
   return (
     <Stack gap="xl">
@@ -653,7 +686,11 @@ export function InterviewCatalogCompanyPage() {
           <Text c="dimmed">В треках этой компании пока нет этапов.</Text>
         </Card>
       ) : (
-        <Accordion multiple defaultValue={[]} className="brand-accordion">
+        <Accordion
+          multiple
+          defaultValue={defaultOpenSections}
+          className="brand-accordion"
+        >
           {sections.map(({ stageType, items }) => (
             <Accordion.Item key={stageType} value={stageType}>
               <Accordion.Control>
@@ -670,6 +707,7 @@ export function InterviewCatalogCompanyPage() {
                       companyId={companyId}
                       track={track}
                       stage={stage}
+                      highlighted={stage.id === targetStageId}
                     />
                   ))}
                 </Stack>

@@ -72,6 +72,9 @@ class StubUploadStore:
         del upload, inline
         return "https://storage.example/recording.mp3?signed=redacted"
 
+    async def ensure_browser_playable(self, upload: StoredUpload) -> StoredUpload:
+        return upload
+
 
 class StagedUploadStore(StubUploadStore):
     def __init__(self, actual_size: int = 1_024) -> None:
@@ -1292,6 +1295,69 @@ async def test_file_transcription_repairs_missing_or_stale_legacy_media_size(
     assert stage is not None
     assert interview.processing_status is IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED
     assert stage.media_size == 1_024
+
+
+class LegacyM4aUploadStore(StagedUploadStore):
+    """A legacy ".mp3" recording that is actually an ALAC-free m4a container."""
+
+    async def ensure_browser_playable(self, upload: StoredUpload) -> StoredUpload:
+        return StoredUpload(
+            storage_key=upload.storage_key,
+            filename="recording.m4a",
+            content_type="audio/mp4",
+            size=upload.size,
+        )
+
+
+@pytest.mark.asyncio
+async def test_file_transcription_corrects_mislabeled_legacy_audio_before_probing(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    created, _, stage_id = await create_analysis_from_journal(
+        client,
+        seeded,
+        monkeypatch,
+        company_name="Legacy mislabeled audio",
+        media_storage_key="external:https://s3.firstvds.ru:443/interviews/legacy/recording.mp3",
+    )
+    assert created.status_code == 201, created.text
+    interview_id = UUID(created.json()["id"])
+    provider = FileUploadTranscriptionProvider()
+    declared_content_types: list[str] = []
+
+    async def fake_probe(*_args: object, **kwargs: object) -> MediaProbe:
+        declared_content_types.append(str(kwargs["declared_content_type"]))
+        return MediaProbe(
+            format_names=("mov", "mp4", "m4a"),
+            duration_seconds=10,
+            streams=(MediaStreamProbe(kind="audio", codec="aac", duration_seconds=10),),
+        )
+
+    monkeypatch.setattr(intelligence_jobs, "async_session_factory", TestSession)
+    monkeypatch.setattr(intelligence_jobs, "probe_media_async", fake_probe)
+    monkeypatch.setattr(intelligence_jobs.settings, "interview_staging_directory", str(tmp_path))
+    context: dict[str, Any] = {
+        "redis": RecordingRedis(),
+        "transcription_provider": provider,
+        "upload_store": LegacyM4aUploadStore(actual_size=1_024),
+        "media_staging_guard": StagingGuard(max_concurrency=1, min_free_bytes=0),
+    }
+
+    await intelligence_jobs.submit_transcription(context, str(interview_id))
+
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        stage = await session.get(InterviewProcessStage, stage_id)
+    assert interview is not None
+    assert stage is not None
+    assert interview.processing_status is IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED
+    assert interview.processing_error_code is None
+    assert declared_content_types == ["audio/mp4"]
+    assert stage.media_content_type == "audio/mp4"
+    assert stage.media_filename == "recording.m4a"
 
 
 @pytest.mark.asyncio

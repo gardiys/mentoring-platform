@@ -74,8 +74,13 @@ export function InterviewCatalogHistoryPage() {
         <Stack>
           {query.data.items.map((item) => (
             <Card key={item.stage_id} withBorder>
-              <Group justify="space-between" align="flex-start" wrap="wrap">
-                <div>
+              <Group
+                justify="space-between"
+                align="flex-start"
+                wrap="nowrap"
+                className="responsive-card-header"
+              >
+                <div className="min-width-zero">
                   <Badge variant="light">{stageLabels[item.stage_type]}</Badge>
                   <Title order={3} mt="xs">
                     {item.company_name}
@@ -95,7 +100,7 @@ export function InterviewCatalogHistoryPage() {
                   </Badge>
                   <Button
                     component={Link}
-                    to={`/interviews/catalog/${item.company_id}`}
+                    to={`/interviews/catalog/${item.company_id}?stage=${item.stage_id}`}
                     size="compact-sm"
                     variant="light"
                   >

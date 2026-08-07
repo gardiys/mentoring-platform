@@ -45,7 +45,7 @@ def upgrade() -> None:
     op.create_table(
         "interview_catalog_favorites",
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("process_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("stage_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -53,10 +53,10 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
-            ["process_id"],
-            ["interview_processes.id"],
+            ["stage_id"],
+            ["interview_process_stages.id"],
             ondelete="CASCADE",
-            name="fk_interview_catalog_favorites_process_id_interview_processes",
+            name="fk_interview_catalog_favorites_stage_id_process_stages",
         ),
         sa.ForeignKeyConstraint(
             ["user_id"],
@@ -64,7 +64,7 @@ def upgrade() -> None:
             ondelete="CASCADE",
             name="fk_interview_catalog_favorites_user_id_users",
         ),
-        sa.PrimaryKeyConstraint("user_id", "process_id", name="pk_interview_catalog_favorites"),
+        sa.PrimaryKeyConstraint("user_id", "stage_id", name="pk_interview_catalog_favorites"),
     )
     op.create_index(
         "ix_interview_catalog_favorites_user",

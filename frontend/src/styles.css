@@ -674,6 +674,10 @@ a {
   width: 100%;
 }
 
+.responsive-card-header {
+  flex-wrap: nowrap;
+}
+
 .roadmap-section-meta,
 .file-actions {
   flex: 0 0 auto;

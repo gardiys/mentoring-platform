@@ -167,15 +167,15 @@ export function useSetInterviewCatalogFavorite() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
-      processId,
+      stageId,
       favorite,
     }: {
-      processId: string;
+      stageId: string;
       favorite: boolean;
     }) =>
       favorite
-        ? api.favoriteInterviewCatalogTrack(processId)
-        : api.unfavoriteInterviewCatalogTrack(processId),
+        ? api.favoriteInterviewCatalogStage(stageId)
+        : api.unfavoriteInterviewCatalogStage(stageId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: interviewCatalogKeys.all });
     },
