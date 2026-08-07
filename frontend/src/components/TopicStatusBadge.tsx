@@ -11,14 +11,15 @@ const labels: Record<ProgressStatus, string> = {
 const colors: Record<ProgressStatus, string> = {
   not_started: "brandSand",
   in_progress: "brandBlue",
-  completed: "brandYellow",
+  completed: "brandGreen",
 };
 
 export function TopicStatusBadge({ status }: { status: ProgressStatus }) {
   return (
     <Badge
       color={colors[status]}
-      c={status === "completed" ? "brandNavy.9" : undefined}
+      variant={status === "completed" ? "filled" : "light"}
+      leftSection={status === "completed" ? "✓" : undefined}
     >
       {labels[status]}
     </Badge>

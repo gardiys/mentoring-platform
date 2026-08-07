@@ -86,6 +86,18 @@ export const brandTheme = createTheme({
       "#0a6073",
       "#0b4e5e",
     ],
+    brandGreen: [
+      "#eefcf3",
+      "#d5f7e1",
+      "#a9edc3",
+      "#78e0a2",
+      "#4dd184",
+      "#22b866",
+      "#189951",
+      "#127a40",
+      "#0f6033",
+      "#0b4a28",
+    ],
   },
   components: {
     Button: Button.extend({ defaultProps: { radius: "xl", fw: 600 } }),

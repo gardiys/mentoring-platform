@@ -1,7 +1,6 @@
 import {
   Accordion,
   Alert,
-  Anchor,
   Badge,
   Button,
   Group,
@@ -163,17 +162,13 @@ export function RoadmapPage() {
                   {section.topics.map((topic) => (
                     <Group
                       key={topic.id}
+                      component={Link}
+                      to={`/topics/${topic.id}`}
                       justify="space-between"
                       className="topic-row"
                     >
                       <div className="topic-row-main">
-                        <Anchor
-                          component={Link}
-                          to={`/topics/${topic.id}`}
-                          fw={600}
-                        >
-                          {topic.title}
-                        </Anchor>
+                        <Text fw={600}>{topic.title}</Text>
                         {topic.first_completed_at && (
                           <Text size="xs" c="dimmed">
                             Завершено{" "}

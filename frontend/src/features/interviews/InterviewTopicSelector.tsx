@@ -3,13 +3,16 @@ import {
   Button,
   Card,
   Checkbox,
+  Collapse,
   Group,
   SimpleGrid,
   Stack,
   Text,
   Title,
+  UnstyledButton,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { useDisclosure } from "@mantine/hooks";
 import { useEffect, useMemo, useState } from "react";
 
 import type { InterviewTopicOption } from "../../types/api";
@@ -21,6 +24,7 @@ interface Props {
 }
 
 export function InterviewTopicSelector({ deckSlug, topics }: Props) {
+  const [opened, { toggle }] = useDisclosure(false);
   const serverSelection = useMemo(
     () =>
       topics.filter((topic) => topic.is_selected).map((topic) => topic.name),
@@ -39,7 +43,7 @@ export function InterviewTopicSelector({ deckSlug, topics }: Props) {
     selected.size !== serverSelection.length ||
     serverSelection.some((category) => !selected.has(category));
 
-  const toggle = (category: string, checked: boolean) => {
+  const toggleTopic = (category: string, checked: boolean) => {
     setSelected((current) => {
       const next = new Set(current);
       if (checked) next.add(category);
@@ -68,70 +72,84 @@ export function InterviewTopicSelector({ deckSlug, topics }: Props) {
   return (
     <Card withBorder className="interview-topic-selector">
       <Stack>
-        <Group justify="space-between" align="flex-start">
-          <div>
-            <Title order={2}>Выберите темы</Title>
-            <Text c="dimmed" size="sm">
-              Карточки будут приходить только из тех разделов, которые вы уже
-              проходили.
-            </Text>
-          </div>
-          <Text className="technical-label">
-            Выбрано {selected.size} из {topics.length}
-          </Text>
-        </Group>
+        <UnstyledButton onClick={toggle} className="interview-topic-toggle">
+          <Group justify="space-between" align="flex-start">
+            <div>
+              <Title order={2}>Выберите темы</Title>
+              <Text c="dimmed" size="sm">
+                Карточки будут приходить только из тех разделов, которые вы
+                уже проходили.
+              </Text>
+            </div>
+            <Group gap="xs" wrap="nowrap">
+              <Text className="technical-label">
+                Выбрано {selected.size} из {topics.length}
+              </Text>
+              <Text
+                className={`interview-topic-toggle-icon${opened ? " interview-topic-toggle-icon-open" : ""}`}
+                aria-hidden
+              >
+                ▾
+              </Text>
+            </Group>
+          </Group>
+        </UnstyledButton>
 
         {mutation.isError && (
           <Alert color="red">{mutation.error.message}</Alert>
         )}
 
-        <Group>
-          <Button
-            type="button"
-            variant="subtle"
-            size="xs"
-            onClick={() =>
-              setSelected(new Set(topics.map((topic) => topic.name)))
-            }
-          >
-            Выбрать все
-          </Button>
-          <Button
-            type="button"
-            variant="subtle"
-            color="gray"
-            size="xs"
-            onClick={() => setSelected(new Set())}
-          >
-            Сбросить
-          </Button>
-        </Group>
+        <Collapse in={opened}>
+          <Stack>
+            <Group>
+              <Button
+                type="button"
+                variant="subtle"
+                size="xs"
+                onClick={() =>
+                  setSelected(new Set(topics.map((topic) => topic.name)))
+                }
+              >
+                Выбрать все
+              </Button>
+              <Button
+                type="button"
+                variant="subtle"
+                color="gray"
+                size="xs"
+                onClick={() => setSelected(new Set())}
+              >
+                Сбросить
+              </Button>
+            </Group>
 
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
-          {topics.map((topic) => (
-            <Checkbox
-              key={topic.name}
-              checked={selected.has(topic.name)}
-              onChange={(event) =>
-                toggle(topic.name, event.currentTarget.checked)
-              }
-              label={topic.name}
-              description={`${topic.total_cards} вопросов · ${topic.frequent_cards} частых`}
-              className="interview-topic-checkbox"
-            />
-          ))}
-        </SimpleGrid>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+              {topics.map((topic) => (
+                <Checkbox
+                  key={topic.name}
+                  checked={selected.has(topic.name)}
+                  onChange={(event) =>
+                    toggleTopic(topic.name, event.currentTarget.checked)
+                  }
+                  label={topic.name}
+                  description={`${topic.total_cards} вопросов · ${topic.frequent_cards} частых`}
+                  className="interview-topic-checkbox"
+                />
+              ))}
+            </SimpleGrid>
 
-        <Group justify="flex-end">
-          <Button
-            type="button"
-            onClick={save}
-            loading={mutation.isPending}
-            disabled={!dirty}
-          >
-            Сохранить выбор
-          </Button>
-        </Group>
+            <Group justify="flex-end">
+              <Button
+                type="button"
+                onClick={save}
+                loading={mutation.isPending}
+                disabled={!dirty}
+              >
+                Сохранить выбор
+              </Button>
+            </Group>
+          </Stack>
+        </Collapse>
       </Stack>
     </Card>
   );
