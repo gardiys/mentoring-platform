@@ -160,26 +160,26 @@ export function RoadmapPage() {
                     <Text c="dimmed">В разделе пока нет тем.</Text>
                   )}
                   {section.topics.map((topic) => (
-                    <Group
+                    <Link
                       key={topic.id}
-                      component={Link}
                       to={`/topics/${topic.id}`}
-                      justify="space-between"
                       className="topic-row"
                     >
-                      <div className="topic-row-main">
-                        <Text fw={600}>{topic.title}</Text>
-                        {topic.first_completed_at && (
-                          <Text size="xs" c="dimmed">
-                            Завершено{" "}
-                            {new Date(topic.first_completed_at).toLocaleString(
-                              "ru-RU",
-                            )}
-                          </Text>
-                        )}
-                      </div>
-                      <TopicStatusBadge status={topic.status} />
-                    </Group>
+                      <Group justify="space-between">
+                        <div className="topic-row-main">
+                          <Text fw={600}>{topic.title}</Text>
+                          {topic.first_completed_at && (
+                            <Text size="xs" c="dimmed">
+                              Завершено{" "}
+                              {new Date(
+                                topic.first_completed_at,
+                              ).toLocaleString("ru-RU")}
+                            </Text>
+                          )}
+                        </div>
+                        <TopicStatusBadge status={topic.status} />
+                      </Group>
+                    </Link>
                   ))}
                 </Stack>
               </Accordion.Panel>

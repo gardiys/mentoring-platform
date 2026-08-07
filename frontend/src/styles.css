@@ -641,6 +641,7 @@ a {
 }
 
 .topic-row {
+  display: block;
   padding: 0.8rem;
   background: color-mix(in srgb, var(--brand-warm) 78%, transparent);
   border: 1px solid transparent;
