@@ -1,5 +1,4 @@
-const TELEGRAM_SDK_PATH =
-  "/vendor/telegram-web-app-2026-07-14.js";
+const TELEGRAM_SDK_PATH = "/vendor/telegram-web-app-2026-07-14.js";
 const TELEGRAM_SDK_SCRIPT_ATTRIBUTE = "telegramSdk";
 const TELEGRAM_SDK_SCRIPT_SELECTOR = "script[data-telegram-sdk]";
 const TELEGRAM_INIT_PARAMS_STORAGE_KEY = "__telegram__initParams";
@@ -8,11 +7,7 @@ const DEFAULT_TELEGRAM_SDK_TIMEOUT_MS = 3_000;
 export const TELEGRAM_SDK_READY_EVENT = "mentoring:telegram-sdk-ready";
 
 export type TelegramSdkLoadResult =
-  | "not-needed"
-  | "already-ready"
-  | "loaded"
-  | "failed"
-  | "timeout";
+  "not-needed" | "already-ready" | "loaded" | "failed" | "timeout";
 
 type TelegramLaunchParams = {
   tgWebAppData?: unknown;
@@ -81,13 +76,14 @@ function launchParams(windowValue: Window): TelegramLaunchParams {
   const fromStorage = parseStoredLaunchParams(windowValue);
   return {
     tgWebAppData: fromUrl.tgWebAppData ?? fromStorage.tgWebAppData,
-    tgWebAppPlatform:
-      fromUrl.tgWebAppPlatform ?? fromStorage.tgWebAppPlatform,
+    tgWebAppPlatform: fromUrl.tgWebAppPlatform ?? fromStorage.tgWebAppPlatform,
     tgWebAppVersion: fromUrl.tgWebAppVersion ?? fromStorage.tgWebAppVersion,
   };
 }
 
-export function getTelegramInitData(windowValue: Window = window): string | null {
+export function getTelegramInitData(
+  windowValue: Window = window,
+): string | null {
   const sdkInitData = windowValue.Telegram?.WebApp?.initData;
   if (typeof sdkInitData === "string" && sdkInitData.length > 0) {
     return sdkInitData;
@@ -98,9 +94,7 @@ export function getTelegramInitData(windowValue: Window = window): string | null
     : null;
 }
 
-export function isTelegramLaunchContext(
-  windowValue: Window = window,
-): boolean {
+export function isTelegramLaunchContext(windowValue: Window = window): boolean {
   if (getTelegramInitData(windowValue)) return true;
 
   const sdkPlatform = windowValue.Telegram?.WebApp?.platform;
@@ -123,7 +117,7 @@ export function isTelegramLaunchContext(
   const bridgeWindow = windowValue as TelegramBridgeWindow;
   return Boolean(
     bridgeWindow.TelegramWebviewProxy ||
-      bridgeWindow.webkit?.messageHandlers?.TelegramWebviewProxy,
+    bridgeWindow.webkit?.messageHandlers?.TelegramWebviewProxy,
   );
 }
 

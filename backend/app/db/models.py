@@ -59,6 +59,21 @@ from app.mentors.models import (
     StudentLearningStatus,
     StudentStrengthLevel,
 )
+from app.payments.models import (
+    MentorPayout,
+    MentorPayoutAllocation,
+    MentorPayoutOrigin,
+    MentorPayoutStatus,
+    MentorReward,
+    MentorRewardKind,
+    PaymentAttempt,
+    PaymentAttemptStatus,
+    PaymentInstallment,
+    PaymentInstallmentStatus,
+    PaymentWebhookEvent,
+    StudentEmployment,
+    StudentEmploymentStatus,
+)
 from app.progress.models import ProgressStatus, TopicProgress
 from app.roadmaps.models import Roadmap, RoadmapEnrollment, RoadmapSection, Topic
 from app.schedule.models import (
@@ -130,6 +145,19 @@ __all__ = [
     "LearningTrackEnrollment",
     "LearningTrackRoadmap",
     "ProgressStatus",
+    "StudentEmployment",
+    "StudentEmploymentStatus",
+    "PaymentInstallment",
+    "PaymentInstallmentStatus",
+    "PaymentAttempt",
+    "PaymentAttemptStatus",
+    "PaymentWebhookEvent",
+    "MentorReward",
+    "MentorRewardKind",
+    "MentorPayout",
+    "MentorPayoutAllocation",
+    "MentorPayoutOrigin",
+    "MentorPayoutStatus",
     "Roadmap",
     "RoadmapEnrollment",
     "RoadmapSection",

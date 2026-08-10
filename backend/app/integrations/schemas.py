@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -16,6 +17,12 @@ class ProvisionTelegramStudentRequest(BaseModel):
     email: str | None = Field(default=None, max_length=320)
     track_slug: str = Field(min_length=1, max_length=160, pattern=SLUG_PATTERN)
     mentor_telegram_id: int | None = Field(default=None, gt=0)
+    repayment_percent: Decimal | None = Field(default=None, gt=0, le=1000, decimal_places=2)
+    mentor_reward_percent: Decimal | None = Field(default=None, ge=0, le=100, decimal_places=2)
+    entry_payment_rubles: Decimal = Field(
+        default=Decimal("45000"), ge=0, max_digits=12, decimal_places=2
+    )
+    entry_payment_paid: bool = True
 
 
 class GrantedTrackRead(BaseModel):

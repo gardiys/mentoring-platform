@@ -71,9 +71,7 @@ describe("Telegram SDK bootstrap", () => {
     expect(getTelegramInitData()).toBe("query_id=stored");
     const loading = loadTelegramSdk(window, document, 1_000);
     expect(document.querySelector(SDK_SELECTOR)).not.toBeNull();
-    document
-      .querySelector(SDK_SELECTOR)
-      ?.dispatchEvent(new Event("error"));
+    document.querySelector(SDK_SELECTOR)?.dispatchEvent(new Event("error"));
     await expect(loading).resolves.toBe("failed");
   });
 
@@ -105,6 +103,8 @@ describe("Telegram SDK bootstrap", () => {
     const html = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
 
     expect(html).not.toContain("https://telegram.org/js/telegram-web-app.js");
-    expect(html).toContain('<script type="module" src="/src/main.tsx"></script>');
+    expect(html).toContain(
+      '<script type="module" src="/src/main.tsx"></script>',
+    );
   });
 });

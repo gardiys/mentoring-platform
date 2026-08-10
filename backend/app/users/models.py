@@ -1,9 +1,20 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from enum import StrEnum
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, Enum, String, true
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    Enum,
+    Numeric,
+    String,
+    true,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -20,6 +31,16 @@ MENTOR_CAPABLE_ROLES = (UserRole.MENTOR, UserRole.ADMIN)
 
 class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "repayment_percent > 0 AND repayment_percent <= 1000",
+            name="repayment_percent_range",
+        ),
+        CheckConstraint(
+            "entry_payment_kopecks >= 0",
+            name="entry_payment_non_negative",
+        ),
+    )
     email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True, nullable=True)
     telegram_id: Mapped[int | None] = mapped_column(
         BigInteger, unique=True, index=True, nullable=True
@@ -39,6 +60,21 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         DateTime(timezone=True), nullable=True
     )
     learning_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    repayment_percent: Mapped[Decimal] = mapped_column(
+        Numeric(6, 2), default=Decimal("200.00"), nullable=False
+    )
+    entry_payment_kopecks: Mapped[int] = mapped_column(
+        BigInteger, default=4_500_000, nullable=False
+    )
+    entry_payment_paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    program_excluded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    program_exclusion_reason: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=true(), nullable=False
     )

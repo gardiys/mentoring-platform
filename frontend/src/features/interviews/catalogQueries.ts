@@ -149,7 +149,9 @@ export function useMarkInterviewCatalogStageViewed() {
     mutationFn: (stageId: string) =>
       api.markInterviewCatalogStageViewed(stageId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: interviewCatalogKeys.all });
+      await queryClient.invalidateQueries({
+        queryKey: interviewCatalogKeys.all,
+      });
     },
   });
 }
@@ -177,7 +179,9 @@ export function useSetInterviewCatalogFavorite() {
         ? api.favoriteInterviewCatalogStage(stageId)
         : api.unfavoriteInterviewCatalogStage(stageId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: interviewCatalogKeys.all });
+      await queryClient.invalidateQueries({
+        queryKey: interviewCatalogKeys.all,
+      });
     },
   });
 }

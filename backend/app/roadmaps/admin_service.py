@@ -263,9 +263,7 @@ async def get_admin_topic(
     session: AsyncSession, roadmap_id: UUID, section_id: UUID, topic_id: UUID
 ) -> AdminTopicRead:
     topic = await session.scalar(
-        select(Topic)
-        .where(Topic.id == topic_id)
-        .options(selectinload(Topic.media))
+        select(Topic).where(Topic.id == topic_id).options(selectinload(Topic.media))
     )
     section = await session.get(RoadmapSection, section_id)
     if (

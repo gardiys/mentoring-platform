@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from httpx import AsyncClient
 from pydantic import SecretStr
 from pytest import MonkeyPatch
@@ -5,6 +7,8 @@ from sqlalchemy import func, select
 
 from app.auth import dependencies as auth_dependencies
 from app.integrations import dependencies as integration_dependencies
+from app.mentors.models import MentorStudent
+from app.payments.models import MentorReward, MentorRewardKind
 from app.roadmaps.models import RoadmapEnrollment
 from app.tracks.models import LearningTrackEnrollment
 from app.users.models import User
@@ -76,6 +80,7 @@ async def test_bot_provisions_paid_student_and_grants_selected_track(
         student = await session.scalar(select(User).where(User.telegram_id == 987654321))
         assert student is not None
         assert student.telegram_username == "paid_student"
+        assert student.repayment_percent == Decimal("200.00")
     me = await client.get("/api/v1/me", headers=telegram_auth())
     roadmaps = await client.get("/api/v1/roadmaps", headers=telegram_auth())
 
@@ -88,6 +93,79 @@ async def test_bot_provisions_paid_student_and_grants_selected_track(
     assert me.json()["telegram_id"] == 987654321
     assert me.json()["onboarding_completed_at"] is not None
     assert [item["slug"] for item in roadmaps.json()] == ["python-backend"]
+
+
+async def test_bot_can_set_custom_student_repayment_percent(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        integration_dependencies.settings,
+        "bot_integration_token",
+        SecretStr(INTEGRATION_TOKEN),
+    )
+    response = await client.post(
+        "/api/v1/integrations/telegram/students",
+        headers=integration_auth(),
+        json=student_payload(track_slug="go", repayment_percent=175),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["track"]["id"] == str(seeded.go_track_id)
+    async with TestSession() as session:
+        student = await session.scalar(select(User).where(User.telegram_id == 987654321))
+        assert student is not None
+        assert student.repayment_percent == Decimal("175.00")
+
+
+async def test_bot_sets_custom_mentor_terms_and_entry_reward(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        integration_dependencies.settings,
+        "bot_integration_token",
+        SecretStr(INTEGRATION_TOKEN),
+    )
+    async with TestSession() as session:
+        mentor = await session.get(User, seeded.mentor_id)
+        assert mentor is not None
+        mentor.telegram_id = 123450001
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/integrations/telegram/students",
+        headers=integration_auth(),
+        json=student_payload(
+            mentor_telegram_id=123450001,
+            mentor_reward_percent=55,
+            entry_payment_rubles=50_000,
+            entry_payment_paid=True,
+        ),
+    )
+    assert response.status_code == 200, response.text
+    student_id = response.json()["user"]["id"]
+
+    async with TestSession() as session:
+        relation = await session.scalar(
+            select(MentorStudent).where(MentorStudent.student_id == student_id)
+        )
+        reward = await session.scalar(
+            select(MentorReward).where(
+                MentorReward.student_id == student_id,
+                MentorReward.kind == MentorRewardKind.ENTRY_PAYMENT,
+            )
+        )
+        student = await session.get(User, student_id)
+        assert relation is not None
+        assert relation.reward_percent == Decimal("55.00")
+        assert student is not None
+        assert student.entry_payment_kopecks == 5_000_000
+        assert reward is not None
+        assert reward.amount_kopecks == 1_000_000
+        assert reward.basis_kopecks == 5_000_000
 
 
 async def test_bot_provisioning_is_idempotent_and_updates_student_data(

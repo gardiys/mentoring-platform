@@ -77,8 +77,8 @@ export function InterviewTopicSelector({ deckSlug, topics }: Props) {
             <div>
               <Title order={2}>Выберите темы</Title>
               <Text c="dimmed" size="sm">
-                Карточки будут приходить только из тех разделов, которые вы
-                уже проходили.
+                Карточки будут приходить только из тех разделов, которые вы уже
+                проходили.
               </Text>
             </div>
             <Group gap="xs" wrap="nowrap">

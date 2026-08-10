@@ -29,6 +29,15 @@ from app.media.router import (
 )
 from app.mentors.admin_router import router as admin_mentors_router
 from app.mentors.router import router as mentors_router
+from app.payments.router import (
+    admin_router as admin_payments_router,
+)
+from app.payments.router import (
+    mentor_router as mentor_payments_router,
+)
+from app.payments.router import (
+    router as payments_router,
+)
 from app.roadmaps.admin_router import router as admin_roadmaps_router
 from app.roadmaps.router import router as roadmaps_router
 from app.schedule.router import (
@@ -74,6 +83,9 @@ app.include_router(admin_content_media_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(roadmaps_router, prefix="/api/v1")
 app.include_router(mentors_router, prefix="/api/v1")
+app.include_router(payments_router, prefix="/api/v1")
+app.include_router(mentor_payments_router, prefix="/api/v1")
+app.include_router(admin_payments_router, prefix="/api/v1")
 app.include_router(admin_mentors_router, prefix="/api/v1")
 app.include_router(admin_roadmaps_router, prefix="/api/v1")
 app.include_router(roadmap_media_router, prefix="/api/v1")

@@ -193,9 +193,9 @@ export function RoadmapPage() {
                           {topic.last_completed_at && (
                             <Text size="xs" c="dimmed">
                               Завершено{" "}
-                              {new Date(
-                                topic.last_completed_at,
-                              ).toLocaleString("ru-RU")}
+                              {new Date(topic.last_completed_at).toLocaleString(
+                                "ru-RU",
+                              )}
                             </Text>
                           )}
                         </div>

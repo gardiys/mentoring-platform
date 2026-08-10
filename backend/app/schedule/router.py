@@ -153,9 +153,7 @@ async def mentor_update_activity(
     status_code=status.HTTP_204_NO_CONTENT,
     response_class=Response,
 )
-async def mentor_delete_activity(
-    event_id: UUID, session: Session, mentor: MentorUser
-) -> Response:
+async def mentor_delete_activity(event_id: UUID, session: Session, mentor: MentorUser) -> Response:
     await delete_mentor_activity(session, mentor, event_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

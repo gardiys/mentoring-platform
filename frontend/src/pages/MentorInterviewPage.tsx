@@ -356,7 +356,9 @@ export function MentorInterviewPage() {
                       color: "green",
                       message: "Трек собеседований удалён",
                     });
-                    navigate(`/mentor/students/${studentId}`, { replace: true });
+                    navigate(`/mentor/students/${studentId}`, {
+                      replace: true,
+                    });
                   },
                   onError: (error) =>
                     notifications.show({

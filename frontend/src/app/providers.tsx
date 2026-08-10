@@ -1,7 +1,4 @@
-import {
-  localStorageColorSchemeManager,
-  MantineProvider,
-} from "@mantine/core";
+import { localStorageColorSchemeManager, MantineProvider } from "@mantine/core";
 import { Notifications } from "@mantine/notifications";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { type PropsWithChildren, useState } from "react";

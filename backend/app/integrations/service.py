@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -10,6 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import api_error
 from app.integrations.schemas import ProvisionTelegramStudentRequest
 from app.mentors.models import MentorStudent
+from app.payments.service import (
+    change_student_repayment_percent,
+    sync_one_time_mentor_rewards,
+)
 from app.roadmaps.models import Roadmap
 from app.tracks.models import LearningTrack
 from app.tracks.service import (
@@ -64,6 +69,16 @@ async def provision_telegram_student(
                 role=UserRole.STUDENT,
                 onboarding_completed_at=now,
                 learning_start_date=now.date(),
+                repayment_percent=(
+                    payload.repayment_percent
+                    or (Decimal("150") if track.slug.casefold() == "go" else Decimal("200"))
+                ),
+                entry_payment_kopecks=int(
+                    (payload.entry_payment_rubles * 100).quantize(
+                        Decimal("1"), rounding=ROUND_HALF_UP
+                    )
+                ),
+                entry_payment_paid_at=now if payload.entry_payment_paid else None,
             )
             .on_conflict_do_nothing(index_elements=[User.telegram_id])
             .returning(User.id)
@@ -90,6 +105,21 @@ async def provision_telegram_student(
         user.onboarding_completed_at = user.onboarding_completed_at or now
         user.learning_start_date = user.learning_start_date or user.created_at.date()
         user.is_active = True
+        if payload.repayment_percent is not None:
+            await change_student_repayment_percent(
+                session,
+                user.id,
+                payload.repayment_percent,
+            )
+            user.repayment_percent = payload.repayment_percent
+        user.entry_payment_kopecks = int(
+            (payload.entry_payment_rubles * 100).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        )
+        user.entry_payment_paid_at = (
+            user.entry_payment_paid_at or now if payload.entry_payment_paid else None
+        )
 
         access_created = await ensure_track_access(
             session,
@@ -101,9 +131,31 @@ async def provision_telegram_student(
                 select(MentorStudent).where(MentorStudent.student_id == user.id)
             )
             if relation is None:
-                session.add(MentorStudent(mentor_id=mentor.id, student_id=user.id))
+                session.add(
+                    MentorStudent(
+                        mentor_id=mentor.id,
+                        student_id=user.id,
+                        reward_percent=(
+                            payload.mentor_reward_percent
+                            if payload.mentor_reward_percent is not None
+                            else (
+                                Decimal("45")
+                                if track.slug.casefold() == "go"
+                                else Decimal("60")
+                            )
+                        ),
+                    )
+                )
             else:
                 relation.mentor_id = mentor.id
+                if payload.mentor_reward_percent is not None:
+                    relation.reward_percent = payload.mentor_reward_percent
+                elif relation.reward_percent is None:
+                    relation.reward_percent = (
+                        Decimal("45") if track.slug.casefold() == "go" else Decimal("60")
+                    )
+            await session.flush()
+            await sync_one_time_mentor_rewards(session, user.id)
         await session.commit()
         await session.refresh(user)
     except IntegrityError:

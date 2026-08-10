@@ -71,7 +71,10 @@ export function AppLayout() {
       location.pathname === "/knowledge" ||
       location.pathname === "/interviews" ||
       location.pathname === "/my-mentor" ||
+      location.pathname === "/payments" ||
       location.pathname === "/mentor/profile" ||
+      location.pathname === "/mentor/rewards" ||
+      location.pathname === "/admin/payments" ||
       location.pathname === "/admin/schedule" ||
       location.pathname === "/admin/useful-links";
     if (rootRoute) {
@@ -197,19 +200,41 @@ export function AppLayout() {
             onClick={close}
           />
           {student && (
-            <NavLink
-              component={Link}
-              to="/my-mentor"
-              label="Мой ментор"
-              description="Контакты и созвоны"
-              leftSection={<span className="nav-index">ME</span>}
-              className="brand-nav-link"
-              active={location.pathname.startsWith("/my-mentor")}
-              onClick={close}
-            />
+            <>
+              <NavLink
+                component={Link}
+                to="/my-mentor"
+                label="Мой ментор"
+                description="Контакты и созвоны"
+                leftSection={<span className="nav-index">ME</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/my-mentor")}
+                onClick={close}
+              />
+              <NavLink
+                component={Link}
+                to="/payments"
+                label="Мои платежи"
+                description="График и оплата"
+                leftSection={<span className="nav-index">₽</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/payments")}
+                onClick={close}
+              />
+            </>
           )}
           {mentor && (
             <>
+              <NavLink
+                component={Link}
+                to="/mentor/rewards"
+                label="Вознаграждения"
+                description="Начисления по ученикам"
+                leftSection={<span className="nav-index">₽</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/mentor/rewards")}
+                onClick={close}
+              />
               <NavLink
                 component={Link}
                 to="/mentor/profile"
@@ -246,6 +271,16 @@ export function AppLayout() {
           )}
           {admin && (
             <>
+              <NavLink
+                component={Link}
+                to="/admin/payments"
+                label="Платежи"
+                description="Ученики, просрочки, менторы"
+                leftSection={<span className="nav-index">PAY</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/admin/payments")}
+                onClick={close}
+              />
               <NavLink
                 component={Link}
                 to="/admin/students"

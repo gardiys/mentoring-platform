@@ -57,6 +57,15 @@ import type {
   InterviewProcessStageMutation,
   InterviewProcessStatus,
   InterviewProcessSummary,
+  AdminPaymentPage,
+  AdminPaymentStudentPage,
+  AdminMentorPayoutDetail,
+  AdminMentorPayoutDashboard,
+  EmploymentMutation,
+  MentorRewardSummary,
+  PaymentInstallmentStatus,
+  PaymentLinkRead,
+  StudentPaymentDashboard,
   InterviewDownloadUrl,
   InterviewCatalogCommentMutation,
   InterviewCatalogCommentRead,
@@ -209,6 +218,150 @@ function finalizeRetryDelay(milliseconds: number, signal?: AbortSignal) {
 
 export const api = {
   me: () => apiRequest<User>("/api/v1/me"),
+  myPayments: () => apiRequest<StudentPaymentDashboard>("/api/v1/payments/me"),
+  updateMyPaymentDays: (paymentDays: number[]) =>
+    apiRequest<StudentPaymentDashboard>("/api/v1/payments/me/schedule", {
+      method: "PUT",
+      body: JSON.stringify({ payment_days: paymentDays }),
+    }),
+  createPaymentLink: (installmentId: string) =>
+    apiRequest<PaymentLinkRead>(
+      `/api/v1/payments/installments/${installmentId}/link`,
+      { method: "POST" },
+    ),
+  mentorStudentPayments: (studentId: string) =>
+    apiRequest<StudentPaymentDashboard>(
+      `/api/v1/mentor/students/${studentId}/payments`,
+    ),
+  setMentorStudentEmployment: (
+    studentId: string,
+    payload: EmploymentMutation,
+  ) =>
+    apiRequest<StudentPaymentDashboard>(
+      `/api/v1/mentor/students/${studentId}/employment`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
+  terminateMentorStudentEmployment: (
+    studentId: string,
+    payload: { ended_at: string; reason: string | null },
+  ) =>
+    apiRequest<StudentPaymentDashboard>(
+      `/api/v1/mentor/students/${studentId}/employment/terminate`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  mentorRewards: () =>
+    apiRequest<MentorRewardSummary>("/api/v1/mentor/rewards"),
+  requestMentorPayout: (amountRubles: number) =>
+    apiRequest<MentorRewardSummary>("/api/v1/mentor/payouts", {
+      method: "POST",
+      body: JSON.stringify({ amount_rubles: amountRubles }),
+    }),
+  cancelMentorPayout: (payoutId: string, reason: string | null = null) =>
+    apiRequest<MentorRewardSummary>(
+      `/api/v1/mentor/payouts/${payoutId}/cancel`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
+  uploadMentorPayoutReceipt: (
+    payoutId: string,
+    file: File,
+    options?: UploadOptions,
+  ) =>
+    uploadFile<MentorRewardSummary>(
+      `/api/v1/mentor/payouts/${payoutId}/receipt/upload`,
+      `/api/v1/mentor/payouts/${payoutId}/receipt/complete`,
+      file,
+      {},
+      options,
+    ),
+  openMentorPayoutReceipt: (payoutId: string) =>
+    apiRequest<InterviewDownloadUrl>(
+      `/api/v1/mentor/payouts/${payoutId}/receipt`,
+    ).then((result) => result.url),
+  deleteMentorPayoutReceipt: (payoutId: string) =>
+    apiRequest<MentorRewardSummary>(
+      `/api/v1/mentor/payouts/${payoutId}/receipt`,
+      { method: "DELETE" },
+    ),
+  adminPayments: (options: {
+    status?: PaymentInstallmentStatus | null;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const params = new URLSearchParams({
+      limit: String(options.limit ?? 50),
+      offset: String(options.offset ?? 0),
+    });
+    if (options.status) params.set("status", options.status);
+    return apiRequest<AdminPaymentPage>(
+      `/api/v1/admin/payments?${params.toString()}`,
+    );
+  },
+  adminPaymentStudents: (options: { limit?: number; offset?: number } = {}) =>
+    apiRequest<AdminPaymentStudentPage>(
+      `/api/v1/admin/payments/students?limit=${options.limit ?? 50}&offset=${options.offset ?? 0}`,
+    ),
+  adminPaymentStudent: (studentId: string) =>
+    apiRequest<StudentPaymentDashboard>(
+      `/api/v1/admin/payments/students/${studentId}`,
+    ),
+  adminOverduePayments: (options: { limit?: number; offset?: number } = {}) =>
+    apiRequest<AdminPaymentPage>(
+      `/api/v1/admin/payments/overdue?limit=${options.limit ?? 50}&offset=${options.offset ?? 0}`,
+    ),
+  updateAdminPaymentDays: (studentId: string, paymentDays: number[]) =>
+    apiRequest<StudentPaymentDashboard>(
+      `/api/v1/admin/payments/students/${studentId}/schedule`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ payment_days: paymentDays }),
+      },
+    ),
+  confirmAdminPayment: (installmentId: string) =>
+    apiRequest<StudentPaymentDashboard>(
+      `/api/v1/admin/payments/installments/${installmentId}/confirm`,
+      { method: "POST" },
+    ),
+  revokeAdminPayment: (installmentId: string, reason: string) =>
+    apiRequest<StudentPaymentDashboard>(
+      `/api/v1/admin/payments/installments/${installmentId}/revoke`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
+  markAdminMentorRewardPaid: (rewardId: string) =>
+    apiRequest<void>(`/api/v1/admin/payments/rewards/${rewardId}/mark-paid`, {
+      method: "POST",
+    }),
+  adminMentorPayouts: () =>
+    apiRequest<AdminMentorPayoutDashboard>(
+      "/api/v1/admin/payments/mentor-payouts",
+    ),
+  adminMentorPayoutDetail: (mentorId: string) =>
+    apiRequest<AdminMentorPayoutDetail>(
+      `/api/v1/admin/payments/mentors/${mentorId}`,
+    ),
+  createAdminMentorPayout: (
+    mentorId: string,
+    payload: { amount_rubles: number; payment_reference: string | null },
+  ) =>
+    apiRequest<AdminMentorPayoutDashboard>(
+      `/api/v1/admin/payments/mentors/${mentorId}/payouts`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  markAdminMentorPayoutPaid: (
+    payoutId: string,
+    paymentReference: string | null,
+  ) =>
+    apiRequest<AdminMentorPayoutDashboard>(
+      `/api/v1/admin/payments/payouts/${payoutId}/mark-paid`,
+      {
+        method: "POST",
+        body: JSON.stringify({ payment_reference: paymentReference }),
+      },
+    ),
+  cancelAdminMentorPayout: (payoutId: string, reason: string | null = null) =>
+    apiRequest<AdminMentorPayoutDashboard>(
+      `/api/v1/admin/payments/payouts/${payoutId}/cancel`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
   logout: () => apiRequest<null>("/api/v1/auth/web/logout", { method: "POST" }),
   completeOnboarding: () =>
     apiRequest<User>("/api/v1/me/onboarding", { method: "POST" }),

@@ -11,6 +11,7 @@ from app.interviews.models import (
 from app.interviews.uploads import InterviewUploadStore
 from app.media.models import ProtectedContentMedia
 from app.mentors.models import MentorStudentDocument, MockInterview
+from app.payments.models import MentorPayout
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ async def delete_upload_if_unreferenced(
         ),
         select(MentorStudentDocument.id).where(MentorStudentDocument.storage_key == storage_key),
         select(MockInterview.id).where(MockInterview.media_storage_key == storage_key),
+        select(MentorPayout.id).where(MentorPayout.receipt_storage_key == storage_key),
         select(ProtectedContentMedia.id).where(
             or_(
                 ProtectedContentMedia.storage_key == storage_key,

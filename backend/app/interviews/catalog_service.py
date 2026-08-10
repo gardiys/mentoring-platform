@@ -234,9 +234,7 @@ def _comment(
         author=_author(author) if author is not None else None,
         body=comment.body,
         is_own=comment.user_id == current_user.id,
-        is_mentor_feedback=(
-            author is not None and author.role.value in {"mentor", "admin"}
-        ),
+        is_mentor_feedback=(author is not None and author.role.value in {"mentor", "admin"}),
         is_ai_feedback=comment.is_ai_feedback,
         created_at=comment.created_at,
         updated_at=comment.updated_at,
@@ -290,9 +288,7 @@ async def list_catalog_companies(
             func.count(distinct(InterviewProcess.id)),
             func.count(distinct(matching_stage_id)),
             func.max(matching_stage_scheduled_at),
-            func.count(
-                distinct(case((view_alias.stage_id.is_(None), matching_stage_id)))
-            ),
+            func.count(distinct(case((view_alias.stage_id.is_(None), matching_stage_id)))),
             func.bool_or(favorite_alias.stage_id.is_not(None)),
         )
         .join(InterviewProcess, InterviewProcess.company_id == Company.id)
@@ -578,14 +574,10 @@ async def catalog_company_detail(
                 ],
                 is_viewed=stage.id in view_by_stage,
                 first_viewed_at=(
-                    view_by_stage[stage.id].first_viewed_at
-                    if stage.id in view_by_stage
-                    else None
+                    view_by_stage[stage.id].first_viewed_at if stage.id in view_by_stage else None
                 ),
                 last_viewed_at=(
-                    view_by_stage[stage.id].last_viewed_at
-                    if stage.id in view_by_stage
-                    else None
+                    view_by_stage[stage.id].last_viewed_at if stage.id in view_by_stage else None
                 ),
                 is_favorite=stage.id in favorite_stage_ids,
             )
@@ -745,9 +737,7 @@ async def delete_catalog_comment(
     await session.commit()
 
 
-async def set_catalog_favorite(
-    session: AsyncSession, current_user: User, stage_id: UUID
-) -> None:
+async def set_catalog_favorite(session: AsyncSession, current_user: User, stage_id: UUID) -> None:
     stage = await get_catalog_stage(session, current_user, stage_id)
     await session.execute(
         insert(InterviewCatalogFavorite)

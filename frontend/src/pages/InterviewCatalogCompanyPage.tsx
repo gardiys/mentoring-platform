@@ -641,7 +641,10 @@ export function InterviewCatalogCompanyPage() {
     }
   }
   const sections = stageTypeOrder
-    .map((stageType) => ({ stageType, items: stagesByType.get(stageType) ?? [] }))
+    .map((stageType) => ({
+      stageType,
+      items: stagesByType.get(stageType) ?? [],
+    }))
     .filter((section) => section.items.length > 0);
   const totalStages = sections.reduce(
     (sum, section) => sum + section.items.length,

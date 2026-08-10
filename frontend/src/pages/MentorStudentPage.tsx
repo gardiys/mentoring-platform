@@ -27,6 +27,7 @@ import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { ProgressBar } from "../components/ProgressBar";
 import { TelegramChatLink } from "../components/TelegramChatLink";
+import { StudentPaymentsPanel } from "../components/StudentPaymentsPanel";
 import { TopicStatusBadge } from "../components/TopicStatusBadge";
 import { UploadProgressPanel } from "../components/UploadProgressPanel";
 import {
@@ -479,6 +480,7 @@ export function MentorStudentPage() {
             </Tabs.Tab>
             <Tabs.Tab value="documents">Резюме и легенда</Tabs.Tab>
             <Tabs.Tab value="notes">Заметки ({student.notes.length})</Tabs.Tab>
+            <Tabs.Tab value="payments">Платежи</Tabs.Tab>
           </Tabs.List>
         </ScrollArea>
 
@@ -774,6 +776,10 @@ export function MentorStudentPage() {
               </Card>
             ))}
           </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="payments" pt="lg">
+          <StudentPaymentsPanel studentId={studentId} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

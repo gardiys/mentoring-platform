@@ -165,6 +165,29 @@ class Settings(BaseSettings):
     interview_ai_max_active_per_user: int = Field(default=1, ge=1, le=10)
     interview_ai_global_active_limit: int = Field(default=50, ge=1, le=10_000)
     interview_ai_quota_timezone: str = "Europe/Moscow"
+    tochka_client_id: str | None = None
+    tochka_jwt_token: SecretStr | None = None
+    tochka_api_base_url: str = "https://enter.tochka.com/uapi"
+    tochka_proxy_url: SecretStr | None = None
+    tochka_public_key: SecretStr | None = None
+    tochka_customer_code: str | None = None
+    tochka_redirect_url: str | None = None
+    tochka_fail_redirect_url: str | None = None
+    tochka_payment_modes_raw: str = Field(
+        default="sbp,card",
+        validation_alias="TOCHKA_PAYMENT_MODES",
+    )
+    tochka_payment_purpose: str = "Оплата услуг по программе менторства"
+    tochka_receipt_tax_system_code: str = "osn"
+    tochka_receipt_vat_type: str = "none"
+    tochka_receipt_payment_method: str = "full_payment"
+    tochka_receipt_payment_object: str = "service"
+    tochka_receipt_item_name: str = "Информационно-консультационные услуги"
+    tochka_receipt_measure: str = "шт."
+    tochka_supplier_name: str = ""
+    tochka_supplier_phone: str = ""
+    tochka_supplier_tax_code: str = ""
+    tochka_request_timeout_seconds: float = Field(default=20, ge=5, le=120)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -184,6 +207,9 @@ class Settings(BaseSettings):
         "nexara_api_key",
         "openai_api_key",
         "openai_proxy_url",
+        "tochka_jwt_token",
+        "tochka_proxy_url",
+        "tochka_public_key",
         mode="before",
     )
     @classmethod
@@ -290,6 +316,10 @@ class Settings(BaseSettings):
         "openai_analysis_model",
         "openai_extraction_model",
         "openai_light_review_model",
+        "tochka_client_id",
+        "tochka_customer_code",
+        "tochka_redirect_url",
+        "tochka_fail_redirect_url",
         mode="before",
     )
     @classmethod
@@ -300,6 +330,11 @@ class Settings(BaseSettings):
     @classmethod
     def empty_embedding_model_uses_default(cls, value: object) -> object:
         return "text-embedding-3-small" if value == "" else value
+
+    @property
+    def tochka_payment_modes(self) -> list[str]:
+        modes = [item.strip() for item in self.tochka_payment_modes_raw.split(",") if item.strip()]
+        return modes or ["sbp", "card"]
 
 
 @lru_cache

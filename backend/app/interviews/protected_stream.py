@@ -22,9 +22,7 @@ def create_interview_stream_ticket(
     )
 
 
-def read_interview_stream_ticket(
-    token: str, *, user_agent: str, secret: str
-) -> tuple[UUID, UUID]:
+def read_interview_stream_ticket(token: str, *, user_agent: str, secret: str) -> tuple[UUID, UUID]:
     return read_bound_stream_ticket(
         token,
         expected_kind="interview_catalog_stream",

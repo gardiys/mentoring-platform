@@ -38,9 +38,7 @@ it("показывает историю просмотренных этапов"
 
   expect(await screen.findByText("Яндекс")).toBeInTheDocument();
   expect(screen.getByText(/Python · этап от/)).toBeInTheDocument();
-  expect(
-    screen.getByText(/Просмотрено 13 августа 2026/),
-  ).toBeInTheDocument();
+  expect(screen.getByText(/Просмотрено 13 августа 2026/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Открыть" })).toHaveAttribute(
     "href",
     "/interviews/catalog/73000000-0000-4000-8000-000000000001?stage=71000000-0000-4000-8000-000000000001",

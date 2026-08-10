@@ -70,13 +70,29 @@ export type TrackAccessRead = Schemas["TrackAccessRead"];
 
 export type AdminStudentMutation = Omit<
   Schemas["AdminStudentMutation"],
-  "last_name" | "email" | "track_ids"
+  | "telegram_username"
+  | "last_name"
+  | "email"
+  | "track_ids"
+  | "mentor_id"
+  | "repayment_percent"
+  | "mentor_reward_percent"
+  | "entry_payment_rubles"
+  | "entry_payment_paid"
+  | "program_excluded"
+  | "program_exclusion_reason"
 > & {
   telegram_username: string | null;
   last_name: string | null;
   email: string | null;
   track_ids: string[];
   mentor_id: string | null;
+  repayment_percent: number;
+  mentor_reward_percent: number | null;
+  entry_payment_rubles: number;
+  entry_payment_paid: boolean;
+  program_excluded: boolean;
+  program_exclusion_reason: string | null;
 };
 export type AdminStudentTrackRead = Schemas["AdminStudentTrackRead"];
 export interface AdminStudentMentorRead {
@@ -86,15 +102,49 @@ export interface AdminStudentMentorRead {
   last_name: string | null;
   telegram_username: string | null;
 }
-export type AdminStudentListItem = Schemas["AdminStudentListItem"] & {
+export type AdminStudentListItem = Omit<
+  Schemas["AdminStudentListItem"],
+  | "telegram_username"
+  | "mentor"
+  | "learning_status"
+  | "repayment_percent"
+  | "mentor_reward_percent"
+  | "entry_payment_kopecks"
+  | "entry_payment_paid_at"
+  | "program_excluded_at"
+  | "program_exclusion_reason"
+> & {
   telegram_username: string | null;
   mentor: AdminStudentMentorRead | null;
   learning_status: StudentLearningStatus;
+  repayment_percent: number;
+  mentor_reward_percent: number | null;
+  entry_payment_kopecks: number;
+  entry_payment_paid_at: string | null;
+  program_excluded_at: string | null;
+  program_exclusion_reason: string | null;
 };
-export type AdminStudentDetail = Schemas["AdminStudentDetail"] & {
+export type AdminStudentDetail = Omit<
+  Schemas["AdminStudentDetail"],
+  | "telegram_username"
+  | "mentor"
+  | "learning_status"
+  | "repayment_percent"
+  | "mentor_reward_percent"
+  | "entry_payment_kopecks"
+  | "entry_payment_paid_at"
+  | "program_excluded_at"
+  | "program_exclusion_reason"
+> & {
   telegram_username: string | null;
   mentor: AdminStudentMentorRead | null;
   learning_status: StudentLearningStatus;
+  repayment_percent: number;
+  mentor_reward_percent: number | null;
+  entry_payment_kopecks: number;
+  entry_payment_paid_at: string | null;
+  program_excluded_at: string | null;
+  program_exclusion_reason: string | null;
 };
 export type AdminStudentPage = Omit<Schemas["AdminStudentPage"], "items"> & {
   items: AdminStudentListItem[];
@@ -328,6 +378,221 @@ export interface MyMentorDashboardRead {
   mentor: MyMentorPublicRead | null;
   schedule: ScheduleEventRead[];
   useful_links: PinnedResourceLinkRead[];
+}
+
+export type PaymentInstallmentStatus =
+  "scheduled" | "pending" | "paid" | "cancelled";
+export type StudentEmploymentStatus = "active" | "terminated";
+export type MentorRewardKind =
+  "employment_payment" | "entry_payment" | "program_exclusion" | "legacy_fixed";
+export type MentorPayoutStatus = "requested" | "paid" | "cancelled";
+export type MentorPayoutOrigin = "mentor_request" | "admin_direct";
+
+export interface EmploymentMutation {
+  company_name: string;
+  company_id: string | null;
+  start_date: string;
+  net_salary_rubles: number;
+}
+
+export interface EmploymentRead {
+  id: string;
+  company_id: string | null;
+  company_name: string;
+  start_date: string;
+  net_salary_kopecks: number;
+  repayment_percent: number;
+  status: StudentEmploymentStatus;
+  ended_at: string | null;
+  end_reason: string | null;
+  payment_days: number[];
+  total_owed_kopecks: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentInstallmentRead {
+  id: string;
+  sequence_number: number;
+  due_date: string;
+  amount_kopecks: number;
+  salary_percent: number;
+  employment_id: string;
+  company_name: string;
+  status: PaymentInstallmentStatus;
+  paid_at: string | null;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  payment_url: string | null;
+  can_pay: boolean;
+}
+
+export interface PaymentSummaryRead {
+  total_owed_kopecks: number;
+  paid_kopecks: number;
+  remaining_kopecks: number;
+  overdue_kopecks: number;
+  paid_installments: number;
+  total_installments: number;
+  paid_salary_percent: number;
+  remaining_salary_percent: number;
+}
+
+export interface StudentPaymentDashboard {
+  student_id: string;
+  student_name: string;
+  repayment_percent: number;
+  mentor_reward_percent: number | null;
+  employment: EmploymentRead | null;
+  employment_history: EmploymentRead[];
+  installments: PaymentInstallmentRead[];
+  summary: PaymentSummaryRead;
+  can_manage_employment: boolean;
+  can_manage_payment_days: boolean;
+}
+
+export interface PaymentLinkRead {
+  installment_id: string;
+  payment_url: string;
+  expires_in: number | null;
+}
+
+export interface AdminPaymentListItem {
+  installment_id: string;
+  student_id: string;
+  student_name: string;
+  student_telegram_username: string | null;
+  mentor_id: string | null;
+  mentor_name: string | null;
+  company_name: string;
+  due_date: string;
+  amount_kopecks: number;
+  status: PaymentInstallmentStatus;
+  paid_at: string | null;
+  mentor_reward_kopecks: number | null;
+  mentor_reward_id: string | null;
+  mentor_reward_paid_at: string | null;
+  requires_manual_review: boolean;
+}
+
+export interface AdminPaymentStudentRead {
+  student_id: string;
+  student_name: string;
+  student_telegram_username: string | null;
+  mentor_id: string | null;
+  mentor_name: string | null;
+  company_name: string;
+  employment_start_date: string;
+  net_salary_kopecks: number;
+  repayment_percent: number;
+  total_owed_kopecks: number;
+  paid_kopecks: number;
+  remaining_kopecks: number;
+  overdue_kopecks: number;
+  overdue_payments: number;
+  next_payment_date: string | null;
+  paid_installments: number;
+  total_installments: number;
+}
+
+export interface AdminPaymentStudentPage {
+  items: AdminPaymentStudentRead[];
+  total: number;
+  limit: number;
+  offset: number;
+  total_remaining_kopecks: number;
+  total_paid_kopecks: number;
+  total_overdue_kopecks: number;
+}
+
+export interface AdminPaymentPage {
+  items: AdminPaymentListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  scheduled_kopecks: number;
+  paid_kopecks: number;
+  overdue_kopecks: number;
+  mentor_rewards_accrued_kopecks: number;
+  mentor_rewards_paid_kopecks: number;
+  mentor_rewards: MentorRewardRead[];
+}
+
+export interface MentorRewardRead {
+  id: string;
+  kind: MentorRewardKind;
+  mentor_id: string;
+  mentor_name: string;
+  mentor_telegram_username: string | null;
+  student_id: string;
+  student_name: string;
+  student_telegram_username: string | null;
+  company_name: string | null;
+  basis_kopecks: number | null;
+  reward_percent: number | null;
+  amount_kopecks: number;
+  paid_kopecks: number;
+  reserved_kopecks: number;
+  available_kopecks: number;
+  created_at: string;
+  paid_at: string | null;
+}
+
+export interface MentorPayoutRead {
+  id: string;
+  mentor_id: string;
+  mentor_name: string;
+  mentor_telegram_username: string | null;
+  amount_kopecks: number;
+  origin: MentorPayoutOrigin;
+  status: MentorPayoutStatus;
+  payment_reference: string | null;
+  created_at: string;
+  paid_at: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  receipt_filename: string | null;
+  receipt_content_type: string | null;
+  receipt_size: number | null;
+  receipt_uploaded_at: string | null;
+}
+
+export interface AdminMentorPayoutBalanceRead {
+  mentor_id: string;
+  mentor_name: string;
+  mentor_telegram_username: string | null;
+  accrued_kopecks: number;
+  paid_kopecks: number;
+  reserved_kopecks: number;
+  available_kopecks: number;
+}
+
+export interface AdminMentorPayoutDashboard {
+  balances: AdminMentorPayoutBalanceRead[];
+  payouts: MentorPayoutRead[];
+}
+
+export interface AdminMentorPayoutDetail {
+  mentor_id: string;
+  mentor_name: string;
+  mentor_telegram_username: string | null;
+  accrued_kopecks: number;
+  paid_kopecks: number;
+  reserved_kopecks: number;
+  available_kopecks: number;
+  rewards: MentorRewardRead[];
+  payouts: MentorPayoutRead[];
+}
+
+export interface MentorRewardSummary {
+  mentor_id: string;
+  accrued_kopecks: number;
+  paid_kopecks: number;
+  unpaid_kopecks: number;
+  reserved_kopecks: number;
+  available_kopecks: number;
+  rewards: MentorRewardRead[];
+  payouts: MentorPayoutRead[];
 }
 
 export interface MentorStudentRoadmapSummary {

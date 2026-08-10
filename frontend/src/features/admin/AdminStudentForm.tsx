@@ -62,6 +62,12 @@ function initialForm(student?: AdminStudentDetail): StudentFormState {
     learning_start_date: student?.learning_start_date ?? todayInputValue(),
     mentor_id: student?.mentor?.id ?? null,
     track_ids: student?.tracks.map((track) => track.id) ?? [],
+    repayment_percent: student?.repayment_percent ?? 200,
+    mentor_reward_percent: student?.mentor_reward_percent ?? 60,
+    entry_payment_rubles: student ? student.entry_payment_kopecks / 100 : 45_000,
+    entry_payment_paid: Boolean(student?.entry_payment_paid_at),
+    program_excluded: Boolean(student?.program_excluded_at),
+    program_exclusion_reason: student?.program_exclusion_reason ?? null,
   };
 }
 
@@ -89,18 +95,34 @@ export function AdminStudentForm({ options, student }: Props) {
     form.first_name.trim().length > 0 &&
     isValidTelegramUsername(form.telegram_username) &&
     Boolean(form.learning_start_date) &&
-    Boolean(form.mentor_id);
+    Boolean(form.mentor_id) &&
+    form.repayment_percent > 0 &&
+    form.entry_payment_rubles >= 0;
   const allowNavigation = useUnsavedChanges(
     JSON.stringify(form) !== JSON.stringify(initial.current),
   );
 
   const toggleTrack = (trackId: string, checked: boolean) => {
-    setForm((current) => ({
-      ...current,
-      track_ids: checked
+    setForm((current) => {
+      const trackIds = checked
         ? [...current.track_ids, trackId]
-        : current.track_ids.filter((id) => id !== trackId),
-    }));
+        : current.track_ids.filter((id) => id !== trackId);
+      const selectedTracks = options.tracks.filter((track) =>
+        trackIds.includes(track.id),
+      );
+      const goOnly =
+        selectedTracks.length > 0 &&
+        selectedTracks.every((track) => track.slug.toLowerCase() === "go");
+      return {
+        ...current,
+        track_ids: trackIds,
+        mentor_reward_percent: student
+          ? current.mentor_reward_percent
+          : goOnly
+            ? 45
+            : 60,
+      };
+    });
   };
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -332,6 +354,118 @@ export function AdminStudentForm({ options, student }: Props) {
                 }));
               }}
             />
+          </Stack>
+        </Card>
+
+        <Card withBorder>
+          <Stack>
+            <div>
+              <Title order={2}>Условия выплат</Title>
+              <Text c="dimmed" size="sm" mt={4}>
+                Общая сумма рассчитывается от будущей зарплаты на руки. Каждый
+                плановый взнос составит 25% зарплаты.
+              </Text>
+            </div>
+            <Group grow align="flex-start">
+              <NumberInput
+                label="Выплачивает по программе, %"
+                description="Обычно Python — 200%, Go — 150%"
+                required
+                min={1}
+                max={1000}
+                decimalScale={2}
+                suffix="%"
+                value={form.repayment_percent}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    repayment_percent: typeof value === "number" ? value : 200,
+                  }))
+                }
+              />
+              <NumberInput
+                label="Доля ментора, %"
+                description="От одной зарплаты: обычно Python — 60%, Go — 45%"
+                min={0}
+                max={100}
+                decimalScale={2}
+                suffix="%"
+                value={form.mentor_reward_percent ?? ""}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    mentor_reward_percent:
+                      typeof value === "number" ? value : null,
+                  }))
+                }
+              />
+            </Group>
+            <Divider />
+            <Group grow align="flex-start">
+              <NumberInput
+                label="Вступительный платёж"
+                description="Стандартная сумма — 45 000 ₽"
+                required
+                min={0}
+                decimalScale={2}
+                thousandSeparator=" "
+                suffix=" ₽"
+                value={form.entry_payment_rubles}
+                onChange={(value) =>
+                  setForm((current) => ({
+                    ...current,
+                    entry_payment_rubles:
+                      typeof value === "number" ? value : 45_000,
+                  }))
+                }
+              />
+              <Checkbox
+                mt={30}
+                label="Вступительный платёж получен"
+                description="После сохранения ментору начислится 10 000 ₽"
+                checked={form.entry_payment_paid}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    entry_payment_paid: event.currentTarget.checked,
+                  }))
+                }
+              />
+            </Group>
+            {editing && (
+              <Paper withBorder p="md">
+                <Stack>
+                  <Checkbox
+                    color="red"
+                    label="Ученик исключён из программы"
+                    description="Доступ будет закрыт, ментору единоразово начислится 10 000 ₽"
+                    checked={form.program_excluded}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        program_excluded: event.currentTarget.checked,
+                        program_exclusion_reason: event.currentTarget.checked
+                          ? current.program_exclusion_reason
+                          : null,
+                      }))
+                    }
+                  />
+                  {form.program_excluded && (
+                    <TextInput
+                      label="Причина исключения"
+                      value={form.program_exclusion_reason ?? ""}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          program_exclusion_reason:
+                            event.currentTarget.value || null,
+                        }))
+                      }
+                    />
+                  )}
+                </Stack>
+              </Paper>
+            )}
           </Stack>
         </Card>
 

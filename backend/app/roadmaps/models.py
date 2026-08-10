@@ -35,9 +35,7 @@ class Roadmap(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         order_by="RoadmapSection.position",
         passive_deletes=True,
     )
-    enrollments = relationship(
-        "RoadmapEnrollment", back_populates="roadmap", passive_deletes=True
-    )
+    enrollments = relationship("RoadmapEnrollment", back_populates="roadmap", passive_deletes=True)
 
 
 class RoadmapSection(UUIDPrimaryKeyMixin, TimestampMixin, Base):

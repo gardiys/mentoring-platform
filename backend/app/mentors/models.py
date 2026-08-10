@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -49,6 +51,10 @@ class MentorStudent(Base):
     __tablename__ = "mentor_students"
     __table_args__ = (
         CheckConstraint("mentor_id <> student_id", name="different_users"),
+        CheckConstraint(
+            "reward_percent IS NULL OR (reward_percent >= 0 AND reward_percent <= 100)",
+            name="mentor_reward_percent_range",
+        ),
         UniqueConstraint("student_id", name="uq_mentor_students_one_mentor_per_student"),
         Index("ix_mentor_students_mentor", "mentor_id", "student_id"),
     )
@@ -82,6 +88,7 @@ class MentorStudent(Base):
     status_updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    reward_percent: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
 
 
 class MentorTrackAssignment(Base):

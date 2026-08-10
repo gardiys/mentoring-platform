@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -19,6 +20,14 @@ class AdminStudentMutation(BaseModel):
     learning_start_date: date | None = None
     mentor_id: UUID | None = None
     track_ids: list[UUID] = Field(default_factory=list)
+    repayment_percent: Decimal = Field(default=Decimal("200"), gt=0, le=1000, decimal_places=2)
+    mentor_reward_percent: Decimal | None = Field(default=None, ge=0, le=100, decimal_places=2)
+    entry_payment_rubles: Decimal = Field(
+        default=Decimal("45000"), ge=0, max_digits=12, decimal_places=2
+    )
+    entry_payment_paid: bool = False
+    program_excluded: bool = False
+    program_exclusion_reason: str | None = Field(default=None, max_length=500)
 
     @field_validator("telegram_username", mode="before")
     @classmethod
@@ -63,6 +72,12 @@ class AdminStudentListItem(BaseModel):
     mentor: AdminStudentMentorRead | None
     tracks: list[AdminStudentTrackRead]
     last_progress_at: datetime | None
+    repayment_percent: Decimal
+    mentor_reward_percent: Decimal | None
+    entry_payment_kopecks: int
+    entry_payment_paid_at: datetime | None
+    program_excluded_at: datetime | None
+    program_exclusion_reason: str | None
 
 
 class AdminStudentDetail(AdminStudentListItem):

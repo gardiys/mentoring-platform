@@ -98,6 +98,13 @@ const studentRoutes = [
 
 const mentorRoutes = [
   {
+    path: "/mentor/rewards",
+    lazy: lazyPage(
+      () => import("../pages/MentorRewardsPage"),
+      "MentorRewardsPage",
+    ),
+  },
+  {
     path: "/mentor/profile",
     lazy: lazyPage(
       () => import("../pages/MentorProfilePage"),
@@ -142,6 +149,41 @@ const mentorRoutes = [
 ];
 
 const adminRoutes = [
+  {
+    path: "/admin/payments",
+    lazy: lazyPage(
+      () => import("../pages/AdminPaymentsPage"),
+      "AdminPaymentsPage",
+    ),
+  },
+  {
+    path: "/admin/payments/students/:studentId",
+    lazy: lazyPage(
+      () => import("../pages/AdminStudentPaymentsPage"),
+      "AdminStudentPaymentsPage",
+    ),
+  },
+  {
+    path: "/admin/payments/overdue",
+    lazy: lazyPage(
+      () => import("../pages/AdminOverduePaymentsPage"),
+      "AdminOverduePaymentsPage",
+    ),
+  },
+  {
+    path: "/admin/payments/mentors",
+    lazy: lazyPage(
+      () => import("../pages/AdminMentorPaymentsPage"),
+      "AdminMentorPaymentsPage",
+    ),
+  },
+  {
+    path: "/admin/payments/mentors/:mentorId",
+    lazy: lazyPage(
+      () => import("../pages/AdminMentorPaymentDetailPage"),
+      "AdminMentorPaymentDetailPage",
+    ),
+  },
   {
     path: "/admin/schedule",
     lazy: lazyPage(
@@ -382,6 +424,13 @@ export const router = createBrowserRouter([
               {
                 element: <RoleGuard roles={["student"]} />,
                 children: [
+                  {
+                    path: "/payments",
+                    lazy: lazyPage(
+                      () => import("../pages/PaymentsPage"),
+                      "PaymentsPage",
+                    ),
+                  },
                   {
                     path: "/my-mentor",
                     lazy: lazyPage(

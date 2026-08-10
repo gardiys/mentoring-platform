@@ -221,9 +221,7 @@ async def _admin_topic_model(
     statement = (
         select(KnowledgeTopic)
         .where(KnowledgeTopic.id == topic_id)
-        .options(
-            selectinload(KnowledgeTopic.entries).selectinload(KnowledgeEntry.media)
-        )
+        .options(selectinload(KnowledgeTopic.entries).selectinload(KnowledgeEntry.media))
         .options(selectinload(KnowledgeTopic.track_links))
     )
     if lock:
@@ -239,9 +237,7 @@ async def list_admin_topics(session: AsyncSession) -> list[AdminKnowledgeTopicRe
         await session.scalars(
             select(KnowledgeTopic)
             .order_by(KnowledgeTopic.position, KnowledgeTopic.title)
-            .options(
-                selectinload(KnowledgeTopic.entries).selectinload(KnowledgeEntry.media)
-            )
+            .options(selectinload(KnowledgeTopic.entries).selectinload(KnowledgeEntry.media))
             .options(selectinload(KnowledgeTopic.track_links))
         )
     )

@@ -2,7 +2,7 @@ COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 PROD_COMPOSE := docker compose -f infra/docker-compose.prod.yml --env-file .env.production
 first_name ?= Администратор
 
-.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings check-s3-multipart prod-check-s3-multipart ensure-test-db prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings check-s3-multipart prod-check-s3-multipart tochka-webhook prod-tochka-webhook ensure-test-db prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -51,6 +51,12 @@ check-s3-multipart:
 
 prod-check-s3-multipart: prod-config
 	$(PROD_COMPOSE) run --rm --no-deps backend python -m app.check_s3_multipart --confirm
+
+tochka-webhook:
+	$(COMPOSE) exec backend python -m app.configure_tochka_webhook
+
+prod-tochka-webhook: prod-config
+	$(PROD_COMPOSE) exec backend python -m app.configure_tochka_webhook
 
 migrate:
 	cd backend && poetry run alembic upgrade head

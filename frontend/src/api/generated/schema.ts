@@ -2028,6 +2028,466 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payments/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Payments */
+        get: operations["my_payments_api_v1_payments_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/me/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update My Payment Days */
+        put: operations["update_my_payment_days_api_v1_payments_me_schedule_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/installments/{installment_id}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Installment Payment Link */
+        post: operations["installment_payment_link_api_v1_payments_installments__installment_id__link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payments/tochka/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tochka Webhook */
+        post: operations["tochka_webhook_api_v1_payments_tochka_webhook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Student Payments */
+        get: operations["mentor_student_payments_api_v1_mentor_students__student_id__payments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/employment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mentor Set Student Employment */
+        put: operations["mentor_set_student_employment_api_v1_mentor_students__student_id__employment_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/students/{student_id}/employment/terminate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Terminate Student Employment */
+        post: operations["mentor_terminate_student_employment_api_v1_mentor_students__student_id__employment_terminate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Mentor Rewards */
+        get: operations["my_mentor_rewards_api_v1_mentor_rewards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create My Payout Request */
+        post: operations["create_my_payout_request_api_v1_mentor_payouts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/payouts/{payout_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel My Payout Request */
+        post: operations["cancel_my_payout_request_api_v1_mentor_payouts__payout_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/payouts/{payout_id}/receipt/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Payout Receipt Upload */
+        post: operations["create_payout_receipt_upload_api_v1_mentor_payouts__payout_id__receipt_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/payouts/{payout_id}/receipt/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Payout Receipt Upload */
+        post: operations["complete_payout_receipt_upload_api_v1_mentor_payouts__payout_id__receipt_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/payouts/{payout_id}/receipt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Open Payout Receipt */
+        get: operations["open_payout_receipt_api_v1_mentor_payouts__payout_id__receipt_get"];
+        put?: never;
+        post?: never;
+        /** Delete Payout Receipt */
+        delete: operations["delete_payout_receipt_api_v1_mentor_payouts__payout_id__receipt_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Payments */
+        get: operations["admin_payments_api_v1_admin_payments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Payment Students */
+        get: operations["admin_payment_students_api_v1_admin_payments_students_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/students/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Student Payments */
+        get: operations["admin_student_payments_api_v1_admin_payments_students__student_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/overdue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Overdue Payments */
+        get: operations["admin_overdue_payments_api_v1_admin_payments_overdue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/mentor-payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Mentor Payouts */
+        get: operations["admin_mentor_payouts_api_v1_admin_payments_mentor_payouts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/mentors/{mentor_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Mentor Payments */
+        get: operations["admin_mentor_payments_api_v1_admin_payments_mentors__mentor_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/mentors/{mentor_id}/payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Create Mentor Payout */
+        post: operations["admin_create_mentor_payout_api_v1_admin_payments_mentors__mentor_id__payouts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/payouts/{payout_id}/mark-paid": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Mark Mentor Payout Paid */
+        post: operations["admin_mark_mentor_payout_paid_api_v1_admin_payments_payouts__payout_id__mark_paid_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/payouts/{payout_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Cancel Mentor Payout */
+        post: operations["admin_cancel_mentor_payout_api_v1_admin_payments_payouts__payout_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/students/{student_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Admin Update Payment Days */
+        put: operations["admin_update_payment_days_api_v1_admin_payments_students__student_id__schedule_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/installments/{installment_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Confirm Payment */
+        post: operations["admin_confirm_payment_api_v1_admin_payments_installments__installment_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/installments/{installment_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Revoke Payment */
+        post: operations["admin_revoke_payment_api_v1_admin_payments_installments__installment_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/rewards/{reward_id}/mark-paid": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Mark Reward Paid */
+        post: operations["admin_mark_reward_paid_api_v1_admin_payments_rewards__reward_id__mark_paid_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/tochka/webhook/configure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Configure Tochka Webhook */
+        post: operations["configure_tochka_webhook_api_v1_admin_payments_tochka_webhook_configure_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/mentors": {
         parameters: {
             query?: never;
@@ -3304,6 +3764,57 @@ export interface components {
             /** Track Ids */
             track_ids: string[];
         };
+        /** AdminMentorPayoutBalanceRead */
+        AdminMentorPayoutBalanceRead: {
+            /**
+             * Mentor Id
+             * Format: uuid
+             */
+            mentor_id: string;
+            /** Mentor Name */
+            mentor_name: string;
+            /** Mentor Telegram Username */
+            mentor_telegram_username: string | null;
+            /** Accrued Kopecks */
+            accrued_kopecks: number;
+            /** Paid Kopecks */
+            paid_kopecks: number;
+            /** Reserved Kopecks */
+            reserved_kopecks: number;
+            /** Available Kopecks */
+            available_kopecks: number;
+        };
+        /** AdminMentorPayoutDashboard */
+        AdminMentorPayoutDashboard: {
+            /** Balances */
+            balances: components["schemas"]["AdminMentorPayoutBalanceRead"][];
+            /** Payouts */
+            payouts: components["schemas"]["MentorPayoutRead"][];
+        };
+        /** AdminMentorPayoutDetail */
+        AdminMentorPayoutDetail: {
+            /**
+             * Mentor Id
+             * Format: uuid
+             */
+            mentor_id: string;
+            /** Mentor Name */
+            mentor_name: string;
+            /** Mentor Telegram Username */
+            mentor_telegram_username: string | null;
+            /** Accrued Kopecks */
+            accrued_kopecks: number;
+            /** Paid Kopecks */
+            paid_kopecks: number;
+            /** Reserved Kopecks */
+            reserved_kopecks: number;
+            /** Available Kopecks */
+            available_kopecks: number;
+            /** Rewards */
+            rewards: components["schemas"]["MentorRewardRead"][];
+            /** Payouts */
+            payouts: components["schemas"]["MentorPayoutRead"][];
+        };
         /** AdminMentorProfileMutation */
         AdminMentorProfileMutation: {
             /** First Name */
@@ -3340,6 +3851,133 @@ export interface components {
             slug: string;
             /** Title */
             title: string;
+        };
+        /** AdminPaymentListItem */
+        AdminPaymentListItem: {
+            /**
+             * Installment Id
+             * Format: uuid
+             */
+            installment_id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Student Telegram Username */
+            student_telegram_username: string | null;
+            /** Mentor Id */
+            mentor_id: string | null;
+            /** Mentor Name */
+            mentor_name: string | null;
+            /** Company Name */
+            company_name: string;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /** Amount Kopecks */
+            amount_kopecks: number;
+            status: components["schemas"]["PaymentInstallmentStatus"];
+            /** Paid At */
+            paid_at: string | null;
+            /** Mentor Reward Kopecks */
+            mentor_reward_kopecks: number | null;
+            /** Mentor Reward Id */
+            mentor_reward_id: string | null;
+            /** Mentor Reward Paid At */
+            mentor_reward_paid_at: string | null;
+            /**
+             * Requires Manual Review
+             * @default false
+             */
+            requires_manual_review: boolean;
+        };
+        /** AdminPaymentPage */
+        AdminPaymentPage: {
+            /** Items */
+            items: components["schemas"]["AdminPaymentListItem"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Scheduled Kopecks */
+            scheduled_kopecks: number;
+            /** Paid Kopecks */
+            paid_kopecks: number;
+            /** Overdue Kopecks */
+            overdue_kopecks: number;
+            /** Mentor Rewards Accrued Kopecks */
+            mentor_rewards_accrued_kopecks: number;
+            /** Mentor Rewards Paid Kopecks */
+            mentor_rewards_paid_kopecks: number;
+            /** Mentor Rewards */
+            mentor_rewards: components["schemas"]["MentorRewardRead"][];
+        };
+        /** AdminPaymentStudentPage */
+        AdminPaymentStudentPage: {
+            /** Items */
+            items: components["schemas"]["AdminPaymentStudentRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total Remaining Kopecks */
+            total_remaining_kopecks: number;
+            /** Total Paid Kopecks */
+            total_paid_kopecks: number;
+            /** Total Overdue Kopecks */
+            total_overdue_kopecks: number;
+        };
+        /** AdminPaymentStudentRead */
+        AdminPaymentStudentRead: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Student Telegram Username */
+            student_telegram_username: string | null;
+            /** Mentor Id */
+            mentor_id: string | null;
+            /** Mentor Name */
+            mentor_name: string | null;
+            /** Company Name */
+            company_name: string;
+            /**
+             * Employment Start Date
+             * Format: date
+             */
+            employment_start_date: string;
+            /** Net Salary Kopecks */
+            net_salary_kopecks: number;
+            /** Repayment Percent */
+            repayment_percent: string;
+            /** Total Owed Kopecks */
+            total_owed_kopecks: number;
+            /** Paid Kopecks */
+            paid_kopecks: number;
+            /** Remaining Kopecks */
+            remaining_kopecks: number;
+            /** Overdue Kopecks */
+            overdue_kopecks: number;
+            /** Overdue Payments */
+            overdue_payments: number;
+            /** Next Payment Date */
+            next_payment_date: string | null;
+            /** Paid Installments */
+            paid_installments: number;
+            /** Total Installments */
+            total_installments: number;
         };
         /** AdminQuestionModerationCardCandidate */
         AdminQuestionModerationCardCandidate: {
@@ -3787,6 +4425,18 @@ export interface components {
             tracks: components["schemas"]["AdminStudentTrackRead"][];
             /** Last Progress At */
             last_progress_at: string | null;
+            /** Repayment Percent */
+            repayment_percent: string;
+            /** Mentor Reward Percent */
+            mentor_reward_percent: string | null;
+            /** Entry Payment Kopecks */
+            entry_payment_kopecks: number;
+            /** Entry Payment Paid At */
+            entry_payment_paid_at: string | null;
+            /** Program Excluded At */
+            program_excluded_at: string | null;
+            /** Program Exclusion Reason */
+            program_exclusion_reason: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -3827,6 +4477,18 @@ export interface components {
             tracks: components["schemas"]["AdminStudentTrackRead"][];
             /** Last Progress At */
             last_progress_at: string | null;
+            /** Repayment Percent */
+            repayment_percent: string;
+            /** Mentor Reward Percent */
+            mentor_reward_percent: string | null;
+            /** Entry Payment Kopecks */
+            entry_payment_kopecks: number;
+            /** Entry Payment Paid At */
+            entry_payment_paid_at: string | null;
+            /** Program Excluded At */
+            program_excluded_at: string | null;
+            /** Program Exclusion Reason */
+            program_exclusion_reason: string | null;
         };
         /** AdminStudentMentorMutation */
         AdminStudentMentorMutation: {
@@ -3869,6 +4531,30 @@ export interface components {
             mentor_id?: string | null;
             /** Track Ids */
             track_ids?: string[];
+            /**
+             * Repayment Percent
+             * @default 200
+             */
+            repayment_percent: number | string;
+            /** Mentor Reward Percent */
+            mentor_reward_percent?: number | string | null;
+            /**
+             * Entry Payment Rubles
+             * @default 45000
+             */
+            entry_payment_rubles: number | string;
+            /**
+             * Entry Payment Paid
+             * @default false
+             */
+            entry_payment_paid: boolean;
+            /**
+             * Program Excluded
+             * @default false
+             */
+            program_excluded: boolean;
+            /** Program Exclusion Reason */
+            program_exclusion_reason?: string | null;
         };
         /** AdminStudentOptions */
         AdminStudentOptions: {
@@ -4233,6 +4919,70 @@ export interface components {
             size: number;
             /** @default legacy-post */
             upload_protocol: components["schemas"]["ContentMediaUploadProtocol"];
+        };
+        /** EmploymentMutation */
+        EmploymentMutation: {
+            /** Company Name */
+            company_name: string;
+            /** Company Id */
+            company_id?: string | null;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Net Salary Rubles */
+            net_salary_rubles: number | string;
+        };
+        /** EmploymentRead */
+        EmploymentRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Company Id */
+            company_id: string | null;
+            /** Company Name */
+            company_name: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /** Net Salary Kopecks */
+            net_salary_kopecks: number;
+            /** Repayment Percent */
+            repayment_percent: string;
+            status: components["schemas"]["StudentEmploymentStatus"];
+            /** Ended At */
+            ended_at: string | null;
+            /** End Reason */
+            end_reason: string | null;
+            /** Payment Days */
+            payment_days: number[];
+            /** Total Owed Kopecks */
+            total_owed_kopecks: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** EmploymentTerminationMutation */
+        EmploymentTerminationMutation: {
+            /**
+             * Ended At
+             * Format: date
+             */
+            ended_at: string;
+            /** Reason */
+            reason?: string | null;
         };
         /** GrantedRoadmapRead */
         GrantedRoadmapRead: {
@@ -5793,6 +6543,75 @@ export interface components {
              */
             updated_at: string;
         };
+        /** MentorPayoutAmountMutation */
+        MentorPayoutAmountMutation: {
+            /** Amount Rubles */
+            amount_rubles: number | string;
+            /** Payment Reference */
+            payment_reference?: string | null;
+        };
+        /** MentorPayoutCancelMutation */
+        MentorPayoutCancelMutation: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /** MentorPayoutMarkPaidMutation */
+        MentorPayoutMarkPaidMutation: {
+            /** Payment Reference */
+            payment_reference?: string | null;
+        };
+        /**
+         * MentorPayoutOrigin
+         * @enum {string}
+         */
+        MentorPayoutOrigin: "mentor_request" | "admin_direct";
+        /** MentorPayoutRead */
+        MentorPayoutRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Mentor Id
+             * Format: uuid
+             */
+            mentor_id: string;
+            /** Mentor Name */
+            mentor_name: string;
+            /** Mentor Telegram Username */
+            mentor_telegram_username: string | null;
+            /** Amount Kopecks */
+            amount_kopecks: number;
+            origin: components["schemas"]["MentorPayoutOrigin"];
+            status: components["schemas"]["MentorPayoutStatus"];
+            /** Payment Reference */
+            payment_reference: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Paid At */
+            paid_at: string | null;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /** Cancellation Reason */
+            cancellation_reason: string | null;
+            /** Receipt Filename */
+            receipt_filename: string | null;
+            /** Receipt Content Type */
+            receipt_content_type: string | null;
+            /** Receipt Size */
+            receipt_size: number | null;
+            /** Receipt Uploaded At */
+            receipt_uploaded_at: string | null;
+        };
+        /**
+         * MentorPayoutStatus
+         * @enum {string}
+         */
+        MentorPayoutStatus: "requested" | "paid" | "cancelled";
         /** MentorProfileMutation */
         MentorProfileMutation: {
             /** Consultation Url */
@@ -5819,6 +6638,81 @@ export interface components {
             one_off_activities: components["schemas"]["ScheduleEventRead"][];
             /** Updated At */
             updated_at: string | null;
+        };
+        /**
+         * MentorRewardKind
+         * @enum {string}
+         */
+        MentorRewardKind: "employment_payment" | "entry_payment" | "program_exclusion" | "legacy_fixed";
+        /** MentorRewardRead */
+        MentorRewardRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["MentorRewardKind"];
+            /**
+             * Mentor Id
+             * Format: uuid
+             */
+            mentor_id: string;
+            /** Mentor Name */
+            mentor_name: string;
+            /** Mentor Telegram Username */
+            mentor_telegram_username: string | null;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Student Telegram Username */
+            student_telegram_username: string | null;
+            /** Company Name */
+            company_name: string | null;
+            /** Basis Kopecks */
+            basis_kopecks: number | null;
+            /** Reward Percent */
+            reward_percent: string | null;
+            /** Amount Kopecks */
+            amount_kopecks: number;
+            /** Paid Kopecks */
+            paid_kopecks: number;
+            /** Reserved Kopecks */
+            reserved_kopecks: number;
+            /** Available Kopecks */
+            available_kopecks: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Paid At */
+            paid_at: string | null;
+        };
+        /** MentorRewardSummary */
+        MentorRewardSummary: {
+            /**
+             * Mentor Id
+             * Format: uuid
+             */
+            mentor_id: string;
+            /** Accrued Kopecks */
+            accrued_kopecks: number;
+            /** Paid Kopecks */
+            paid_kopecks: number;
+            /** Unpaid Kopecks */
+            unpaid_kopecks: number;
+            /** Reserved Kopecks */
+            reserved_kopecks: number;
+            /** Available Kopecks */
+            available_kopecks: number;
+            /** Rewards */
+            rewards: components["schemas"]["MentorRewardRead"][];
+            /** Payouts */
+            payouts: components["schemas"]["MentorPayoutRead"][];
         };
         /** MentorStudentDetail */
         MentorStudentDetail: {
@@ -6067,6 +6961,92 @@ export interface components {
             /** Group Calendar Url */
             group_calendar_url: string | null;
         };
+        /** PaymentDaysMutation */
+        PaymentDaysMutation: {
+            /** Payment Days */
+            payment_days: number[];
+        };
+        /** PaymentInstallmentRead */
+        PaymentInstallmentRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Sequence Number */
+            sequence_number: number;
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /** Amount Kopecks */
+            amount_kopecks: number;
+            /** Salary Percent */
+            salary_percent: string;
+            /**
+             * Employment Id
+             * Format: uuid
+             */
+            employment_id: string;
+            /** Company Name */
+            company_name: string;
+            status: components["schemas"]["PaymentInstallmentStatus"];
+            /** Paid At */
+            paid_at: string | null;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Revocation Reason */
+            revocation_reason: string | null;
+            /** Payment Url */
+            payment_url?: string | null;
+            /**
+             * Can Pay
+             * @default false
+             */
+            can_pay: boolean;
+        };
+        /**
+         * PaymentInstallmentStatus
+         * @enum {string}
+         */
+        PaymentInstallmentStatus: "scheduled" | "pending" | "paid" | "cancelled";
+        /** PaymentLinkRead */
+        PaymentLinkRead: {
+            /**
+             * Installment Id
+             * Format: uuid
+             */
+            installment_id: string;
+            /** Payment Url */
+            payment_url: string;
+            /** Expires In */
+            expires_in?: number | null;
+        };
+        /** PaymentRevocationMutation */
+        PaymentRevocationMutation: {
+            /** Reason */
+            reason: string;
+        };
+        /** PaymentSummaryRead */
+        PaymentSummaryRead: {
+            /** Total Owed Kopecks */
+            total_owed_kopecks: number;
+            /** Paid Kopecks */
+            paid_kopecks: number;
+            /** Remaining Kopecks */
+            remaining_kopecks: number;
+            /** Overdue Kopecks */
+            overdue_kopecks: number;
+            /** Paid Installments */
+            paid_installments: number;
+            /** Total Installments */
+            total_installments: number;
+            /** Paid Salary Percent */
+            paid_salary_percent: string;
+            /** Remaining Salary Percent */
+            remaining_salary_percent: string;
+        };
         /** PinnedResourceLinkMutation */
         PinnedResourceLinkMutation: {
             /** Title */
@@ -6187,6 +7167,20 @@ export interface components {
             track_slug: string;
             /** Mentor Telegram Id */
             mentor_telegram_id?: number | null;
+            /** Repayment Percent */
+            repayment_percent?: number | string | null;
+            /** Mentor Reward Percent */
+            mentor_reward_percent?: number | string | null;
+            /**
+             * Entry Payment Rubles
+             * @default 45000
+             */
+            entry_payment_rubles: number | string;
+            /**
+             * Entry Payment Paid
+             * @default true
+             */
+            entry_payment_paid: boolean;
         };
         /** ProvisionTelegramStudentResponse */
         ProvisionTelegramStudentResponse: {
@@ -6352,10 +7346,45 @@ export interface components {
             topics: components["schemas"]["TopicListItem"][];
         };
         /**
+         * StudentEmploymentStatus
+         * @enum {string}
+         */
+        StudentEmploymentStatus: "active" | "terminated";
+        /**
          * StudentLearningStatus
          * @enum {string}
          */
         StudentLearningStatus: "learning" | "interviewing" | "probation" | "finished";
+        /** StudentPaymentDashboard */
+        StudentPaymentDashboard: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Repayment Percent */
+            repayment_percent: string;
+            /** Mentor Reward Percent */
+            mentor_reward_percent: string | null;
+            employment: components["schemas"]["EmploymentRead"] | null;
+            /** Employment History */
+            employment_history: components["schemas"]["EmploymentRead"][];
+            /** Installments */
+            installments: components["schemas"]["PaymentInstallmentRead"][];
+            summary: components["schemas"]["PaymentSummaryRead"];
+            /**
+             * Can Manage Employment
+             * @default false
+             */
+            can_manage_employment: boolean;
+            /**
+             * Can Manage Payment Days
+             * @default false
+             */
+            can_manage_payment_days: boolean;
+        };
         /** StudentRoadmapSummary */
         StudentRoadmapSummary: {
             /**
@@ -6514,6 +7543,11 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WebhookResult */
+        WebhookResult: {
+            /** Status */
+            status: string;
         };
     };
     responses: never;
@@ -11558,6 +12592,1038 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_payments_api_v1_payments_me_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_my_payment_days_api_v1_payments_me_schedule_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentDaysMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    installment_payment_link_api_v1_payments_installments__installment_id__link_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                installment_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentLinkRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tochka_webhook_api_v1_payments_tochka_webhook_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResult"];
+                };
+            };
+        };
+    };
+    mentor_student_payments_api_v1_mentor_students__student_id__payments_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_set_student_employment_api_v1_mentor_students__student_id__employment_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmploymentMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_terminate_student_employment_api_v1_mentor_students__student_id__employment_terminate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmploymentTerminationMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_mentor_rewards_api_v1_mentor_rewards_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorRewardSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_my_payout_request_api_v1_mentor_payouts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorPayoutAmountMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorRewardSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_my_payout_request_api_v1_mentor_payouts__payout_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                payout_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorPayoutCancelMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorRewardSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_payout_receipt_upload_api_v1_mentor_payouts__payout_id__receipt_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                payout_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewUploadIntentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_payout_receipt_upload_api_v1_mentor_payouts__payout_id__receipt_complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                payout_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewUploadComplete"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorRewardSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_payout_receipt_api_v1_mentor_payouts__payout_id__receipt_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                payout_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_payout_receipt_api_v1_mentor_payouts__payout_id__receipt_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                payout_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorRewardSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_payments_api_v1_admin_payments_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["PaymentInstallmentStatus"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_payment_students_api_v1_admin_payments_students_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentStudentPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_student_payments_api_v1_admin_payments_students__student_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_overdue_payments_api_v1_admin_payments_overdue_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPaymentPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_mentor_payouts_api_v1_admin_payments_mentor_payouts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorPayoutDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_mentor_payments_api_v1_admin_payments_mentors__mentor_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                mentor_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorPayoutDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_mentor_payout_api_v1_admin_payments_mentors__mentor_id__payouts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                mentor_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorPayoutAmountMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorPayoutDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_mark_mentor_payout_paid_api_v1_admin_payments_payouts__payout_id__mark_paid_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                payout_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorPayoutMarkPaidMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorPayoutDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_cancel_mentor_payout_api_v1_admin_payments_payouts__payout_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                payout_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorPayoutCancelMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorPayoutDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_payment_days_api_v1_admin_payments_students__student_id__schedule_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentDaysMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_confirm_payment_api_v1_admin_payments_installments__installment_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                installment_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_revoke_payment_api_v1_admin_payments_installments__installment_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                installment_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentRevocationMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_mark_reward_paid_api_v1_admin_payments_rewards__reward_id__mark_paid_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                reward_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    configure_tochka_webhook_api_v1_admin_payments_tochka_webhook_configure_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

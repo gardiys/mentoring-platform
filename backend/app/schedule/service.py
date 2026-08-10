@@ -102,9 +102,7 @@ def _weekly_occurrences(
     return regular, effective, False
 
 
-def _reschedule_base_occurrence(
-    event: ScheduleEvent, *, now: datetime
-) -> datetime | None:
+def _reschedule_base_occurrence(event: ScheduleEvent, *, now: datetime) -> datetime | None:
     _, effective, pending = _weekly_occurrences(event, now=now)
     if pending:
         return event.rescheduled_from
@@ -216,9 +214,7 @@ async def _profile_read(session: AsyncSession, mentor: User) -> MentorProfileRea
             ScheduleTrackRead(id=track.id, slug=track.slug, title=track.title) for track in tracks
         ],
         weekly_calls=[_event_read(event, track, owner) for event, track, owner in calls],
-        one_off_activities=[
-            _event_read(event, track, owner) for event, track, owner in activities
-        ],
+        one_off_activities=[_event_read(event, track, owner) for event, track, owner in activities],
         updated_at=profile.updated_at if profile else None,
     )
 

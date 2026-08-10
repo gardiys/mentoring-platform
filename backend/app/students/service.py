@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
 from sqlalchemy import String, cast, delete, func, or_, select, update
@@ -7,6 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
 from app.mentors.models import MentorStudent, StudentLearningStatus
+from app.payments.service import (
+    change_student_repayment_percent,
+    sync_one_time_mentor_rewards,
+    terminate_active_employment_for_student,
+)
 from app.progress.models import TopicProgress
 from app.roadmaps.models import RoadmapEnrollment
 from app.students.schemas import (
@@ -118,6 +124,21 @@ async def _student_learning_statuses(
     return {student_id: learning_status for student_id, learning_status in rows}
 
 
+async def _student_reward_percentages(
+    session: AsyncSession, student_ids: list[UUID]
+) -> dict[UUID, Decimal | None]:
+    if not student_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(MentorStudent.student_id, MentorStudent.reward_percent).where(
+                MentorStudent.student_id.in_(student_ids)
+            )
+        )
+    ).all()
+    return {student_id: reward_percent for student_id, reward_percent in rows}
+
+
 async def _available_mentors(session: AsyncSession) -> list[AdminStudentMentorRead]:
     mentors = list(
         await session.scalars(
@@ -221,6 +242,7 @@ async def list_students(
     progress = await _last_progress(session, ids)
     mentors = await _student_mentors(session, ids)
     learning_statuses_by_student = await _student_learning_statuses(session, ids)
+    reward_percentages = await _student_reward_percentages(session, ids)
     return AdminStudentPage(
         items=[
             AdminStudentListItem(
@@ -239,6 +261,12 @@ async def list_students(
                 mentor=mentors.get(student.id),
                 tracks=tracks.get(student.id, []),
                 last_progress_at=progress.get(student.id),
+                repayment_percent=student.repayment_percent,
+                mentor_reward_percent=reward_percentages.get(student.id),
+                entry_payment_kopecks=student.entry_payment_kopecks,
+                entry_payment_paid_at=student.entry_payment_paid_at,
+                program_excluded_at=student.program_excluded_at,
+                program_exclusion_reason=student.program_exclusion_reason,
             )
             for student in students
         ],
@@ -272,6 +300,16 @@ async def student_detail(session: AsyncSession, student_id: UUID) -> AdminStuden
         onboarding_completed_at=student.onboarding_completed_at,
         tracks=tracks.get(student.id, []),
         last_progress_at=progress.get(student.id),
+        repayment_percent=student.repayment_percent,
+        mentor_reward_percent=(
+            await session.scalar(
+                select(MentorStudent.reward_percent).where(MentorStudent.student_id == student.id)
+            )
+        ),
+        entry_payment_kopecks=student.entry_payment_kopecks,
+        entry_payment_paid_at=student.entry_payment_paid_at,
+        program_excluded_at=student.program_excluded_at,
+        program_exclusion_reason=student.program_exclusion_reason,
     )
 
 
@@ -312,10 +350,19 @@ async def _validate_student_payload(
         mentor = await session.get(User, payload.mentor_id)
         if mentor is None or mentor.role not in MENTOR_CAPABLE_ROLES:
             api_error(422, "invalid_student_mentor", "Selected mentor does not exist")
+    elif payload.mentor_reward_percent is not None:
+        api_error(
+            422,
+            "mentor_reward_without_mentor",
+            "A mentor must be selected before setting a mentor reward percentage",
+        )
 
 
 async def _sync_student_mentor(
-    session: AsyncSession, student_id: UUID, mentor_id: UUID | None
+    session: AsyncSession,
+    student_id: UUID,
+    mentor_id: UUID | None,
+    reward_percent: Decimal | None = None,
 ) -> None:
     relation = await session.scalar(
         select(MentorStudent).where(MentorStudent.student_id == student_id)
@@ -325,9 +372,36 @@ async def _sync_student_mentor(
             await session.delete(relation)
         return
     if relation is None:
-        session.add(MentorStudent(mentor_id=mentor_id, student_id=student_id))
+        session.add(
+            MentorStudent(
+                mentor_id=mentor_id,
+                student_id=student_id,
+                reward_percent=reward_percent,
+            )
+        )
     else:
         relation.mentor_id = mentor_id
+        relation.reward_percent = reward_percent
+
+
+async def _effective_mentor_reward_percent(
+    session: AsyncSession, payload: AdminStudentMutation
+) -> Decimal | None:
+    if payload.mentor_id is None:
+        return None
+    if payload.mentor_reward_percent is not None:
+        return payload.mentor_reward_percent
+    slugs = set(
+        await session.scalars(
+            select(LearningTrack.slug).where(LearningTrack.id.in_(payload.track_ids))
+        )
+    )
+    go_only = bool(slugs) and all(slug.casefold() == "go" for slug in slugs)
+    return Decimal("45") if go_only else Decimal("60")
+
+
+def _rubles_to_kopecks(value: Decimal) -> int:
+    return int((value * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 async def _sync_student_tracks(
@@ -368,6 +442,7 @@ async def create_student(
 ) -> AdminStudentDetail:
     await _validate_student_payload(session, payload, student_id=None)
     now = datetime.now(UTC)
+    mentor_reward_percent = await _effective_mentor_reward_percent(session, payload)
     student = User(
         telegram_id=payload.telegram_id,
         telegram_username=payload.telegram_username,
@@ -377,13 +452,28 @@ async def create_student(
         role=UserRole.STUDENT,
         onboarding_completed_at=now,
         learning_start_date=payload.learning_start_date or now.date(),
+        repayment_percent=payload.repayment_percent,
+        entry_payment_kopecks=_rubles_to_kopecks(payload.entry_payment_rubles),
+        entry_payment_paid_at=now if payload.entry_payment_paid else None,
+        program_excluded_at=now if payload.program_excluded else None,
+        program_exclusion_reason=(
+            payload.program_exclusion_reason or None if payload.program_excluded else None
+        ),
         is_active=True,
     )
     session.add(student)
     try:
         await session.flush()
         await _sync_student_tracks(session, student.id, payload.track_ids)
-        await _sync_student_mentor(session, student.id, payload.mentor_id)
+        await _sync_student_mentor(
+            session,
+            student.id,
+            payload.mentor_id,
+            mentor_reward_percent,
+        )
+        if payload.program_excluded:
+            student.is_active = False
+        await sync_one_time_mentor_rewards(session, student.id)
         await session.commit()
     except IntegrityError:
         await session.rollback()
@@ -401,11 +491,42 @@ async def update_student(
     student.first_name = payload.first_name
     student.last_name = payload.last_name or None
     student.email = payload.email or None
+    await change_student_repayment_percent(session, student.id, payload.repayment_percent)
+    student.repayment_percent = payload.repayment_percent
+    student.entry_payment_kopecks = _rubles_to_kopecks(payload.entry_payment_rubles)
+    student.entry_payment_paid_at = (
+        student.entry_payment_paid_at or datetime.now(UTC)
+        if payload.entry_payment_paid
+        else None
+    )
+    student.program_excluded_at = (
+        student.program_excluded_at or datetime.now(UTC)
+        if payload.program_excluded
+        else None
+    )
+    student.program_exclusion_reason = (
+        payload.program_exclusion_reason or None if payload.program_excluded else None
+    )
+    if payload.program_excluded:
+        student.is_active = False
+        await terminate_active_employment_for_student(
+            session,
+            student.id,
+            ended_at=datetime.now(UTC).date(),
+            reason=payload.program_exclusion_reason or "Исключён из программы",
+        )
     if payload.learning_start_date is not None:
         await _set_learning_start_date(session, student, payload.learning_start_date)
     try:
+        mentor_reward_percent = await _effective_mentor_reward_percent(session, payload)
         await _sync_student_tracks(session, student.id, payload.track_ids)
-        await _sync_student_mentor(session, student.id, payload.mentor_id)
+        await _sync_student_mentor(
+            session,
+            student.id,
+            payload.mentor_id,
+            mentor_reward_percent,
+        )
+        await sync_one_time_mentor_rewards(session, student.id)
         await session.commit()
     except IntegrityError:
         await session.rollback()
