@@ -4344,6 +4344,8 @@ export interface components {
             student_id: string;
             /** Student Name */
             student_name: string;
+            /** Student Telegram Username */
+            student_telegram_username: string | null;
             /** Company Name */
             company_name: string;
             /** Position Name */
@@ -4457,6 +4459,8 @@ export interface components {
             student_id: string;
             /** Student Name */
             student_name: string;
+            /** Student Telegram Username */
+            student_telegram_username: string | null;
             /** Company Name */
             company_name: string;
             /** Position Name */

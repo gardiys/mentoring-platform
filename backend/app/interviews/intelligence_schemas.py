@@ -38,6 +38,7 @@ class IntelligenceInterviewSummary(BaseModel):
     process_id: UUID
     student_id: UUID
     student_name: str
+    student_telegram_username: str | None
     company_name: str
     position_name: str | None
     track_id: UUID

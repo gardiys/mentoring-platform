@@ -31,6 +31,7 @@ from app.interviews.models import (
     InterviewProcessStage,
     InterviewStageType,
 )
+from app.users.models import User
 from tests.conftest import SeededData, TestSession, auth
 
 
@@ -101,6 +102,9 @@ async def seed_operations_data(
     yesterday = today - timedelta(days=1)
 
     async with TestSession() as session:
+        student = await session.get(User, seeded.student_id)
+        assert student is not None
+        student.telegram_username = "ivan_backend"
         company = Company(
             name="Operations",
             normalized_name="operations",
@@ -319,6 +323,7 @@ async def test_admin_requeues_uploaded_processing_without_quota_or_state_changes
     assert requested.json()["total"] == 1
     requested_item = requested.json()["items"][0]
     assert requested_item["id"] == str(uploaded_id)
+    assert requested_item["student_telegram_username"] == "ivan_backend"
     assert requested_item["failed_stage"] == "transcription_submit"
     assert requested_item["processing_error_code"] == "TRANSCRIPTION_TEMPORARY_ERROR"
     assert requested_item["processing_error_message"] == "Повторная попытка ожидает worker."

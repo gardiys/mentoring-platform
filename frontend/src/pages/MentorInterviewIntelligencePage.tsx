@@ -18,6 +18,7 @@ import { notifications } from "@mantine/notifications";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { TelegramChatLink } from "../components/TelegramChatLink";
 import { useMe } from "../features/auth/queries";
 import {
   useAdminIntelligenceOperations,
@@ -227,6 +228,9 @@ export function MentorInterviewIntelligencePage() {
                     <Text className="technical-label">
                       {interview.student_name} · {interview.track_title}
                     </Text>
+                    <TelegramChatLink
+                      username={interview.student_telegram_username}
+                    />
                     <Title order={3}>{interview.company_name}</Title>
                     <Text c="dimmed">{interview.position_name}</Text>
                     <Text size="xs" c="dimmed" mt="xs">

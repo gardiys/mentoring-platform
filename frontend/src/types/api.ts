@@ -491,6 +491,7 @@ export interface IntelligenceInterviewSummary {
   process_id: string;
   student_id: string;
   student_name: string;
+  student_telegram_username: string | null;
   company_name: string;
   position_name: string | null;
   track_id: string;

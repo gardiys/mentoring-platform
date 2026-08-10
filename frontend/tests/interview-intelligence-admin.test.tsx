@@ -35,6 +35,7 @@ const requestedInterview: IntelligenceInterviewSummary = {
   process_id: "72000000-0000-4000-8000-000000000001",
   student_id: "20000000-0000-4000-8000-000000000001",
   student_name: "Иван",
+  student_telegram_username: "ivan_backend",
   company_name: "Яндекс",
   position_name: "Python developer",
   track_id: "40000000-0000-4000-8000-000000000001",
@@ -124,6 +125,9 @@ it("даёт админу запустить ожидающий AI-разбор 
   ).toBeInTheDocument();
   expect(list).toHaveBeenCalledWith("requested", { limit: 10, offset: 0 });
   expect(list).toHaveBeenCalledTimes(1);
+  expect(
+    screen.getByRole("link", { name: "Написать в Telegram · @ivan_backend" }),
+  ).toHaveAttribute("href", "https://t.me/ivan_backend");
 
   await userEvent.click(
     screen.getByRole("button", { name: "Запустить AI-разбор" }),

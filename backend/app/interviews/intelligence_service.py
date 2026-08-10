@@ -518,6 +518,7 @@ async def intelligence_summary(
         process_id=process.id,
         student_id=interview.student_id,
         student_name=student.first_name,
+        student_telegram_username=student.telegram_username,
         company_name=process.company_name,
         position_name=interview.position_name,
         track_id=track.id,
