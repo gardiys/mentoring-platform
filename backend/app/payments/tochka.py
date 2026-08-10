@@ -201,8 +201,15 @@ class TochkaPaymentService:
                 },
             )
             if response.is_error:
+                detail = _provider_error_detail(response)
+                logger.warning(
+                    "Tochka Bank rejected webhook configuration status=%s detail=%s",
+                    response.status_code,
+                    detail or "not provided",
+                )
+                suffix = f": {detail}" if detail else ""
                 raise TochkaError(
-                    f"Could not configure Tochka webhook: HTTP {response.status_code}"
+                    f"Could not configure Tochka webhook: HTTP {response.status_code}{suffix}"
                 )
             return cast(dict[str, Any], response.json())
 
@@ -243,12 +250,15 @@ def parse_webhook_body(
             else ""
         )
         if public_key:
-            payload = jwt.decode(
-                text,
-                public_key,
-                algorithms=["RS256"],
-                options={"verify_aud": False},
-            )
+            try:
+                payload = jwt.decode(
+                    text,
+                    _webhook_verification_key(public_key),
+                    algorithms=["RS256"],
+                    options={"verify_aud": False},
+                )
+            except (jwt.PyJWTError, TypeError, ValueError) as error:
+                raise ValueError("Invalid Tochka webhook signature") from error
             if not isinstance(payload, dict):
                 raise ValueError("Webhook JWT payload must be an object")
             return payload, True
@@ -387,6 +397,17 @@ def _customer_code_from_jwt(token: str) -> str | None:
     except (ValueError, json.JSONDecodeError):
         return None
     return _string_or_none(payload.get("customer_code") or payload.get("customerCode"))
+
+
+def _webhook_verification_key(value: str) -> Any:
+    """Accept both the official Tochka JWK JSON and a legacy PEM key."""
+    compact = value.strip()
+    if not compact.startswith("{"):
+        return value
+    payload = json.loads(compact)
+    if not isinstance(payload, dict) or payload.get("kty") != "RSA":
+        raise ValueError("TOCHKA_PUBLIC_KEY must contain an RSA JWK or PEM key")
+    return jwt.PyJWK.from_dict(payload).key
 
 
 def _decode_unverified_jwt(token: str) -> dict[str, Any]:

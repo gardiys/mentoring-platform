@@ -547,6 +547,16 @@ frontend. Redirect URL должны использовать HTTPS; backend пр
 make prod-tochka-webhook
 ```
 
+JWT-ключ должен включать разрешения `MakeAcquiringOperation`, `ReadAcquiringData` и
+`ManageWebhookData`. Точка не позволяет добавить доступ к уже выпущенному JWT-ключу: если
+`ManageWebhookData` отсутствует, перевыпустите ключ и обновите одновременно `TOCHKA_CLIENT_ID` и
+`TOCHKA_JWT_TOKEN` перед повторным запуском команды.
+
+`TOCHKA_PUBLIC_KEY` — не JWT приложения, а отдельный публичный ключ подписи webhook. Скачайте его
+с `https://enter.tochka.com/doc/openapi/static/keys/public`, приведите JSON к одной строке и
+сохраните целиком. Backend принимает официальный JWK JSON и PEM; placeholder
+`REPLACE_WITH_TOCHKA_WEBHOOK_PUBLIC_KEY` оставлять нельзя.
+
 Он указывает Точке публичный адрес
 `https://<DOMAIN>/api/v1/payments/tochka/webhook`. Подписанный JWT проверяется публичным ключом;
 для неподписанного production-события backend дополнительно сверяет операцию через API банка.

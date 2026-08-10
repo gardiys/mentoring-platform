@@ -58,7 +58,7 @@ tochka-webhook:
 	$(COMPOSE) exec backend python -m app.configure_tochka_webhook
 
 prod-tochka-webhook: prod-config
-	$(PROD_COMPOSE) exec backend python -m app.configure_tochka_webhook
+	$(PROD_COMPOSE) run --rm --build --no-deps backend python -m app.configure_tochka_webhook
 
 migrate:
 	cd backend && poetry run alembic upgrade head

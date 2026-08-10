@@ -3,10 +3,13 @@ from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import httpx
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
+from pydantic import SecretStr
 
 from app.core.config import Settings
-from app.payments.tochka import TochkaError, TochkaPaymentService
+from app.payments.tochka import TochkaError, TochkaPaymentService, parse_webhook_body
 
 
 def _settings() -> Settings:
@@ -138,3 +141,55 @@ async def test_payment_link_rejects_http_redirect_before_provider_request() -> N
             )
 
     assert provider_called is False
+
+
+async def test_webhook_configuration_error_contains_safe_provider_detail() -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            json={
+                "code": "403",
+                "message": "Forbidden by consent",
+                "Errors": [
+                    {
+                        "errorCode": "Missing permission",
+                        "message": "ManageWebhookData is required",
+                    }
+                ],
+            },
+        )
+
+    async with httpx.AsyncClient(
+        base_url="https://enter.tochka.com/uapi",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        with pytest.raises(
+            TochkaError,
+            match=(
+                "HTTP 403: 403; Forbidden by consent; "
+                "Missing permission \\| ManageWebhookData is required"
+            ),
+        ):
+            await TochkaPaymentService(_settings(), client).configure_webhook(
+                "https://platform.example.com/api/v1/payments/tochka/webhook"
+            )
+
+
+def test_signed_webhook_accepts_official_jwk_json_public_key() -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_jwk = jwt.algorithms.RSAAlgorithm.to_jwk(private_key.public_key(), as_dict=True)
+    token = jwt.encode(
+        {"event": "acquiringInternetPayment", "Data": {"status": "APPROVED"}},
+        private_key,
+        algorithm="RS256",
+    )
+    settings = _settings().model_copy(
+        update={"tochka_public_key": SecretStr(json.dumps(public_jwk))}
+    )
+
+    payload, is_signed = parse_webhook_body(
+        token.encode(), "text/plain; charset=utf-8", settings
+    )
+
+    assert is_signed is True
+    assert payload["event"] == "acquiringInternetPayment"
