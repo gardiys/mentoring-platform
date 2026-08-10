@@ -63,6 +63,13 @@ async def test_web_login_creates_cookie_session_and_logout_clears_it(
 ) -> None:
     configure_web_auth(monkeypatch)
     await grant_telegram_id(seeded)
+    async with TestSession() as session:
+        user = await session.get(User, seeded.student_id)
+        assert user is not None
+        user.first_name = "Иван"
+        user.last_name = "Правильная фамилия"
+        user.telegram_username = "old_name"
+        await session.commit()
     state = await begin_login(client, "/knowledge?section=python")
 
     async def exchange(**_: str) -> TelegramIdentity:
@@ -88,10 +95,13 @@ async def test_web_login_creates_cookie_session_and_logout_clears_it(
     me = await client.get("/api/v1/me")
     assert me.status_code == 200
     assert me.json()["id"] == str(seeded.student_id)
-    assert me.json()["first_name"] == "Новое имя"
+    assert me.json()["first_name"] == "Иван"
+    assert me.json()["last_name"] == "Правильная фамилия"
     async with TestSession() as session:
         user = await session.get(User, seeded.student_id)
         assert user is not None
+        assert user.first_name == "Иван"
+        assert user.last_name == "Правильная фамилия"
         assert user.telegram_username == "new_name"
 
     logout = await client.post("/api/v1/auth/web/logout")

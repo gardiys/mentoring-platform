@@ -53,14 +53,11 @@ async def _telegram_user(session: AsyncSession, init_data: str) -> User:
         )
     _ensure_platform_access(user)
 
+    # Names stored by the platform are canonical: they can come from the
+    # onboarding bot, an import, or an explicit admin edit. Telegram profile
+    # names are display names and must never overwrite those values on login.
     telegram_username = telegram_user.username.lstrip("@") if telegram_user.username else None
-    if (user.first_name, user.last_name, user.telegram_username) != (
-        telegram_user.first_name,
-        telegram_user.last_name,
-        telegram_username,
-    ):
-        user.first_name = telegram_user.first_name
-        user.last_name = telegram_user.last_name
+    if user.telegram_username != telegram_username:
         user.telegram_username = telegram_username
         await session.commit()
         await session.refresh(user)

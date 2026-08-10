@@ -10,7 +10,8 @@ from pydantic import SecretStr
 from pytest import MonkeyPatch
 
 from app.auth import dependencies as auth_dependencies
-from tests.conftest import SeededData, auth
+from app.users.models import User
+from tests.conftest import SeededData, TestSession, auth
 
 BOT_TOKEN = "123456:test-token"
 
@@ -19,13 +20,24 @@ def telegram_auth(
     telegram_id: int = 987654321,
     *,
     first_name: str = "Телеграм",
+    last_name: str | None = None,
+    username: str | None = None,
     auth_date: datetime | None = None,
 ) -> dict[str, str]:
+    telegram_user: dict[str, int | str] = {
+        "id": telegram_id,
+        "first_name": first_name,
+        "language_code": "ru",
+    }
+    if last_name is not None:
+        telegram_user["last_name"] = last_name
+    if username is not None:
+        telegram_user["username"] = username
     values = {
         "auth_date": str(int((auth_date or datetime.now(UTC)).timestamp())),
         "query_id": "AAHdF6IQAAAAAN0XohDhrOrc",
         "user": json.dumps(
-            {"id": telegram_id, "first_name": first_name, "language_code": "ru"},
+            telegram_user,
             ensure_ascii=False,
             separators=(",", ":"),
         ),
@@ -81,6 +93,39 @@ async def test_telegram_auth_rejects_tampered_and_expired_data(
 
     assert tampered.status_code == 401
     assert expired.status_code == 401
+
+
+async def test_telegram_auth_preserves_platform_names_and_syncs_username(
+    client: AsyncClient, seeded: SeededData, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(auth_dependencies.settings, "telegram_bot_token", SecretStr(BOT_TOKEN))
+    async with TestSession() as session:
+        user = await session.get(User, seeded.student_id)
+        assert user is not None
+        user.telegram_id = 987654321
+        user.first_name = "Иван"
+        user.last_name = "Правильная фамилия"
+        user.telegram_username = "old_username"
+        await session.commit()
+
+    response = await client.get(
+        "/api/v1/me",
+        headers=telegram_auth(
+            first_name="Имя из Telegram",
+            last_name="Фамилия из Telegram",
+            username="fresh_username",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["first_name"] == "Иван"
+    assert response.json()["last_name"] == "Правильная фамилия"
+    async with TestSession() as session:
+        user = await session.get(User, seeded.student_id)
+        assert user is not None
+        assert user.first_name == "Иван"
+        assert user.last_name == "Правильная фамилия"
+        assert user.telegram_username == "fresh_username"
 
 
 async def test_dev_auth_is_disabled_outside_development(

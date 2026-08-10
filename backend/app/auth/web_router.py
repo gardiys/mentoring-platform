@@ -139,13 +139,9 @@ async def telegram_callback(
         response.delete_cookie(OAUTH_STATE_COOKIE, path="/api/v1/auth/web/telegram")
         return response
 
-    if (user.first_name, user.last_name, user.telegram_username) != (
-        identity.first_name,
-        identity.last_name,
-        identity.telegram_username,
-    ):
-        user.first_name = identity.first_name
-        user.last_name = identity.last_name
+    # Keep names managed by the platform. Telegram profile names are mutable
+    # display values and must not replace imported or admin-corrected data.
+    if user.telegram_username != identity.telegram_username:
         user.telegram_username = identity.telegram_username
         await session.commit()
         await session.refresh(user)
