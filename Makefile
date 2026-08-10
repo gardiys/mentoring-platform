@@ -1,8 +1,10 @@
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file .env
 PROD_COMPOSE := docker compose -f infra/docker-compose.prod.yml --env-file .env.production
+PROD_ENV_FILE ?= .env.production
+PROD_ENV_EXAMPLE_FILE ?= .env.production.example
 first_name ?= Администратор
 
-.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings check-s3-multipart prod-check-s3-multipart tochka-webhook prod-tochka-webhook ensure-test-db prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings check-s3-multipart prod-check-s3-multipart tochka-webhook prod-tochka-webhook ensure-test-db prod-env-sync prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -96,6 +98,30 @@ typecheck:
 
 api-generate:
 	cd frontend && pnpm api:generate
+
+prod-env-sync:
+	@test -f "$(PROD_ENV_EXAMPLE_FILE)" || (echo "Missing $(PROD_ENV_EXAMPLE_FILE)" && exit 1)
+	@touch "$(PROD_ENV_FILE)"
+	@added_count=$$(awk -F= '\
+		FILENAME == ARGV[1] { \
+			if ($$0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) existing[$$1] = 1; \
+			next; \
+		} \
+		$$0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/ && !($$1 in existing) { print; } \
+	' "$(PROD_ENV_FILE)" "$(PROD_ENV_EXAMPLE_FILE)" | wc -l | tr -d ' '); \
+	if [ "$$added_count" -eq 0 ]; then \
+		echo "$(PROD_ENV_FILE) already contains every example variable"; \
+	else \
+		printf '\n' >> "$(PROD_ENV_FILE)"; \
+		awk -F= '\
+			FILENAME == ARGV[1] { \
+				if ($$0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/) existing[$$1] = 1; \
+				next; \
+			} \
+			$$0 ~ /^[A-Za-z_][A-Za-z0-9_]*=/ && !($$1 in existing) { print; } \
+		' "$(PROD_ENV_FILE)" "$(PROD_ENV_EXAMPLE_FILE)" >> "$(PROD_ENV_FILE)"; \
+		echo "Added $$added_count missing variables to $(PROD_ENV_FILE)"; \
+	fi
 
 prod-init:
 	docker volume create mentoring-platform-production_postgres_data >/dev/null
