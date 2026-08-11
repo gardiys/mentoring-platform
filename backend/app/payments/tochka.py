@@ -79,6 +79,7 @@ class TochkaPaymentService:
         amount_kopecks: int,
         client_name: str,
         client_email: str,
+        return_path: str | None = None,
     ) -> PaymentLinkResult:
         payment_link_id = _validate_provider_identifier(
             payment_link_id,
@@ -118,15 +119,22 @@ class TochkaPaymentService:
         }
         if supplier:
             item["Supplier"] = supplier
+        return_url = (
+            _frontend_return_url(self.settings.web_frontend_url, return_path)
+            if return_path is not None
+            else None
+        )
         success_url = _tochka_redirect_url(
-            self.settings.tochka_redirect_url
+            return_url
+            or self.settings.tochka_redirect_url
             or f"{self.settings.web_frontend_url.rstrip('/')}/payments",
             setting_name="TOCHKA_REDIRECT_URL",
             payment_status="success",
             payment_link_id=payment_link_id,
         )
         failure_url = _tochka_redirect_url(
-            self.settings.tochka_fail_redirect_url
+            return_url
+            or self.settings.tochka_fail_redirect_url
             or f"{self.settings.web_frontend_url.rstrip('/')}/payments",
             setting_name="TOCHKA_FAIL_REDIRECT_URL",
             payment_status="failed",
@@ -393,9 +401,37 @@ def _normalize_api_base_url(value: str) -> str:
 
 
 def _tochka_redirect_url(url: str, *, setting_name: str, **params: str) -> str:
-    if urlsplit(url).scheme.lower() != "https":
-        raise TochkaError(f"{setting_name} must use HTTPS when creating a Tochka Bank payment link")
+    try:
+        parsed = urlsplit(url)
+        _ = parsed.port
+    except ValueError as error:
+        raise TochkaError(
+            f"{setting_name} must be an absolute HTTPS URL when creating a Tochka Bank payment link"
+        ) from error
+    if (
+        parsed.scheme.lower() != "https"
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+    ):
+        raise TochkaError(
+            f"{setting_name} must be an absolute HTTPS URL when creating a Tochka Bank payment link"
+        )
     return _add_query_params(url, **params)
+
+
+def _frontend_return_url(origin: str, path: str) -> str:
+    parsed = urlsplit(path)
+    if (
+        not path.startswith("/")
+        or path.startswith("//")
+        or parsed.scheme
+        or parsed.netloc
+        or parsed.fragment
+    ):
+        raise TochkaError("The internal Tochka return path is invalid")
+    return f"{origin.rstrip('/')}{path}"
 
 
 def _format_amount(value: Decimal) -> str:

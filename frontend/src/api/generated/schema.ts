@@ -2522,6 +2522,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/payments/tochka/test-payment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Latest Tochka Test Payment */
+        get: operations["admin_latest_tochka_test_payment_api_v1_admin_payments_tochka_test_payment_get"];
+        put?: never;
+        /** Admin Create Tochka Test Payment */
+        post: operations["admin_create_tochka_test_payment_api_v1_admin_payments_tochka_test_payment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/payments/rewards/{reward_id}/mark-paid": {
         parameters: {
             query?: never;
@@ -4772,6 +4790,33 @@ export interface components {
              * Format: date-time
              */
             granted_at: string;
+        };
+        /** AdminTochkaTestPaymentCreate */
+        AdminTochkaTestPaymentCreate: {
+            /** Email */
+            email: string;
+        };
+        /** AdminTochkaTestPaymentRead */
+        AdminTochkaTestPaymentRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Amount Kopecks */
+            amount_kopecks: number;
+            status: components["schemas"]["PaymentAttemptStatus"];
+            /** Payment Url */
+            payment_url: string | null;
+            /** Provider Operation Id */
+            provider_operation_id: string | null;
+            /** Approved At */
+            approved_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** AdminTopicCreate */
         AdminTopicCreate: {
@@ -7153,6 +7198,11 @@ export interface components {
             /** Group Calendar Url */
             group_calendar_url: string | null;
         };
+        /**
+         * PaymentAttemptStatus
+         * @enum {string}
+         */
+        PaymentAttemptStatus: "pending" | "approved" | "failed" | "cancelled" | "manual_review" | "revoked";
         /** PaymentDaysMutation */
         PaymentDaysMutation: {
             /** Payment Days */
@@ -13937,6 +13987,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_latest_tochka_test_payment_api_v1_admin_payments_tochka_test_payment_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTochkaTestPaymentRead"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_tochka_test_payment_api_v1_admin_payments_tochka_test_payment_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminTochkaTestPaymentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTochkaTestPaymentRead"];
                 };
             };
             /** @description Validation Error */

@@ -29,8 +29,10 @@ x-backend-environment: &backend-environment
   TOCHKA_PROXY_URL: ${TOCHKA_PROXY_URL:-}
   TOCHKA_PUBLIC_KEY: ${TOCHKA_PUBLIC_KEY:-}
   TOCHKA_CUSTOMER_CODE: ${TOCHKA_CUSTOMER_CODE:-}
-  TOCHKA_REDIRECT_URL: ${TOCHKA_REDIRECT_URL:-}
-  TOCHKA_FAIL_REDIRECT_URL: ${TOCHKA_FAIL_REDIRECT_URL:-}
+  # Tochka accepts only absolute HTTPS redirects. Build them from the same
+  # public domain that Caddy serves instead of trusting stale optional values.
+  TOCHKA_REDIRECT_URL: https://${DOMAIN:?Set DOMAIN in .env.production}/payments
+  TOCHKA_FAIL_REDIRECT_URL: https://${DOMAIN:?Set DOMAIN in .env.production}/payments
   TOCHKA_PAYMENT_MODES: ${TOCHKA_PAYMENT_MODES:-sbp,card}
   TOCHKA_PAYMENT_PURPOSE: ${TOCHKA_PAYMENT_PURPOSE:-Оплата услуг по программе менторства}
   TOCHKA_RECEIPT_TAX_SYSTEM_CODE: ${TOCHKA_RECEIPT_TAX_SYSTEM_CODE:-osn}

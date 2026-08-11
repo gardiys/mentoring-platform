@@ -63,6 +63,7 @@ import type {
   AdminPaymentPage,
   AdminPaymentStudentPage,
   AdminEmploymentPaymentStatus,
+  AdminTochkaTestPaymentRead,
   AdminMentorPayoutDetail,
   AdminMentorPayoutDashboard,
   EmploymentMutation,
@@ -313,6 +314,15 @@ export const api = {
   adminPaymentStudent: (studentId: string) =>
     apiRequest<StudentPaymentDashboard>(
       `/api/v1/admin/payments/students/${studentId}`,
+    ),
+  adminTochkaTestPayment: () =>
+    apiRequest<AdminTochkaTestPaymentRead | null>(
+      "/api/v1/admin/payments/tochka/test-payment",
+    ),
+  createAdminTochkaTestPayment: (email: string) =>
+    apiRequest<AdminTochkaTestPaymentRead>(
+      "/api/v1/admin/payments/tochka/test-payment",
+      { method: "POST", body: JSON.stringify({ email }) },
     ),
   adminOverduePayments: (options: { limit?: number; offset?: number } = {}) =>
     apiRequest<AdminPaymentPage>(

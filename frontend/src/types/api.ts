@@ -389,6 +389,8 @@ export interface MyMentorDashboardRead {
 
 export type PaymentInstallmentStatus =
   "scheduled" | "pending" | "paid" | "cancelled";
+export type PaymentAttemptStatus =
+  "pending" | "approved" | "failed" | "cancelled" | "manual_review" | "revoked";
 export type AdminEmploymentPaymentStatus = "outstanding" | "paid" | "all";
 export type StudentEmploymentStatus = "active" | "terminated";
 export type MentorRewardKind =
@@ -466,6 +468,16 @@ export interface PaymentLinkRead {
   installment_id: string;
   payment_url: string;
   expires_in: number | null;
+}
+
+export interface AdminTochkaTestPaymentRead {
+  id: string;
+  amount_kopecks: number;
+  status: PaymentAttemptStatus;
+  payment_url: string | null;
+  provider_operation_id: string | null;
+  approved_at: string | null;
+  created_at: string;
 }
 
 export interface AdminPaymentListItem {

@@ -36,6 +36,7 @@ from app.payments.models import (
     PaymentInstallment,
     PaymentInstallmentStatus,
     PaymentWebhookEvent,
+    TochkaTestPayment,
 )
 from app.payments.schemas import (
     AdminEmploymentPaymentStatus,
@@ -44,6 +45,8 @@ from app.payments.schemas import (
     AdminMentorPayoutDetail,
     AdminPaymentPage,
     AdminPaymentStudentPage,
+    AdminTochkaTestPaymentCreate,
+    AdminTochkaTestPaymentRead,
     EmploymentMutation,
     EmploymentTerminationMutation,
     MentorPayoutAmountMutation,
@@ -67,10 +70,12 @@ from app.payments.service import (
     cancel_mentor_payout,
     confirm_installment,
     create_admin_mentor_payout,
+    create_admin_tochka_test_payment,
     create_payment_link,
     delete_mentor_payout_receipt,
     edit_mentor_payout,
     ensure_mentor_payout_receipt_upload_allowed,
+    latest_admin_tochka_test_payment,
     mark_installment_paid,
     mark_mentor_payout_paid,
     mark_mentor_reward_paid,
@@ -501,6 +506,33 @@ async def admin_revoke_payment(
     return await revoke_installment_payment(session, installment_id, admin, payload)
 
 
+@admin_router.get(
+    "/tochka/test-payment",
+    response_model=AdminTochkaTestPaymentRead | None,
+)
+async def admin_latest_tochka_test_payment(
+    session: Session,
+    admin: AdminUser,
+) -> AdminTochkaTestPaymentRead | None:
+    return await latest_admin_tochka_test_payment(session, admin)
+
+
+@admin_router.post(
+    "/tochka/test-payment",
+    response_model=AdminTochkaTestPaymentRead,
+)
+async def admin_create_tochka_test_payment(
+    payload: AdminTochkaTestPaymentCreate,
+    session: Session,
+    admin: AdminUser,
+) -> AdminTochkaTestPaymentRead:
+    return await create_admin_tochka_test_payment(
+        session,
+        admin,
+        email=payload.email,
+    )
+
+
 @admin_router.post(
     "/rewards/{reward_id}/mark-paid",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -558,54 +590,92 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
         return WebhookResult(status="duplicate")
 
     attempt = None
+    test_payment = None
     if event.payment_link_id:
         attempt = await session.scalar(
             select(PaymentAttempt)
             .where(PaymentAttempt.payment_link_id == event.payment_link_id)
             .with_for_update()
         )
+        if attempt is None:
+            test_payment = await session.scalar(
+                select(TochkaTestPayment)
+                .where(TochkaTestPayment.payment_link_id == event.payment_link_id)
+                .with_for_update()
+            )
     if attempt is None and event.operation_id:
         attempt = await session.scalar(
             select(PaymentAttempt)
             .where(PaymentAttempt.provider_operation_id == event.operation_id)
             .with_for_update()
         )
+        if attempt is None and test_payment is None:
+            test_payment = await session.scalar(
+                select(TochkaTestPayment)
+                .where(TochkaTestPayment.provider_operation_id == event.operation_id)
+                .with_for_update()
+            )
 
     if (
-        attempt is None
+        (attempt is None and test_payment is None)
         or event.payment_link_id is None
         or event.operation_id is None
-        or event.payment_link_id != attempt.payment_link_id
-        or (
-            attempt.provider_operation_id is not None
-            and event.operation_id != attempt.provider_operation_id
-        )
+    ):
+        return WebhookResult(status="unverified")
+
+    payment_record = attempt if attempt is not None else test_payment
+    assert payment_record is not None
+    if event.payment_link_id != payment_record.payment_link_id or (
+        payment_record.provider_operation_id is not None
+        and event.operation_id != payment_record.provider_operation_id
     ):
         return WebhookResult(status="unverified")
 
     operation_attempt_id = await session.scalar(
         select(PaymentAttempt.id).where(PaymentAttempt.provider_operation_id == event.operation_id)
     )
-    if operation_attempt_id is not None and operation_attempt_id != attempt.id:
+    operation_test_payment_id = await session.scalar(
+        select(TochkaTestPayment.id).where(
+            TochkaTestPayment.provider_operation_id == event.operation_id
+        )
+    )
+    if attempt is not None and (
+        (operation_attempt_id is not None and operation_attempt_id != attempt.id)
+        or operation_test_payment_id is not None
+    ):
+        return WebhookResult(status="unverified")
+    if test_payment is not None and (
+        operation_attempt_id is not None
+        or (operation_test_payment_id is not None and operation_test_payment_id != test_payment.id)
+    ):
         return WebhookResult(status="unverified")
 
-    installment = await session.scalar(
-        select(PaymentInstallment)
-        .where(PaymentInstallment.id == attempt.installment_id)
-        .with_for_update()
-    )
-    if installment is None:
-        return WebhookResult(status="unverified")
+    installment = None
+    if attempt is not None:
+        installment = await session.scalar(
+            select(PaymentInstallment)
+            .where(PaymentInstallment.id == attempt.installment_id)
+            .with_for_update()
+        )
+        if installment is None:
+            return WebhookResult(status="unverified")
+        consumer_id = installment.id
+        amount_kopecks = installment.amount_kopecks
+    else:
+        assert test_payment is not None
+        consumer_id = test_payment.id
+        amount_kopecks = test_payment.amount_kopecks
 
     verified_status = await _verified_status(
         event,
-        attempt=attempt,
-        installment=installment,
+        payment_link_id=payment_record.payment_link_id,
+        consumer_id=consumer_id,
+        amount_kopecks=amount_kopecks,
     )
     if verified_status is None:
         return WebhookResult(status="unverified")
     webhook_event = PaymentWebhookEvent(
-        attempt_id=attempt.id,
+        attempt_id=attempt.id if attempt is not None else None,
         provider="tochka",
         event_id=event.event_id,
         deduplication_key=event.deduplication_key,
@@ -614,25 +684,32 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
     )
     session.add(webhook_event)
 
-    if attempt.provider_operation_id is None:
-        attempt.provider_operation_id = event.operation_id
+    if payment_record.provider_operation_id is None:
+        payment_record.provider_operation_id = event.operation_id
     mapped = PaymentAttemptStatus(map_payment_status(verified_status))
-    attempt_was_revoked = attempt.status is PaymentAttemptStatus.REVOKED
-    attempt.status = mapped
-    if mapped is PaymentAttemptStatus.APPROVED:
-        if installment.status is PaymentInstallmentStatus.CANCELLED or attempt_was_revoked:
-            attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
-        else:
-            attempt.approved_at = datetime.now(UTC)
-            await mark_installment_paid(
-                session,
-                installment,
-                confirmed_by=None,
-                approved_at=attempt.approved_at,
-            )
-    elif mapped in {PaymentAttemptStatus.FAILED, PaymentAttemptStatus.CANCELLED}:
-        if installment.status is not PaymentInstallmentStatus.CANCELLED:
-            installment.status = PaymentInstallmentStatus.SCHEDULED
+    if attempt is not None:
+        assert installment is not None
+        attempt_was_revoked = attempt.status is PaymentAttemptStatus.REVOKED
+        attempt.status = mapped
+        if mapped is PaymentAttemptStatus.APPROVED:
+            if installment.status is PaymentInstallmentStatus.CANCELLED or attempt_was_revoked:
+                attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+            else:
+                attempt.approved_at = datetime.now(UTC)
+                await mark_installment_paid(
+                    session,
+                    installment,
+                    confirmed_by=None,
+                    approved_at=attempt.approved_at,
+                )
+        elif mapped in {PaymentAttemptStatus.FAILED, PaymentAttemptStatus.CANCELLED}:
+            if installment.status is not PaymentInstallmentStatus.CANCELLED:
+                installment.status = PaymentInstallmentStatus.SCHEDULED
+    else:
+        assert test_payment is not None
+        test_payment.status = mapped
+        if mapped is PaymentAttemptStatus.APPROVED:
+            test_payment.approved_at = datetime.now(UTC)
     try:
         await session.commit()
     except IntegrityError:
@@ -644,8 +721,9 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
 async def _verified_status(
     event: TochkaWebhookEvent,
     *,
-    attempt: PaymentAttempt,
-    installment: PaymentInstallment,
+    payment_link_id: str,
+    consumer_id: UUID,
+    amount_kopecks: int,
 ) -> str | None:
     if settings.app_env != "production":
         return event.status
@@ -657,14 +735,11 @@ async def _verified_status(
     except Exception:
         return None
     if (
-        operation.payment_link_id != attempt.payment_link_id
+        operation.payment_link_id != payment_link_id
         or operation.operation_id != event.operation_id
-        or operation.consumer_id != str(installment.id)
+        or operation.consumer_id != str(consumer_id)
         or operation.status is None
-        or (
-            operation.amount_kopecks is not None
-            and operation.amount_kopecks != installment.amount_kopecks
-        )
+        or (operation.amount_kopecks is not None and operation.amount_kopecks != amount_kopecks)
     ):
         return None
     return operation.status

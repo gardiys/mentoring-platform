@@ -127,7 +127,19 @@ async def test_payment_link_error_contains_safe_provider_detail() -> None:
             )
 
 
-async def test_payment_link_rejects_http_redirect_before_provider_request() -> None:
+@pytest.mark.parametrize(
+    "redirect_url",
+    [
+        "http://platform.example.com/payments",
+        "https:platform.example.com/payments",
+        "https:///payments",
+        "https://user:password@platform.example.com/payments",
+        "https://platform.example.com/payments#fragment",
+    ],
+)
+async def test_payment_link_rejects_non_absolute_https_redirect_before_provider_request(
+    redirect_url: str,
+) -> None:
     provider_called = False
 
     async def handler(_: httpx.Request) -> httpx.Response:
@@ -135,14 +147,12 @@ async def test_payment_link_rejects_http_redirect_before_provider_request() -> N
         provider_called = True
         return httpx.Response(200, json={})
 
-    settings = _settings().model_copy(
-        update={"tochka_redirect_url": "http://platform.example.com/payments"}
-    )
+    settings = _settings().model_copy(update={"tochka_redirect_url": redirect_url})
     async with httpx.AsyncClient(
         base_url="https://enter.tochka.com/uapi",
         transport=httpx.MockTransport(handler),
     ) as client:
-        with pytest.raises(TochkaError, match="TOCHKA_REDIRECT_URL must use HTTPS"):
+        with pytest.raises(TochkaError, match="must be an absolute HTTPS URL"):
             await TochkaPaymentService(settings, client).create_payment_link(
                 installment_id=uuid4(),
                 payment_link_id="payment-link-id",

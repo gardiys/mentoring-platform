@@ -18,6 +18,7 @@ export const paymentKeys = {
     ["payments", "admin", "students", status, page] as const,
   adminStudent: (studentId: string) =>
     ["payments", "admin", "student", studentId] as const,
+  adminTochkaTest: ["payments", "admin", "tochka-test"] as const,
   overdue: (page: number) => ["payments", "admin", "overdue", page] as const,
   rewards: ["payments", "mentor", "rewards"] as const,
   mentorPayouts: ["payments", "admin", "mentor-payouts"] as const,
@@ -149,6 +150,25 @@ export function useAdminPaymentStudent(studentId: string) {
     queryKey: paymentKeys.adminStudent(studentId),
     queryFn: () => api.adminPaymentStudent(studentId),
     enabled: Boolean(studentId),
+  });
+}
+
+export function useAdminTochkaTestPayment() {
+  return useQuery({
+    queryKey: paymentKeys.adminTochkaTest,
+    queryFn: api.adminTochkaTestPayment,
+    refetchInterval: (query) =>
+      query.state.data?.status === "pending" ? 3_000 : false,
+  });
+}
+
+export function useCreateAdminTochkaTestPayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.createAdminTochkaTestPayment,
+    onSuccess: (payment) => {
+      queryClient.setQueryData(paymentKeys.adminTochkaTest, payment);
+    },
   });
 }
 

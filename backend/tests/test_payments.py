@@ -15,6 +15,7 @@ from sqlalchemy import select
 from app.interviews.uploads import StoredUpload
 from app.mentors.models import MentorStudent
 from app.payments import router as payment_router
+from app.payments import service as payment_service
 from app.payments.models import (
     MentorPayout,
     MentorPayoutAllocation,
@@ -29,6 +30,7 @@ from app.payments.models import (
     PaymentInstallmentStatus,
     StudentEmployment,
     StudentEmploymentSalaryRevision,
+    TochkaTestPayment,
 )
 from app.payments.service import (
     calculate_due_dates,
@@ -37,6 +39,7 @@ from app.payments.service import (
     payout_receipt_upload,
     set_mentor_payout_receipt,
 )
+from app.payments.tochka import PaymentLinkResult
 from app.users.models import User
 from tests.conftest import SeededData, TestSession, auth
 
@@ -1193,6 +1196,119 @@ async def test_development_payment_link_is_idempotent(
     )
     assert first.status_code == second.status_code == 200
     assert first.json()["payment_url"] == second.json()["payment_url"]
+
+
+async def test_production_replaces_stale_non_https_payment_link(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dashboard = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.mentor_id),
+        json={
+            "company_name": "Yandex",
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 200_000,
+        },
+    )
+    installment_id = dashboard.json()["installments"][0]["id"]
+    stale = await client.post(
+        f"/api/v1/payments/installments/{installment_id}/link",
+        headers=auth(seeded.student_id),
+    )
+    assert stale.status_code == 200
+    assert stale.json()["payment_url"].startswith("http://")
+
+    production_settings = payment_service.get_settings().model_copy(
+        update={"app_env": "production"}
+    )
+    monkeypatch.setattr(payment_service, "get_settings", lambda: production_settings)
+
+    async def create_https_link(_service: object, **kwargs: object) -> PaymentLinkResult:
+        return PaymentLinkResult(
+            payment_link_id=str(kwargs["payment_link_id"]),
+            provider_operation_id=None,
+            payment_url="https://secure.tochka.test/payment",
+            raw_response={"Data": {"paymentLink": "https://secure.tochka.test/payment"}},
+        )
+
+    monkeypatch.setattr(
+        payment_service.TochkaPaymentService,
+        "create_payment_link",
+        create_https_link,
+    )
+    replacement = await client.post(
+        f"/api/v1/payments/installments/{installment_id}/link",
+        headers=auth(seeded.student_id),
+    )
+    assert replacement.status_code == 200, replacement.text
+    assert replacement.json()["payment_url"] == "https://secure.tochka.test/payment"
+
+    async with TestSession() as session:
+        attempts = list(
+            await session.scalars(
+                select(PaymentAttempt)
+                .where(PaymentAttempt.installment_id == UUID(installment_id))
+                .order_by(PaymentAttempt.created_at)
+            )
+        )
+    assert [attempt.status for attempt in attempts] == [
+        PaymentAttemptStatus.REVOKED,
+        PaymentAttemptStatus.PENDING,
+    ]
+    assert attempts[0].payment_url is None
+
+
+async def test_admin_can_run_isolated_ten_ruble_tochka_check(
+    client: AsyncClient,
+    seeded: SeededData,
+) -> None:
+    forbidden = await client.post(
+        "/api/v1/admin/payments/tochka/test-payment",
+        headers=auth(seeded.student_id),
+        json={"email": "student@example.com"},
+    )
+    assert forbidden.status_code == 403
+
+    created = await client.post(
+        "/api/v1/admin/payments/tochka/test-payment",
+        headers=auth(seeded.admin_id),
+        json={"email": "admin@example.com"},
+    )
+    assert created.status_code == 200, created.text
+    payload = created.json()
+    assert payload["amount_kopecks"] == 1_000
+    assert payload["status"] == "pending"
+    payment_link_id = parse_qs(urlparse(payload["payment_url"]).query)["local_payment"][0]
+
+    webhook = await client.post(
+        "/api/v1/payments/tochka/webhook",
+        json={
+            "eventType": "acquiringInternetPayment",
+            "eventId": "evt-admin-test-payment",
+            "Data": {
+                "paymentLinkId": payment_link_id,
+                "operationId": "admin-test-operation",
+                "status": "APPROVED",
+            },
+        },
+    )
+    assert webhook.status_code == 200, webhook.text
+    assert webhook.json() == {"status": "ok"}
+
+    latest = await client.get(
+        "/api/v1/admin/payments/tochka/test-payment",
+        headers=auth(seeded.admin_id),
+    )
+    assert latest.status_code == 200, latest.text
+    assert latest.json()["id"] == payload["id"]
+    assert latest.json()["status"] == "approved"
+    assert latest.json()["approved_at"] is not None
+    async with TestSession() as session:
+        stored = await session.get(TochkaTestPayment, UUID(payload["id"]))
+    assert stored is not None
+    assert stored.provider_operation_id == "admin-test-operation"
 
 
 async def _create_test_payment_attempt(client: AsyncClient, seeded: SeededData) -> tuple[UUID, str]:

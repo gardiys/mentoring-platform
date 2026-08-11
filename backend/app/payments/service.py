@@ -3,7 +3,8 @@ from __future__ import annotations
 import calendar
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from uuid import UUID
+from urllib.parse import urlsplit
+from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,7 @@ from app.payments.models import (
     StudentEmployment,
     StudentEmploymentSalaryRevision,
     StudentEmploymentStatus,
+    TochkaTestPayment,
 )
 from app.payments.schemas import (
     AdminEmploymentPaymentStatus,
@@ -42,6 +44,7 @@ from app.payments.schemas import (
     AdminPaymentPage,
     AdminPaymentStudentPage,
     AdminPaymentStudentRead,
+    AdminTochkaTestPaymentRead,
     EmploymentMutation,
     EmploymentRead,
     EmploymentTerminationMutation,
@@ -61,6 +64,7 @@ from app.users.models import User, UserRole
 INSTALLMENT_PERCENT = Decimal("25")
 ENTRY_PAYMENT_MENTOR_REWARD_KOPECKS = 1_000_000
 PROGRAM_EXCLUSION_MENTOR_REWARD_KOPECKS = 1_000_000
+TOCHKA_TEST_PAYMENT_AMOUNT_KOPECKS = 1_000
 
 
 def calculate_installment_amounts(net_salary_kopecks: int, repayment_percent: Decimal) -> list[int]:
@@ -549,6 +553,7 @@ async def payment_dashboard(
 async def create_payment_link(
     session: AsyncSession, student: User, installment_id: UUID
 ) -> PaymentLinkRead:
+    settings = get_settings()
     row = (
         await session.execute(
             select(PaymentInstallment, StudentEmployment)
@@ -582,7 +587,14 @@ async def create_payment_link(
         .order_by(PaymentAttempt.created_at.desc())
     )
     if existing is not None and existing.payment_url is not None:
-        return PaymentLinkRead(installment_id=installment.id, payment_url=existing.payment_url)
+        if settings.app_env != "production" or _is_absolute_https_url(existing.payment_url):
+            return PaymentLinkRead(
+                installment_id=installment.id,
+                payment_url=existing.payment_url,
+            )
+        # Old development/imported links must never escape to a production browser.
+        existing.status = PaymentAttemptStatus.REVOKED
+        existing.payment_url = None
 
     attempt_count = int(
         await session.scalar(
@@ -594,7 +606,7 @@ async def create_payment_link(
     )
     payment_link_id = f"mp_{installment.id.hex}_r{attempt_count + 1}"
     try:
-        result = await TochkaPaymentService(get_settings()).create_payment_link(
+        result = await TochkaPaymentService(settings).create_payment_link(
             installment_id=installment.id,
             payment_link_id=payment_link_id,
             amount_kopecks=installment.amount_kopecks,
@@ -616,6 +628,54 @@ async def create_payment_link(
     installment.status = PaymentInstallmentStatus.PENDING
     await session.commit()
     return PaymentLinkRead(installment_id=installment.id, payment_url=result.payment_url)
+
+
+async def create_admin_tochka_test_payment(
+    session: AsyncSession,
+    admin: User,
+    *,
+    email: str,
+) -> AdminTochkaTestPaymentRead:
+    test_payment_id = uuid4()
+    payment_link_id = f"mpt_{test_payment_id.hex}"
+    try:
+        result = await TochkaPaymentService(get_settings()).create_payment_link(
+            installment_id=test_payment_id,
+            payment_link_id=payment_link_id,
+            amount_kopecks=TOCHKA_TEST_PAYMENT_AMOUNT_KOPECKS,
+            client_name=" ".join(filter(None, (admin.first_name, admin.last_name))),
+            client_email=email,
+            return_path="/admin/payments",
+        )
+    except TochkaError as error:
+        api_error(502, "tochka_test_payment_link_failed", str(error))
+    test_payment = TochkaTestPayment(
+        id=test_payment_id,
+        requested_by_user_id=admin.id,
+        amount_kopecks=TOCHKA_TEST_PAYMENT_AMOUNT_KOPECKS,
+        payment_link_id=result.payment_link_id,
+        provider_operation_id=result.provider_operation_id,
+        status=PaymentAttemptStatus.PENDING,
+        payment_url=result.payment_url,
+        raw_create_response=result.raw_response,
+    )
+    session.add(test_payment)
+    await session.commit()
+    await session.refresh(test_payment)
+    return _tochka_test_payment_read(test_payment)
+
+
+async def latest_admin_tochka_test_payment(
+    session: AsyncSession,
+    admin: User,
+) -> AdminTochkaTestPaymentRead | None:
+    payment = await session.scalar(
+        select(TochkaTestPayment)
+        .where(TochkaTestPayment.requested_by_user_id == admin.id)
+        .order_by(TochkaTestPayment.created_at.desc())
+        .limit(1)
+    )
+    return _tochka_test_payment_read(payment) if payment is not None else None
 
 
 async def confirm_installment(
@@ -1058,9 +1118,7 @@ async def admin_payment_student_page(
     outstanding_condition = (StudentEmployment.status == StudentEmploymentStatus.ACTIVE) & (
         remaining > 0
     )
-    paid_condition = (paid > 0) & (
-        paid_salary_percent >= StudentEmployment.repayment_percent
-    )
+    paid_condition = (paid > 0) & (paid_salary_percent >= StudentEmployment.repayment_percent)
     if status is AdminEmploymentPaymentStatus.OUTSTANDING:
         conditions = [outstanding_condition]
     elif status is AdminEmploymentPaymentStatus.PAID:
@@ -2102,6 +2160,18 @@ def _employment_read(employment: StudentEmployment) -> EmploymentRead:
     )
 
 
+def _tochka_test_payment_read(payment: TochkaTestPayment) -> AdminTochkaTestPaymentRead:
+    return AdminTochkaTestPaymentRead(
+        id=payment.id,
+        amount_kopecks=payment.amount_kopecks,
+        status=payment.status,
+        payment_url=payment.payment_url,
+        provider_operation_id=payment.provider_operation_id,
+        approved_at=payment.approved_at,
+        created_at=payment.created_at,
+    )
+
+
 def _admin_item(
     installment: PaymentInstallment,
     employment: StudentEmployment,
@@ -2152,6 +2222,21 @@ def _salary_percent(amount_kopecks: int, net_salary_kopecks: int) -> Decimal:
     return (Decimal(amount_kopecks) * Decimal(100) / Decimal(net_salary_kopecks)).quantize(
         Decimal("0.01"),
         rounding=ROUND_HALF_UP,
+    )
+
+
+def _is_absolute_https_url(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+        _ = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme.lower() == "https"
+        and parsed.hostname is not None
+        and parsed.username is None
+        and parsed.password is None
+        and not parsed.fragment
     )
 
 

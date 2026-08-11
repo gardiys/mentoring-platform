@@ -9,6 +9,7 @@ from app.payments.models import (
     MentorPayoutOrigin,
     MentorPayoutStatus,
     MentorRewardKind,
+    PaymentAttemptStatus,
     PaymentInstallmentStatus,
     StudentEmploymentStatus,
 )
@@ -18,6 +19,30 @@ class AdminEmploymentPaymentStatus(StrEnum):
     OUTSTANDING = "outstanding"
     PAID = "paid"
     ALL = "all"
+
+
+class AdminTochkaTestPaymentCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: str = Field(min_length=5, max_length=320)
+
+    @field_validator("email")
+    @classmethod
+    def valid_email(cls, value: str) -> str:
+        local, separator, domain = value.rpartition("@")
+        if not separator or not local or "." not in domain or domain.startswith("."):
+            raise ValueError("A valid email is required for the fiscal receipt")
+        return value
+
+
+class AdminTochkaTestPaymentRead(BaseModel):
+    id: UUID
+    amount_kopecks: int
+    status: PaymentAttemptStatus
+    payment_url: str | None
+    provider_operation_id: str | None
+    approved_at: datetime | None
+    created_at: datetime
 
 
 class EmploymentMutation(BaseModel):

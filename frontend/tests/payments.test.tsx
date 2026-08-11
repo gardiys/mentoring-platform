@@ -74,6 +74,22 @@ const dashboard: StudentPaymentDashboard = {
   can_manage_payment_days: true,
 };
 
+const admin = {
+  id: "10000000-0000-4000-8000-000000000099",
+  telegram_id: 999,
+  first_name: "Администратор",
+  last_name: null,
+  email: "admin@example.com",
+  role: "admin" as const,
+  onboarding_completed_at: "2026-08-01T00:00:00Z",
+  is_active: true,
+};
+
+function mockAdminPaymentCheck() {
+  vi.spyOn(api, "me").mockResolvedValue(admin);
+  vi.spyOn(api, "adminTochkaTestPayment").mockResolvedValue(null);
+}
+
 it("показывает график и сохраняет ровно две выбранные даты", async () => {
   const save = vi.fn().mockResolvedValue(undefined);
   renderPage(<PaymentSchedule dashboard={dashboard} onSaveDays={save} />);
@@ -125,6 +141,7 @@ const studentRegistry: AdminPaymentStudentPage = {
 };
 
 it("показывает учеников с офферами вместо плоского списка взносов", async () => {
+  mockAdminPaymentCheck();
   vi.spyOn(api, "adminPaymentStudents").mockResolvedValue(studentRegistry);
 
   renderPage(<AdminPaymentsPage />);
@@ -138,6 +155,7 @@ it("показывает учеников с офферами вместо пл�
 });
 
 it("переключает реестр на полностью выплаченные офферы", async () => {
+  mockAdminPaymentCheck();
   const registry = vi
     .spyOn(api, "adminPaymentStudents")
     .mockResolvedValue(studentRegistry);
@@ -153,6 +171,45 @@ it("переключает реестр на полностью выплачен
       limit: 50,
       offset: 0,
     }),
+  );
+});
+
+it("создаёт для администратора изолированную тестовую оплату на 10 рублей", async () => {
+  mockAdminPaymentCheck();
+  vi.spyOn(api, "adminPaymentStudents").mockResolvedValue(studentRegistry);
+  const create = vi
+    .spyOn(api, "createAdminTochkaTestPayment")
+    .mockResolvedValue({
+      id: "90000000-0000-4000-8000-000000000001",
+      amount_kopecks: 1_000,
+      status: "pending",
+      payment_url: "https://secure.tochka.test/payment",
+      provider_operation_id: null,
+      approved_at: null,
+      created_at: "2026-08-12T12:00:00Z",
+    });
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const replace = vi.fn();
+  vi.spyOn(window, "open").mockReturnValue({
+    opener: null,
+    closed: false,
+    location: { replace },
+  } as unknown as Window);
+
+  renderPage(<AdminPaymentsPage />);
+
+  expect(
+    await screen.findByDisplayValue("admin@example.com"),
+  ).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Создать тестовую оплату · 10 ₽" }),
+  );
+
+  await waitFor(() =>
+    expect(create).toHaveBeenCalledWith("admin@example.com", expect.anything()),
+  );
+  await waitFor(() =>
+    expect(replace).toHaveBeenCalledWith("https://secure.tochka.test/payment"),
   );
 });
 

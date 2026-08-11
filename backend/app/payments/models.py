@@ -212,6 +212,38 @@ class PaymentInstallmentDueDateRevision(UUIDPrimaryKeyMixin, TimestampMixin, Bas
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
 
 
+class TochkaTestPayment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "tochka_test_payments"
+    __table_args__ = (
+        UniqueConstraint("payment_link_id", name="uq_tochka_test_payments_link_id"),
+        UniqueConstraint(
+            "provider_operation_id",
+            name="uq_tochka_test_payments_provider_operation_id",
+        ),
+        CheckConstraint("amount_kopecks = 1000", name="amount_is_ten_rubles"),
+        Index("ix_tochka_test_payments_admin_created", "requested_by_user_id", "created_at"),
+    )
+
+    requested_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    amount_kopecks: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1_000)
+    payment_link_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_operation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[PaymentAttemptStatus] = mapped_column(
+        Enum(
+            PaymentAttemptStatus,
+            name="payment_attempt_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        default=PaymentAttemptStatus.PENDING,
+        nullable=False,
+    )
+    payment_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_create_response: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class PaymentAttempt(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "payment_attempts"
     __table_args__ = (
