@@ -1568,6 +1568,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update My Email */
+        patch: operations["update_my_email_api_v1_me_email_patch"];
+        trace?: never;
+    };
     "/api/v1/me/onboarding": {
         parameters: {
             query?: never;
@@ -7767,6 +7784,11 @@ export interface components {
             /** Granted */
             granted: boolean;
         };
+        /** UserEmailMutation */
+        UserEmailMutation: {
+            /** Email */
+            email: string;
+        };
         /** UserRead */
         UserRead: {
             /**
@@ -11787,6 +11809,44 @@ export interface operations {
             };
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_my_email_api_v1_me_email_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserEmailMutation"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

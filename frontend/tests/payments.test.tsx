@@ -10,6 +10,7 @@ import { AdminOverduePaymentsPage } from "../src/pages/AdminOverduePaymentsPage"
 import { AdminPaymentsPage } from "../src/pages/AdminPaymentsPage";
 import { AdminStudentPaymentsPage } from "../src/pages/AdminStudentPaymentsPage";
 import { MentorRewardsPage } from "../src/pages/MentorRewardsPage";
+import { PaymentsPage } from "../src/pages/PaymentsPage";
 import type {
   AdminMentorPayoutDetail,
   AdminMentorPayoutDashboard,
@@ -107,6 +108,39 @@ it("показывает график и сохраняет ровно две в
   await userEvent.click(screen.getByRole("button", { name: "Сохранить даты" }));
 
   expect(save).toHaveBeenCalledWith([5, 20]);
+});
+
+it("ученик сохраняет email перед созданием платёжной ссылки", async () => {
+  const student = { ...admin, role: "student" as const, email: null };
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "myPayments").mockResolvedValue(dashboard);
+  const updateEmail = vi.spyOn(api, "updateMyEmail").mockResolvedValue({
+    ...student,
+    email: "student@example.com",
+  });
+
+  renderPage(<PaymentsPage />, "/payments", "/payments");
+
+  expect(
+    await screen.findByText("Укажите email перед оплатой"),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Оплатить" }),
+  ).not.toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText("Email"), "student@example.com");
+  await userEvent.click(
+    screen.getByRole("button", { name: "Сохранить email" }),
+  );
+
+  await waitFor(() =>
+    expect(updateEmail).toHaveBeenCalledWith(
+      "student@example.com",
+      expect.anything(),
+    ),
+  );
+  expect(
+    await screen.findByRole("button", { name: "Оплатить" }),
+  ).toBeInTheDocument();
 });
 
 const studentRegistry: AdminPaymentStudentPage = {

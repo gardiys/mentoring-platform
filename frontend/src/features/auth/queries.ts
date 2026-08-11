@@ -13,6 +13,14 @@ export function useMe(enabled = true) {
   });
 }
 
+export function useUpdateMyEmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.updateMyEmail,
+    onSuccess: (user) => queryClient.setQueryData(meQueryKey, user),
+  });
+}
+
 export function useCompleteOnboarding() {
   const queryClient = useQueryClient();
   return useMutation({

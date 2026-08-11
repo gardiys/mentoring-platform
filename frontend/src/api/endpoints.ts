@@ -223,6 +223,11 @@ function finalizeRetryDelay(milliseconds: number, signal?: AbortSignal) {
 
 export const api = {
   me: () => apiRequest<User>("/api/v1/me"),
+  updateMyEmail: (email: string) =>
+    apiRequest<User>("/api/v1/me/email", {
+      method: "PATCH",
+      body: JSON.stringify({ email }),
+    }),
   myPayments: () => apiRequest<StudentPaymentDashboard>("/api/v1/payments/me"),
   updateMyPaymentDays: (paymentDays: number[]) =>
     apiRequest<StudentPaymentDashboard>("/api/v1/payments/me/schedule", {

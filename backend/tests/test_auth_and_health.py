@@ -58,6 +58,55 @@ async def test_authentication_errors(client: AsyncClient, seeded: SeededData) ->
     assert unknown.json()["detail"]["code"] == "user_not_found"
 
 
+async def test_student_can_set_and_change_unique_email(
+    client: AsyncClient,
+    seeded: SeededData,
+) -> None:
+    async with TestSession() as session:
+        mentor = await session.get(User, seeded.mentor_id)
+        assert mentor is not None
+        mentor.email = "used@example.com"
+        await session.commit()
+
+    saved = await client.patch(
+        "/api/v1/me/email",
+        headers=auth(seeded.student_id),
+        json={"email": " Student@Example.COM "},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["email"] == "student@example.com"
+
+    changed = await client.patch(
+        "/api/v1/me/email",
+        headers=auth(seeded.student_id),
+        json={"email": "new@example.com"},
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["email"] == "new@example.com"
+
+    duplicate = await client.patch(
+        "/api/v1/me/email",
+        headers=auth(seeded.student_id),
+        json={"email": "USED@EXAMPLE.COM"},
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["code"] == "email_already_used"
+
+    invalid = await client.patch(
+        "/api/v1/me/email",
+        headers=auth(seeded.student_id),
+        json={"email": "not-an-email"},
+    )
+    assert invalid.status_code == 422
+
+    forbidden = await client.patch(
+        "/api/v1/me/email",
+        headers=auth(seeded.mentor_id),
+        json={"email": "mentor-new@example.com"},
+    )
+    assert forbidden.status_code == 403
+
+
 async def test_health_and_ready(client: AsyncClient) -> None:
     health = await client.get("/health")
     ready = await client.get("/ready")
