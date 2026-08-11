@@ -267,6 +267,11 @@ class MentorReward(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     amount_kopecks: Mapped[int] = mapped_column(BigInteger, nullable=False)
     paid_kopecks: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    voided_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    void_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class MentorPayout(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -316,6 +321,11 @@ class MentorPayout(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancellation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    edited_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    edit_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     receipt_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     receipt_filename: Mapped[str | None] = mapped_column(String(500), nullable=True)
     receipt_content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
@@ -340,3 +350,26 @@ class MentorPayoutAllocation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         PGUUID(as_uuid=True), ForeignKey("mentor_rewards.id", ondelete="RESTRICT"), nullable=False
     )
     amount_kopecks: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class MentorPayoutRevision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "mentor_payout_revisions"
+    __table_args__ = (
+        Index("ix_mentor_payout_revisions_payout_created", "payout_id", "created_at"),
+    )
+
+    payout_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("mentor_payouts.id", ondelete="CASCADE"), nullable=False
+    )
+    edited_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    previous_amount_kopecks: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    new_amount_kopecks: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    previous_payment_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    new_payment_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    previous_paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    new_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -20,6 +20,7 @@ from app.payments.models import (
     MentorPayout,
     MentorPayoutAllocation,
     MentorPayoutOrigin,
+    MentorPayoutRevision,
     MentorPayoutStatus,
     MentorReward,
     MentorRewardKind,
@@ -553,6 +554,8 @@ async def revoke_installment_payment(
     reward = await session.scalar(
         select(MentorReward).where(MentorReward.installment_id == installment.id).with_for_update()
     )
+    if reward is not None and reward.voided_at is not None:
+        reward = None
     if reward is not None:
         reserved = await _reserved_amounts_by_reward(session, [reward.id])
         if reward.paid_kopecks > 0 or reserved.get(reward.id, 0) > 0:
@@ -729,6 +732,8 @@ async def _remove_unpaid_one_time_reward(
     )
     if reward is None:
         return
+    if reward.voided_at is not None:
+        return
     reserved = await _reserved_amounts_by_reward(session, [reward.id])
     if reward.paid_kopecks > 0 or reserved.get(reward.id, 0) > 0:
         api_error(
@@ -784,7 +789,11 @@ async def admin_payment_page(
             .join(StudentEmployment, StudentEmployment.id == PaymentInstallment.employment_id)
             .join(User, User.id == StudentEmployment.student_id)
             .outerjoin(MentorStudent, MentorStudent.student_id == User.id)
-            .outerjoin(MentorReward, MentorReward.installment_id == PaymentInstallment.id)
+            .outerjoin(
+                MentorReward,
+                (MentorReward.installment_id == PaymentInstallment.id)
+                & MentorReward.voided_at.is_(None),
+            )
             .where(*conditions)
             .order_by(PaymentInstallment.due_date, PaymentInstallment.sequence_number)
             .limit(limit)
@@ -825,7 +834,9 @@ async def admin_payment_page(
             )
         )
     ).all()
-    rewards = list(await session.scalars(select(MentorReward)))
+    rewards = list(
+        await session.scalars(select(MentorReward).where(MentorReward.voided_at.is_(None)))
+    )
     today = date.today()
     return AdminPaymentPage(
         items=items,
@@ -1055,7 +1066,10 @@ async def mentor_reward_summary(session: AsyncSession, mentor: User) -> MentorRe
     rewards = list(
         await session.scalars(
             select(MentorReward)
-            .where(MentorReward.mentor_id == mentor.id)
+            .where(
+                MentorReward.mentor_id == mentor.id,
+                MentorReward.voided_at.is_(None),
+            )
             .order_by(MentorReward.created_at.desc())
         )
     )
@@ -1088,6 +1102,7 @@ async def _mentor_reward_reads(
         .join(mentor_user, mentor_user.id == MentorReward.mentor_id)
         .outerjoin(PaymentInstallment, PaymentInstallment.id == MentorReward.installment_id)
         .outerjoin(StudentEmployment, StudentEmployment.id == PaymentInstallment.employment_id)
+        .where(MentorReward.voided_at.is_(None))
         .order_by(MentorReward.created_at.desc())
     )
     if mentor_id is not None:
@@ -1127,12 +1142,16 @@ async def mark_mentor_reward_paid(session: AsyncSession, reward_id: UUID, admin:
     reward = await session.scalar(select(MentorReward).where(MentorReward.id == reward_id))
     if reward is None:
         api_error(404, "mentor_reward_not_found", "Mentor reward was not found")
+    if reward.voided_at is not None:
+        api_error(409, "mentor_reward_voided", "A voided reward cannot be paid")
     await _lock_mentor(session, reward.mentor_id)
     reward = await session.scalar(
         select(MentorReward).where(MentorReward.id == reward_id).with_for_update()
     )
     if reward is None:
         api_error(404, "mentor_reward_not_found", "Mentor reward was not found")
+    if reward.voided_at is not None:
+        api_error(409, "mentor_reward_voided", "A voided reward cannot be paid")
     remaining = reward.amount_kopecks - reward.paid_kopecks
     if remaining <= 0:
         return
@@ -1164,6 +1183,43 @@ async def mark_mentor_reward_paid(session: AsyncSession, reward_id: UUID, admin:
     reward.paid_kopecks += remaining
     reward.paid_at = payout.paid_at
     await session.commit()
+
+
+async def void_mentor_reward(
+    session: AsyncSession,
+    admin: User,
+    reward_id: UUID,
+    reason: str,
+) -> AdminMentorPayoutDashboard:
+    reward = await session.scalar(select(MentorReward).where(MentorReward.id == reward_id))
+    if reward is None:
+        api_error(404, "mentor_reward_not_found", "Mentor reward was not found")
+    await _lock_mentor(session, reward.mentor_id)
+    reward = await session.scalar(
+        select(MentorReward).where(MentorReward.id == reward_id).with_for_update()
+    )
+    if reward is None:
+        api_error(404, "mentor_reward_not_found", "Mentor reward was not found")
+    if reward.voided_at is not None:
+        api_error(409, "mentor_reward_already_voided", "The reward is already voided")
+    reserved = await _reserved_amounts_by_reward(session, [reward.id])
+    if reward.paid_kopecks > 0:
+        api_error(
+            409,
+            "mentor_reward_already_paid",
+            "Cancel the related mentor payout before deleting this reward",
+        )
+    if reserved.get(reward.id, 0) > 0:
+        api_error(
+            409,
+            "mentor_reward_reserved",
+            "Cancel the mentor payout request before deleting this reward",
+        )
+    reward.voided_by_user_id = admin.id
+    reward.voided_at = datetime.now(UTC)
+    reward.void_reason = reason
+    await session.commit()
+    return await admin_mentor_payout_dashboard(session)
 
 
 async def request_mentor_payout(
@@ -1256,6 +1312,62 @@ async def mark_mentor_payout_paid(
     return await admin_mentor_payout_dashboard(session)
 
 
+async def edit_mentor_payout(
+    session: AsyncSession,
+    admin: User,
+    payout_id: UUID,
+    *,
+    amount_kopecks: int,
+    payment_reference: str | None,
+    paid_at: datetime | None,
+    reason: str,
+) -> AdminMentorPayoutDashboard:
+    payout = await _payout_model(session, payout_id, lock=True)
+    if payout.status is MentorPayoutStatus.CANCELLED:
+        api_error(409, "mentor_payout_cancelled", "A cancelled payout cannot be edited")
+    await _lock_mentor(session, payout.mentor_id)
+    allocations, rewards = await _payout_allocations_and_rewards(session, payout.id)
+    previous_amount = payout.amount_kopecks
+    previous_reference = payout.payment_reference
+    previous_paid_at = payout.paid_at
+
+    if payout.status is MentorPayoutStatus.PAID:
+        _reverse_paid_allocations(allocations, rewards)
+    await session.execute(
+        delete(MentorPayoutAllocation).where(MentorPayoutAllocation.payout_id == payout.id)
+    )
+    await session.flush()
+
+    payout.amount_kopecks = amount_kopecks
+    payout.payment_reference = payment_reference or None
+    if payout.status is MentorPayoutStatus.PAID:
+        payout.paid_at = paid_at or payout.paid_at or datetime.now(UTC)
+    else:
+        payout.paid_at = None
+    payout.edited_by_user_id = admin.id
+    payout.edited_at = datetime.now(UTC)
+    payout.edit_reason = reason
+
+    new_allocations = await _allocate_available_rewards(session, payout, amount_kopecks)
+    if payout.status is MentorPayoutStatus.PAID:
+        _apply_paid_allocations(new_allocations, payout.paid_at)
+    session.add(
+        MentorPayoutRevision(
+            payout_id=payout.id,
+            edited_by_user_id=admin.id,
+            reason=reason,
+            previous_amount_kopecks=previous_amount,
+            new_amount_kopecks=amount_kopecks,
+            previous_payment_reference=previous_reference,
+            new_payment_reference=payout.payment_reference,
+            previous_paid_at=previous_paid_at,
+            new_paid_at=payout.paid_at,
+        )
+    )
+    await session.commit()
+    return await admin_mentor_payout_dashboard(session)
+
+
 async def cancel_mentor_payout(
     session: AsyncSession,
     actor: User,
@@ -1265,8 +1377,20 @@ async def cancel_mentor_payout(
     payout = await _payout_model(session, payout_id, lock=True)
     if actor.role is not UserRole.ADMIN and payout.mentor_id != actor.id:
         api_error(404, "mentor_payout_not_found", "Payout request was not found")
-    if payout.status is not MentorPayoutStatus.REQUESTED:
-        api_error(409, "mentor_payout_not_requested", "Only an open request can be cancelled")
+    if payout.status is MentorPayoutStatus.CANCELLED:
+        api_error(409, "mentor_payout_already_cancelled", "The payout is already cancelled")
+    if payout.status is MentorPayoutStatus.PAID:
+        if actor.role is not UserRole.ADMIN:
+            api_error(409, "mentor_payout_already_paid", "A paid payout cannot be cancelled")
+        if not reason or len(reason.strip()) < 3:
+            api_error(
+                422,
+                "mentor_payout_cancellation_reason_required",
+                "A reason is required to cancel a paid payout",
+            )
+        await _lock_mentor(session, payout.mentor_id)
+        allocations, rewards = await _payout_allocations_and_rewards(session, payout.id)
+        _reverse_paid_allocations(allocations, rewards)
     payout.status = MentorPayoutStatus.CANCELLED
     payout.cancelled_by_user_id = actor.id
     payout.cancelled_at = datetime.now(UTC)
@@ -1285,7 +1409,9 @@ async def ensure_mentor_payout_receipt_upload_allowed(
 
 
 async def admin_mentor_payout_dashboard(session: AsyncSession) -> AdminMentorPayoutDashboard:
-    rewards = list(await session.scalars(select(MentorReward)))
+    rewards = list(
+        await session.scalars(select(MentorReward).where(MentorReward.voided_at.is_(None)))
+    )
     reward_ids = [reward.id for reward in rewards]
     reserved_by_reward = await _reserved_amounts_by_reward(session, reward_ids)
     mentor_ids = {reward.mentor_id for reward in rewards}
@@ -1326,11 +1452,14 @@ async def admin_mentor_payout_detail(
     if mentor is None:
         api_error(404, "mentor_not_found", "Mentor was not found")
     rewards = list(
-        await session.scalars(select(MentorReward).where(MentorReward.mentor_id == mentor_id))
+        await session.scalars(
+            select(MentorReward).where(
+                MentorReward.mentor_id == mentor_id,
+                MentorReward.voided_at.is_(None),
+            )
+        )
     )
     payouts = await _payout_reads(session, mentor_id=mentor_id)
-    if not rewards and not payouts:
-        api_error(404, "mentor_payments_not_found", "Mentor has no payment history")
     reserved_by_reward = await _reserved_amounts_by_reward(
         session, [reward.id for reward in rewards]
     )
@@ -1452,7 +1581,10 @@ async def _allocate_available_rewards(
     rewards = list(
         await session.scalars(
             select(MentorReward)
-            .where(MentorReward.mentor_id == payout.mentor_id)
+            .where(
+                MentorReward.mentor_id == payout.mentor_id,
+                MentorReward.voided_at.is_(None),
+            )
             .order_by(MentorReward.created_at, MentorReward.id)
             .with_for_update()
         )
@@ -1498,6 +1630,41 @@ def _apply_paid_allocations(
             reward.paid_at = paid_at
 
 
+async def _payout_allocations_and_rewards(
+    session: AsyncSession, payout_id: UUID
+) -> tuple[list[MentorPayoutAllocation], dict[UUID, MentorReward]]:
+    allocations = list(
+        await session.scalars(
+            select(MentorPayoutAllocation)
+            .where(MentorPayoutAllocation.payout_id == payout_id)
+            .order_by(MentorPayoutAllocation.created_at, MentorPayoutAllocation.id)
+        )
+    )
+    if not allocations:
+        return [], {}
+    rewards = {
+        reward.id: reward
+        for reward in await session.scalars(
+            select(MentorReward)
+            .where(MentorReward.id.in_([allocation.reward_id for allocation in allocations]))
+            .with_for_update()
+        )
+    }
+    return allocations, rewards
+
+
+def _reverse_paid_allocations(
+    allocations: list[MentorPayoutAllocation], rewards: dict[UUID, MentorReward]
+) -> None:
+    for allocation in allocations:
+        reward = rewards.get(allocation.reward_id)
+        if reward is None or reward.paid_kopecks < allocation.amount_kopecks:
+            raise RuntimeError("Mentor payout allocations are inconsistent with paid rewards")
+        reward.paid_kopecks -= allocation.amount_kopecks
+        if reward.paid_kopecks < reward.amount_kopecks:
+            reward.paid_at = None
+
+
 async def _payout_reads(
     session: AsyncSession, *, mentor_id: UUID | None = None
 ) -> list[MentorPayoutRead]:
@@ -1524,6 +1691,8 @@ async def _payout_reads(
             paid_at=payout.paid_at,
             cancelled_at=payout.cancelled_at,
             cancellation_reason=payout.cancellation_reason,
+            edited_at=payout.edited_at,
+            edit_reason=payout.edit_reason,
             receipt_filename=payout.receipt_filename,
             receipt_content_type=payout.receipt_content_type,
             receipt_size=payout.receipt_size,

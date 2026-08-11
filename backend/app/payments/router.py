@@ -38,6 +38,7 @@ from app.payments.models import (
     PaymentWebhookEvent,
 )
 from app.payments.schemas import (
+    AdminMentorPayoutCancelMutation,
     AdminMentorPayoutDashboard,
     AdminMentorPayoutDetail,
     AdminPaymentPage,
@@ -46,8 +47,10 @@ from app.payments.schemas import (
     EmploymentTerminationMutation,
     MentorPayoutAmountMutation,
     MentorPayoutCancelMutation,
+    MentorPayoutEditMutation,
     MentorPayoutMarkPaidMutation,
     MentorRewardSummary,
+    MentorRewardVoidMutation,
     PaymentDaysMutation,
     PaymentLinkRead,
     PaymentRevocationMutation,
@@ -64,6 +67,7 @@ from app.payments.service import (
     create_admin_mentor_payout,
     create_payment_link,
     delete_mentor_payout_receipt,
+    edit_mentor_payout,
     ensure_mentor_payout_receipt_upload_allowed,
     mark_installment_paid,
     mark_mentor_payout_paid,
@@ -77,6 +81,7 @@ from app.payments.service import (
     set_mentor_payout_receipt,
     set_payment_days,
     terminate_employment,
+    void_mentor_reward,
 )
 from app.payments.tochka import (
     TochkaPaymentService,
@@ -398,13 +403,34 @@ async def admin_mark_mentor_payout_paid(
     return await mark_mentor_payout_paid(session, admin, payout_id, payload.payment_reference)
 
 
+@admin_router.patch(
+    "/payouts/{payout_id}",
+    response_model=AdminMentorPayoutDashboard,
+)
+async def admin_edit_mentor_payout(
+    payout_id: UUID,
+    payload: MentorPayoutEditMutation,
+    session: Session,
+    admin: AdminUser,
+) -> AdminMentorPayoutDashboard:
+    return await edit_mentor_payout(
+        session,
+        admin,
+        payout_id,
+        amount_kopecks=_kopecks(payload.amount_rubles),
+        payment_reference=payload.payment_reference,
+        paid_at=payload.paid_at,
+        reason=payload.reason,
+    )
+
+
 @admin_router.post(
     "/payouts/{payout_id}/cancel",
     response_model=AdminMentorPayoutDashboard,
 )
 async def admin_cancel_mentor_payout(
     payout_id: UUID,
-    payload: MentorPayoutCancelMutation,
+    payload: AdminMentorPayoutCancelMutation,
     session: Session,
     admin: AdminUser,
 ) -> AdminMentorPayoutDashboard:
@@ -462,6 +488,19 @@ async def admin_mark_reward_paid(
 ) -> Response:
     await mark_mentor_reward_paid(session, reward_id, _admin)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@admin_router.post(
+    "/rewards/{reward_id}/void",
+    response_model=AdminMentorPayoutDashboard,
+)
+async def admin_void_mentor_reward(
+    reward_id: UUID,
+    payload: MentorRewardVoidMutation,
+    session: Session,
+    admin: AdminUser,
+) -> AdminMentorPayoutDashboard:
+    return await void_mentor_reward(session, admin, reward_id, payload.reason)
 
 
 @admin_router.post("/tochka/webhook/configure")

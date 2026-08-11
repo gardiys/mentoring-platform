@@ -12,6 +12,7 @@ from app.mentors.models import MentorStudent
 from app.payments.models import (
     MentorPayout,
     MentorPayoutAllocation,
+    MentorPayoutRevision,
     MentorPayoutStatus,
     MentorReward,
     MentorRewardKind,
@@ -112,6 +113,207 @@ async def test_admin_can_pay_aggregate_mentor_balance_partially(
         )
     assert sorted(reward.paid_kopecks for reward in rewards) == [500_000, 1_000_000]
     assert sum(item.amount_kopecks for item in allocations) == 1_500_000
+
+
+async def test_admin_can_edit_paid_mentor_payout_and_recalculate_balance(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await _seed_mentor_rewards(seeded, 2_000_000)
+    created = await client.post(
+        f"/api/v1/admin/payments/mentors/{seeded.mentor_id}/payouts",
+        headers=auth(seeded.admin_id),
+        json={"amount_rubles": 15_000, "payment_reference": "Акт №15"},
+    )
+    assert created.status_code == 200, created.text
+    payout_id = created.json()["payouts"][0]["id"]
+
+    edited = await client.patch(
+        f"/api/v1/admin/payments/payouts/{payout_id}",
+        headers=auth(seeded.admin_id),
+        json={
+            "amount_rubles": 8_000,
+            "payment_reference": "Исправленный акт",
+            "paid_at": "2026-08-11T12:30:00+03:00",
+            "reason": "Исправлена ошибочная сумма",
+        },
+    )
+    assert edited.status_code == 200, edited.text
+    balance = edited.json()["balances"][0]
+    assert balance["paid_kopecks"] == 800_000
+    assert balance["available_kopecks"] == 1_200_000
+    payout_read = edited.json()["payouts"][0]
+    assert payout_read["amount_kopecks"] == 800_000
+    assert payout_read["payment_reference"] == "Исправленный акт"
+    assert payout_read["edit_reason"] == "Исправлена ошибочная сумма"
+
+    async with TestSession() as session:
+        payout = await session.get(MentorPayout, payout_id)
+        revision = await session.scalar(
+            select(MentorPayoutRevision).where(MentorPayoutRevision.payout_id == payout_id)
+        )
+        rewards = list(
+            await session.scalars(
+                select(MentorReward).where(MentorReward.mentor_id == seeded.mentor_id)
+            )
+        )
+    assert payout is not None
+    assert payout.amount_kopecks == 800_000
+    assert payout.edited_by_user_id == seeded.admin_id
+    assert revision is not None
+    assert revision.previous_amount_kopecks == 1_500_000
+    assert revision.new_amount_kopecks == 800_000
+    assert sum(reward.paid_kopecks for reward in rewards) == 800_000
+
+
+async def test_admin_can_cancel_paid_mentor_payout_and_restore_balance(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await _seed_mentor_rewards(seeded, 1_000_000)
+    created = await client.post(
+        f"/api/v1/admin/payments/mentors/{seeded.mentor_id}/payouts",
+        headers=auth(seeded.admin_id),
+        json={"amount_rubles": 10_000, "payment_reference": "Ошибочный акт"},
+    )
+    assert created.status_code == 200, created.text
+    payout_id = created.json()["payouts"][0]["id"]
+
+    without_reason = await client.post(
+        f"/api/v1/admin/payments/payouts/{payout_id}/cancel",
+        headers=auth(seeded.admin_id),
+        json={},
+    )
+    assert without_reason.status_code == 422
+    assert (
+        without_reason.json()["detail"]["code"]
+        == "mentor_payout_cancellation_reason_required"
+    )
+
+    cancelled = await client.post(
+        f"/api/v1/admin/payments/payouts/{payout_id}/cancel",
+        headers=auth(seeded.admin_id),
+        json={"reason": "Выплата была добавлена по ошибке"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    balance = cancelled.json()["balances"][0]
+    assert balance["paid_kopecks"] == 0
+    assert balance["available_kopecks"] == 1_000_000
+    payout_read = cancelled.json()["payouts"][0]
+    assert payout_read["status"] == "cancelled"
+    assert payout_read["cancellation_reason"] == "Выплата была добавлена по ошибке"
+
+    async with TestSession() as session:
+        payout = await session.get(MentorPayout, payout_id)
+        rewards = list(
+            await session.scalars(
+                select(MentorReward).where(MentorReward.mentor_id == seeded.mentor_id)
+            )
+        )
+    assert payout is not None
+    assert payout.status is MentorPayoutStatus.CANCELLED
+    assert payout.cancelled_by_user_id == seeded.admin_id
+    assert sum(reward.paid_kopecks for reward in rewards) == 0
+
+
+async def test_admin_can_void_erroneous_unpaid_reward_and_hide_it_from_mentor(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await _seed_mentor_rewards(seeded, 1_000_000)
+    async with TestSession() as session:
+        reward_id = await session.scalar(
+            select(MentorReward.id).where(MentorReward.mentor_id == seeded.mentor_id)
+        )
+    assert reward_id is not None
+
+    voided = await client.post(
+        f"/api/v1/admin/payments/rewards/{reward_id}/void",
+        headers=auth(seeded.admin_id),
+        json={"reason": "Архивный расчёт с ментором уже закрыт"},
+    )
+    assert voided.status_code == 200, voided.text
+    assert voided.json()["balances"] == []
+
+    mentor_summary = await client.get(
+        "/api/v1/mentor/rewards",
+        headers=auth(seeded.mentor_id),
+    )
+    assert mentor_summary.status_code == 200, mentor_summary.text
+    assert mentor_summary.json()["accrued_kopecks"] == 0
+    assert mentor_summary.json()["available_kopecks"] == 0
+    assert mentor_summary.json()["rewards"] == []
+
+    detail = await client.get(
+        f"/api/v1/admin/payments/mentors/{seeded.mentor_id}",
+        headers=auth(seeded.admin_id),
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["accrued_kopecks"] == 0
+    assert detail.json()["rewards"] == []
+
+    async with TestSession() as session:
+        reward = await session.get(MentorReward, reward_id)
+    assert reward is not None
+    assert reward.voided_by_user_id == seeded.admin_id
+    assert reward.voided_at is not None
+    assert reward.void_reason == "Архивный расчёт с ментором уже закрыт"
+
+
+async def test_admin_cannot_void_reward_while_it_is_reserved(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await _seed_mentor_rewards(seeded, 1_000_000)
+    requested = await client.post(
+        "/api/v1/mentor/payouts",
+        headers=auth(seeded.mentor_id),
+        json={"amount_rubles": 10_000},
+    )
+    reward_id = requested.json()["rewards"][0]["id"]
+
+    voided = await client.post(
+        f"/api/v1/admin/payments/rewards/{reward_id}/void",
+        headers=auth(seeded.admin_id),
+        json={"reason": "Ошибочное начисление"},
+    )
+    assert voided.status_code == 409
+    assert voided.json()["detail"]["code"] == "mentor_reward_reserved"
+
+
+async def test_admin_cancels_paid_payout_before_voiding_its_reward(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await _seed_mentor_rewards(seeded, 1_000_000)
+    created = await client.post(
+        f"/api/v1/admin/payments/mentors/{seeded.mentor_id}/payouts",
+        headers=auth(seeded.admin_id),
+        json={"amount_rubles": 10_000},
+    )
+    payout_id = created.json()["payouts"][0]["id"]
+    async with TestSession() as session:
+        reward_id = await session.scalar(
+            select(MentorReward.id).where(MentorReward.mentor_id == seeded.mentor_id)
+        )
+    assert reward_id is not None
+
+    blocked = await client.post(
+        f"/api/v1/admin/payments/rewards/{reward_id}/void",
+        headers=auth(seeded.admin_id),
+        json={"reason": "Ошибочное начисление"},
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["detail"]["code"] == "mentor_reward_already_paid"
+
+    cancelled = await client.post(
+        f"/api/v1/admin/payments/payouts/{payout_id}/cancel",
+        headers=auth(seeded.admin_id),
+        json={"reason": "Выплата была рассчитана повторно"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+
+    voided = await client.post(
+        f"/api/v1/admin/payments/rewards/{reward_id}/void",
+        headers=auth(seeded.admin_id),
+        json={"reason": "Архивный расчёт уже закрыт"},
+    )
+    assert voided.status_code == 200, voided.text
 
 
 async def test_mentor_request_reserves_balance_until_admin_pays_it(

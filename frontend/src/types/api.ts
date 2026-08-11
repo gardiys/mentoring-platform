@@ -551,6 +551,8 @@ export interface MentorPayoutRead {
   paid_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;
+  edited_at: string | null;
+  edit_reason: string | null;
   receipt_filename: string | null;
   receipt_content_type: string | null;
   receipt_size: number | null;

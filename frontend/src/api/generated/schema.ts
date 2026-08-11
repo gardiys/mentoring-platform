@@ -2386,6 +2386,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/payments/payouts/{payout_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Edit Mentor Payout */
+        patch: operations["admin_edit_mentor_payout_api_v1_admin_payments_payouts__payout_id__patch"];
+        trace?: never;
+    };
     "/api/v1/admin/payments/payouts/{payout_id}/cancel": {
         parameters: {
             query?: never;
@@ -2465,6 +2482,23 @@ export interface paths {
         put?: never;
         /** Admin Mark Reward Paid */
         post: operations["admin_mark_reward_paid_api_v1_admin_payments_rewards__reward_id__mark_paid_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payments/rewards/{reward_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Void Mentor Reward */
+        post: operations["admin_void_mentor_reward_api_v1_admin_payments_rewards__reward_id__void_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3783,6 +3817,11 @@ export interface components {
             reserved_kopecks: number;
             /** Available Kopecks */
             available_kopecks: number;
+        };
+        /** AdminMentorPayoutCancelMutation */
+        AdminMentorPayoutCancelMutation: {
+            /** Reason */
+            reason?: string | null;
         };
         /** AdminMentorPayoutDashboard */
         AdminMentorPayoutDashboard: {
@@ -6555,6 +6594,17 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** MentorPayoutEditMutation */
+        MentorPayoutEditMutation: {
+            /** Amount Rubles */
+            amount_rubles: number | string;
+            /** Payment Reference */
+            payment_reference?: string | null;
+            /** Paid At */
+            paid_at?: string | null;
+            /** Reason */
+            reason: string;
+        };
         /** MentorPayoutMarkPaidMutation */
         MentorPayoutMarkPaidMutation: {
             /** Payment Reference */
@@ -6598,6 +6648,10 @@ export interface components {
             cancelled_at: string | null;
             /** Cancellation Reason */
             cancellation_reason: string | null;
+            /** Edited At */
+            edited_at: string | null;
+            /** Edit Reason */
+            edit_reason: string | null;
             /** Receipt Filename */
             receipt_filename: string | null;
             /** Receipt Content Type */
@@ -6713,6 +6767,11 @@ export interface components {
             rewards: components["schemas"]["MentorRewardRead"][];
             /** Payouts */
             payouts: components["schemas"]["MentorPayoutRead"][];
+        };
+        /** MentorRewardVoidMutation */
+        MentorRewardVoidMutation: {
+            /** Reason */
+            reason: string;
         };
         /** MentorStudentDetail */
         MentorStudentDetail: {
@@ -13411,6 +13470,46 @@ export interface operations {
             };
         };
     };
+    admin_edit_mentor_payout_api_v1_admin_payments_payouts__payout_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                payout_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorPayoutEditMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorPayoutDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_cancel_mentor_payout_api_v1_admin_payments_payouts__payout_id__cancel_post: {
         parameters: {
             query?: never;
@@ -13427,7 +13526,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MentorPayoutCancelMutation"];
+                "application/json": components["schemas"]["AdminMentorPayoutCancelMutation"];
             };
         };
         responses: {
@@ -13589,6 +13688,46 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_void_mentor_reward_api_v1_admin_payments_rewards__reward_id__void_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                reward_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorRewardVoidMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMentorPayoutDashboard"];
+                };
             };
             /** @description Validation Error */
             422: {

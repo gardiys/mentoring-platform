@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Group,
+  Modal,
   NumberInput,
   ScrollArea,
   SimpleGrid,
@@ -11,6 +12,7 @@ import {
   Table,
   Text,
   TextInput,
+  Textarea,
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -18,12 +20,14 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { AdminPaymentsNavigation } from "../components/AdminPaymentsNavigation";
+import { AdminMentorPayoutActions } from "../components/AdminMentorPayoutActions";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import {
   useAdminMentorPayoutDetail,
   useCreateAdminMentorPayout,
+  useVoidAdminMentorReward,
 } from "../features/payments/queries";
 import type { MentorRewardRead } from "../types/api";
 import { formatRubles } from "../utils/money";
@@ -32,8 +36,13 @@ export function AdminMentorPaymentDetailPage() {
   const { mentorId = "" } = useParams();
   const query = useAdminMentorPayoutDetail(mentorId);
   const createPayout = useCreateAdminMentorPayout();
+  const voidReward = useVoidAdminMentorReward();
   const [amount, setAmount] = useState<number | string>("");
   const [reference, setReference] = useState("");
+  const [rewardToVoid, setRewardToVoid] = useState<MentorRewardRead | null>(
+    null,
+  );
+  const [voidReason, setVoidReason] = useState("");
 
   if (query.isPending) return <LoadingState label="Считаем выплаты ментора…" />;
   if (query.isError) {
@@ -174,7 +183,7 @@ export function AdminMentorPaymentDetailPage() {
           </Text>
         </div>
         <ScrollArea type="auto">
-          <Table verticalSpacing="md" horizontalSpacing="lg" miw={1120}>
+          <Table verticalSpacing="md" horizontalSpacing="lg" miw={1320}>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Дата</Table.Th>
@@ -185,6 +194,7 @@ export function AdminMentorPaymentDetailPage() {
                 <Table.Th>Начислено</Table.Th>
                 <Table.Th>Выплачено</Table.Th>
                 <Table.Th>Доступно</Table.Th>
+                <Table.Th>Действия</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -229,6 +239,29 @@ export function AdminMentorPaymentDetailPage() {
                       {formatRubles(reward.available_kopecks)}
                     </Badge>
                   </Table.Td>
+                  <Table.Td>
+                    {reward.paid_kopecks > 0 ? (
+                      <Text size="xs" c="dimmed">
+                        Сначала отмените связанную выплату
+                      </Text>
+                    ) : reward.reserved_kopecks > 0 ? (
+                      <Text size="xs" c="dimmed">
+                        Сначала отмените заявку ментора
+                      </Text>
+                    ) : (
+                      <Button
+                        size="compact-sm"
+                        color="red"
+                        variant="subtle"
+                        onClick={() => {
+                          setVoidReason("");
+                          setRewardToVoid(reward);
+                        }}
+                      >
+                        Удалить ошибочное
+                      </Button>
+                    )}
+                  </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -236,12 +269,84 @@ export function AdminMentorPaymentDetailPage() {
         </ScrollArea>
       </Card>
 
+      <Modal
+        opened={rewardToVoid !== null}
+        onClose={() => {
+          if (voidReward.isPending) return;
+          setRewardToVoid(null);
+          setVoidReason("");
+        }}
+        title="Удалить ошибочное начисление"
+        centered
+      >
+        <Stack>
+          <Alert color="red" variant="light">
+            {rewardToVoid
+              ? `${formatRubles(rewardToVoid.amount_kopecks)} по ученику «${rewardToVoid.student_name}» исчезнут из баланса и списка ментора. Запись сохранится только в аудите.`
+              : null}
+          </Alert>
+          <Textarea
+            label="Причина удаления"
+            description="Например: уже рассчитались с ментором по архивным данным. Минимум 3 символа."
+            minRows={3}
+            maxLength={500}
+            value={voidReason}
+            onChange={(event) => setVoidReason(event.currentTarget.value)}
+            required
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="subtle"
+              disabled={voidReward.isPending}
+              onClick={() => {
+                setRewardToVoid(null);
+                setVoidReason("");
+              }}
+            >
+              Не удалять
+            </Button>
+            <Button
+              color="red"
+              loading={voidReward.isPending}
+              disabled={voidReason.trim().length < 3}
+              onClick={() => {
+                if (!rewardToVoid) return;
+                voidReward.mutate(
+                  {
+                    rewardId: rewardToVoid.id,
+                    reason: voidReason.trim(),
+                  },
+                  {
+                    onSuccess: () => {
+                      setRewardToVoid(null);
+                      setVoidReason("");
+                      notifications.show({
+                        color: "green",
+                        message:
+                          "Ошибочное начисление удалено из баланса ментора",
+                      });
+                    },
+                    onError: (error) =>
+                      notifications.show({
+                        color: "red",
+                        message: error.message,
+                      }),
+                  },
+                );
+              }}
+            >
+              Удалить начисление
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       <Card withBorder p={0}>
         <div style={{ padding: "var(--mantine-spacing-lg)" }}>
           <Title order={3}>История выплат ментору</Title>
         </div>
         <ScrollArea type="auto">
-          <Table verticalSpacing="md" horizontalSpacing="lg" miw={820}>
+          <Table verticalSpacing="md" horizontalSpacing="lg" miw={1040}>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Дата</Table.Th>
@@ -249,13 +354,18 @@ export function AdminMentorPaymentDetailPage() {
                 <Table.Th>Статус</Table.Th>
                 <Table.Th>Источник</Table.Th>
                 <Table.Th>Акт / комментарий</Table.Th>
+                <Table.Th>Действия</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {data.payouts.map((payout) => (
                 <Table.Tr key={payout.id}>
                   <Table.Td>
-                    {dateTimeLabel(payout.paid_at ?? payout.created_at)}
+                    {dateTimeLabel(
+                      payout.status === "cancelled"
+                        ? (payout.cancelled_at ?? payout.created_at)
+                        : (payout.paid_at ?? payout.created_at),
+                    )}
                   </Table.Td>
                   <Table.Td fw={700}>
                     {formatRubles(payout.amount_kopecks)}
@@ -284,9 +394,21 @@ export function AdminMentorPaymentDetailPage() {
                       : "Администратор"}
                   </Table.Td>
                   <Table.Td>
-                    {payout.payment_reference ??
-                      payout.cancellation_reason ??
-                      "—"}
+                    <Stack gap={2}>
+                      <Text size="sm">
+                        {payout.status === "cancelled"
+                          ? (payout.cancellation_reason ?? "—")
+                          : (payout.payment_reference ?? "—")}
+                      </Text>
+                      {payout.edited_at && (
+                        <Text size="xs" c="dimmed">
+                          Изменено: {payout.edit_reason}
+                        </Text>
+                      )}
+                    </Stack>
+                  </Table.Td>
+                  <Table.Td>
+                    <AdminMentorPayoutActions payout={payout} />
                   </Table.Td>
                 </Table.Tr>
               ))}

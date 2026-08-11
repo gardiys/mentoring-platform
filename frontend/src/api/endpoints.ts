@@ -330,6 +330,11 @@ export const api = {
     apiRequest<void>(`/api/v1/admin/payments/rewards/${rewardId}/mark-paid`, {
       method: "POST",
     }),
+  voidAdminMentorReward: (rewardId: string, reason: string) =>
+    apiRequest<AdminMentorPayoutDashboard>(
+      `/api/v1/admin/payments/rewards/${rewardId}/void`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
   adminMentorPayouts: () =>
     apiRequest<AdminMentorPayoutDashboard>(
       "/api/v1/admin/payments/mentor-payouts",
@@ -356,6 +361,19 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ payment_reference: paymentReference }),
       },
+    ),
+  editAdminMentorPayout: (
+    payoutId: string,
+    payload: {
+      amount_rubles: number;
+      payment_reference: string | null;
+      paid_at: string | null;
+      reason: string;
+    },
+  ) =>
+    apiRequest<AdminMentorPayoutDashboard>(
+      `/api/v1/admin/payments/payouts/${payoutId}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
     ),
   cancelAdminMentorPayout: (payoutId: string, reason: string | null = null) =>
     apiRequest<AdminMentorPayoutDashboard>(

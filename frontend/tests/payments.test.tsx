@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -248,6 +248,8 @@ const payoutDashboard: AdminMentorPayoutDashboard = {
       paid_at: null,
       cancelled_at: null,
       cancellation_reason: null,
+      edited_at: null,
+      edit_reason: null,
       receipt_filename: null,
       receipt_content_type: null,
       receipt_size: null,
@@ -307,6 +309,8 @@ const mentorSummary: MentorRewardSummary = {
       paid_at: "2026-08-10T11:00:00Z",
       cancelled_at: null,
       cancellation_reason: null,
+      edited_at: null,
+      edit_reason: null,
       receipt_filename: null,
       receipt_content_type: null,
       receipt_size: null,
@@ -364,6 +368,115 @@ it("показывает администратору происхождение
   ).toBeInTheDocument();
   expect(screen.getByText("Иван Иванов")).toBeInTheDocument();
   expect(screen.getByText("50 000 ₽")).toBeInTheDocument();
+});
+
+it("администратор удаляет повторное архивное начисление из баланса ментора", async () => {
+  vi.spyOn(api, "adminMentorPayoutDetail").mockResolvedValue(mentorDetail);
+  const voidReward = vi
+    .spyOn(api, "voidAdminMentorReward")
+    .mockResolvedValue(payoutDashboard);
+
+  renderPage(
+    <AdminMentorPaymentDetailPage />,
+    `/admin/payments/mentors/${mentorDetail.mentor_id}`,
+    "/admin/payments/mentors/:mentorId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Удалить ошибочное" }),
+  );
+  const dialog = await screen.findByRole("dialog");
+  const submit = within(dialog).getByRole("button", {
+    name: "Удалить начисление",
+  });
+  expect(submit).toBeDisabled();
+  await userEvent.type(
+    within(dialog).getByRole("textbox", { name: /Причина удаления/ }),
+    "Расчёт по архиву уже закрыт",
+  );
+  await userEvent.click(submit);
+
+  await waitFor(() =>
+    expect(voidReward).toHaveBeenCalledWith(
+      "50000000-0000-4000-8000-000000000001",
+      "Расчёт по архиву уже закрыт",
+    ),
+  );
+});
+
+it("администратор редактирует зафиксированную выплату ментора", async () => {
+  vi.spyOn(api, "adminMentorPayoutDetail").mockResolvedValue(mentorDetail);
+  const edit = vi
+    .spyOn(api, "editAdminMentorPayout")
+    .mockResolvedValue(payoutDashboard);
+
+  renderPage(
+    <AdminMentorPaymentDetailPage />,
+    `/admin/payments/mentors/${mentorDetail.mentor_id}`,
+    "/admin/payments/mentors/:mentorId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Редактировать" }),
+  );
+  const dialog = await screen.findByRole("dialog");
+  const amount = within(dialog).getByRole("textbox", {
+    name: /Сумма выплаты/,
+  });
+  await userEvent.clear(amount);
+  await userEvent.type(amount, "4000");
+  await userEvent.type(
+    within(dialog).getByRole("textbox", { name: /Причина изменения/ }),
+    "Исправлена сумма в акте",
+  );
+  await userEvent.click(
+    within(dialog).getByRole("button", { name: "Сохранить изменения" }),
+  );
+
+  await waitFor(() =>
+    expect(edit).toHaveBeenCalledWith(
+      "40000000-0000-4000-8000-000000000002",
+      expect.objectContaining({
+        amount_rubles: 4_000,
+        payment_reference: "Акт №10",
+        reason: "Исправлена сумма в акте",
+      }),
+    ),
+  );
+});
+
+it("администратор удаляет ошибочную выплату с обязательной причиной", async () => {
+  vi.spyOn(api, "adminMentorPayoutDetail").mockResolvedValue(mentorDetail);
+  const cancel = vi
+    .spyOn(api, "cancelAdminMentorPayout")
+    .mockResolvedValue(payoutDashboard);
+
+  renderPage(
+    <AdminMentorPaymentDetailPage />,
+    `/admin/payments/mentors/${mentorDetail.mentor_id}`,
+    "/admin/payments/mentors/:mentorId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Удалить ошибочную" }),
+  );
+  const dialog = await screen.findByRole("dialog");
+  const submit = within(dialog).getByRole("button", {
+    name: "Удалить ошибочную",
+  });
+  expect(submit).toBeDisabled();
+  await userEvent.type(
+    within(dialog).getByRole("textbox", { name: /Причина отмены/ }),
+    "Выплата создана случайно",
+  );
+  await userEvent.click(submit);
+
+  await waitFor(() =>
+    expect(cancel).toHaveBeenCalledWith(
+      "40000000-0000-4000-8000-000000000002",
+      "Выплата создана случайно",
+    ),
+  );
 });
 
 it("ментор запрашивает выплату и может приложить необязательный чек", async () => {

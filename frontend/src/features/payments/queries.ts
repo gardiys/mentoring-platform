@@ -270,7 +270,37 @@ export function useMarkAdminMentorPayoutPaid() {
 export function useCancelAdminMentorPayout() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payoutId: string) => api.cancelAdminMentorPayout(payoutId),
+    mutationFn: ({ payoutId, reason }: { payoutId: string; reason?: string }) =>
+      api.cancelAdminMentorPayout(payoutId, reason ?? null),
+    onSuccess: (dashboard) => {
+      queryClient.setQueryData(paymentKeys.mentorPayouts, dashboard);
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+    },
+  });
+}
+
+export function useEditAdminMentorPayout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      payoutId,
+      amountRubles,
+      paymentReference,
+      paidAt,
+      reason,
+    }: {
+      payoutId: string;
+      amountRubles: number;
+      paymentReference: string | null;
+      paidAt: string | null;
+      reason: string;
+    }) =>
+      api.editAdminMentorPayout(payoutId, {
+        amount_rubles: amountRubles,
+        payment_reference: paymentReference,
+        paid_at: paidAt,
+        reason,
+      }),
     onSuccess: (dashboard) => {
       queryClient.setQueryData(paymentKeys.mentorPayouts, dashboard);
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
@@ -284,5 +314,17 @@ export function useMarkMentorRewardPaid() {
     mutationFn: api.markAdminMentorRewardPaid,
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: paymentKeys.all }),
+  });
+}
+
+export function useVoidAdminMentorReward() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ rewardId, reason }: { rewardId: string; reason: string }) =>
+      api.voidAdminMentorReward(rewardId, reason),
+    onSuccess: (dashboard) => {
+      queryClient.setQueryData(paymentKeys.mentorPayouts, dashboard);
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+    },
   });
 }

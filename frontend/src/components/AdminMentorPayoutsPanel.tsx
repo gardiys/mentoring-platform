@@ -32,6 +32,7 @@ import { formatRubles } from "../utils/money";
 import { openExternalResource } from "../utils/openExternalResource";
 import { ErrorState } from "./ErrorState";
 import { LoadingState } from "./LoadingState";
+import { AdminMentorPayoutActions } from "./AdminMentorPayoutActions";
 
 const payoutStatus = {
   requested: { label: "Запрошена", color: "yellow" },
@@ -133,7 +134,8 @@ export function AdminMentorPayoutsPanel() {
                 markPaid.isPending && markPaid.variables?.payoutId === payout.id
               }
               cancelling={
-                cancelPayout.isPending && cancelPayout.variables === payout.id
+                cancelPayout.isPending &&
+                cancelPayout.variables?.payoutId === payout.id
               }
               onPay={() =>
                 markPaid.mutate(
@@ -163,15 +165,18 @@ export function AdminMentorPayoutsPanel() {
                 ) {
                   return;
                 }
-                cancelPayout.mutate(payout.id, {
-                  onSuccess: () =>
-                    notifications.show({ message: "Заявка отменена" }),
-                  onError: (error) =>
-                    notifications.show({
-                      color: "red",
-                      message: error.message,
-                    }),
-                });
+                cancelPayout.mutate(
+                  { payoutId: payout.id },
+                  {
+                    onSuccess: () =>
+                      notifications.show({ message: "Заявка отменена" }),
+                    onError: (error) =>
+                      notifications.show({
+                        color: "red",
+                        message: error.message,
+                      }),
+                  },
+                );
               }}
             />
           ))}
@@ -282,7 +287,7 @@ export function AdminMentorPayoutsPanel() {
           </Text>
         </div>
         <ScrollArea type="auto">
-          <Table miw={850} verticalSpacing="md" horizontalSpacing="lg">
+          <Table miw={1080} verticalSpacing="md" horizontalSpacing="lg">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Ментор</Table.Th>
@@ -292,6 +297,7 @@ export function AdminMentorPayoutsPanel() {
                 <Table.Th>Статус</Table.Th>
                 <Table.Th>Акт / комментарий</Table.Th>
                 <Table.Th>Чек</Table.Th>
+                <Table.Th>Действия</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -304,7 +310,11 @@ export function AdminMentorPayoutsPanel() {
                       {formatRubles(payout.amount_kopecks)}
                     </Table.Td>
                     <Table.Td>
-                      {formatDate(payout.paid_at ?? payout.cancelled_at)}
+                      {formatDate(
+                        payout.status === "cancelled"
+                          ? payout.cancelled_at
+                          : payout.paid_at,
+                      )}
                     </Table.Td>
                     <Table.Td>
                       {payout.origin === "mentor_request"
@@ -317,9 +327,18 @@ export function AdminMentorPayoutsPanel() {
                       </Badge>
                     </Table.Td>
                     <Table.Td>
-                      {payout.payment_reference ??
-                        payout.cancellation_reason ??
-                        "—"}
+                      <Stack gap={2}>
+                        <Text size="sm">
+                          {payout.status === "cancelled"
+                            ? (payout.cancellation_reason ?? "—")
+                            : (payout.payment_reference ?? "—")}
+                        </Text>
+                        {payout.edited_at && (
+                          <Text size="xs" c="dimmed">
+                            Изменено: {payout.edit_reason}
+                          </Text>
+                        )}
+                      </Stack>
                     </Table.Td>
                     <Table.Td>
                       {payout.receipt_filename ? (
@@ -344,6 +363,9 @@ export function AdminMentorPayoutsPanel() {
                           Не загружен
                         </Text>
                       )}
+                    </Table.Td>
+                    <Table.Td>
+                      <AdminMentorPayoutActions payout={payout} />
                     </Table.Td>
                   </Table.Tr>
                 );

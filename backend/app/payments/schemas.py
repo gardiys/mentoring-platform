@@ -179,6 +179,12 @@ class MentorRewardRead(BaseModel):
     paid_at: datetime | None
 
 
+class MentorRewardVoidMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class MentorPayoutAmountMutation(BaseModel):
     amount_rubles: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     payment_reference: str | None = Field(default=None, max_length=500)
@@ -190,6 +196,21 @@ class MentorPayoutMarkPaidMutation(BaseModel):
 
 class MentorPayoutCancelMutation(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
+
+
+class AdminMentorPayoutCancelMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class MentorPayoutEditMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    amount_rubles: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    payment_reference: str | None = Field(default=None, max_length=500)
+    paid_at: datetime | None = None
+    reason: str = Field(min_length=3, max_length=500)
 
 
 class MentorPayoutRead(BaseModel):
@@ -205,6 +226,8 @@ class MentorPayoutRead(BaseModel):
     paid_at: datetime | None
     cancelled_at: datetime | None
     cancellation_reason: str | None
+    edited_at: datetime | None
+    edit_reason: str | None
     receipt_filename: str | None
     receipt_content_type: str | None
     receipt_size: int | None
