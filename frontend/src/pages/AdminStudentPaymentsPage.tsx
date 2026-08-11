@@ -1,4 +1,11 @@
-import { Button, Group, Modal, Stack, Textarea } from "@mantine/core";
+import {
+  Button,
+  Group,
+  Modal,
+  Stack,
+  Textarea,
+  TextInput,
+} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -11,6 +18,7 @@ import { PaymentSchedule } from "../components/PaymentSchedule";
 import {
   useAdminPaymentStudent,
   useConfirmAdminPayment,
+  useRescheduleAdminPayment,
   useRevokeAdminPayment,
   useUpdateStudentPaymentDays,
 } from "../features/payments/queries";
@@ -21,8 +29,15 @@ export function AdminStudentPaymentsPage() {
   const updateDays = useUpdateStudentPaymentDays(studentId);
   const confirm = useConfirmAdminPayment();
   const revoke = useRevokeAdminPayment();
+  const reschedule = useRescheduleAdminPayment(studentId);
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
+  const [rescheduleTarget, setRescheduleTarget] = useState<{
+    id: string;
+    currentDueDate: string;
+  } | null>(null);
+  const [rescheduleDueDate, setRescheduleDueDate] = useState("");
+  const [rescheduleReason, setRescheduleReason] = useState("");
 
   if (query.isPending)
     return <LoadingState label="Загружаем платежи ученика…" />;
@@ -75,7 +90,100 @@ export function AdminStudentPaymentsPage() {
         revokingInstallmentId={
           revoke.isPending ? (revoke.variables?.installmentId ?? null) : null
         }
+        onReschedule={(installmentId, currentDueDate) => {
+          setRescheduleTarget({ id: installmentId, currentDueDate });
+          setRescheduleDueDate(nextAvailableDate(currentDueDate));
+          setRescheduleReason("");
+        }}
+        reschedulingInstallmentId={
+          reschedule.isPending
+            ? (reschedule.variables?.installmentId ?? null)
+            : null
+        }
       />
+      <Modal
+        opened={rescheduleTarget !== null}
+        onClose={() => {
+          if (reschedule.isPending) return;
+          setRescheduleTarget(null);
+          setRescheduleDueDate("");
+          setRescheduleReason("");
+        }}
+        title="Перенести дату платежа"
+        centered
+      >
+        <Stack>
+          <TextInput
+            label="Новая дата платежа"
+            type="date"
+            min={
+              rescheduleTarget
+                ? nextAvailableDate(rescheduleTarget.currentDueDate)
+                : undefined
+            }
+            value={rescheduleDueDate}
+            onChange={(event) =>
+              setRescheduleDueDate(event.currentTarget.value)
+            }
+            required
+          />
+          <Textarea
+            label="Причина переноса"
+            description="Причина и предыдущая дата сохранятся в истории платежа."
+            minRows={3}
+            maxLength={500}
+            value={rescheduleReason}
+            onChange={(event) => setRescheduleReason(event.currentTarget.value)}
+            required
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="subtle"
+              disabled={reschedule.isPending}
+              onClick={() => setRescheduleTarget(null)}
+            >
+              Не переносить
+            </Button>
+            <Button
+              color="orange"
+              loading={reschedule.isPending}
+              disabled={
+                !rescheduleTarget ||
+                !rescheduleDueDate ||
+                rescheduleReason.trim().length < 3
+              }
+              onClick={() => {
+                if (!rescheduleTarget) return;
+                reschedule.mutate(
+                  {
+                    installmentId: rescheduleTarget.id,
+                    dueDate: rescheduleDueDate,
+                    reason: rescheduleReason.trim(),
+                  },
+                  {
+                    onSuccess: () => {
+                      setRescheduleTarget(null);
+                      setRescheduleDueDate("");
+                      setRescheduleReason("");
+                      notifications.show({
+                        color: "green",
+                        message: "Дата платежа перенесена",
+                      });
+                    },
+                    onError: (error) =>
+                      notifications.show({
+                        color: "red",
+                        message: error.message,
+                      }),
+                  },
+                );
+              }}
+            >
+              Перенести платёж
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <Modal
         opened={revokeTarget !== null}
         onClose={() => {
@@ -143,4 +251,17 @@ export function AdminStudentPaymentsPage() {
       </Modal>
     </Stack>
   );
+}
+
+function nextAvailableDate(currentDueDate: string) {
+  const current = new Date(`${currentDueDate}T00:00:00`);
+  current.setDate(current.getDate() + 1);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const next = current > today ? current : today;
+  return [
+    next.getFullYear(),
+    String(next.getMonth() + 1).padStart(2, "0"),
+    String(next.getDate()).padStart(2, "0"),
+  ].join("-");
 }

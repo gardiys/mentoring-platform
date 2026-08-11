@@ -96,6 +96,7 @@ it("показывает график и сохраняет ровно две в
 const studentRegistry: AdminPaymentStudentPage = {
   items: [
     {
+      employment_id: dashboard.employment!.id,
       student_id: dashboard.student_id,
       student_name: dashboard.student_name,
       student_telegram_username: "ivan",
@@ -133,6 +134,68 @@ it("показывает учеников с офферами вместо пл�
   expect(screen.getByRole("link", { name: "Открыть платежи" })).toHaveAttribute(
     "href",
     `/admin/payments/students/${dashboard.student_id}`,
+  );
+});
+
+it("переключает реестр на полностью выплаченные офферы", async () => {
+  const registry = vi
+    .spyOn(api, "adminPaymentStudents")
+    .mockResolvedValue(studentRegistry);
+
+  renderPage(<AdminPaymentsPage />);
+
+  await screen.findByText("Иван Иванов");
+  await userEvent.click(screen.getByText("Выплачены"));
+
+  await waitFor(() =>
+    expect(registry).toHaveBeenCalledWith({
+      status: "paid",
+      limit: 50,
+      offset: 0,
+    }),
+  );
+});
+
+it("администратор переносит отдельный платёж с указанием причины", async () => {
+  vi.spyOn(api, "adminPaymentStudent").mockResolvedValue(dashboard);
+  const reschedule = vi.spyOn(api, "rescheduleAdminPayment").mockResolvedValue({
+    ...dashboard,
+    installments: [
+      {
+        ...dashboard.installments[0]!,
+        due_date: "2026-10-05",
+        due_date_changed_at: "2026-08-12T12:00:00Z",
+        previous_due_date: "2026-09-25",
+        due_date_change_reason: "Перенос по просьбе ученика",
+      },
+    ],
+  });
+
+  renderPage(
+    <AdminStudentPaymentsPage />,
+    `/admin/payments/students/${dashboard.student_id}`,
+    "/admin/payments/students/:studentId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Перенести дату" }),
+  );
+  const dueDate = await screen.findByLabelText(/Новая дата платежа/);
+  await userEvent.clear(dueDate);
+  await userEvent.type(dueDate, "2026-10-05");
+  await userEvent.type(
+    await screen.findByLabelText(/Причина переноса/),
+    "Перенос по просьбе ученика",
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Перенести платёж" }),
+  );
+
+  await waitFor(() =>
+    expect(reschedule).toHaveBeenCalledWith(dashboard.installments[0]!.id, {
+      due_date: "2026-10-05",
+      reason: "Перенос по просьбе ученика",
+    }),
   );
 });
 

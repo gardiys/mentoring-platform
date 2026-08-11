@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -11,6 +12,12 @@ from app.payments.models import (
     PaymentInstallmentStatus,
     StudentEmploymentStatus,
 )
+
+
+class AdminEmploymentPaymentStatus(StrEnum):
+    OUTSTANDING = "outstanding"
+    PAID = "paid"
+    ALL = "all"
 
 
 class EmploymentMutation(BaseModel):
@@ -49,6 +56,13 @@ class PaymentRevocationMutation(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class PaymentDueDateMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    due_date: date
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class EmploymentRead(BaseModel):
     id: UUID
     company_id: UUID | None
@@ -77,6 +91,9 @@ class PaymentInstallmentRead(BaseModel):
     paid_at: datetime | None
     revoked_at: datetime | None
     revocation_reason: str | None
+    due_date_changed_at: datetime | None = None
+    previous_due_date: date | None = None
+    due_date_change_reason: str | None = None
     payment_url: str | None = None
     can_pay: bool = False
 
@@ -130,6 +147,7 @@ class AdminPaymentListItem(BaseModel):
 
 
 class AdminPaymentStudentRead(BaseModel):
+    employment_id: UUID
     student_id: UUID
     student_name: str
     student_telegram_username: str | None

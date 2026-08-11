@@ -62,6 +62,7 @@ import type {
   InterviewProcessSummary,
   AdminPaymentPage,
   AdminPaymentStudentPage,
+  AdminEmploymentPaymentStatus,
   AdminMentorPayoutDetail,
   AdminMentorPayoutDashboard,
   EmploymentMutation,
@@ -299,9 +300,15 @@ export const api = {
       `/api/v1/admin/payments?${params.toString()}`,
     );
   },
-  adminPaymentStudents: (options: { limit?: number; offset?: number } = {}) =>
+  adminPaymentStudents: (
+    options: {
+      status?: AdminEmploymentPaymentStatus;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) =>
     apiRequest<AdminPaymentStudentPage>(
-      `/api/v1/admin/payments/students?limit=${options.limit ?? 50}&offset=${options.offset ?? 0}`,
+      `/api/v1/admin/payments/students?status=${options.status ?? "outstanding"}&limit=${options.limit ?? 50}&offset=${options.offset ?? 0}`,
     ),
   adminPaymentStudent: (studentId: string) =>
     apiRequest<StudentPaymentDashboard>(
@@ -318,6 +325,14 @@ export const api = {
         method: "PUT",
         body: JSON.stringify({ payment_days: paymentDays }),
       },
+    ),
+  rescheduleAdminPayment: (
+    installmentId: string,
+    payload: { due_date: string; reason: string },
+  ) =>
+    apiRequest<StudentPaymentDashboard>(
+      `/api/v1/admin/payments/installments/${installmentId}/due-date`,
+      { method: "PATCH", body: JSON.stringify(payload) },
     ),
   confirmAdminPayment: (installmentId: string) =>
     apiRequest<StudentPaymentDashboard>(

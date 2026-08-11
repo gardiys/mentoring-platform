@@ -27,11 +27,14 @@ from app.payments.models import (
     PaymentAttempt,
     PaymentAttemptStatus,
     PaymentInstallment,
+    PaymentInstallmentDueDateRevision,
     PaymentInstallmentStatus,
     StudentEmployment,
+    StudentEmploymentSalaryRevision,
     StudentEmploymentStatus,
 )
 from app.payments.schemas import (
+    AdminEmploymentPaymentStatus,
     AdminMentorPayoutBalanceRead,
     AdminMentorPayoutDashboard,
     AdminMentorPayoutDetail,
@@ -45,6 +48,7 @@ from app.payments.schemas import (
     MentorPayoutRead,
     MentorRewardRead,
     MentorRewardSummary,
+    PaymentDueDateMutation,
     PaymentInstallmentRead,
     PaymentLinkRead,
     PaymentRevocationMutation,
@@ -176,6 +180,7 @@ async def set_employment(
         )
         session.add(employment)
         await session.flush()
+        await _regenerate_unpaid_installments(session, employment)
     else:
         paid_count = int(
             await session.scalar(
@@ -186,23 +191,34 @@ async def set_employment(
             )
             or 0
         )
-        changed_financial_terms = (
-            employment.start_date != payload.start_date
-            or employment.net_salary_kopecks != salary_kopecks
+        company_changed = (
+            employment.company_id != company.id
+            or employment.company_name.casefold() != company.name.casefold()
         )
-        if paid_count and changed_financial_terms:
+        if paid_count and (company_changed or employment.start_date != payload.start_date):
             api_error(
                 409,
-                "employment_terms_locked",
-                "Salary, start date and repayment percentage cannot be changed after a payment",
+                "employment_identity_locked",
+                "Company and start date cannot be changed after a payment",
             )
+        previous_salary_kopecks = employment.net_salary_kopecks
         employment.company_id = company.id
         employment.company_name = company.name
         employment.start_date = payload.start_date
         employment.net_salary_kopecks = salary_kopecks
         employment.recorded_by_user_id = actor.id
-
-    await _regenerate_unpaid_installments(session, employment)
+        if paid_count and previous_salary_kopecks != salary_kopecks:
+            session.add(
+                StudentEmploymentSalaryRevision(
+                    employment_id=employment.id,
+                    edited_by_user_id=actor.id,
+                    previous_net_salary_kopecks=previous_salary_kopecks,
+                    new_net_salary_kopecks=salary_kopecks,
+                )
+            )
+            await _recalculate_installments_after_salary_correction(session, employment)
+        elif not paid_count:
+            await _regenerate_unpaid_installments(session, employment)
     await session.commit()
     return await payment_dashboard(session, actor, student.id)
 
@@ -317,6 +333,73 @@ async def set_payment_days(
     return await payment_dashboard(session, actor, student_id)
 
 
+async def reschedule_installment_due_date(
+    session: AsyncSession,
+    admin: User,
+    installment_id: UUID,
+    payload: PaymentDueDateMutation,
+) -> StudentPaymentDashboard:
+    row = (
+        await session.execute(
+            select(PaymentInstallment, StudentEmployment)
+            .join(StudentEmployment)
+            .where(PaymentInstallment.id == installment_id)
+            .with_for_update()
+        )
+    ).one_or_none()
+    if row is None:
+        api_error(404, "payment_installment_not_found", "Payment was not found")
+    installment, employment = row
+    if installment.status not in {
+        PaymentInstallmentStatus.SCHEDULED,
+        PaymentInstallmentStatus.PENDING,
+    }:
+        api_error(
+            409,
+            "payment_due_date_locked",
+            "Only an unpaid active payment can be rescheduled",
+        )
+    if payload.due_date <= installment.due_date:
+        api_error(
+            422,
+            "payment_due_date_not_later",
+            "The new payment date must be later than the current date",
+        )
+    if payload.due_date < date.today():
+        api_error(
+            422,
+            "payment_due_date_in_past",
+            "The new payment date cannot be in the past",
+        )
+    conflicting_installment = await session.scalar(
+        select(PaymentInstallment.id).where(
+            PaymentInstallment.employment_id == employment.id,
+            PaymentInstallment.id != installment.id,
+            PaymentInstallment.due_date == payload.due_date,
+            PaymentInstallment.status != PaymentInstallmentStatus.CANCELLED,
+        )
+    )
+    if conflicting_installment is not None:
+        api_error(
+            409,
+            "payment_due_date_conflict",
+            "Another payment is already scheduled for this date",
+        )
+    previous_due_date = installment.due_date
+    installment.due_date = payload.due_date
+    session.add(
+        PaymentInstallmentDueDateRevision(
+            installment_id=installment.id,
+            changed_by_user_id=admin.id,
+            previous_due_date=previous_due_date,
+            new_due_date=payload.due_date,
+            reason=payload.reason,
+        )
+    )
+    await session.commit()
+    return await payment_dashboard(session, admin, employment.student_id)
+
+
 async def payment_dashboard(
     session: AsyncSession, actor: User, student_id: UUID
 ) -> StudentPaymentDashboard:
@@ -353,6 +436,9 @@ async def payment_dashboard(
         )
     )
     latest_attempts = await _latest_attempts(session, [item.id for item in installments])
+    latest_due_date_revisions = await _latest_due_date_revisions(
+        session, [item.id for item in installments]
+    )
     today = date.today()
     reads = [
         PaymentInstallmentRead(
@@ -367,8 +453,27 @@ async def payment_dashboard(
             paid_at=item.paid_at,
             revoked_at=item.revoked_at,
             revocation_reason=item.revocation_reason,
+            due_date_changed_at=(
+                latest_due_date_revisions[item.id].created_at
+                if item.id in latest_due_date_revisions
+                else None
+            ),
+            previous_due_date=(
+                latest_due_date_revisions[item.id].previous_due_date
+                if item.id in latest_due_date_revisions
+                else None
+            ),
+            due_date_change_reason=(
+                latest_due_date_revisions[item.id].reason
+                if item.id in latest_due_date_revisions
+                else None
+            ),
             payment_url=(
-                latest_attempts[item.id].payment_url if item.id in latest_attempts else None
+                latest_attempts[item.id].payment_url
+                if item.id in latest_attempts
+                and latest_attempts[item.id].status
+                in {PaymentAttemptStatus.PENDING, PaymentAttemptStatus.MANUAL_REVIEW}
+                else None
             ),
             can_pay=(
                 actor.id == student_id
@@ -868,6 +973,7 @@ async def admin_payment_page(
 async def admin_payment_student_page(
     session: AsyncSession,
     *,
+    status: AdminEmploymentPaymentStatus,
     limit: int,
     offset: int,
 ) -> AdminPaymentStudentPage:
@@ -931,6 +1037,15 @@ async def admin_payment_student_page(
         .correlate(StudentEmployment)
         .scalar_subquery()
     )
+    paid_salary_percent = (
+        select(func.coalesce(func.sum(PaymentInstallment.salary_percent), 0))
+        .where(
+            PaymentInstallment.employment_id == StudentEmployment.id,
+            PaymentInstallment.status == PaymentInstallmentStatus.PAID,
+        )
+        .correlate(StudentEmployment)
+        .scalar_subquery()
+    )
     installment_count = (
         select(func.count(PaymentInstallment.id))
         .where(
@@ -940,10 +1055,18 @@ async def admin_payment_student_page(
         .correlate(StudentEmployment)
         .scalar_subquery()
     )
-    conditions = [
-        StudentEmployment.status == StudentEmploymentStatus.ACTIVE,
-        remaining > 0,
-    ]
+    outstanding_condition = (StudentEmployment.status == StudentEmploymentStatus.ACTIVE) & (
+        remaining > 0
+    )
+    paid_condition = (paid > 0) & (
+        paid_salary_percent >= StudentEmployment.repayment_percent
+    )
+    if status is AdminEmploymentPaymentStatus.OUTSTANDING:
+        conditions = [outstanding_condition]
+    elif status is AdminEmploymentPaymentStatus.PAID:
+        conditions = [paid_condition]
+    else:
+        conditions = []
     total = int(
         await session.scalar(select(func.count(StudentEmployment.id)).where(*conditions)) or 0
     )
@@ -964,7 +1087,13 @@ async def admin_payment_student_page(
             .join(User, User.id == StudentEmployment.student_id)
             .outerjoin(MentorStudent, MentorStudent.student_id == User.id)
             .where(*conditions)
-            .order_by((overdue > 0).desc(), next_payment, User.first_name, User.last_name)
+            .order_by(
+                (overdue > 0).desc(),
+                next_payment,
+                StudentEmployment.start_date.desc(),
+                User.first_name,
+                User.last_name,
+            )
             .limit(limit)
             .offset(offset)
         )
@@ -980,6 +1109,7 @@ async def admin_payment_student_page(
     )
     items = [
         AdminPaymentStudentRead(
+            employment_id=employment.id,
             student_id=student.id,
             student_name=" ".join(filter(None, (student.first_name, student.last_name))),
             student_telegram_username=student.telegram_username,
@@ -1001,7 +1131,10 @@ async def admin_payment_student_page(
             employment_start_date=employment.start_date,
             net_salary_kopecks=employment.net_salary_kopecks,
             repayment_percent=employment.repayment_percent,
-            total_owed_kopecks=row_paid + row_remaining,
+            total_owed_kopecks=_percent_of(
+                employment.net_salary_kopecks,
+                employment.repayment_percent,
+            ),
             paid_kopecks=row_paid,
             remaining_kopecks=row_remaining,
             overdue_kopecks=row_overdue,
@@ -1048,7 +1181,7 @@ async def admin_payment_student_page(
                 ),
             )
             .join(StudentEmployment)
-            .where(StudentEmployment.status == StudentEmploymentStatus.ACTIVE)
+            .where(*conditions)
         )
     ).one()
     return AdminPaymentStudentPage(
@@ -1745,6 +1878,129 @@ async def _regenerate_unpaid_installments(
     )
 
 
+async def _recalculate_installments_after_salary_correction(
+    session: AsyncSession,
+    employment: StudentEmployment,
+) -> None:
+    installments = await _installments(session, employment.id)
+    paid = [item for item in installments if item.status is PaymentInstallmentStatus.PAID]
+    outstanding = [
+        item
+        for item in installments
+        if item.status in {PaymentInstallmentStatus.SCHEDULED, PaymentInstallmentStatus.PENDING}
+    ]
+    total_owed = _percent_of(employment.net_salary_kopecks, employment.repayment_percent)
+    already_paid = sum(item.amount_kopecks for item in paid)
+    if already_paid > total_owed:
+        api_error(
+            409,
+            "corrected_salary_below_paid_amount",
+            "The corrected total obligation cannot be lower than the amount already paid",
+        )
+
+    paid_percent = _salary_percent(already_paid, employment.net_salary_kopecks)
+    if already_paid == total_owed:
+        paid_percent = employment.repayment_percent
+    paid_percent = min(paid_percent, employment.repayment_percent)
+    allocated_paid_percent = Decimal("0")
+    for index, installment in enumerate(paid):
+        if index == len(paid) - 1:
+            installment.salary_percent = paid_percent - allocated_paid_percent
+        else:
+            installment_percent = min(
+                _salary_percent(installment.amount_kopecks, employment.net_salary_kopecks),
+                paid_percent - allocated_paid_percent,
+            )
+            installment.salary_percent = installment_percent
+            allocated_paid_percent += installment_percent
+
+    for installment in outstanding:
+        attempts = list(
+            await session.scalars(
+                select(PaymentAttempt).where(
+                    PaymentAttempt.installment_id == installment.id,
+                    PaymentAttempt.status.in_(
+                        [PaymentAttemptStatus.PENDING, PaymentAttemptStatus.MANUAL_REVIEW]
+                    ),
+                )
+            )
+        )
+        for attempt in attempts:
+            # A bank link contains the old amount. If it is paid later, its
+            # webhook is deliberately routed to manual review.
+            attempt.status = PaymentAttemptStatus.REVOKED
+            attempt.payment_url = None
+
+    remaining_amount = total_owed - already_paid
+    regular_amount = _percent_of(employment.net_salary_kopecks, INSTALLMENT_PERCENT)
+    desired_amounts: list[int] = []
+    while remaining_amount > 0:
+        amount = min(regular_amount, remaining_amount)
+        desired_amounts.append(amount)
+        remaining_amount -= amount
+
+    remaining_percent = employment.repayment_percent - paid_percent
+    desired_percents: list[Decimal] = []
+    allocated_remaining_percent = Decimal("0")
+    for index in range(len(desired_amounts)):
+        if index == len(desired_amounts) - 1:
+            installment_percent = remaining_percent - allocated_remaining_percent
+        else:
+            installment_percent = min(
+                INSTALLMENT_PERCENT,
+                remaining_percent - allocated_remaining_percent,
+            )
+        desired_percents.append(installment_percent)
+        allocated_remaining_percent += installment_percent
+
+    reused_count = min(len(outstanding), len(desired_amounts))
+    for installment, amount, salary_percent in zip(
+        outstanding[:reused_count],
+        desired_amounts[:reused_count],
+        desired_percents[:reused_count],
+        strict=True,
+    ):
+        installment.amount_kopecks = amount
+        installment.salary_percent = salary_percent
+        installment.status = PaymentInstallmentStatus.SCHEDULED
+
+    for installment in outstanding[reused_count:]:
+        installment.status = PaymentInstallmentStatus.CANCELLED
+
+    missing_count = len(desired_amounts) - reused_count
+    if missing_count <= 0:
+        return
+    last_due_date = max(
+        (item.due_date for item in installments),
+        default=_add_month(employment.start_date) - timedelta(days=1),
+    )
+    due_dates = _payment_dates_on_or_after(
+        last_due_date + timedelta(days=1),
+        (employment.payment_day_first, employment.payment_day_second),
+        missing_count,
+    )
+    next_sequence = max((item.sequence_number for item in installments), default=0) + 1
+    session.add_all(
+        [
+            PaymentInstallment(
+                employment_id=employment.id,
+                sequence_number=next_sequence + index,
+                due_date=due_date,
+                amount_kopecks=amount,
+                salary_percent=salary_percent,
+            )
+            for index, (due_date, amount, salary_percent) in enumerate(
+                zip(
+                    due_dates,
+                    desired_amounts[reused_count:],
+                    desired_percents[reused_count:],
+                    strict=True,
+                )
+            )
+        ]
+    )
+
+
 async def _reschedule_unpaid_installments(
     session: AsyncSession, employment: StudentEmployment
 ) -> None:
@@ -1796,6 +2052,24 @@ async def _latest_attempts(
     result: dict[UUID, PaymentAttempt] = {}
     for attempt in attempts:
         result.setdefault(attempt.installment_id, attempt)
+    return result
+
+
+async def _latest_due_date_revisions(
+    session: AsyncSession, installment_ids: list[UUID]
+) -> dict[UUID, PaymentInstallmentDueDateRevision]:
+    if not installment_ids:
+        return {}
+    revisions = list(
+        await session.scalars(
+            select(PaymentInstallmentDueDateRevision)
+            .where(PaymentInstallmentDueDateRevision.installment_id.in_(installment_ids))
+            .order_by(PaymentInstallmentDueDateRevision.created_at.desc())
+        )
+    )
+    result: dict[UUID, PaymentInstallmentDueDateRevision] = {}
+    for revision in revisions:
+        result.setdefault(revision.installment_id, revision)
     return result
 
 
@@ -1869,6 +2143,15 @@ def _percent_of(amount_kopecks: int, percent: Decimal) -> int:
         (Decimal(amount_kopecks) * percent / Decimal(100)).quantize(
             Decimal("1"), rounding=ROUND_HALF_UP
         )
+    )
+
+
+def _salary_percent(amount_kopecks: int, net_salary_kopecks: int) -> Decimal:
+    if amount_kopecks <= 0:
+        return Decimal("0")
+    return (Decimal(amount_kopecks) * Decimal(100) / Decimal(net_salary_kopecks)).quantize(
+        Decimal("0.01"),
+        rounding=ROUND_HALF_UP,
     )
 
 

@@ -25,8 +25,10 @@ from app.payments.models import (
     PaymentAttempt,
     PaymentAttemptStatus,
     PaymentInstallment,
+    PaymentInstallmentDueDateRevision,
     PaymentInstallmentStatus,
     StudentEmployment,
+    StudentEmploymentSalaryRevision,
 )
 from app.payments.service import (
     calculate_due_dates,
@@ -459,6 +461,124 @@ async def test_mentor_records_employment_and_student_sees_schedule(
     assert student_response.json()["installments"][0]["can_pay"] is True
 
 
+async def test_salary_can_be_corrected_after_payment_without_changing_company(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    created = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.mentor_id),
+        json={
+            "company_name": "Yandex",
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 300_000,
+        },
+    )
+    assert created.status_code == 200, created.text
+    created_payload = created.json()
+    first_installment = created_payload["installments"][0]
+    second_installment = created_payload["installments"][1]
+
+    confirmed = await client.post(
+        f"/api/v1/admin/payments/installments/{first_installment['id']}/confirm",
+        headers=auth(seeded.admin_id),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    payment_link = await client.post(
+        f"/api/v1/payments/installments/{second_installment['id']}/link",
+        headers=auth(seeded.student_id),
+    )
+    assert payment_link.status_code == 200, payment_link.text
+
+    corrected = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.admin_id),
+        json={
+            "company_name": created_payload["employment"]["company_name"],
+            "company_id": created_payload["employment"]["company_id"],
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 250_000,
+        },
+    )
+    assert corrected.status_code == 200, corrected.text
+    payload = corrected.json()
+    assert payload["employment"]["company_name"] == "Yandex"
+    assert payload["employment"]["net_salary_kopecks"] == 25_000_000
+    assert payload["summary"]["total_owed_kopecks"] == 50_000_000
+    assert payload["summary"]["paid_kopecks"] == 7_500_000
+    assert payload["summary"]["remaining_kopecks"] == 42_500_000
+    assert payload["summary"]["paid_salary_percent"] == "30.00"
+    assert payload["summary"]["remaining_salary_percent"] == "170.00"
+    active = [item for item in payload["installments"] if item["status"] != "cancelled"]
+    assert len(active) == 8
+    assert active[0]["amount_kopecks"] == 7_500_000
+    assert sum(item["amount_kopecks"] for item in active[1:]) == 42_500_000
+    corrected_second = next(
+        item for item in payload["installments"] if item["id"] == second_installment["id"]
+    )
+    assert corrected_second["status"] == "scheduled"
+    assert corrected_second["payment_url"] is None
+
+    async with TestSession() as session:
+        revision = await session.scalar(select(StudentEmploymentSalaryRevision))
+        attempt = await session.scalar(
+            select(PaymentAttempt).where(
+                PaymentAttempt.installment_id == UUID(second_installment["id"])
+            )
+        )
+    assert revision is not None
+    assert revision.edited_by_user_id == seeded.admin_id
+    assert revision.previous_net_salary_kopecks == 30_000_000
+    assert revision.new_net_salary_kopecks == 25_000_000
+    assert attempt is not None
+    assert attempt.status is PaymentAttemptStatus.REVOKED
+    assert attempt.payment_url is None
+
+    changed_company = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.admin_id),
+        json={
+            "company_name": "Другая компания",
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 250_000,
+        },
+    )
+    assert changed_company.status_code == 409
+    assert changed_company.json()["detail"]["code"] == "employment_identity_locked"
+
+
+async def test_corrected_salary_cannot_be_lower_than_already_paid_amount(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    created = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.mentor_id),
+        json={
+            "company_name": "Yandex",
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 300_000,
+        },
+    )
+    payload = created.json()
+    confirmed = await client.post(
+        f"/api/v1/admin/payments/installments/{payload['installments'][0]['id']}/confirm",
+        headers=auth(seeded.admin_id),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    correction = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.admin_id),
+        json={
+            "company_name": payload["employment"]["company_name"],
+            "company_id": payload["employment"]["company_id"],
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 30_000,
+        },
+    )
+    assert correction.status_code == 409
+    assert correction.json()["detail"]["code"] == "corrected_salary_below_paid_amount"
+
+
 async def test_other_mentor_cannot_manage_student_payments(
     client: AsyncClient, seeded: SeededData
 ) -> None:
@@ -664,6 +784,114 @@ async def test_admin_finance_registry_groups_students_and_exposes_overdue_detail
     assert mentor_payload["available_kopecks"] > 0
 
 
+async def test_admin_can_view_fully_paid_offers_and_revoke_missing_payment(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    async with TestSession() as session:
+        student = await session.get(User, seeded.student_id)
+        assert student is not None
+        student.repayment_percent = Decimal("25")
+        await session.commit()
+
+    dashboard = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.mentor_id),
+        json={
+            "company_name": "Yandex",
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 200_000,
+        },
+    )
+    installment_id = dashboard.json()["installments"][0]["id"]
+    confirmed = await client.post(
+        f"/api/v1/admin/payments/installments/{installment_id}/confirm",
+        headers=auth(seeded.admin_id),
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    outstanding = await client.get(
+        "/api/v1/admin/payments/students?status=outstanding",
+        headers=auth(seeded.admin_id),
+    )
+    assert outstanding.status_code == 200, outstanding.text
+    assert outstanding.json()["total"] == 0
+
+    paid = await client.get(
+        "/api/v1/admin/payments/students?status=paid",
+        headers=auth(seeded.admin_id),
+    )
+    assert paid.status_code == 200, paid.text
+    assert paid.json()["total"] == 1
+    assert paid.json()["items"][0]["employment_id"] == dashboard.json()["employment"]["id"]
+    assert paid.json()["items"][0]["remaining_kopecks"] == 0
+    assert paid.json()["items"][0]["paid_kopecks"] == 5_000_000
+
+    revoked = await client.post(
+        f"/api/v1/admin/payments/installments/{installment_id}/revoke",
+        headers=auth(seeded.admin_id),
+        json={"reason": "Деньги фактически не поступили"},
+    )
+    assert revoked.status_code == 200, revoked.text
+    assert revoked.json()["summary"]["remaining_kopecks"] == 5_000_000
+
+    paid_after_revoke = await client.get(
+        "/api/v1/admin/payments/students?status=paid",
+        headers=auth(seeded.admin_id),
+    )
+    assert paid_after_revoke.json()["total"] == 0
+    outstanding_after_revoke = await client.get(
+        "/api/v1/admin/payments/students?status=outstanding",
+        headers=auth(seeded.admin_id),
+    )
+    assert outstanding_after_revoke.json()["total"] == 1
+
+
+async def test_admin_can_postpone_an_individual_payment_with_audit_history(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    dashboard = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.mentor_id),
+        json={
+            "company_name": "Yandex",
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 200_000,
+        },
+    )
+    installment = dashboard.json()["installments"][0]
+    postponed = await client.patch(
+        f"/api/v1/admin/payments/installments/{installment['id']}/due-date",
+        headers=auth(seeded.admin_id),
+        json={
+            "due_date": "2026-10-05",
+            "reason": "Ученик попросил перенести платёж",
+        },
+    )
+    assert postponed.status_code == 200, postponed.text
+    updated = next(
+        item for item in postponed.json()["installments"] if item["id"] == installment["id"]
+    )
+    assert updated["due_date"] == "2026-10-05"
+    assert updated["previous_due_date"] == installment["due_date"]
+    assert updated["due_date_change_reason"] == "Ученик попросил перенести платёж"
+    assert updated["due_date_changed_at"] is not None
+
+    async with TestSession() as session:
+        revision = await session.scalar(select(PaymentInstallmentDueDateRevision))
+    assert revision is not None
+    assert revision.changed_by_user_id == seeded.admin_id
+    assert revision.previous_due_date.isoformat() == installment["due_date"]
+    assert revision.new_due_date.isoformat() == "2026-10-05"
+
+    not_later = await client.patch(
+        f"/api/v1/admin/payments/installments/{installment['id']}/due-date",
+        headers=auth(seeded.admin_id),
+        json={"due_date": "2026-10-01", "reason": "Слишком ранняя дата"},
+    )
+    assert not_later.status_code == 422
+    assert not_later.json()["detail"]["code"] == "payment_due_date_not_later"
+
+
 async def test_admin_can_revoke_an_incorrectly_confirmed_payment(
     client: AsyncClient, seeded: SeededData
 ) -> None:
@@ -785,6 +1013,21 @@ async def test_terminated_employment_carries_paid_percent_to_new_job(
     assert terminated_data["summary"]["paid_salary_percent"] == "75.00"
     assert terminated_data["summary"]["remaining_salary_percent"] == "125.00"
     assert sum(item["status"] == "cancelled" for item in terminated_data["installments"]) == 5
+
+    paid_offers = await client.get(
+        "/api/v1/admin/payments/students?status=paid",
+        headers=auth(seeded.admin_id),
+    )
+    assert paid_offers.status_code == 200, paid_offers.text
+    assert paid_offers.json()["total"] == 0
+    all_offers = await client.get(
+        "/api/v1/admin/payments/students?status=all",
+        headers=auth(seeded.admin_id),
+    )
+    assert all_offers.status_code == 200, all_offers.text
+    assert all_offers.json()["total"] == 1
+    assert all_offers.json()["items"][0]["total_owed_kopecks"] == 40_000_000
+    assert all_offers.json()["items"][0]["paid_kopecks"] == 15_000_000
 
     second = await client.put(
         f"/api/v1/mentor/students/{seeded.student_id}/employment",

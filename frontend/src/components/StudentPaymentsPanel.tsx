@@ -61,6 +61,19 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
 
   const dashboard = query.data;
   const isAdmin = me.data?.role === "admin";
+  const currentEmploymentHasPaidPayments = Boolean(
+    dashboard.employment &&
+    dashboard.installments.some(
+      (installment) =>
+        installment.employment_id === dashboard.employment?.id &&
+        installment.status === "paid",
+    ),
+  );
+  const salaryChanged = Boolean(
+    dashboard.employment &&
+    typeof salary === "number" &&
+    Math.round(salary * 100) !== dashboard.employment.net_salary_kopecks,
+  );
   const validEmployment =
     companyName.trim().length > 0 &&
     Boolean(startDate) &&
@@ -89,11 +102,19 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
               Администратор может указать процент в карточке ученика.
             </Alert>
           )}
+          {currentEmploymentHasPaidPayments && (
+            <Alert color="blue" title="Можно скорректировать зарплату">
+              Компания и дата выхода зафиксированы после первого платежа.
+              Укажите фактическую зарплату на руки — уже полученные платежи
+              сохранятся, а оставшаяся сумма и будущий график будут пересчитаны.
+            </Alert>
+          )}
           <Group grow align="flex-start">
             <TextInput
               label="Компания"
               required
               value={companyName}
+              disabled={currentEmploymentHasPaidPayments}
               onChange={(event) => setCompanyName(event.currentTarget.value)}
             />
             <TextInput
@@ -101,6 +122,7 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
               type="date"
               required
               value={startDate}
+              disabled={currentEmploymentHasPaidPayments}
               onChange={(event) => setStartDate(event.currentTarget.value)}
             />
             <NumberInput
@@ -131,6 +153,14 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
             disabled={!validEmployment}
             onClick={() => {
               if (!validEmployment || typeof salary !== "number") return;
+              if (
+                currentEmploymentHasPaidPayments &&
+                salaryChanged &&
+                !window.confirm(
+                  "Скорректировать зарплату? Оплаченные суммы сохранятся, старые платёжные ссылки перестанут учитываться автоматически, а будущие платежи пересчитаются.",
+                )
+              )
+                return;
               employmentMutation.mutate(
                 {
                   company_name: companyName.trim(),
@@ -153,9 +183,11 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
               );
             }}
           >
-            {dashboard.employment
-              ? "Обновить данные"
-              : "Создать график платежей"}
+            {currentEmploymentHasPaidPayments && salaryChanged
+              ? "Скорректировать зарплату"
+              : dashboard.employment
+                ? "Обновить данные"
+                : "Создать график платежей"}
           </Button>
           {dashboard.employment && (
             <Card withBorder>

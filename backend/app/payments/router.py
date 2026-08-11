@@ -38,6 +38,7 @@ from app.payments.models import (
     PaymentWebhookEvent,
 )
 from app.payments.schemas import (
+    AdminEmploymentPaymentStatus,
     AdminMentorPayoutCancelMutation,
     AdminMentorPayoutDashboard,
     AdminMentorPayoutDetail,
@@ -52,6 +53,7 @@ from app.payments.schemas import (
     MentorRewardSummary,
     MentorRewardVoidMutation,
     PaymentDaysMutation,
+    PaymentDueDateMutation,
     PaymentLinkRead,
     PaymentRevocationMutation,
     StudentPaymentDashboard,
@@ -76,6 +78,7 @@ from app.payments.service import (
     payment_dashboard,
     payout_receipt_upload,
     request_mentor_payout,
+    reschedule_installment_due_date,
     revoke_installment_payment,
     set_employment,
     set_mentor_payout_receipt,
@@ -327,10 +330,18 @@ async def admin_payments(
 async def admin_payment_students(
     session: Session,
     _admin: AdminUser,
+    payment_status: Annotated[
+        AdminEmploymentPaymentStatus, Query(alias="status")
+    ] = AdminEmploymentPaymentStatus.OUTSTANDING,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> AdminPaymentStudentPage:
-    return await admin_payment_student_page(session, limit=limit, offset=offset)
+    return await admin_payment_student_page(
+        session,
+        status=payment_status,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @admin_router.get("/students/{student_id}", response_model=StudentPaymentDashboard)
@@ -450,6 +461,19 @@ async def admin_update_payment_days(
     admin: AdminUser,
 ) -> StudentPaymentDashboard:
     return await set_payment_days(session, admin, student_id, payload.payment_days)
+
+
+@admin_router.patch(
+    "/installments/{installment_id}/due-date",
+    response_model=StudentPaymentDashboard,
+)
+async def admin_reschedule_payment(
+    installment_id: UUID,
+    payload: PaymentDueDateMutation,
+    session: Session,
+    admin: AdminUser,
+) -> StudentPaymentDashboard:
+    return await reschedule_installment_due_date(session, admin, installment_id, payload)
 
 
 @admin_router.post(

@@ -46,6 +46,8 @@ interface Props {
   confirmingInstallmentId?: string | null;
   onRevoke?: (installmentId: string) => void;
   revokingInstallmentId?: string | null;
+  onReschedule?: (installmentId: string, dueDate: string) => void;
+  reschedulingInstallmentId?: string | null;
 }
 
 export function PaymentSchedule({
@@ -58,6 +60,8 @@ export function PaymentSchedule({
   confirmingInstallmentId,
   onRevoke,
   revokingInstallmentId,
+  onReschedule,
+  reschedulingInstallmentId,
 }: Props) {
   const [firstDay, setFirstDay] = useState<number | "">(
     dashboard.employment?.payment_days[0] ?? 10,
@@ -292,7 +296,26 @@ export function PaymentSchedule({
                     }
                   >
                     <Table.Td>{installment.sequence_number}</Table.Td>
-                    <Table.Td>{dateLabel(installment.due_date)}</Table.Td>
+                    <Table.Td>
+                      <Text fw={installment.due_date_changed_at ? 700 : 400}>
+                        {dateLabel(installment.due_date)}
+                      </Text>
+                      {installment.due_date_changed_at && (
+                        <Stack gap={2} mt={4}>
+                          <Badge color="orange" variant="light" size="sm">
+                            Дата перенесена
+                          </Badge>
+                          {installment.previous_due_date && (
+                            <Text size="xs" c="orange">
+                              Было {dateLabel(installment.previous_due_date)}
+                              {installment.due_date_change_reason
+                                ? ` · ${installment.due_date_change_reason}`
+                                : ""}
+                            </Text>
+                          )}
+                        </Stack>
+                      )}
+                    </Table.Td>
                     <Table.Td>{installment.company_name}</Table.Td>
                     <Table.Td fw={700}>
                       {formatRubles(installment.amount_kopecks)}
@@ -313,49 +336,76 @@ export function PaymentSchedule({
                         )}
                     </Table.Td>
                     <Table.Td ta="right">
-                      {installment.status !== "paid" &&
-                        onPay &&
-                        installment.can_pay && (
-                          <Button
-                            size="xs"
-                            loading={payingInstallmentId === installment.id}
-                            onClick={() => onPay(installment.id)}
-                          >
-                            Оплатить
-                          </Button>
-                        )}
-                      {(installment.status === "scheduled" ||
-                        installment.status === "pending") &&
-                        onConfirm && (
-                          <Button
-                            size="xs"
-                            variant="light"
-                            loading={confirmingInstallmentId === installment.id}
-                            onClick={() => onConfirm(installment.id)}
-                          >
-                            Подтвердить вручную
-                          </Button>
-                        )}
-                      {installment.status === "paid" && installment.paid_at && (
-                        <Stack gap={4} align="flex-end">
-                          <Text size="xs" c="dimmed">
-                            {new Date(installment.paid_at).toLocaleString(
-                              "ru-RU",
-                            )}
-                          </Text>
-                          {onRevoke && (
+                      <Group gap="xs" justify="flex-end" wrap="wrap">
+                        {installment.status !== "paid" &&
+                          onPay &&
+                          installment.can_pay && (
                             <Button
-                              size="compact-xs"
-                              color="red"
-                              variant="subtle"
-                              loading={revokingInstallmentId === installment.id}
-                              onClick={() => onRevoke(installment.id)}
+                              size="xs"
+                              loading={payingInstallmentId === installment.id}
+                              onClick={() => onPay(installment.id)}
                             >
-                              Отменить подтверждение
+                              Оплатить
                             </Button>
                           )}
-                        </Stack>
-                      )}
+                        {(installment.status === "scheduled" ||
+                          installment.status === "pending") &&
+                          onReschedule && (
+                            <Button
+                              size="xs"
+                              color="orange"
+                              variant="light"
+                              loading={
+                                reschedulingInstallmentId === installment.id
+                              }
+                              onClick={() =>
+                                onReschedule(
+                                  installment.id,
+                                  installment.due_date,
+                                )
+                              }
+                            >
+                              Перенести дату
+                            </Button>
+                          )}
+                        {(installment.status === "scheduled" ||
+                          installment.status === "pending") &&
+                          onConfirm && (
+                            <Button
+                              size="xs"
+                              variant="light"
+                              loading={
+                                confirmingInstallmentId === installment.id
+                              }
+                              onClick={() => onConfirm(installment.id)}
+                            >
+                              Подтвердить вручную
+                            </Button>
+                          )}
+                        {installment.status === "paid" &&
+                          installment.paid_at && (
+                            <Stack gap={4} align="flex-end">
+                              <Text size="xs" c="dimmed">
+                                {new Date(installment.paid_at).toLocaleString(
+                                  "ru-RU",
+                                )}
+                              </Text>
+                              {onRevoke && (
+                                <Button
+                                  size="compact-xs"
+                                  color="red"
+                                  variant="subtle"
+                                  loading={
+                                    revokingInstallmentId === installment.id
+                                  }
+                                  onClick={() => onRevoke(installment.id)}
+                                >
+                                  Отменить подтверждение
+                                </Button>
+                              )}
+                            </Stack>
+                          )}
+                      </Group>
                     </Table.Td>
                   </Table.Tr>
                 );

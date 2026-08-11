@@ -4,6 +4,7 @@ import {
   Card,
   Pagination,
   ScrollArea,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Table,
@@ -19,12 +20,15 @@ import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useAdminPaymentStudents } from "../features/payments/queries";
 import { formatRubles } from "../utils/money";
+import type { AdminEmploymentPaymentStatus } from "../types/api";
 
 const PAGE_SIZE = 50;
 
 export function AdminPaymentsPage() {
   const [page, setPage] = useState(1);
-  const query = useAdminPaymentStudents(page);
+  const [status, setStatus] =
+    useState<AdminEmploymentPaymentStatus>("outstanding");
+  const query = useAdminPaymentStudents(status, page);
 
   if (query.isPending)
     return <LoadingState label="Загружаем учеников с офферами…" />;
@@ -40,12 +44,25 @@ export function AdminPaymentsPage() {
       <PageHeader
         eyebrow="Администрирование · финансы"
         title="Ученики с офферами"
-        description="Активные трудоустройства, по которым ученикам ещё нужно выполнить обязательства перед платформой."
+        description="Проверяйте текущие обязательства и полностью выплаченные офферы. В карточке ученика доступна история каждого платежа."
       />
       <AdminPaymentsNavigation active="students" />
 
+      <SegmentedControl
+        value={status}
+        onChange={(value) => {
+          setStatus(value as AdminEmploymentPaymentStatus);
+          setPage(1);
+        }}
+        data={[
+          { value: "outstanding", label: "Ожидают оплаты" },
+          { value: "paid", label: "Выплачены" },
+          { value: "all", label: "Все офферы" },
+        ]}
+      />
+
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-        <Metric title="Учеников платят" value={String(data.total)} />
+        <Metric title="Офферов в выборке" value={String(data.total)} />
         <Metric
           title="Осталось получить"
           value={formatRubles(data.total_remaining_kopecks)}
@@ -82,7 +99,7 @@ export function AdminPaymentsPage() {
                 const overdue = item.overdue_kopecks > 0;
                 return (
                   <Table.Tr
-                    key={item.student_id}
+                    key={item.employment_id}
                     style={
                       overdue
                         ? {
@@ -115,7 +132,14 @@ export function AdminPaymentsPage() {
                       </Text>
                     </Table.Td>
                     <Table.Td fw={700}>
-                      {formatRubles(item.remaining_kopecks)}
+                      {item.paid_kopecks >= item.total_owed_kopecks &&
+                      item.total_owed_kopecks > 0 ? (
+                        <Badge color="green" variant="light">
+                          Выплачено полностью
+                        </Badge>
+                      ) : (
+                        formatRubles(item.remaining_kopecks)
+                      )}
                     </Table.Td>
                     <Table.Td>
                       {overdue ? (
@@ -153,7 +177,9 @@ export function AdminPaymentsPage() {
         </ScrollArea>
         {data.items.length === 0 && (
           <Text c="dimmed" p="xl">
-            Нет активных трудоустройств с непогашенными обязательствами.
+            {status === "paid"
+              ? "Полностью выплаченных офферов пока нет."
+              : "Офферов по выбранному фильтру нет."}
           </Text>
         )}
       </Card>

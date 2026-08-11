@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
 import type {
+  AdminEmploymentPaymentStatus,
   EmploymentMutation,
   PaymentInstallmentStatus,
 } from "../../types/api";
@@ -13,8 +14,8 @@ export const paymentKeys = {
   student: (studentId: string) => ["payments", "student", studentId] as const,
   admin: (status: PaymentInstallmentStatus | null, page: number) =>
     ["payments", "admin", status, page] as const,
-  adminStudents: (page: number) =>
-    ["payments", "admin", "students", page] as const,
+  adminStudents: (status: AdminEmploymentPaymentStatus, page: number) =>
+    ["payments", "admin", "students", status, page] as const,
   adminStudent: (studentId: string) =>
     ["payments", "admin", "student", studentId] as const,
   overdue: (page: number) => ["payments", "admin", "overdue", page] as const,
@@ -91,6 +92,30 @@ export function useUpdateStudentPaymentDays(studentId: string) {
   });
 }
 
+export function useRescheduleAdminPayment(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      installmentId,
+      dueDate,
+      reason,
+    }: {
+      installmentId: string;
+      dueDate: string;
+      reason: string;
+    }) =>
+      api.rescheduleAdminPayment(installmentId, {
+        due_date: dueDate,
+        reason,
+      }),
+    onSuccess: (dashboard) => {
+      queryClient.setQueryData(paymentKeys.adminStudent(studentId), dashboard);
+      queryClient.setQueryData(paymentKeys.student(studentId), dashboard);
+      void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
+    },
+  });
+}
+
 export function useAdminPayments(
   status: PaymentInstallmentStatus | null,
   page: number,
@@ -103,11 +128,18 @@ export function useAdminPayments(
   });
 }
 
-export function useAdminPaymentStudents(page: number) {
+export function useAdminPaymentStudents(
+  status: AdminEmploymentPaymentStatus,
+  page: number,
+) {
   return useQuery({
-    queryKey: paymentKeys.adminStudents(page),
+    queryKey: paymentKeys.adminStudents(status, page),
     queryFn: () =>
-      api.adminPaymentStudents({ limit: 50, offset: (page - 1) * 50 }),
+      api.adminPaymentStudents({
+        status,
+        limit: 50,
+        offset: (page - 1) * 50,
+      }),
     placeholderData: (previous) => previous,
   });
 }

@@ -389,6 +389,7 @@ export interface MyMentorDashboardRead {
 
 export type PaymentInstallmentStatus =
   "scheduled" | "pending" | "paid" | "cancelled";
+export type AdminEmploymentPaymentStatus = "outstanding" | "paid" | "all";
 export type StudentEmploymentStatus = "active" | "terminated";
 export type MentorRewardKind =
   "employment_payment" | "entry_payment" | "program_exclusion" | "legacy_fixed";
@@ -430,6 +431,9 @@ export interface PaymentInstallmentRead {
   paid_at: string | null;
   revoked_at: string | null;
   revocation_reason: string | null;
+  due_date_changed_at?: string | null;
+  previous_due_date?: string | null;
+  due_date_change_reason?: string | null;
   payment_url: string | null;
   can_pay: boolean;
 }
@@ -483,6 +487,7 @@ export interface AdminPaymentListItem {
 }
 
 export interface AdminPaymentStudentRead {
+  employment_id: string;
   student_id: string;
   student_name: string;
   student_telegram_username: string | null;

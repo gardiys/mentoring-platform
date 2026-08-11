@@ -125,6 +125,30 @@ class StudentEmployment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class StudentEmploymentSalaryRevision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "student_employment_salary_revisions"
+    __table_args__ = (
+        Index(
+            "ix_student_employment_salary_revisions_employment_created",
+            "employment_id",
+            "created_at",
+        ),
+        CheckConstraint("previous_net_salary_kopecks > 0", name="previous_salary_positive"),
+        CheckConstraint("new_net_salary_kopecks > 0", name="new_salary_positive"),
+    )
+
+    employment_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("student_employments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    edited_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    previous_net_salary_kopecks: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    new_net_salary_kopecks: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
 class PaymentInstallment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "payment_installments"
     __table_args__ = (
@@ -163,6 +187,29 @@ class PaymentInstallment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     revocation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class PaymentInstallmentDueDateRevision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "payment_installment_due_date_revisions"
+    __table_args__ = (
+        Index(
+            "ix_payment_installment_due_date_revisions_installment_created",
+            "installment_id",
+            "created_at",
+        ),
+    )
+
+    installment_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("payment_installments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    changed_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    previous_due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    new_due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
 
 
 class PaymentAttempt(UUIDPrimaryKeyMixin, TimestampMixin, Base):

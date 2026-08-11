@@ -2471,6 +2471,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/payments/installments/{installment_id}/due-date": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Reschedule Payment */
+        patch: operations["admin_reschedule_payment_api_v1_admin_payments_installments__installment_id__due_date_patch"];
+        trace?: never;
+    };
     "/api/v1/admin/payments/installments/{installment_id}/confirm": {
         parameters: {
             query?: never;
@@ -3306,6 +3323,11 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * AdminEmploymentPaymentStatus
+         * @enum {string}
+         */
+        AdminEmploymentPaymentStatus: "outstanding" | "paid" | "all";
         /** AdminIntelligenceOperationsRead */
         AdminIntelligenceOperationsRead: {
             /**
@@ -4073,6 +4095,11 @@ export interface components {
         };
         /** AdminPaymentStudentRead */
         AdminPaymentStudentRead: {
+            /**
+             * Employment Id
+             * Format: uuid
+             */
+            employment_id: string;
             /**
              * Student Id
              * Format: uuid
@@ -7131,6 +7158,16 @@ export interface components {
             /** Payment Days */
             payment_days: number[];
         };
+        /** PaymentDueDateMutation */
+        PaymentDueDateMutation: {
+            /**
+             * Due Date
+             * Format: date
+             */
+            due_date: string;
+            /** Reason */
+            reason: string;
+        };
         /** PaymentInstallmentRead */
         PaymentInstallmentRead: {
             /**
@@ -7163,6 +7200,12 @@ export interface components {
             revoked_at: string | null;
             /** Revocation Reason */
             revocation_reason: string | null;
+            /** Due Date Changed At */
+            due_date_changed_at?: string | null;
+            /** Previous Due Date */
+            previous_due_date?: string | null;
+            /** Due Date Change Reason */
+            due_date_change_reason?: string | null;
             /** Payment Url */
             payment_url?: string | null;
             /**
@@ -7708,6 +7751,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
         /** WebhookResult */
         WebhookResult: {
@@ -13409,6 +13456,7 @@ export interface operations {
     admin_payment_students_api_v1_admin_payments_students_get: {
         parameters: {
             query?: {
+                status?: components["schemas"]["AdminEmploymentPaymentStatus"];
                 limit?: number;
                 offset?: number;
             };
@@ -13763,6 +13811,46 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PaymentDaysMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentPaymentDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_reschedule_payment_api_v1_admin_payments_installments__installment_id__due_date_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                installment_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PaymentDueDateMutation"];
             };
         };
         responses: {
