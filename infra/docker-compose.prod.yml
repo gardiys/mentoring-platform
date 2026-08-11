@@ -157,16 +157,31 @@ x-logging: &default-logging
     max-file: "5"
 
 services:
+  redis-permissions:
+    image: redis:7.4-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+    restart: "no"
+    user: "0:0"
+    entrypoint: ["chown"]
+    command: ["-R", "999:1000", "/data"]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 16
+    mem_limit: 64m
+    cpus: 0.1
+    network_mode: none
+    volumes:
+      - redis_data:/data
+    logging: *default-logging
+
   redis:
     image: redis:7.4-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     restart: unless-stopped
     init: true
+    user: "999:1000"
     read_only: true
     cap_drop: [ALL]
-    # The official entrypoint needs these only while it fixes /data ownership
-    # and drops from root to the redis user. The redis-server process itself
-    # then runs as uid 999 without ambient capabilities.
-    cap_add: [CHOWN, SETGID, SETUID]
     security_opt: [no-new-privileges:true]
     pids_limit: 128
     mem_limit: 1g
@@ -185,11 +200,15 @@ services:
     volumes:
       - redis_data:/data
     networks: [data]
+    depends_on:
+      redis-permissions:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20
+      start_period: 20s
     logging: *default-logging
 
   postgres-permissions:
