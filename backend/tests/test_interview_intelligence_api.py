@@ -1023,7 +1023,11 @@ async def test_fake_processing_pipeline_reaches_ready(
     assert moderation_detail["matched_card_id"] == str(existing_card_id)
     assert moderation_detail["matched_card_deck_id"] == str(deck_id)
     assert moderation_detail["matched_card_category"] == "python"
+    assert moderation_detail["matched_card_answer"] == "Проверенный существующий ответ"
     assert moderation_detail["matched_card_asked_count"] == 4
+    assert moderation_detail["card_candidates"][0]["answer_markdown"] == (
+        "Проверенный существующий ответ"
+    )
     assert moderation_detail["deck_options"] == [
         {
             "id": str(empty_deck_id),
@@ -1129,7 +1133,7 @@ async def test_fake_processing_pipeline_reaches_ready(
         json={
             "action": "approve",
             "question_markdown": "Как работает GIL в Python?",
-            "answer_markdown": "Проверенный существующий ответ",
+            "answer_markdown": "Обновлённый ответ существующей карточки",
             "category": "python",
             "frequency": "frequent",
         },
@@ -1141,6 +1145,7 @@ async def test_fake_processing_pipeline_reaches_ready(
             select(InterviewCard).where(InterviewCard.slug == "existing-gil-question")
         )
         assert existing_card is not None
+        assert existing_card.answer_markdown == "Обновлённый ответ существующей карточки"
         assert existing_card.asked_count == 5
         assert existing_card.companies is not None
         assert "Ozon" in existing_card.companies

@@ -58,13 +58,6 @@ export function KnowledgeEntryPage() {
           {new Date(query.data.updated_at).toLocaleDateString("ru-RU")}
         </Text>
       </Group>
-      <Paper
-        withBorder
-        p={{ base: "md", sm: "xl" }}
-        className="markdown-content"
-      >
-        <ReactMarkdown>{query.data.content_markdown}</ReactMarkdown>
-      </Paper>
       <ProtectedContentMediaList
         media={query.data.media ?? []}
         resourceKey={`knowledge:${query.data.id}`}
@@ -72,6 +65,13 @@ export function KnowledgeEntryPage() {
           api.knowledgeMediaPlayback(entrySlug, mediaId)
         }
       />
+      <Paper
+        withBorder
+        p={{ base: "md", sm: "xl" }}
+        className="markdown-content"
+      >
+        <ReactMarkdown>{query.data.content_markdown}</ReactMarkdown>
+      </Paper>
     </Stack>
   );
 }

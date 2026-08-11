@@ -85,6 +85,7 @@ function moderationCandidates(
         )?.title ?? "—",
       category: item.matched_card_category,
       question_markdown: item.matched_card_question,
+      answer_markdown: item.matched_card_answer ?? "",
       matched_text: item.matched_card_question,
       asked_count: item.matched_card_asked_count ?? 0,
       frequency: "occasional",
@@ -117,7 +118,10 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
     item.matched_card_category ??
     matchingCategory(initialDeck?.categories ?? [], item.category);
   const [question, setQuestion] = useState(item.question_text);
-  const initialAnswer = item.suggested_answer || item.candidate_answer || "";
+  const newCardInitialAnswer =
+    item.suggested_answer || item.candidate_answer || "";
+  const initialAnswer =
+    exactCardCandidate?.answer_markdown ?? newCardInitialAnswer;
   const [answer, setAnswer] = useState(initialAnswer);
   const [deckId, setDeckId] = useState<string | null>(initialDeckId);
   const [category, setCategory] = useState<string | null>(initialCategory);
@@ -158,7 +162,12 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
 
   const changeDestination = (value: string) => {
     setDestination(value);
-    if (value !== CREATE_NEW_CARD) setAnswer(initialAnswer);
+    setAnswer(
+      value === CREATE_NEW_CARD
+        ? newCardInitialAnswer
+        : (cardCandidates.find((candidate) => candidate.id === value)
+            ?.answer_markdown ?? ""),
+    );
   };
 
   const submit = (action: "approve" | "reject") => {
@@ -176,6 +185,7 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
           action: "approve" as const,
           target_card_id: targetCard.id,
           question_markdown: question.trim(),
+          answer_markdown: answer.trim(),
         }
       : {
           action: "approve" as const,
@@ -299,6 +309,17 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
                             {questionPreview(matchedText)}»
                           </Text>
                         )}
+                        <Text
+                          size="sm"
+                          ml={30}
+                          style={{ whiteSpace: "pre-wrap" }}
+                          lineClamp={4}
+                        >
+                          <Text component="span" fw={600}>
+                            Ответ карточки:{" "}
+                          </Text>
+                          {candidate.answer_markdown}
+                        </Text>
                       </Stack>
                     </Card>
                   );
@@ -361,15 +382,22 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
                 : undefined
             }
           />
-          {!targetCard && (
-            <Textarea
-              label="Проверенный ответ для обратной стороны карточки"
-              value={answer}
-              onChange={(event) => setAnswer(event.currentTarget.value)}
-              minRows={7}
-              required
-            />
-          )}
+          <Textarea
+            label={
+              targetCard
+                ? "Ответ связанной карточки"
+                : "Проверенный ответ для обратной стороны карточки"
+            }
+            description={
+              targetCard
+                ? "При подтверждении изменённый ответ сохранится в существующей карточке."
+                : undefined
+            }
+            value={answer}
+            onChange={(event) => setAnswer(event.currentTarget.value)}
+            minRows={7}
+            required
+          />
           {item.candidate_answer && (
             <Alert color="gray" title="Ответ кандидата">
               <Text style={{ whiteSpace: "pre-wrap" }}>
@@ -459,9 +487,9 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
               loading={moderation.isPending}
               disabled={
                 !question.trim() ||
+                !answer.trim() ||
                 (!targetCard && !isCreateNew) ||
-                (isCreateNew &&
-                  (!answer.trim() || !deckId || !moderationCategory?.trim()))
+                (isCreateNew && (!deckId || !moderationCategory?.trim()))
               }
               onClick={() => submit("approve")}
             >

@@ -30,6 +30,8 @@ const question: AdminQuestionModerationDetail = {
   matched_card_deck_id: deckId,
   matched_card_category: "Python",
   matched_card_question: "## Как работает GIL в Python?",
+  matched_card_answer:
+    "GIL не позволяет потокам одновременно исполнять Python-байткод.",
   matched_card_asked_count: 7,
   card_candidates: [
     {
@@ -38,6 +40,8 @@ const question: AdminQuestionModerationDetail = {
       deck_title: "Backend",
       category: "Python",
       question_markdown: "## Как работает GIL в Python?",
+      answer_markdown:
+        "GIL не позволяет потокам одновременно исполнять Python-байткод.",
       matched_text: "## Как работает GIL в Python?",
       asked_count: 7,
       frequency: "frequent",
@@ -103,10 +107,11 @@ it("автоматически выбирает только точное сов
     }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("textbox", {
-      name: /Проверенный ответ для обратной стороны карточки/,
-    }),
-  ).not.toBeInTheDocument();
+    screen.getByRole("textbox", { name: "Ответ связанной карточки" }),
+  ).toHaveValue(question.matched_card_answer);
+  expect(
+    screen.getAllByText(question.matched_card_answer ?? ""),
+  ).not.toHaveLength(0);
   expect(screen.queryByLabelText("Набор карточек")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Существующая тема")).not.toBeInTheDocument();
 });
@@ -123,6 +128,7 @@ it("требует явного подтверждения точного сов
     matched_card_deck_id: null,
     matched_card_category: null,
     matched_card_question: null,
+    matched_card_answer: null,
     matched_card_asked_count: null,
     card_candidates: [candidate],
   };
@@ -164,6 +170,7 @@ it("связывает похожий вопрос только после яв�
     matched_card_deck_id: null,
     matched_card_category: null,
     matched_card_question: null,
+    matched_card_answer: null,
     matched_card_asked_count: null,
     card_candidates: [
       {
@@ -172,6 +179,8 @@ it("связывает похожий вопрос только после яв�
         deck_title: "Backend",
         category: "Брокеры сообщений",
         question_markdown: "## Расскажи, в чём отличия Kafka и RabbitMQ?",
+        answer_markdown:
+          "Kafka — распределённый журнал, RabbitMQ — брокер очередей.",
         matched_text: "Kafka и RabbitMQ — в чём разница?",
         asked_count: 12,
         frequency: "frequent",
@@ -219,11 +228,14 @@ it("связывает похожий вопрос только после яв�
   expect(screen.getByRole("textbox", { name: /Вопрос/ })).toHaveValue(
     correctedQuestion,
   );
-  expect(
-    screen.queryByRole("textbox", {
-      name: /Проверенный ответ для обратной стороны карточки/,
-    }),
-  ).not.toBeInTheDocument();
+  const linkedAnswerInput = screen.getByRole("textbox", {
+    name: "Ответ связанной карточки",
+  });
+  expect(linkedAnswerInput).toHaveValue(
+    "Kafka — распределённый журнал, RabbitMQ — брокер очередей.",
+  );
+  await user.clear(linkedAnswerInput);
+  await user.type(linkedAnswerInput, "Обновлённый проверенный ответ");
   await user.click(screen.getByRole("button", { name: "Связать с карточкой" }));
 
   await waitFor(() =>
@@ -234,10 +246,10 @@ it("связывает похожий вопрос только после яв�
         action: "approve",
         target_card_id: candidateId,
         question_markdown: correctedQuestion,
+        answer_markdown: "Обновлённый проверенный ответ",
       },
     ),
   );
-  expect(moderate.mock.calls[0]?.[2]).not.toHaveProperty("answer_markdown");
 });
 
 it("позволяет явно создать новую карточку вместо похожей", async () => {
@@ -250,6 +262,7 @@ it("позволяет явно создать новую карточку вм�
     matched_card_deck_id: null,
     matched_card_category: null,
     matched_card_question: null,
+    matched_card_answer: null,
     matched_card_asked_count: null,
     card_candidates: [
       {
@@ -258,6 +271,7 @@ it("позволяет явно создать новую карточку вм�
         deck_title: "Backend",
         category: "Python",
         question_markdown: "## Какие гарантии доставки есть у RabbitMQ?",
+        answer_markdown: "At most once, at least once и exactly once.",
         matched_text: "Какие гарантии доставки есть у RabbitMQ?",
         asked_count: 2,
         frequency: "occasional",
@@ -316,6 +330,7 @@ it("публикует новый вопрос в выбранную сущес�
     matched_card_deck_id: null,
     matched_card_category: null,
     matched_card_question: null,
+    matched_card_answer: null,
     matched_card_asked_count: null,
     card_candidates: [],
   };
@@ -361,6 +376,7 @@ it("создаёт новую тему только после явного вы
     matched_card_deck_id: null,
     matched_card_category: null,
     matched_card_question: null,
+    matched_card_answer: null,
     matched_card_asked_count: null,
     card_candidates: [],
   };

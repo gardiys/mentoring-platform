@@ -78,7 +78,9 @@ function ProtectedContentMediaPlayer({
   resourceKey: string;
   loadPlayback: (mediaId: string) => Promise<ContentMediaPlayback>;
 }) {
-  const [opened, setOpened] = useState(false);
+  const processingStatus = contentMediaProcessingStatus(item);
+  const playbackAvailable = contentMediaPlaybackAvailable(item);
+  const [opened, setOpened] = useState(playbackAvailable);
   const playback = useProtectedContentMediaPlayback(resourceKey, item.id, () =>
     loadPlayback(item.id),
   );
@@ -89,14 +91,21 @@ function ProtectedContentMediaPlayer({
   const resumeTimeRef = useRef(0);
   const resumePlaybackRef = useRef(false);
   const automaticRecoveryAttemptedRef = useRef(false);
+  const initialPlaybackRequestedRef = useRef(false);
   const displayTitle = item.title || item.filename;
-  const processingStatus = contentMediaProcessingStatus(item);
-  const playbackAvailable = contentMediaPlaybackAvailable(item);
   const isReady = processingStatus === "ready";
   const preparation = PREPARATION_STATUS[processingStatus];
   const playbackData = playback.data;
   const playbackDataUpdatedAt = playback.dataUpdatedAt;
   const refetchPlayback = playback.refetch;
+
+  useEffect(() => {
+    if (!playbackAvailable || initialPlaybackRequestedRef.current) return;
+    initialPlaybackRequestedRef.current = true;
+    setOpened(true);
+    setOpening(true);
+    void refetchPlayback().finally(() => setOpening(false));
+  }, [playbackAvailable, refetchPlayback]);
 
   useEffect(() => {
     if (!opened || !playbackData) return;

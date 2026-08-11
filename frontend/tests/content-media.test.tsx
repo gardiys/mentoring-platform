@@ -655,7 +655,7 @@ it("редактор темы роадмапа безопасно изменяе
   );
 });
 
-it("лениво открывает защищённое видео статьи и обновляет ticket", async () => {
+it("показывает видео статьи перед текстом и обновляет ticket", async () => {
   const entry: KnowledgeEntryDetail = {
     id: adminEntry.id,
     kind: adminEntry.kind,
@@ -680,10 +680,20 @@ it("лениво открывает защищённое видео статьи
   );
 
   expect(await screen.findByText("Разбор asyncio")).toBeInTheDocument();
-  expect(playback).not.toHaveBeenCalled();
-  await userEvent.click(screen.getByRole("button", { name: "Открыть запись" }));
   const video = await screen.findByLabelText("Видео: Разбор asyncio");
+  const mediaHeading = screen.getByRole("heading", { name: "Аудио и видео" });
+  const articleHeading = screen
+    .getAllByRole("heading", { name: "Asyncio" })
+    .at(-1);
+  expect(articleHeading).toBeDefined();
+  expect(
+    mediaHeading.compareDocumentPosition(articleHeading as HTMLElement) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   expect(playback).toHaveBeenCalledWith(entry.slug, media.id);
+  expect(
+    screen.getByRole("button", { name: "Скрыть запись" }),
+  ).toBeInTheDocument();
   expect(video).toHaveAttribute("controlsList", "nodownload noremoteplayback");
   expect(video).toHaveAttribute("disablePictureInPicture");
   expect(video).toHaveAttribute("preload", "metadata");
@@ -719,9 +729,6 @@ it("сохраняет воспроизведение legacy media без пол
     "/knowledge/entries/:entrySlug",
   );
 
-  await userEvent.click(
-    await screen.findByRole("button", { name: "Открыть запись" }),
-  );
   expect(
     await screen.findByLabelText("Видео: Разбор asyncio"),
   ).toBeInTheDocument();
@@ -794,7 +801,6 @@ it("показывает статус подготовки, но разреша�
   expect(
     screen.getByText(/можно смотреть исходную запись/),
   ).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "Открыть запись" }));
   expect(
     await screen.findByLabelText("Видео: Разбор asyncio"),
   ).toBeInTheDocument();
@@ -895,9 +901,6 @@ it("один раз автоматически обновляет доступ �
     "/knowledge/entries/:entrySlug",
   );
 
-  await userEvent.click(
-    await screen.findByRole("button", { name: "Открыть запись" }),
-  );
   const firstPlayer = await screen.findByLabelText("Видео: Разбор asyncio");
   fireEvent.error(firstPlayer);
 
@@ -944,9 +947,16 @@ it("открывает защищённое аудио в теме роадма�
   renderPage(<TopicPage />, `/topics/${topic.id}`, "/topics/:topicId");
 
   expect(await screen.findByText(audio.title)).toBeInTheDocument();
-  expect(playback).not.toHaveBeenCalled();
-  await userEvent.click(screen.getByRole("button", { name: "Открыть запись" }));
   const player = await screen.findByLabelText(`Аудио: ${audio.title}`);
+  const mediaHeading = screen.getByRole("heading", { name: "Аудио и видео" });
+  const materialHeading = screen
+    .getAllByRole("heading", { name: "Горутины" })
+    .at(-1);
+  expect(materialHeading).toBeDefined();
+  expect(
+    mediaHeading.compareDocumentPosition(materialHeading as HTMLElement) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   expect(player).toHaveAttribute("controlsList", "nodownload noremoteplayback");
   expect(player).toHaveAttribute("preload", "metadata");
   expect(playback).toHaveBeenCalledWith(topic.id, audio.id);

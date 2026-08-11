@@ -1338,6 +1338,15 @@ async def moderate_intelligence_question(
             refresh_card_frequency(card)
             session.add(card)
             await session.flush()
+        elif payload.answer_markdown is not None:
+            answer_text = payload.answer_markdown.strip()
+            if not answer_text:
+                api_error(
+                    422,
+                    "interview_card_answer_required",
+                    "A verified answer is required",
+                )
+            card.answer_markdown = answer_text
         assert deck is not None
         category = card.category
         if question.question_text != question_text:
@@ -1560,6 +1569,9 @@ async def get_admin_question_moderation(
         matched_card_question=(
             exact_candidate.question_markdown if exact_candidate is not None else None
         ),
+        matched_card_answer=(
+            exact_candidate.answer_markdown if exact_candidate is not None else None
+        ),
         matched_card_asked_count=(
             exact_candidate.asked_count if exact_candidate is not None else None
         ),
@@ -1627,6 +1639,7 @@ async def _question_card_candidates(
             deck_title=decks_by_id[card.deck_id].title,
             category=card.category,
             question_markdown=card.question_markdown,
+            answer_markdown=card.answer_markdown,
             asked_count=card.asked_count,
             frequency=effective_card_frequency(card),
             similarity=candidate.similarity,

@@ -4194,6 +4194,8 @@ export interface components {
             category: string;
             /** Question Markdown */
             question_markdown: string;
+            /** Answer Markdown */
+            answer_markdown: string;
             /** Asked Count */
             asked_count: number;
             frequency: components["schemas"]["InterviewCardFrequency"];
@@ -4273,6 +4275,8 @@ export interface components {
             matched_card_category: string | null;
             /** Matched Card Question */
             matched_card_question: string | null;
+            /** Matched Card Answer */
+            matched_card_answer: string | null;
             /** Matched Card Asked Count */
             matched_card_asked_count: number | null;
             /** Card Candidates */

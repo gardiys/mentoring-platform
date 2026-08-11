@@ -864,6 +864,7 @@ export interface AdminQuestionModerationDetail extends AdminQuestionModerationSu
   matched_card_deck_id: string | null;
   matched_card_category: string | null;
   matched_card_question: string | null;
+  matched_card_answer: string | null;
   matched_card_asked_count: number | null;
   card_candidates: AdminQuestionModerationCardCandidate[];
   deck_options: AdminQuestionModerationDeckOption[];
@@ -875,6 +876,7 @@ export interface AdminQuestionModerationCardCandidate {
   deck_title: string;
   category: string;
   question_markdown: string;
+  answer_markdown: string;
   matched_text: string;
   asked_count: number;
   frequency: "frequent" | "occasional";

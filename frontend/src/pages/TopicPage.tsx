@@ -85,6 +85,13 @@ export function TopicPage() {
           </Text>
         )}
       </Group>
+      <ProtectedContentMediaList
+        media={query.data.media ?? []}
+        resourceKey={`roadmap:${query.data.id}`}
+        loadPlayback={(mediaId) =>
+          api.roadmapTopicMediaPlayback(query.data.id, mediaId)
+        }
+      />
       <Paper
         withBorder
         p={{ base: "md", sm: "xl" }}
@@ -107,13 +114,6 @@ export function TopicPage() {
           {query.data.content_markdown}
         </ReactMarkdown>
       </Paper>
-      <ProtectedContentMediaList
-        media={query.data.media ?? []}
-        resourceKey={`roadmap:${query.data.id}`}
-        loadPlayback={(mediaId) =>
-          api.roadmapTopicMediaPlayback(query.data.id, mediaId)
-        }
-      />
       <Group>
         {query.data.status === "not_started" && (
           <Button

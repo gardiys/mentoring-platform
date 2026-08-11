@@ -307,6 +307,7 @@ class AdminQuestionModerationCardCandidate(BaseModel):
     deck_title: str
     category: str
     question_markdown: str
+    answer_markdown: str
     asked_count: int
     frequency: InterviewCardFrequency
     similarity: float = Field(ge=0, le=1)
@@ -322,6 +323,7 @@ class AdminQuestionModerationDetail(AdminQuestionModerationSummary):
     matched_card_deck_id: UUID | None
     matched_card_category: str | None
     matched_card_question: str | None
+    matched_card_answer: str | None
     matched_card_asked_count: int | None
     card_candidates: list[AdminQuestionModerationCardCandidate]
     deck_options: list[AdminQuestionModerationDeckOption]
