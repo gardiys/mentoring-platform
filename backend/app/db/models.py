@@ -27,6 +27,8 @@ from app.interviews.intelligence_models import (
 from app.interviews.models import (
     Company,
     CompanyAlias,
+    CompanyAliasProposal,
+    CompanyAliasProposalStatus,
     InterviewCard,
     InterviewCardFrequency,
     InterviewCardOccurrence,
@@ -89,6 +91,8 @@ from app.users.models import User, UserRole
 __all__ = [
     "Company",
     "CompanyAlias",
+    "CompanyAliasProposal",
+    "CompanyAliasProposalStatus",
     "MentorStudent",
     "MentorTrackAssignment",
     "MentorStudentDocument",

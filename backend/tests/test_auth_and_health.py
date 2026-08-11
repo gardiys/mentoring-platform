@@ -136,3 +136,17 @@ async def test_dev_auth_is_disabled_outside_development(
     response = await client.get("/api/v1/me", headers=auth(seeded.student_id))
 
     assert response.status_code == 401
+
+
+async def test_dev_auth_requires_explicit_opt_in(
+    client: AsyncClient, seeded: SeededData, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(auth_dependencies.settings, "app_env", "development")
+    monkeypatch.setattr(auth_dependencies.settings, "dev_auth_enabled", False)
+
+    disabled = await client.get("/api/v1/me", headers=auth(seeded.student_id))
+    monkeypatch.setattr(auth_dependencies.settings, "dev_auth_enabled", True)
+    enabled = await client.get("/api/v1/me", headers=auth(seeded.student_id))
+
+    assert disabled.status_code == 401
+    assert enabled.status_code == 200

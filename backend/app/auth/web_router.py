@@ -17,6 +17,7 @@ from app.auth.web_session import (
     code_challenge,
     create_browser_session,
     create_oauth_state,
+    read_browser_session,
     read_oauth_state,
     safe_next_path,
 )
@@ -149,7 +150,12 @@ async def telegram_callback(
     response = RedirectResponse(_frontend_redirect(next_path), status_code=302)
     response.set_cookie(
         BROWSER_SESSION_COOKIE,
-        create_browser_session(user.id, session_secret, settings.web_session_ttl_seconds),
+        create_browser_session(
+            user.id,
+            user.session_version,
+            session_secret,
+            settings.web_session_ttl_seconds,
+        ),
         max_age=settings.web_session_ttl_seconds,
         httponly=True,
         secure=_cookie_secure(),
@@ -161,7 +167,24 @@ async def telegram_callback(
 
 
 @router.post("/logout", status_code=204, response_class=Response)
-async def logout(response: Response) -> Response:
+async def logout(
+    response: Response,
+    session: Session,
+    browser_session: str | None = Cookie(default=None, alias=BROWSER_SESSION_COOKIE),
+) -> Response:
+    if browser_session is not None and settings.web_session_secret is not None:
+        try:
+            identity = read_browser_session(
+                browser_session,
+                settings.web_session_secret.get_secret_value(),
+            )
+        except SignedPayloadError:
+            identity = None
+        if identity is not None:
+            user = await session.get(User, identity.user_id, with_for_update=True)
+            if user is not None and user.session_version == identity.version:
+                user.session_version += 1
+                await session.commit()
     response.delete_cookie(BROWSER_SESSION_COOKIE, path="/")
     response.status_code = 204
     return response

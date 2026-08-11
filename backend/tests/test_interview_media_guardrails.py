@@ -29,7 +29,10 @@ from app.interviews.media_guardrails import (
 )
 from app.interviews.uploads import (
     SAFE_ATTACHMENT_CONTENT_TYPES,
+    SAFE_AUDIO_CONTENT_TYPES,
     SAFE_OFFER_CONTENT_TYPES,
+    SAFE_RASTER_IMAGE_CONTENT_TYPES,
+    SAFE_VIDEO_CONTENT_TYPES,
     CompletedMultipartUploadPart,
     InterviewUploadStore,
     StoredUpload,
@@ -137,6 +140,25 @@ class FakeObjectMetadataClient:
     def head_object(self, **kwargs: Any) -> dict[str, int]:
         self.requests.append(kwargs)
         return {"ContentLength": self.size}
+
+
+class FakeDownloadClient:
+    def __init__(self) -> None:
+        self.request: dict[str, Any] | None = None
+
+    def generate_presigned_url(
+        self,
+        operation: str,
+        *,
+        Params: dict[str, Any],
+        ExpiresIn: int,
+    ) -> str:
+        self.request = {
+            "operation": operation,
+            "params": Params,
+            "expires_in": ExpiresIn,
+        }
+        return "https://s3.example.test/download"
 
 
 def multipart_upload_store() -> tuple[
@@ -346,6 +368,45 @@ async def test_multipart_token_binds_actor_category_and_resource() -> None:
     assert client.complete_requests == []
 
 
+async def test_expired_multipart_token_cannot_finalize_upload() -> None:
+    store, client, _ = multipart_upload_store()
+    store.multipart_session_expires_in = -1
+    user_id = uuid4()
+    intent = await store.create_multipart_upload_intent(
+        user_id=user_id,
+        category="media",
+        resource="interview-stage-media:process:stage",
+        filename="recording.mp4",
+        content_type="video/mp4",
+        size=130 * 1024 * 1024,
+        allowed_content_types=("video",),
+        max_bytes=2 * 1024 * 1024 * 1024,
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        await store.complete_multipart_upload(
+            user_id=user_id,
+            category="media",
+            resource="interview-stage-media:process:stage",
+            storage_key=intent.storage_key,
+            upload_id=intent.upload_id,
+            upload_token=intent.upload_token,
+            filename=intent.filename,
+            content_type=intent.content_type,
+            expected_size=intent.size,
+            parts=tuple(
+                CompletedMultipartUploadPart(part_number=number, etag=f'"etag-{number}"')
+                for number in range(1, 4)
+            ),
+            allowed_content_types=("video",),
+            max_bytes=2 * 1024 * 1024 * 1024,
+        )
+
+    assert caught.value.status_code == 404
+    assert caught.value.detail["code"] == "interview_upload_not_found"
+    assert client.complete_requests == []
+
+
 async def test_multipart_completion_reconciles_ambiguous_provider_timeout() -> None:
     store, client, _ = multipart_upload_store()
     user_id = uuid4()
@@ -423,6 +484,49 @@ async def test_multipart_completion_deletes_metadata_mismatch() -> None:
 
     assert caught.value.status_code == 422
     assert client.deleted == [{"Bucket": "interview-files", "Key": intent.storage_key}]
+
+
+@pytest.mark.parametrize(
+    ("content_type", "inline", "expected_type", "expected_disposition"),
+    [
+        ("video/mp4", True, "video/mp4", "inline"),
+        ("application/pdf", True, "application/pdf", "inline"),
+        ("image/svg+xml", True, "application/octet-stream", "attachment"),
+        ("text/html; charset=utf-8", True, "application/octet-stream", "attachment"),
+        ("text/plain", True, "text/plain", "attachment"),
+    ],
+)
+def test_download_url_never_renders_active_content_inline(
+    content_type: str,
+    inline: bool,
+    expected_type: str,
+    expected_disposition: str,
+) -> None:
+    client = FakeDownloadClient()
+    store = object.__new__(InterviewUploadStore)
+    store.bucket = "interview-files"
+    store.public_client = client
+    store.legacy_client = client
+    store.expires_in = 900
+
+    url = store.download_url(
+        StoredUpload(
+            storage_key="attachments/user/object",
+            filename="unsafe/name\r\nquote.svg",
+            content_type=content_type,
+            size=10,
+        ),
+        inline=inline,
+    )
+
+    assert url == "https://s3.example.test/download"
+    assert client.request is not None
+    params = client.request["params"]
+    assert params["ResponseContentType"] == expected_type
+    assert params["ResponseContentDisposition"].startswith(f"{expected_disposition};")
+    assert "\r" not in params["ResponseContentDisposition"]
+    assert "\n" not in params["ResponseContentDisposition"]
+    assert "%2F" in params["ResponseContentDisposition"]
 
 
 async def test_multipart_abort_requires_signed_actor_binding() -> None:
@@ -534,6 +638,31 @@ def test_attachment_and_offer_allowlists_only_contain_safe_exact_mime_types() ->
         SAFE_ATTACHMENT_CONTENT_TYPES,
     )
     assert MEDIA_CONTAINER_ALLOWLIST.keys() == MEDIA_CODEC_ALLOWLIST.keys()
+
+
+@pytest.mark.parametrize(
+    ("family", "safe_type", "active_type"),
+    [
+        ("image", "image/png", "image/svg+xml"),
+        ("text", "text/plain", "text/html"),
+        ("audio", "audio/mpeg", "audio/svg+xml"),
+        ("video", "video/mp4", "video/svg+xml"),
+    ],
+)
+def test_mime_family_shortcuts_expand_to_safe_exact_allowlists(
+    family: str,
+    safe_type: str,
+    active_type: str,
+) -> None:
+    assert InterviewUploadStore._content_type_allowed(safe_type, (family,))
+    assert not InterviewUploadStore._content_type_allowed(active_type, (family,))
+
+
+def test_safe_media_families_match_supported_probe_types() -> None:
+    assert set(SAFE_AUDIO_CONTENT_TYPES + SAFE_VIDEO_CONTENT_TYPES) == set(
+        MEDIA_CONTAINER_ALLOWLIST
+    )
+    assert "image/svg+xml" not in SAFE_RASTER_IMAGE_CONTENT_TYPES
 
 
 def test_probe_media_checks_real_container_codec_and_duration(

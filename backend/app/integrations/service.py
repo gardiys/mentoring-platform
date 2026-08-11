@@ -16,7 +16,7 @@ from app.payments.service import (
     sync_one_time_mentor_rewards,
 )
 from app.roadmaps.models import Roadmap
-from app.tracks.models import LearningTrack
+from app.tracks.models import LearningTrack, LearningTrackEnrollment
 from app.tracks.service import (
     ensure_track_access,
     get_published_track_by_slug,
@@ -40,20 +40,7 @@ async def provision_telegram_student(
 ) -> ProvisionedStudent:
     track = await get_published_track_by_slug(session, payload.track_slug)
 
-    mentor = None
-    if payload.mentor_telegram_id is not None:
-        mentor = await session.scalar(
-            select(User).where(User.telegram_id == payload.mentor_telegram_id)
-        )
-        if mentor is None or mentor.role not in {UserRole.MENTOR, UserRole.ADMIN}:
-            api_error(422, "mentor_not_found", "Mentor Telegram account was not found")
-
     email = payload.email or None
-    if email is not None:
-        email_owner = await session.scalar(select(User).where(User.email == email))
-        if email_owner is not None and email_owner.telegram_id != payload.telegram_id:
-            api_error(409, "email_already_used", "Email is already used by another user")
-
     now = datetime.now(UTC)
     candidate_id = uuid4()
     try:
@@ -96,41 +83,33 @@ async def provision_telegram_student(
                 "Telegram account belongs to a non-student user",
             )
 
-        user.first_name = payload.first_name
-        user.last_name = payload.last_name or None
-        if payload.telegram_username is not None:
-            user.telegram_username = payload.telegram_username.lstrip("@") or None
-        if email is not None:
-            user.email = email
-        user.onboarding_completed_at = user.onboarding_completed_at or now
-        user.learning_start_date = user.learning_start_date or user.created_at.date()
-        user.is_active = True
-        if payload.repayment_percent is not None:
-            await change_student_repayment_percent(
+        # This endpoint provisions a new student after onboarding payment. It
+        # is deliberately create-only for canonical profile data, financial
+        # terms, access state, track access, and mentor assignment:
+        # delayed/replayed bot requests must not undo later administrator
+        # changes (including an explicitly revoked track enrollment).
+        access_created = False
+        if created:
+            access_created = await ensure_track_access(
                 session,
-                user.id,
-                payload.repayment_percent,
+                user_id=user.id,
+                track_id=track.id,
             )
-            user.repayment_percent = payload.repayment_percent
-        user.entry_payment_kopecks = int(
-            (payload.entry_payment_rubles * 100).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
-        )
-        user.entry_payment_paid_at = (
-            user.entry_payment_paid_at or now if payload.entry_payment_paid else None
-        )
+            mentor = None
+            if payload.mentor_telegram_id is not None:
+                mentor = await session.scalar(
+                    select(User).where(User.telegram_id == payload.mentor_telegram_id)
+                )
+                if mentor is None or mentor.role not in {UserRole.MENTOR, UserRole.ADMIN}:
+                    api_error(422, "mentor_not_found", "Mentor Telegram account was not found")
 
-        access_created = await ensure_track_access(
-            session,
-            user_id=user.id,
-            track_id=track.id,
-        )
-        if mentor is not None:
-            relation = await session.scalar(
-                select(MentorStudent).where(MentorStudent.student_id == user.id)
-            )
-            if relation is None:
+            if payload.repayment_percent is not None:
+                await change_student_repayment_percent(
+                    session,
+                    user.id,
+                    payload.repayment_percent,
+                )
+            if mentor is not None:
                 session.add(
                     MentorStudent(
                         mentor_id=mentor.id,
@@ -146,26 +125,29 @@ async def provision_telegram_student(
                         ),
                     )
                 )
-            else:
-                relation.mentor_id = mentor.id
-                if payload.mentor_reward_percent is not None:
-                    relation.reward_percent = payload.mentor_reward_percent
-                elif relation.reward_percent is None:
-                    relation.reward_percent = (
-                        Decimal("45") if track.slug.casefold() == "go" else Decimal("60")
-                    )
-            await session.flush()
-            await sync_one_time_mentor_rewards(session, user.id)
+                await session.flush()
+                await sync_one_time_mentor_rewards(session, user.id)
         await session.commit()
         await session.refresh(user)
     except IntegrityError:
         await session.rollback()
         api_error(409, "student_provisioning_conflict", "Student data conflicts with an account")
 
+    has_selected_track_access = (
+        await session.get(
+            LearningTrackEnrollment,
+            {"user_id": user.id, "track_id": track.id},
+        )
+        is not None
+    )
     return ProvisionedStudent(
         user=user,
         track=track,
-        roadmaps=await track_roadmap_models(session, track.id, published_only=True),
+        roadmaps=(
+            await track_roadmap_models(session, track.id, published_only=True)
+            if has_selected_track_access
+            else []
+        ),
         created=created,
         access_created=access_created,
     )

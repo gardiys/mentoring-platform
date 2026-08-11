@@ -75,18 +75,20 @@ async def get_current_user(
 
     if browser_session is not None and settings.web_session_secret is not None:
         try:
-            user_id = read_browser_session(
+            browser_identity = read_browser_session(
                 browser_session,
                 settings.web_session_secret.get_secret_value(),
             )
         except SignedPayloadError:
             unauthorized("Browser session is invalid or has expired")
-        user = await session.get(User, user_id)
+        user = await session.get(User, browser_identity.user_id)
         if user is None:
             api_error(401, "user_not_found", "User was not found")
+        if user.session_version != browser_identity.version:
+            unauthorized("Browser session has been revoked")
         return _ensure_platform_access(user)
 
-    if settings.app_env != "development":
+    if settings.app_env != "development" or not settings.dev_auth_enabled:
         unauthorized()
     if x_dev_user_id is None:
         unauthorized()

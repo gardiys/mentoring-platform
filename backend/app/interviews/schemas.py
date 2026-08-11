@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.interviews.intelligence_models import IntelligenceProcessingStatus
 from app.interviews.models import (
+    CompanyAliasProposalStatus,
     InterviewCardFrequency,
     InterviewCardFrequencyMode,
     InterviewProcessStatus,
@@ -341,7 +342,21 @@ class InterviewProcessMutation(BaseModel):
     track_id: UUID
     company_id: UUID | None = None
     company_alias: str | None = Field(default=None, min_length=1, max_length=240)
+    company_alias_confirmed: bool = False
     recruiter_telegram_usernames: list[str] | None = Field(default=None, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_company_alias_confirmation(self) -> "InterviewProcessMutation":
+        if self.company_alias is not None and (
+            self.company_id is None or not self.company_alias_confirmed
+        ):
+            raise ValueError(
+                "An alternative company name requires a selected company "
+                "and explicit confirmation"
+            )
+        if self.company_alias_confirmed and self.company_alias is None:
+            raise ValueError("No alternative company name was provided")
+        return self
 
     @field_validator("recruiter_telegram_usernames")
     @classmethod
@@ -440,6 +455,46 @@ class AdminInterviewProcessPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AdminCompanyAliasProposalRead(BaseModel):
+    id: UUID
+    company_id: UUID | None
+    company_name: str
+    alias_name: str
+    suggested_by_user_id: UUID | None
+    suggested_by_name: str | None
+    suggested_by_telegram_username: str | None
+    status: CompanyAliasProposalStatus
+    conflicting_company_id: UUID | None
+    conflicting_company_name: str | None
+    reviewed_by_name: str | None
+    reviewed_at: datetime | None
+    rejection_reason: str | None
+    created_at: datetime
+
+
+class AdminCompanyAliasProposalPage(BaseModel):
+    items: list[AdminCompanyAliasProposalRead]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminCompanyAliasProposalMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    action: Literal["approve", "reject"]
+    merge_conflicting_company: bool = False
+    rejection_reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_decision(self) -> "AdminCompanyAliasProposalMutation":
+        if self.action == "reject" and not self.rejection_reason:
+            raise ValueError("A rejection reason is required")
+        if self.action == "reject" and self.merge_conflicting_company:
+            raise ValueError("Rejected aliases cannot merge companies")
+        return self
 
 
 class InterviewProcessDetail(InterviewProcessSummary):

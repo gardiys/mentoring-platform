@@ -1,8 +1,12 @@
 from uuid import UUID, uuid4
 
 from httpx import AsyncClient
+from pydantic import SecretStr
+from pytest import MonkeyPatch
 from sqlalchemy import func, select
 
+from app.auth import dependencies as auth_dependencies
+from app.auth.web_session import create_browser_session
 from app.mentors.models import MentorStudent, StudentLearningStatus
 from app.roadmaps.models import RoadmapEnrollment
 from app.tracks.models import LearningTrackEnrollment
@@ -102,8 +106,11 @@ async def test_admin_edits_student_data_and_track_access(
 
     async with TestSession() as session:
         enrollment = await session.get(RoadmapEnrollment, (seeded.student_id, seeded.roadmap_id))
+        student = await session.get(User, seeded.student_id)
         assert enrollment is not None
+        assert student is not None
         assert enrollment.started_at.date().isoformat() == "2026-07-15"
+        assert student.session_version == 2
 
 
 async def test_admin_suspends_and_restores_student_without_losing_tracks(
@@ -137,6 +144,39 @@ async def test_admin_suspends_and_restores_student_without_losing_tracks(
     assert track_count == 1
     assert restored.json()["is_active"] is True
     assert [roadmap["slug"] for roadmap in available.json()] == ["python-backend"]
+
+
+async def test_suspend_and_reactivate_does_not_revive_an_issued_browser_session(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    secret = "student-session-revocation-test-secret"
+    issued_session = create_browser_session(seeded.student_id, 1, secret, 3_600)
+
+    suspended = await client.patch(
+        f"/api/v1/admin/students/{seeded.student_id}/access",
+        headers=auth(seeded.admin_id),
+        json={"is_active": False},
+    )
+    restored = await client.patch(
+        f"/api/v1/admin/students/{seeded.student_id}/access",
+        headers=auth(seeded.admin_id),
+        json={"is_active": True},
+    )
+    assert suspended.status_code == restored.status_code == 200
+
+    monkeypatch.setattr(auth_dependencies.settings, "app_env", "production")
+    monkeypatch.setattr(
+        auth_dependencies.settings,
+        "web_session_secret",
+        SecretStr(secret),
+    )
+    client.cookies.set("mentoring_session", issued_session)
+    replayed = await client.get("/api/v1/me")
+
+    assert replayed.status_code == 401
+    assert replayed.json()["detail"]["code"] == "unauthorized"
 
 
 async def test_admin_student_list_supports_search_access_filter_and_options(

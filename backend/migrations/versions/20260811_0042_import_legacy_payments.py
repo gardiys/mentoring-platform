@@ -439,6 +439,9 @@ def _import_installment(
 
 
 def upgrade() -> None:
+    # Legacy PII exports are intentionally absent from deployment images.
+    if not all(path.is_file() for path in DATA_FILES):
+        return
     user_rows = _read_rows(USER_FILE)
     company_rows = _read_rows(COMPANY_FILE)
     offer_rows = _read_rows(OFFER_FILE)
@@ -498,6 +501,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if not OFFER_FILE.is_file() or not PAYMENT_FILE.is_file():
+        return
     offer_rows = _read_rows(OFFER_FILE)
     payment_rows = _read_rows(PAYMENT_FILE)
     accepted_offer_ids = {

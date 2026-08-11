@@ -57,6 +57,45 @@ SAFE_RASTER_IMAGE_CONTENT_TYPES = (
     "image/tiff",
     "image/webp",
 )
+SAFE_AUDIO_CONTENT_TYPES = (
+    "audio/aac",
+    "audio/amr",
+    "audio/flac",
+    "audio/mp3",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/ogg",
+    "audio/vnd.wave",
+    "audio/wav",
+    "audio/webm",
+    "audio/x-flac",
+    "audio/x-m4a",
+    "audio/x-ms-wma",
+    "audio/x-wav",
+)
+SAFE_VIDEO_CONTENT_TYPES = (
+    "video/3gpp",
+    "video/mp4",
+    "video/mpeg",
+    "video/ogg",
+    "video/quicktime",
+    "video/webm",
+    "video/x-matroska",
+    "video/x-ms-wmv",
+    "video/x-msvideo",
+)
+SAFE_TEXT_CONTENT_TYPES = (
+    "text/csv",
+    "text/markdown",
+    "text/plain",
+    "text/rtf",
+)
+SAFE_CONTENT_TYPE_FAMILIES = {
+    "audio": frozenset(SAFE_AUDIO_CONTENT_TYPES),
+    "image": frozenset(SAFE_RASTER_IMAGE_CONTENT_TYPES),
+    "text": frozenset(SAFE_TEXT_CONTENT_TYPES),
+    "video": frozenset(SAFE_VIDEO_CONTENT_TYPES),
+}
 SAFE_ATTACHMENT_CONTENT_TYPES = (
     "application/msword",
     "application/pdf",
@@ -76,6 +115,22 @@ SAFE_ATTACHMENT_CONTENT_TYPES = (
     *SAFE_RASTER_IMAGE_CONTENT_TYPES,
 )
 SAFE_OFFER_CONTENT_TYPES = ("application/pdf", *SAFE_RASTER_IMAGE_CONTENT_TYPES)
+SAFE_DOWNLOAD_CONTENT_TYPES = frozenset(
+    (
+        *SAFE_ATTACHMENT_CONTENT_TYPES,
+        *SAFE_AUDIO_CONTENT_TYPES,
+        *SAFE_OFFER_CONTENT_TYPES,
+        *SAFE_VIDEO_CONTENT_TYPES,
+    )
+)
+SAFE_INLINE_CONTENT_TYPES = frozenset(
+    (
+        "application/pdf",
+        *SAFE_AUDIO_CONTENT_TYPES,
+        *SAFE_RASTER_IMAGE_CONTENT_TYPES,
+        *SAFE_VIDEO_CONTENT_TYPES,
+    )
+)
 logger = logging.getLogger(__name__)
 
 
@@ -662,8 +717,16 @@ class InterviewUploadStore:
         external_location = self._external_media_location(upload.storage_key)
         client = self.legacy_client if external_location is not None else self.public_client
         bucket, key = external_location or (self.bucket, upload.storage_key)
-        disposition_type = "inline" if inline else "attachment"
-        disposition = f"{disposition_type}; filename*=UTF-8''{quote(upload.filename)}"
+        content_type = upload.content_type.split(";", 1)[0].strip().lower()
+        response_content_type = (
+            content_type
+            if content_type in SAFE_DOWNLOAD_CONTENT_TYPES
+            else "application/octet-stream"
+        )
+        disposition_type = (
+            "inline" if inline and content_type in SAFE_INLINE_CONTENT_TYPES else "attachment"
+        )
+        disposition = f"{disposition_type}; filename*=UTF-8''{quote(upload.filename, safe='')}"
         try:
             return str(
                 client.generate_presigned_url(
@@ -672,7 +735,7 @@ class InterviewUploadStore:
                         "Bucket": bucket,
                         "Key": key,
                         "ResponseContentDisposition": disposition,
-                        "ResponseContentType": upload.content_type,
+                        "ResponseContentType": response_content_type,
                     },
                     ExpiresIn=expires_in if expires_in is not None else self.expires_in,
                 )
@@ -1329,7 +1392,10 @@ class InterviewUploadStore:
     def _content_type_allowed(content_type: str, allowed_content_types: tuple[str, ...]) -> bool:
         return any(
             content_type == allowed
-            or ("/" not in allowed and content_type.startswith(f"{allowed}/"))
+            or (
+                "/" not in allowed
+                and content_type in SAFE_CONTENT_TYPE_FAMILIES.get(allowed, frozenset())
+            )
             for allowed in allowed_content_types
         )
 

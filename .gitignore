@@ -15,7 +15,18 @@ htmlcov/
 backend/.venv/
 backend/data/
 frontend/node_modules/
+frontend/.pnpm-store/
 frontend/dist/
 frontend/coverage/
 backups/
 *.tsbuildinfo
+
+# Production exports contain personal and financial data. Historical files
+# that are already tracked require a separate coordinated history purge, but
+# new copies must never be added to Git accidentally.
+backend/migrations/data/legacy_users.csv
+backend/migrations/data/legacy_interviews.csv
+backend/migrations/data/legacy_offers.csv
+backend/migrations/data/legacy_student_payments.csv
+backend/migrations/data/mentor_payouts_*.csv
+backend/migrations/data/mentorship_associations.csv

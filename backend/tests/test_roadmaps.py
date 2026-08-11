@@ -52,6 +52,24 @@ async def test_mentor_sees_roadmaps_only_for_led_directions(
     assert denied_detail.status_code == 404
 
 
+async def test_direct_topic_is_hidden_when_parent_roadmap_is_unpublished(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    async with TestSession() as session:
+        roadmap = await session.get(Roadmap, seeded.roadmap_id)
+        assert roadmap is not None
+        roadmap.is_published = False
+        await session.commit()
+
+    for user_id in (seeded.student_id, seeded.mentor_id, seeded.admin_id):
+        response = await client.get(
+            f"/api/v1/topics/{seeded.topic_ids[0]}",
+            headers=auth(user_id),
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"]["code"] == "topic_not_found"
+
+
 async def test_returns_ordered_roadmap_structure(client: AsyncClient, seeded: SeededData) -> None:
     response = await client.get("/api/v1/roadmaps/python-backend", headers=auth(seeded.student_id))
 

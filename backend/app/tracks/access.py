@@ -14,15 +14,27 @@ async def accessible_track_ids(session: AsyncSession, user: User) -> set[UUID]:
     if user.role is UserRole.MENTOR:
         return set(
             await session.scalars(
-                select(MentorTrackAssignment.track_id).where(
-                    MentorTrackAssignment.mentor_id == user.id
+                select(MentorTrackAssignment.track_id)
+                .join(
+                    LearningTrack,
+                    LearningTrack.id == MentorTrackAssignment.track_id,
+                )
+                .where(
+                    MentorTrackAssignment.mentor_id == user.id,
+                    LearningTrack.is_published.is_(True),
                 )
             )
         )
     return set(
         await session.scalars(
-            select(LearningTrackEnrollment.track_id).where(
-                LearningTrackEnrollment.user_id == user.id
+            select(LearningTrackEnrollment.track_id)
+            .join(
+                LearningTrack,
+                LearningTrack.id == LearningTrackEnrollment.track_id,
+            )
+            .where(
+                LearningTrackEnrollment.user_id == user.id,
+                LearningTrack.is_published.is_(True),
             )
         )
     )

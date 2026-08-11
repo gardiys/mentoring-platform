@@ -6,6 +6,8 @@ import { telegramMiniAppLink } from "../src/platform/telegramLinks";
 
 afterEach(() => {
   delete window.Telegram;
+  delete (window as Window & { TelegramWebviewProxy?: unknown })
+    .TelegramWebviewProxy;
   vi.restoreAllMocks();
 });
 
@@ -26,6 +28,11 @@ it("TelegramPlatformAdapter инициализирует SDK и подписыв
   const offClick = vi.fn();
   const ready = vi.fn();
   const expand = vi.fn();
+  (
+    window as Window & {
+      TelegramWebviewProxy?: { postEvent: () => void };
+    }
+  ).TelegramWebviewProxy = { postEvent: vi.fn() };
   window.Telegram = {
     WebApp: {
       initData: "query_id=test",

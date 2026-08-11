@@ -11,6 +11,9 @@ import type {
   AdminInterviewCardMutation,
   AdminInterviewCardPage,
   AdminInterviewCardRead,
+  AdminCompanyAliasProposalMutation,
+  AdminCompanyAliasProposalPage,
+  AdminCompanyAliasProposalRead,
   AdminInterviewDeckMutation,
   AdminInterviewDeckRead,
   AdminInterviewDeckSettingsMutation,
@@ -409,6 +412,32 @@ export const api = {
   adminQuestionModerationDetail: (questionId: string) =>
     apiRequest<AdminQuestionModerationDetail>(
       `/api/v1/admin/interviews/question-moderation/${questionId}`,
+    ),
+  adminCompanyAliasProposals: (
+    options: {
+      status?: "all" | "pending" | "approved" | "rejected";
+      q?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
+    const params = new URLSearchParams({
+      status: options.status ?? "pending",
+      limit: String(options.limit ?? 20),
+      offset: String(options.offset ?? 0),
+    });
+    if (options.q) params.set("q", options.q);
+    return apiRequest<AdminCompanyAliasProposalPage>(
+      `/api/v1/admin/interviews/company-alias-proposals?${params.toString()}`,
+    );
+  },
+  moderateCompanyAliasProposal: (
+    proposalId: string,
+    payload: AdminCompanyAliasProposalMutation,
+  ) =>
+    apiRequest<AdminCompanyAliasProposalRead>(
+      `/api/v1/admin/interviews/company-alias-proposals/${proposalId}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
     ),
   intelligenceInterview: (id: string) =>
     apiRequest<IntelligenceInterviewDetail>(`/api/v1/interviews/${id}`),

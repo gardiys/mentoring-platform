@@ -343,6 +343,13 @@ const adminRoutes = [
     ),
   },
   {
+    path: "/admin/company-alias-proposals",
+    lazy: lazyPage(
+      () => import("../pages/AdminCompanyAliasProposalsPage"),
+      "AdminCompanyAliasProposalsPage",
+    ),
+  },
+  {
     path: "/admin/interview-question-moderation/:questionId",
     lazy: lazyPage(
       () => import("../pages/AdminInterviewQuestionModerationEditPage"),

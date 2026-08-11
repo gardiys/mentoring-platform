@@ -35,6 +35,9 @@ IMPORT_NAMESPACE = UUID("b4e13c60-0a0d-4b35-9237-270166e00440")
 
 
 def _read_rows() -> list[dict[str, str]]:
+    # Legacy PII exports are intentionally absent from deployment images.
+    if not DATA_FILE.is_file():
+        return []
     if hashlib.sha256(DATA_FILE.read_bytes()).hexdigest() != DATA_CHECKSUM:
         raise RuntimeError("Legacy user import checksum does not match")
     with DATA_FILE.open(encoding="utf-8-sig", newline="") as source:

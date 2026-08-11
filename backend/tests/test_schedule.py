@@ -126,6 +126,16 @@ async def test_mentor_profile_get_put_url_validation_and_student_forbidden(
             "group_calendar_url": "javascript:alert(1)",
         },
     )
+    insecure = await client.put(
+        "/api/v1/mentor/profile",
+        headers=auth(seeded.mentor_id),
+        json={"consultation_url": "http://cal.example.com/anton"},
+    )
+    credentials = await client.put(
+        "/api/v1/mentor/profile",
+        headers=auth(seeded.mentor_id),
+        json={"consultation_url": "https://user:secret@cal.example.com/anton"},
+    )
     student_get = await client.get(
         "/api/v1/mentor/profile",
         headers=auth(seeded.student_id),
@@ -154,6 +164,8 @@ async def test_mentor_profile_get_put_url_validation_and_student_forbidden(
     assert loaded.json()["consultation_url"] == "https://cal.example.com/anton/python"
     assert loaded.json()["group_calendar_url"] == "https://cal.example.com/anton/group"
     assert invalid.status_code == 422
+    assert insecure.status_code == 422
+    assert credentials.status_code == 422
     assert student_get.status_code == 403
     assert student_put.status_code == 403
 
@@ -230,6 +242,15 @@ async def test_admin_useful_links_crud_order_validation_and_access(
             position=30,
         ),
     )
+    credentialed = await client.post(
+        "/api/v1/admin/useful-links",
+        headers=auth(seeded.admin_id),
+        json=useful_link_payload(
+            title="Credentials",
+            url="https://user:secret@learn.example.com/guide",
+            position=30,
+        ),
+    )
     student_list = await client.get(
         "/api/v1/admin/useful-links",
         headers=auth(seeded.student_id),
@@ -262,6 +283,7 @@ async def test_admin_useful_links_crud_order_validation_and_access(
         "Beta",
     ]
     assert invalid.status_code == 422
+    assert credentialed.status_code == 422
     assert student_list.status_code == 403
     assert mentor_list.status_code == 403
     assert mentor_create.status_code == 403
@@ -300,6 +322,14 @@ async def test_mentor_weekly_call_crud_respects_tracks_owner_and_admin_capabilit
         headers=auth(seeded.mentor_id),
         json=weekly_call_payload(seeded.go_track_id, title="Go-созвон"),
     )
+    insecure_url = await client.post(
+        "/api/v1/mentor/profile/weekly-calls",
+        headers=auth(seeded.mentor_id),
+        json=weekly_call_payload(
+            seeded.python_track_id,
+            meeting_url="http://meet.example.com/weekly",
+        ),
+    )
 
     assert created.status_code == 201, created.text
     call_id = created.json()["id"]
@@ -312,6 +342,7 @@ async def test_mentor_weekly_call_crud_respects_tracks_owner_and_admin_capabilit
 
     assert rejected_go.status_code == 422
     assert rejected_go.json()["detail"]["code"] == "mentor_schedule_track_not_assigned"
+    assert insecure_url.status_code == 422
 
     other_mentor_update = await client.put(
         f"/api/v1/mentor/profile/weekly-calls/{call_id}",

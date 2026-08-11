@@ -8,6 +8,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.auth import dependencies as auth_dependencies
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import (
     LearningTrack,
@@ -23,6 +25,8 @@ from app.db.models import (
 )
 from app.db.session import get_db_session
 from app.main import app
+from app.payments import router as payment_router
+from app.payments import service as payment_service
 from app.users.models import UserRole
 
 TEST_DATABASE_URL = os.getenv(
@@ -33,6 +37,24 @@ if not TEST_DATABASE_URL.rstrip("/").split("/")[-1].split("?")[0].endswith("_tes
     raise RuntimeError("TEST_DATABASE_URL must point to a database ending with '_test'")
 test_engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
 TestSession = async_sessionmaker(test_engine, expire_on_commit=False)
+
+
+@pytest.fixture(autouse=True)
+def isolate_payment_provider_from_local_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests must never contact a real bank because a developer has a populated .env."""
+
+    local_settings = get_settings().model_copy(
+        update={
+            "app_env": "development",
+            "web_frontend_url": "http://test",
+            "tochka_client_id": None,
+            "tochka_jwt_token": None,
+            "tochka_proxy_url": None,
+            "tochka_public_key": None,
+        }
+    )
+    monkeypatch.setattr(payment_service, "get_settings", lambda: local_settings)
+    monkeypatch.setattr(payment_router, "settings", local_settings)
 
 
 @dataclass(frozen=True)
@@ -176,12 +198,17 @@ async def client() -> AsyncIterator[AsyncClient]:
         async with TestSession() as session:
             yield session
 
+    previous_dev_auth = auth_dependencies.settings.dev_auth_enabled
+    auth_dependencies.settings.dev_auth_enabled = True
     app.dependency_overrides[get_db_session] = override_session
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as async_client:
-        yield async_client
-    app.dependency_overrides.clear()
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as async_client:
+            yield async_client
+    finally:
+        auth_dependencies.settings.dev_auth_enabled = previous_dev_auth
+        app.dependency_overrides.clear()
 
 
 def auth(user_id: UUID) -> dict[str, str]:

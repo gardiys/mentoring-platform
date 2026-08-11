@@ -849,6 +849,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/interviews/company-alias-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Company Alias Proposals */
+        get: operations["admin_company_alias_proposals_api_v1_admin_interviews_company_alias_proposals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/interviews/company-alias-proposals/{proposal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Moderate Company Alias Proposal */
+        patch: operations["admin_moderate_company_alias_proposal_api_v1_admin_interviews_company_alias_proposals__proposal_id__patch"];
+        trace?: never;
+    };
     "/api/v1/interviews": {
         parameters: {
             query?: never;
@@ -3210,6 +3244,68 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdminCompanyAliasProposalMutation */
+        AdminCompanyAliasProposalMutation: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "approve" | "reject";
+            /**
+             * Merge Conflicting Company
+             * @default false
+             */
+            merge_conflicting_company: boolean;
+            /** Rejection Reason */
+            rejection_reason?: string | null;
+        };
+        /** AdminCompanyAliasProposalPage */
+        AdminCompanyAliasProposalPage: {
+            /** Items */
+            items: components["schemas"]["AdminCompanyAliasProposalRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** AdminCompanyAliasProposalRead */
+        AdminCompanyAliasProposalRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Company Id */
+            company_id: string | null;
+            /** Company Name */
+            company_name: string;
+            /** Alias Name */
+            alias_name: string;
+            /** Suggested By User Id */
+            suggested_by_user_id: string | null;
+            /** Suggested By Name */
+            suggested_by_name: string | null;
+            /** Suggested By Telegram Username */
+            suggested_by_telegram_username: string | null;
+            status: components["schemas"]["CompanyAliasProposalStatus"];
+            /** Conflicting Company Id */
+            conflicting_company_id: string | null;
+            /** Conflicting Company Name */
+            conflicting_company_name: string | null;
+            /** Reviewed By Name */
+            reviewed_by_name: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Rejection Reason */
+            rejection_reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** AdminIntelligenceOperationsRead */
         AdminIntelligenceOperationsRead: {
             /**
@@ -4822,6 +4918,11 @@ export interface components {
             /** Telegram Id */
             telegram_id: number | null;
         };
+        /**
+         * CompanyAliasProposalStatus
+         * @enum {string}
+         */
+        CompanyAliasProposalStatus: "pending" | "approved" | "rejected";
         /** CompanyOption */
         CompanyOption: {
             /**
@@ -6101,6 +6202,11 @@ export interface components {
             company_id?: string | null;
             /** Company Alias */
             company_alias?: string | null;
+            /**
+             * Company Alias Confirmed
+             * @default false
+             */
+            company_alias_confirmed: boolean;
             /** Recruiter Telegram Usernames */
             recruiter_telegram_usernames?: string[] | null;
         };
@@ -7728,7 +7834,9 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -7738,6 +7846,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
@@ -9835,6 +9952,85 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_company_alias_proposals_api_v1_admin_interviews_company_alias_proposals_get: {
+        parameters: {
+            query?: {
+                status?: "all" | "pending" | "approved" | "rejected";
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCompanyAliasProposalPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_moderate_company_alias_proposal_api_v1_admin_interviews_company_alias_proposals__proposal_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                proposal_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCompanyAliasProposalMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCompanyAliasProposalRead"];
+                };
             };
             /** @description Validation Error */
             422: {

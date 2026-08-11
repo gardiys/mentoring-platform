@@ -172,9 +172,14 @@ def _student_direction_filter(user_id: UUID) -> ColumnElement[bool]:
     return exists(
         select(1)
         .select_from(LearningTrackEnrollment)
+        .join(
+            LearningTrack,
+            LearningTrack.id == LearningTrackEnrollment.track_id,
+        )
         .where(
             LearningTrackEnrollment.user_id == user_id,
             LearningTrackEnrollment.track_id == InterviewProcess.track_id,
+            LearningTrack.is_published.is_(True),
         )
     )
 
@@ -187,9 +192,14 @@ def _direction_filters(current_user: User) -> list[ColumnElement[bool]]:
             exists(
                 select(1)
                 .select_from(MentorTrackAssignment)
+                .join(
+                    LearningTrack,
+                    LearningTrack.id == MentorTrackAssignment.track_id,
+                )
                 .where(
                     MentorTrackAssignment.mentor_id == current_user.id,
                     MentorTrackAssignment.track_id == InterviewProcess.track_id,
+                    LearningTrack.is_published.is_(True),
                 )
             )
         ]
@@ -660,7 +670,10 @@ async def list_catalog_view_history(
         .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
         .join(LearningTrack, LearningTrack.id == InterviewProcess.track_id)
         .join(Company, Company.id == InterviewProcess.company_id)
-        .where(InterviewCatalogView.user_id == current_user.id)
+        .where(
+            InterviewCatalogView.user_id == current_user.id,
+            *_direction_filters(current_user),
+        )
         .order_by(InterviewCatalogView.last_viewed_at.desc())
     )
     total = int(

@@ -1,20 +1,38 @@
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+_DEVELOPMENT_FRONTEND_URL = "http://localhost:5173"
+_DEVELOPMENT_S3_URL = "http://localhost:9000"
+_HOSTNAME_PATTERN = re.compile(
+    r"\A(?=.{1,253}\Z)"
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+    r"(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\Z",
+    re.IGNORECASE,
+)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 
-    app_env: str = "development"
-    app_debug: bool = True
+    app_env: Literal["development", "test", "production"] = "development"
+    app_debug: bool = False
+    dev_auth_enabled: bool = False
+    api_max_request_body_bytes: int = Field(
+        default=8_388_608,
+        ge=1_024,
+        le=67_108_864,
+    )
     database_url: str = "postgresql+asyncpg://mentoring:mentoring@localhost:5432/mentoring"
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
+    allowed_hosts: Annotated[list[str], NoDecode] = []
     log_level: str = "INFO"
     telegram_bot_token: SecretStr | None = None
     bot_integration_token: SecretStr | None = None
@@ -23,14 +41,14 @@ class Settings(BaseSettings):
     telegram_web_client_secret: SecretStr | None = None
     telegram_web_redirect_uri: str | None = None
     telegram_oidc_proxy_url: SecretStr | None = None
-    web_frontend_url: str = "http://localhost:5173"
+    web_frontend_url: str = _DEVELOPMENT_FRONTEND_URL
     web_session_secret: SecretStr | None = None
     web_session_ttl_seconds: int = Field(default=2_592_000, ge=3_600, le=31_536_000)
     web_oauth_state_ttl_seconds: int = Field(default=600, ge=300, le=1_800)
     s3_bucket: str = "mentoring-platform"
     s3_region: str = "us-east-1"
-    s3_endpoint_url: str | None = "http://localhost:9000"
-    s3_public_endpoint_url: str | None = "http://localhost:9000"
+    s3_endpoint_url: str | None = _DEVELOPMENT_S3_URL
+    s3_public_endpoint_url: str | None = _DEVELOPMENT_S3_URL
     s3_access_key_id: str = "mentoring-minio"
     s3_secret_access_key: SecretStr = SecretStr("mentoring-minio-secret")
     s3_presign_ttl_seconds: int = Field(default=900, ge=60, le=3_600)
@@ -189,13 +207,109 @@ class Settings(BaseSettings):
     tochka_supplier_tax_code: str = ""
     tochka_request_timeout_seconds: float = Field(default=20, ge=5, le=120)
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "allowed_hosts", mode="before")
     @classmethod
-    def parse_cors_origins(cls, value: object) -> object:
+    def parse_string_list(cls, value: object) -> object:
         if isinstance(value, str):
             if value.startswith("["):
                 return json.loads(value)
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("cors_origins")
+    @classmethod
+    def validate_cors_origins(cls, values: list[str]) -> list[str]:
+        origins: list[str] = []
+        for value in values:
+            if cls._contains_unsafe_whitespace(value):
+                raise ValueError("CORS_ORIGINS contains whitespace or control characters")
+            try:
+                parsed = urlsplit(value)
+                _ = parsed.port
+            except ValueError as error:
+                raise ValueError("CORS_ORIGINS contains an invalid origin") from error
+            if (
+                value == "*"
+                or parsed.scheme.lower() not in {"http", "https"}
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError(
+                    "CORS_ORIGINS must contain exact http(s) origins without paths or credentials"
+                )
+            origins.append(f"{parsed.scheme.lower()}://{parsed.netloc.lower()}")
+        return origins
+
+    @field_validator("allowed_hosts")
+    @classmethod
+    def validate_allowed_hosts(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            host = value.strip().lower()
+            if host == "*" and value == "*":
+                normalized.append(host)
+                continue
+            hostname = host.removeprefix("*.")
+            if (
+                not host
+                or cls._contains_unsafe_whitespace(value)
+                or ("*" in host and host != "*" and not host.startswith("*."))
+                or "*" in hostname
+                or _HOSTNAME_PATTERN.fullmatch(hostname) is None
+            ):
+                raise ValueError(
+                    "ALLOWED_HOSTS must contain DNS host names or '*.domain' wildcards"
+                )
+            normalized.append(host)
+        return normalized
+
+    @field_validator(
+        "web_frontend_url",
+        "telegram_web_redirect_uri",
+        "s3_endpoint_url",
+        "s3_public_endpoint_url",
+        "nexara_base_url",
+        "tochka_api_base_url",
+        "tochka_redirect_url",
+        "tochka_fail_redirect_url",
+    )
+    @classmethod
+    def validate_http_url(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if value is None:
+            return None
+        field_name = info.field_name.upper() if info.field_name is not None else "URL"
+        if cls._contains_unsafe_whitespace(value):
+            raise ValueError(f"{field_name} contains whitespace or control characters")
+        try:
+            parsed = urlsplit(value)
+            _ = parsed.port
+        except ValueError as error:
+            raise ValueError(f"{field_name} is not a valid URL") from error
+        if (
+            parsed.scheme.lower() not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.fragment
+        ):
+            raise ValueError(
+                f"{field_name} must be an http(s) URL without credentials or fragment"
+            )
+        if info.field_name == "web_frontend_url" and (
+            parsed.path not in {"", "/"} or parsed.query
+        ):
+            raise ValueError("WEB_FRONTEND_URL must be an exact http(s) origin")
+        if info.field_name in {
+            "s3_endpoint_url",
+            "s3_public_endpoint_url",
+            "nexara_base_url",
+            "tochka_api_base_url",
+        } and parsed.query:
+            raise ValueError(f"{field_name} must not contain a query string")
         return value
 
     @field_validator(
@@ -260,6 +374,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_intelligence_job_lifetimes(self) -> "Settings":
+        if self.app_env == "production":
+            if self.app_debug:
+                raise ValueError("APP_DEBUG must be false in production")
+            if self.dev_auth_enabled:
+                raise ValueError("DEV_AUTH_ENABLED must be false in production")
+            if "*" in self.allowed_hosts:
+                raise ValueError("ALLOWED_HOSTS must not contain '*' in production")
+            self._validate_production_placeholders()
+            self._validate_production_urls()
         if self.s3_multipart_presign_ttl_seconds > self.s3_multipart_session_ttl_seconds:
             raise ValueError(
                 "S3_MULTIPART_PRESIGN_TTL_SECONDS must not exceed S3_MULTIPART_SESSION_TTL_SECONDS"
@@ -309,6 +432,110 @@ class Settings(BaseSettings):
             )
         return self
 
+    def _validate_production_urls(self) -> None:
+        web_runtime_configured = (
+            self.web_frontend_url != _DEVELOPMENT_FRONTEND_URL
+            or self.cors_origins != [_DEVELOPMENT_FRONTEND_URL]
+            or self.web_session_secret is not None
+            or self.telegram_web_client_id is not None
+            or self.telegram_web_client_secret is not None
+            or self.telegram_web_redirect_uri is not None
+            or self.tochka_client_id is not None
+            or self.tochka_jwt_token is not None
+        )
+        if web_runtime_configured:
+            self._require_https("WEB_FRONTEND_URL", self.web_frontend_url)
+            for origin in self.cors_origins:
+                self._require_https("CORS_ORIGINS", origin)
+
+        for name, value in (
+            ("TELEGRAM_WEB_REDIRECT_URI", self.telegram_web_redirect_uri),
+            ("NEXARA_BASE_URL", self.nexara_base_url),
+            ("TOCHKA_API_BASE_URL", self.tochka_api_base_url),
+            ("TOCHKA_REDIRECT_URL", self.tochka_redirect_url),
+            ("TOCHKA_FAIL_REDIRECT_URL", self.tochka_fail_redirect_url),
+        ):
+            if value is not None:
+                self._require_https(name, value)
+
+        configured_s3 = (
+            self.s3_endpoint_url not in {None, _DEVELOPMENT_S3_URL}
+            or self.s3_public_endpoint_url not in {None, _DEVELOPMENT_S3_URL}
+            or self.s3_bucket != "mentoring-platform"
+            or self.s3_access_key_id != "mentoring-minio"
+        )
+        if configured_s3:
+            for name, value in (
+                ("S3_ENDPOINT_URL", self.s3_endpoint_url),
+                ("S3_PUBLIC_ENDPOINT_URL", self.s3_public_endpoint_url),
+            ):
+                if value is not None:
+                    self._require_https(name, value)
+
+    @staticmethod
+    def _require_https(name: str, value: str) -> None:
+        if urlsplit(value).scheme.lower() != "https":
+            raise ValueError(f"{name} must use HTTPS in production")
+
+    @staticmethod
+    def _contains_unsafe_whitespace(value: str) -> bool:
+        return any(
+            ord(character) < 32 or ord(character) == 127 or character.isspace()
+            for character in value
+        )
+
+    def _validate_production_placeholders(self) -> None:
+        secret_values = {
+            "TELEGRAM_BOT_TOKEN": self.telegram_bot_token,
+            "BOT_INTEGRATION_TOKEN": self.bot_integration_token,
+            "TELEGRAM_WEB_CLIENT_SECRET": self.telegram_web_client_secret,
+            "TELEGRAM_OIDC_PROXY_URL": self.telegram_oidc_proxy_url,
+            "WEB_SESSION_SECRET": self.web_session_secret,
+            "NEXARA_API_KEY": self.nexara_api_key,
+            "OPENAI_API_KEY": self.openai_api_key,
+            "OPENAI_PROXY_URL": self.openai_proxy_url,
+            "TOCHKA_JWT_TOKEN": self.tochka_jwt_token,
+            "TOCHKA_PROXY_URL": self.tochka_proxy_url,
+            "TOCHKA_PUBLIC_KEY": self.tochka_public_key,
+        }
+        for name, secret in secret_values.items():
+            if secret is not None and self._is_placeholder(secret.get_secret_value()):
+                raise ValueError(f"{name} contains a placeholder value")
+
+        if (
+            self.database_url
+            == "postgresql+asyncpg://mentoring:mentoring@localhost:5432/mentoring"
+            or self._is_placeholder(self.database_url)
+        ):
+            raise ValueError("DATABASE_URL contains development or placeholder credentials")
+
+        configured_s3 = (
+            self.s3_endpoint_url not in {None, _DEVELOPMENT_S3_URL}
+            or self.s3_public_endpoint_url not in {None, _DEVELOPMENT_S3_URL}
+            or self.s3_bucket != "mentoring-platform"
+            or self.s3_access_key_id != "mentoring-minio"
+        )
+        if configured_s3 and (
+            self._is_placeholder(self.s3_access_key_id)
+            or self._is_placeholder(self.s3_secret_access_key.get_secret_value())
+            or self.s3_secret_access_key.get_secret_value() == "mentoring-minio-secret"
+        ):
+            raise ValueError("Production S3 credentials contain a placeholder value")
+
+    @staticmethod
+    def _is_placeholder(value: str) -> bool:
+        normalized = value.strip().upper().replace("-", "_")
+        return any(
+            marker in normalized
+            for marker in (
+                "REPLACE_WITH",
+                "CHANGE_ME",
+                "CHANGEME",
+                "YOUR_SECRET",
+                "PLACEHOLDER",
+            )
+        )
+
     @field_validator(
         "telegram_web_client_id",
         "telegram_web_redirect_uri",
@@ -335,6 +562,28 @@ class Settings(BaseSettings):
     def tochka_payment_modes(self) -> list[str]:
         modes = [item.strip() for item in self.tochka_payment_modes_raw.split(",") if item.strip()]
         return modes or ["sbp", "card"]
+
+    @property
+    def trusted_hosts(self) -> list[str]:
+        hosts = {"127.0.0.1", "backend", "localhost", "test"}
+        hosts.update(self.allowed_hosts)
+        for url in (self.web_frontend_url, self.telegram_web_redirect_uri, *self.cors_origins):
+            if not url or url == "*":
+                continue
+            hostname = urlsplit(url).hostname
+            if hostname:
+                hosts.add(hostname.lower())
+        return sorted(hosts)
+
+    @property
+    def csrf_trusted_origins(self) -> frozenset[str]:
+        origins: set[str] = set()
+        for value in (self.web_frontend_url, *self.cors_origins):
+            parsed = urlsplit(value)
+            if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+                continue
+            origins.add(f"{parsed.scheme.lower()}://{parsed.netloc.lower()}")
+        return frozenset(origins)
 
 
 @lru_cache

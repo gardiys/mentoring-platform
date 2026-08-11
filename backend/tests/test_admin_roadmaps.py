@@ -195,7 +195,10 @@ async def test_admin_deletes_roadmap_and_cascades_student_progress(
     assert "python-backend" not in {item["slug"] for item in student_roadmaps.json()}
 
 
-async def test_deleting_missing_roadmap_returns_404(client: AsyncClient, seeded: SeededData) -> None:
+async def test_deleting_missing_roadmap_returns_404(
+    client: AsyncClient,
+    seeded: SeededData,
+) -> None:
     response = await client.delete(
         f"/api/v1/admin/roadmaps/{uuid4()}", headers=auth(seeded.admin_id)
     )

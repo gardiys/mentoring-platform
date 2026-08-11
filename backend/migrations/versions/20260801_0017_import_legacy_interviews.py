@@ -485,6 +485,9 @@ def _import_interviews(
 
 
 def upgrade() -> None:
+    # Legacy PII exports are intentionally absent from deployment images.
+    if not all(path.is_file() for path in DATA_FILES):
+        return
     user_rows = _read_rows(USER_FILE)
     company_rows = _read_rows(COMPANY_FILE)
     interview_rows = _read_rows(INTERVIEW_FILE)
@@ -511,6 +514,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if not all(path.is_file() for path in DATA_FILES):
+        return
     user_rows = _read_rows(USER_FILE)
     company_rows = _read_rows(COMPANY_FILE)
     interview_rows = _read_rows(INTERVIEW_FILE)

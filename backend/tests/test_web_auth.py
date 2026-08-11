@@ -10,11 +10,26 @@ from pytest import MonkeyPatch, raises
 from app.auth import dependencies as auth_dependencies
 from app.auth import telegram_oidc, web_router
 from app.auth.telegram_oidc import TelegramIdentity
+from app.auth.web_session import safe_next_path
 from app.users.models import User
 from tests.conftest import SeededData, TestSession
 
 SESSION_SECRET = "test-web-session-secret-at-least-32-characters"
 TELEGRAM_ID = 987654321
+
+
+def test_safe_next_path_rejects_ambiguous_or_external_values() -> None:
+    for value in (
+        None,
+        "",
+        "https://evil.example/steal",
+        "//evil.example/steal",
+        "/\\evil.example/steal",
+        "/safe\r\nLocation: https://evil.example",
+    ):
+        assert safe_next_path(value) == "/roadmaps"
+
+    assert safe_next_path("/knowledge?section=python") == "/knowledge?section=python"
 
 
 def configure_web_auth(monkeypatch: MonkeyPatch) -> None:
@@ -97,6 +112,8 @@ async def test_web_login_creates_cookie_session_and_logout_clears_it(
     assert me.json()["id"] == str(seeded.student_id)
     assert me.json()["first_name"] == "Иван"
     assert me.json()["last_name"] == "Правильная фамилия"
+    issued_session = client.cookies.get("mentoring_session")
+    assert issued_session is not None
     async with TestSession() as session:
         user = await session.get(User, seeded.student_id)
         assert user is not None
@@ -104,10 +121,18 @@ async def test_web_login_creates_cookie_session_and_logout_clears_it(
         assert user.last_name == "Правильная фамилия"
         assert user.telegram_username == "new_name"
 
-    logout = await client.post("/api/v1/auth/web/logout")
+    logout = await client.post(
+        "/api/v1/auth/web/logout",
+        headers={"Origin": "http://localhost:5173", "Sec-Fetch-Site": "same-site"},
+    )
     assert logout.status_code == 204
     assert "mentoring_session" not in client.cookies
     assert (await client.get("/api/v1/me")).status_code == 401
+
+    client.cookies.set("mentoring_session", issued_session)
+    replayed = await client.get("/api/v1/me")
+    assert replayed.status_code == 401
+    assert replayed.json()["detail"]["code"] == "unauthorized"
 
 
 async def test_web_login_rejects_unknown_user_and_open_redirect(

@@ -63,14 +63,16 @@ async def assigned_student(
     student_id: UUID,
     *,
     allow_any_user_for_admin: bool = False,
+    lock: bool = False,
 ) -> tuple[User, MentorStudent | None]:
     student = await session.get(User, student_id)
     admin_can_read_any_user = mentor.role is UserRole.ADMIN and allow_any_user_for_admin
     if student is None or (student.role is not UserRole.STUDENT and not admin_can_read_any_user):
         api_error(404, "student_not_found", "Student was not found")
-    relation = await session.scalar(
-        select(MentorStudent).where(MentorStudent.student_id == student_id)
-    )
+    relation_statement = select(MentorStudent).where(MentorStudent.student_id == student_id)
+    if lock:
+        relation_statement = relation_statement.with_for_update()
+    relation = await session.scalar(relation_statement)
     if mentor.role is not UserRole.ADMIN and (relation is None or relation.mentor_id != mentor.id):
         api_error(
             403,
@@ -635,7 +637,7 @@ async def update_student_state(
     student_id: UUID,
     payload: MentorStudentStateMutation,
 ) -> MentorStudentDetail:
-    _, relation = await assigned_student(session, mentor, student_id)
+    _, relation = await assigned_student(session, mentor, student_id, lock=True)
     if relation is None:
         api_error(409, "student_has_no_mentor", "Assign a mentor to the student first")
     relation.learning_status = payload.learning_status
@@ -648,7 +650,7 @@ async def update_student_state(
 async def create_note(
     session: AsyncSession, mentor: User, student_id: UUID, body: str
 ) -> MentorNoteRead:
-    await assigned_student(session, mentor, student_id)
+    await assigned_student(session, mentor, student_id, lock=True)
     note = MentorStudentNote(mentor_id=mentor.id, student_id=student_id, body=body)
     session.add(note)
     await session.commit()
@@ -664,7 +666,7 @@ async def create_note(
 
 
 async def delete_note(session: AsyncSession, mentor: User, student_id: UUID, note_id: UUID) -> None:
-    await assigned_student(session, mentor, student_id)
+    await assigned_student(session, mentor, student_id, lock=True)
     statement = select(MentorStudentNote).where(
         MentorStudentNote.id == note_id,
         MentorStudentNote.student_id == student_id,
@@ -685,7 +687,7 @@ async def update_note(
     note_id: UUID,
     body: str,
 ) -> MentorNoteRead:
-    await assigned_student(session, mentor, student_id)
+    await assigned_student(session, mentor, student_id, lock=True)
     statement = select(MentorStudentNote).where(
         MentorStudentNote.id == note_id,
         MentorStudentNote.student_id == student_id,
@@ -721,7 +723,7 @@ async def get_document(
     *,
     lock: bool = False,
 ) -> MentorStudentDocument | None:
-    await assigned_student(session, mentor, student_id)
+    await assigned_student(session, mentor, student_id, lock=lock)
     statement = select(MentorStudentDocument).where(
         MentorStudentDocument.student_id == student_id,
         MentorStudentDocument.kind == kind,
@@ -809,7 +811,7 @@ async def create_mock(
     student_id: UUID,
     payload: MockInterviewMutation,
 ) -> MockInterviewRead:
-    await assigned_student(session, mentor, student_id)
+    await assigned_student(session, mentor, student_id, lock=True)
     mock = MockInterview(
         mentor_id=mentor.id,
         student_id=student_id,
@@ -856,7 +858,7 @@ async def complete_mock(
     mock_id: UUID,
     payload: MockInterviewFeedbackMutation,
 ) -> MockInterviewRead:
-    await assigned_student(session, mentor, student_id)
+    await assigned_student(session, mentor, student_id, lock=True)
     mock, mock_mentor = await get_mock(session, mentor, mock_id, student_id=student_id, lock=True)
     mock.feedback = payload.feedback
     mock.conducted_at = payload.conducted_at or datetime.now(UTC)
@@ -873,7 +875,7 @@ async def set_mock_media(
     mock_id: UUID,
     upload: StoredUpload,
 ) -> tuple[MockInterviewRead, str | None]:
-    await assigned_student(session, mentor, student_id)
+    await assigned_student(session, mentor, student_id, lock=True)
     mock, mock_mentor = await get_mock(session, mentor, mock_id, student_id=student_id, lock=True)
     previous_key = mock.media_storage_key
     mock.media_storage_key = upload.storage_key
@@ -954,7 +956,7 @@ async def add_interview_feedback(
     stage_id: UUID,
     body: str,
 ) -> InterviewCatalogCommentRead:
-    await assigned_student(session, mentor, student_id)
+    await assigned_student(session, mentor, student_id, lock=True)
     stage = await session.scalar(
         select(InterviewProcessStage)
         .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)

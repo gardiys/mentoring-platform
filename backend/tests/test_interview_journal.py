@@ -1,11 +1,16 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from httpx import AsyncClient
 from pytest import MonkeyPatch
+from sqlalchemy import select
 
 from app.interviews import admin_process_router, journal_router
 from app.interviews.models import (
+    CompanyAlias,
+    CompanyAliasProposal,
+    CompanyAliasProposalStatus,
     InterviewProcess,
     InterviewProcessStage,
     InterviewProcessStageAttachment,
@@ -381,7 +386,7 @@ async def test_company_directory_normalizes_and_ranks_existing_names(
     assert punctuation_insensitive.json()[0]["name"] == "Тбанк"
 
 
-async def test_only_admin_can_merge_companies_when_learning_an_existing_alias(
+async def test_company_alias_requires_confirmation_and_admin_moderation(
     client: AsyncClient, seeded: SeededData
 ) -> None:
     canonical_process = await create_process(client, seeded, "Wildberries")
@@ -392,7 +397,7 @@ async def test_only_admin_can_merge_companies_when_learning_an_existing_alias(
     )
     canonical_id = canonical.json()[0]["id"]
 
-    student_merge = await client.post(
+    missing_confirmation = await client.post(
         "/api/v1/interviews/journal/tracks",
         headers=auth(seeded.student_id),
         json={
@@ -402,22 +407,55 @@ async def test_only_admin_can_merge_companies_when_learning_an_existing_alias(
             "company_alias": "WB",
         },
     )
-    duplicate_before_admin_merge = await client.get(
-        f"/api/v1/interviews/journal/tracks/{duplicate_process['id']}",
+    proposed = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={
+            "company_name": "Wildberries",
+            "track_id": str(seeded.python_track_id),
+            "company_id": canonical_id,
+            "company_alias": "WB",
+            "company_alias_confirmed": True,
+        },
+    )
+    poisoned_without_alias = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={
+            "company_name": "PoisonedGlobalName",
+            "track_id": str(seeded.python_track_id),
+            "company_id": canonical_id,
+            "company_alias": None,
+        },
+    )
+    alias_before_review = await client.get(
+        "/api/v1/interviews/journal/companies?q=WB",
         headers=auth(seeded.student_id),
     )
-
-    linked = await client.post(
-        "/api/v1/interviews/journal/tracks",
+    poison_search = await client.get(
+        "/api/v1/interviews/journal/companies?q=PoisonedGlobalName",
+        headers=auth(seeded.student_id),
+    )
+    student_queue = await client.get(
+        "/api/v1/admin/interviews/company-alias-proposals",
+        headers=auth(seeded.student_id),
+    )
+    queue = await client.get(
+        "/api/v1/admin/interviews/company-alias-proposals",
         headers=auth(seeded.admin_id),
-        json={
-            "company_name": "Wildberries",
-            "track_id": str(seeded.python_track_id),
-            "company_id": canonical_id,
-            "company_alias": "WB",
-        },
     )
-    alias_search = await client.get(
+    proposal = next(item for item in queue.json()["items"] if item["alias_name"] == "WB")
+    merge_without_confirmation = await client.patch(
+        f"/api/v1/admin/interviews/company-alias-proposals/{proposal['id']}",
+        headers=auth(seeded.admin_id),
+        json={"action": "approve"},
+    )
+    approved = await client.patch(
+        f"/api/v1/admin/interviews/company-alias-proposals/{proposal['id']}",
+        headers=auth(seeded.admin_id),
+        json={"action": "approve", "merge_conflicting_company": True},
+    )
+    alias_after_review = await client.get(
         "/api/v1/interviews/journal/companies?q=WB",
         headers=auth(seeded.student_id),
     )
@@ -426,15 +464,218 @@ async def test_only_admin_can_merge_companies_when_learning_an_existing_alias(
         headers=auth(seeded.student_id),
     )
 
-    assert student_merge.status_code == 409
-    assert student_merge.json()["detail"]["code"] == "company_alias_conflict"
-    assert duplicate_before_admin_merge.json()["company_name"] == "WB"
-    assert linked.status_code == 201
-    assert linked.json()["company_name"] == "Wildberries"
-    assert alias_search.json()[0]["name"] == "Wildberries"
-    assert [item["name"] for item in alias_search.json()].count("Wildberries") == 1
+    assert missing_confirmation.status_code == 422
+    assert proposed.status_code == 201
+    assert proposed.json()["company_name"] == "Wildberries"
+    assert poisoned_without_alias.status_code == 201
+    assert poisoned_without_alias.json()["company_name"] == "Wildberries"
+    assert alias_before_review.json()[0]["name"] == "WB"
+    assert poison_search.json() == []
+    assert student_queue.status_code == 403
+    assert queue.json()["total"] == 1
+    assert proposal["company_name"] == "Wildberries"
+    assert proposal["conflicting_company_name"] == "WB"
+    assert merge_without_confirmation.status_code == 409
+    assert merge_without_confirmation.json()["detail"]["code"] == (
+        "company_alias_merge_confirmation_required"
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    assert alias_after_review.json()[0]["name"] == "Wildberries"
+    assert [item["name"] for item in alias_after_review.json()].count("Wildberries") == 1
     assert merged_process.json()["company_name"] == "Wildberries"
     assert canonical_process["company_name"] == "Wildberries"
+    async with TestSession() as session:
+        aliases = list(await session.scalars(select(CompanyAlias)))
+        proposals = list(await session.scalars(select(CompanyAliasProposal)))
+        assert [(alias.name, alias.company_id) for alias in aliases] == [
+            ("WB", UUID(canonical_id))
+        ]
+        assert proposals[0].status is CompanyAliasProposalStatus.APPROVED
+
+
+async def test_admin_can_reject_company_alias_proposal(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await create_process(client, seeded, "Wildberries")
+    company = await client.get(
+        "/api/v1/interviews/journal/companies?q=Wildberries",
+        headers=auth(seeded.student_id),
+    )
+    proposed = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={
+            "company_name": "Wildberries",
+            "track_id": str(seeded.python_track_id),
+            "company_id": company.json()[0]["id"],
+            "company_alias": "BazaarWB",
+            "company_alias_confirmed": True,
+        },
+    )
+    queue = await client.get(
+        "/api/v1/admin/interviews/company-alias-proposals",
+        headers=auth(seeded.admin_id),
+    )
+    proposal_id = queue.json()["items"][0]["id"]
+    rejected = await client.patch(
+        f"/api/v1/admin/interviews/company-alias-proposals/{proposal_id}",
+        headers=auth(seeded.admin_id),
+        json={"action": "reject", "rejection_reason": "Не относится к компании"},
+    )
+    alias_search = await client.get(
+        "/api/v1/interviews/journal/companies?q=BazaarWB",
+        headers=auth(seeded.student_id),
+    )
+
+    assert proposed.status_code == 201
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "rejected"
+    assert rejected.json()["rejection_reason"] == "Не относится к компании"
+    assert alias_search.json() == []
+
+
+async def test_mentor_alias_proposal_is_pending_and_admin_only(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await create_process(client, seeded, "Wildberries")
+    company = await client.get(
+        "/api/v1/interviews/journal/companies?q=Wildberries",
+        headers=auth(seeded.mentor_id),
+    )
+    proposed = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.mentor_id),
+        json={
+            "company_name": "Wildberries",
+            "track_id": str(seeded.python_track_id),
+            "company_id": company.json()[0]["id"],
+            "company_alias": "MentorSecureAlias",
+            "company_alias_confirmed": True,
+        },
+    )
+    queue = await client.get(
+        "/api/v1/admin/interviews/company-alias-proposals",
+        headers=auth(seeded.admin_id),
+    )
+    proposal = queue.json()["items"][0]
+    mentor_cannot_approve = await client.patch(
+        f"/api/v1/admin/interviews/company-alias-proposals/{proposal['id']}",
+        headers=auth(seeded.mentor_id),
+        json={"action": "approve"},
+    )
+    alias_search = await client.get(
+        "/api/v1/interviews/journal/companies?q=MentorSecureAlias",
+        headers=auth(seeded.mentor_id),
+    )
+
+    assert proposed.status_code == 201
+    assert proposal["status"] == "pending"
+    assert proposal["suggested_by_user_id"] == str(seeded.mentor_id)
+    assert mentor_cannot_approve.status_code == 403
+    assert alias_search.json() == []
+
+
+async def test_company_alias_proposal_queue_is_bounded_per_user(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await create_process(client, seeded, "Target Company")
+    company = await client.get(
+        "/api/v1/interviews/journal/companies?q=Target Company",
+        headers=auth(seeded.student_id),
+    )
+    company_id = company.json()[0]["id"]
+
+    for index in range(20):
+        response = await client.post(
+            "/api/v1/interviews/journal/tracks",
+            headers=auth(seeded.student_id),
+            json={
+                "company_name": "Target Company",
+                "track_id": str(seeded.python_track_id),
+                "company_id": company_id,
+                "company_alias": f"Target Alias {index}",
+                "company_alias_confirmed": True,
+            },
+        )
+        assert response.status_code == 201
+
+    blocked = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={
+            "company_name": "Target Company",
+            "track_id": str(seeded.python_track_id),
+            "company_id": company_id,
+            "company_alias": "One alias too many",
+            "company_alias_confirmed": True,
+        },
+    )
+
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"]["code"] == "company_alias_proposal_limit_reached"
+
+
+async def test_concurrent_company_alias_approvals_are_serialized(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await create_process(client, seeded, "Alpha Corp")
+    await create_process(client, seeded, "Beta Corp")
+    alpha = await client.get(
+        "/api/v1/interviews/journal/companies?q=Alpha Corp",
+        headers=auth(seeded.student_id),
+    )
+    beta = await client.get(
+        "/api/v1/interviews/journal/companies?q=Beta Corp",
+        headers=auth(seeded.mentor_id),
+    )
+    for user_id, company in (
+        (seeded.student_id, alpha.json()[0]),
+        (seeded.mentor_id, beta.json()[0]),
+    ):
+        proposed = await client.post(
+            "/api/v1/interviews/journal/tracks",
+            headers=auth(user_id),
+            json={
+                "company_name": company["name"],
+                "track_id": str(seeded.python_track_id),
+                "company_id": company["id"],
+                "company_alias": "SharedBrandAlias",
+                "company_alias_confirmed": True,
+            },
+        )
+        assert proposed.status_code == 201
+
+    queue = await client.get(
+        "/api/v1/admin/interviews/company-alias-proposals",
+        headers=auth(seeded.admin_id),
+    )
+    proposal_ids = [item["id"] for item in queue.json()["items"]]
+    responses = await asyncio.gather(
+        *(
+            client.patch(
+                f"/api/v1/admin/interviews/company-alias-proposals/{proposal_id}",
+                headers=auth(seeded.admin_id),
+                json={"action": "approve"},
+            )
+            for proposal_id in proposal_ids
+        )
+    )
+    reviewed = await client.get(
+        "/api/v1/admin/interviews/company-alias-proposals?status=all",
+        headers=auth(seeded.admin_id),
+    )
+    alias_search = await client.get(
+        "/api/v1/interviews/journal/companies?q=SharedBrandAlias",
+        headers=auth(seeded.student_id),
+    )
+
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    assert sorted(item["status"] for item in reviewed.json()["items"]) == [
+        "approved",
+        "rejected",
+    ]
+    assert alias_search.json()[0]["name"] in {"Alpha", "Beta"}
 
 
 async def test_other_student_cannot_read_or_mutate_personal_journal_track(

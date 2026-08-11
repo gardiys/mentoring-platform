@@ -7,7 +7,7 @@ from datetime import UTC, datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -75,7 +75,7 @@ from app.interviews.question_matching import (
     RankedQuestionCandidate,
     rank_question_candidates,
 )
-from app.mentors.models import MentorStudent
+from app.mentors.models import MentorStudent, MentorTrackAssignment
 from app.tracks.access import has_track_access
 from app.tracks.models import LearningTrack
 from app.users.models import User, UserRole
@@ -117,6 +117,32 @@ STAGE_TO_TYPE = {
     InterviewStageType.FINAL_INTERVIEW: IntelligenceInterviewType.FINAL,
     InterviewStageType.OTHER: IntelligenceInterviewType.OTHER,
 }
+
+
+def _mentor_interview_access(user: User) -> ColumnElement[bool]:
+    assigned_students = select(MentorStudent.student_id).where(
+        MentorStudent.mentor_id == user.id
+    )
+    accessible_stages = (
+        select(InterviewProcessStage.id)
+        .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
+        .join(LearningTrack, LearningTrack.id == InterviewProcess.track_id)
+        .where(
+            LearningTrack.is_published.is_(True),
+            InterviewProcess.track_id.in_(
+                select(MentorTrackAssignment.track_id).where(
+                    MentorTrackAssignment.mentor_id == user.id
+                )
+            )
+        )
+    )
+    return or_(
+        IntelligenceInterview.student_id == user.id,
+        and_(
+            IntelligenceInterview.student_id.in_(assigned_students),
+            IntelligenceInterview.stage_id.in_(accessible_stages),
+        ),
+    )
 
 
 def _quota_day_bounds(now: datetime) -> tuple[datetime, datetime]:
@@ -302,6 +328,8 @@ async def create_intelligence_interview(
         payload.company_name,
         company_id=payload.company_id,
         raw_alias=payload.company_alias,
+        alias_confirmed=payload.company_alias_confirmed,
+        suggested_by=student,
     )
     process = InterviewProcess(
         user_id=student.id,
@@ -344,19 +372,54 @@ async def get_intelligence_interview(
     if user.role is UserRole.STUDENT or (owner_only and user.role is not UserRole.ADMIN):
         statement = statement.where(IntelligenceInterview.student_id == user.id)
     elif user.role is UserRole.MENTOR:
-        statement = statement.where(
-            or_(
-                IntelligenceInterview.student_id == user.id,
-                IntelligenceInterview.student_id.in_(
-                    select(MentorStudent.student_id).where(MentorStudent.mentor_id == user.id)
-                ),
-            )
-        )
+        statement = statement.where(_mentor_interview_access(user))
     if lock:
         statement = statement.with_for_update()
     interview = await session.scalar(statement)
     if interview is None:
         api_error(404, "intelligence_interview_not_found", "Interview was not found")
+    if lock and user.role is UserRole.MENTOR and interview.student_id != user.id:
+        # Serialize mentor mutations with student reassignment and direction
+        # changes. Re-check after acquiring the locks so an old mentor cannot
+        # finish a write that raced an administrator's reassignment.
+        relation = await session.scalar(
+            select(MentorStudent)
+            .where(MentorStudent.student_id == interview.student_id)
+            .with_for_update()
+        )
+        if relation is None or relation.mentor_id != user.id:
+            api_error(404, "intelligence_interview_not_found", "Interview was not found")
+        track_id = await session.scalar(
+            select(InterviewProcess.track_id)
+            .join(
+                InterviewProcessStage,
+                InterviewProcessStage.process_id == InterviewProcess.id,
+            )
+            .where(InterviewProcessStage.id == interview.stage_id)
+        )
+        track = (
+            await session.scalar(
+                select(LearningTrack)
+                .where(LearningTrack.id == track_id)
+                .with_for_update()
+            )
+            if track_id is not None
+            else None
+        )
+        assignment = (
+            await session.scalar(
+                select(MentorTrackAssignment)
+                .where(
+                    MentorTrackAssignment.mentor_id == user.id,
+                    MentorTrackAssignment.track_id == track_id,
+                )
+                .with_for_update()
+            )
+            if track is not None and track.is_published
+            else None
+        )
+        if assignment is None:
+            api_error(404, "intelligence_interview_not_found", "Interview was not found")
     return interview
 
 
@@ -432,14 +495,7 @@ async def list_intelligence_interviews(
     if user.role is UserRole.STUDENT:
         statement = statement.where(IntelligenceInterview.student_id == user.id)
     elif user.role is UserRole.MENTOR:
-        statement = statement.where(
-            or_(
-                IntelligenceInterview.student_id == user.id,
-                IntelligenceInterview.student_id.in_(
-                    select(MentorStudent.student_id).where(MentorStudent.mentor_id == user.id)
-                ),
-            )
-        )
+        statement = statement.where(_mentor_interview_access(user))
     if queue_filter == "requested":
         statement = statement.where(
             IntelligenceInterview.processing_status == IntelligenceProcessingStatus.UPLOADED
@@ -857,7 +913,7 @@ async def create_mentor_comment(
     interview_id: UUID,
     payload: IntelligenceMentorCommentMutation,
 ) -> IntelligenceMentorCommentRead:
-    interview = await get_intelligence_interview(session, mentor, interview_id)
+    interview = await get_intelligence_interview(session, mentor, interview_id, lock=True)
     if payload.question_id is not None:
         question = await session.scalar(
             select(IntelligenceQuestion).where(
@@ -905,7 +961,7 @@ async def review_action(
     rejection_reason: str | None = None,
     edit: IntelligenceReviewEditMutation | None = None,
 ) -> IntelligenceReviewRead:
-    interview = await get_intelligence_interview(session, mentor, interview_id)
+    interview = await get_intelligence_interview(session, mentor, interview_id, lock=True)
     review = await session.scalar(
         select(IntelligenceAnswerReview)
         .join(IntelligenceAnswer, IntelligenceAnswer.id == IntelligenceAnswerReview.answer_id)
@@ -1076,7 +1132,7 @@ async def moderate_intelligence_question(
     question_id: UUID,
     payload: IntelligenceQuestionModerationMutation,
 ) -> IntelligenceInterview:
-    interview = await get_intelligence_interview(session, reviewer, interview_id)
+    interview = await get_intelligence_interview(session, reviewer, interview_id, lock=True)
     question = await session.scalar(
         select(IntelligenceQuestion)
         .where(

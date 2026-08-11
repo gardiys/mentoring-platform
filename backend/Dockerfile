@@ -1,6 +1,27 @@
-FROM mwader/static-ffmpeg:7.1.1@sha256:11a44711684c0b9f754c047dcd64235b8b52deab251bd0e0a86f22faa160749c AS media-tools
+FROM mwader/static-ffmpeg:8.1.2@sha256:33f770f812cbfc3de96c547157fc9faf8bd95a36481753439ffa761045167585 AS media-tools
 
-FROM python:3.12-slim AS base
+FROM python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36 AS dependency-wheels
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
+WORKDIR /build
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential \
+        cargo \
+        libssl-dev \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt ./
+# Recent upstream aarch64 wheels use CPU instructions that are unavailable in
+# some Docker Desktop VMs. Build cryptography from its hash-verified sdist for
+# the actual build CPU; all remaining packages stay hash-pinned binary wheels.
+RUN pip wheel \
+        --require-hashes \
+        --no-binary=cryptography \
+        --wheel-dir=/wheels \
+        -r requirements.txt
+
+FROM python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36 AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
@@ -17,7 +38,12 @@ RUN groupadd --system --gid 10001 mentoring \
         /var/lib/mentoring/interview-legacy-transcode \
         /var/lib/mentoring/content-media-normalization
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --from=dependency-wheels /wheels /wheels
+RUN pip install --no-cache-dir --no-index --find-links=/wheels --no-deps \
+        /wheels/cryptography-*.whl \
+    && pip install --no-cache-dir --no-index --find-links=/wheels \
+        --require-hashes -r requirements.txt \
+    && rm -rf /wheels
 
 FROM base AS migration
 COPY --chown=mentoring:mentoring app ./app
@@ -30,4 +56,6 @@ FROM base AS runtime
 COPY --chown=mentoring:mentoring app ./app
 USER mentoring
 EXPOSE 8000
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2).read()" || exit 1
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

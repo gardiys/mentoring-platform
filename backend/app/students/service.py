@@ -365,7 +365,9 @@ async def _sync_student_mentor(
     reward_percent: Decimal | None = None,
 ) -> None:
     relation = await session.scalar(
-        select(MentorStudent).where(MentorStudent.student_id == student_id)
+        select(MentorStudent)
+        .where(MentorStudent.student_id == student_id)
+        .with_for_update()
     )
     if mentor_id is None:
         if relation is not None:
@@ -485,7 +487,18 @@ async def update_student(
     session: AsyncSession, student_id: UUID, payload: AdminStudentMutation
 ) -> AdminStudentDetail:
     student = await get_student_model(session, student_id, lock=True)
+    # Keep the lock order consistent with mentor-side mutations (assignment,
+    # then employment/payment rows) so reassignment cannot race an old
+    # mentor's write and concurrent requests do not deadlock each other.
+    await session.scalar(
+        select(MentorStudent)
+        .where(MentorStudent.student_id == student.id)
+        .with_for_update()
+    )
     await _validate_student_payload(session, payload, student_id=student_id)
+    revoke_browser_sessions = student.telegram_id != payload.telegram_id or (
+        payload.program_excluded and student.is_active
+    )
     student.telegram_id = payload.telegram_id
     student.telegram_username = payload.telegram_username
     student.first_name = payload.first_name
@@ -515,6 +528,8 @@ async def update_student(
             ended_at=datetime.now(UTC).date(),
             reason=payload.program_exclusion_reason or "Исключён из программы",
         )
+    if revoke_browser_sessions:
+        student.session_version += 1
     if payload.learning_start_date is not None:
         await _set_learning_start_date(session, student, payload.learning_start_date)
     try:
@@ -538,6 +553,8 @@ async def set_student_access(
     session: AsyncSession, student_id: UUID, *, is_active: bool
 ) -> AdminStudentDetail:
     student = await get_student_model(session, student_id, lock=True)
+    if student.is_active != is_active:
+        student.session_version += 1
     student.is_active = is_active
     await session.commit()
     return await student_detail(session, student.id)

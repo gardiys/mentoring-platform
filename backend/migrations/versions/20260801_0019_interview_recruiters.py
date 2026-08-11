@@ -42,6 +42,9 @@ DESCRIPTION_SEPARATOR = "\n\n---\n\n"
 
 
 def _read_rows() -> list[dict[str, str]]:
+    # Legacy PII exports are intentionally absent from deployment images.
+    if not DATA_FILE.is_file():
+        return []
     if hashlib.sha256(DATA_FILE.read_bytes()).hexdigest() != DATA_CHECKSUM:
         raise RuntimeError("Legacy interview import checksum does not match")
     with DATA_FILE.open(encoding="utf-8-sig", newline="") as source:

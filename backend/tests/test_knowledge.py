@@ -1,6 +1,7 @@
 from httpx import AsyncClient
 
-from tests.conftest import SeededData, auth
+from app.tracks.models import LearningTrack
+from tests.conftest import SeededData, TestSession, auth
 
 
 def knowledge_payload(
@@ -107,6 +108,35 @@ async def test_knowledge_is_scoped_by_mentor_directions(
     assert [topic["slug"] for topic in python_mentor.json()] == ["backend-practice"]
     assert go_mentor.json() == []
     assert [topic["slug"] for topic in admin.json()] == ["backend-practice"]
+
+
+async def test_unpublished_track_revokes_student_and_mentor_knowledge_access(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await create_topic(client, seeded)
+    async with TestSession() as session:
+        track = await session.get(LearningTrack, seeded.python_track_id)
+        assert track is not None
+        track.is_published = False
+        await session.commit()
+
+    student_topics = await client.get(
+        "/api/v1/knowledge/topics",
+        headers=auth(seeded.student_id),
+    )
+    mentor_entry = await client.get(
+        "/api/v1/knowledge/entries/backend-practice-postgres-search",
+        headers=auth(seeded.mentor_id),
+    )
+    admin_topics = await client.get(
+        "/api/v1/knowledge/topics",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert student_topics.status_code == 200
+    assert student_topics.json() == []
+    assert mentor_entry.status_code == 404
+    assert [topic["slug"] for topic in admin_topics.json()] == ["backend-practice"]
 
 
 async def test_admin_sees_available_articles_and_all_drafts_in_editor(

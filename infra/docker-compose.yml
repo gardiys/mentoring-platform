@@ -3,7 +3,7 @@ services:
     image: redis:7.4-alpine
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -19,7 +19,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mentoring}
       POSTGRES_DB: ${POSTGRES_DB:-mentoring}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
@@ -42,8 +42,8 @@ services:
       MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: 1h
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -71,11 +71,27 @@ services:
     volumes:
       - ./minio-lifecycle.json:/config/minio-lifecycle.json:ro
 
+  migrate:
+    build:
+      context: ../backend
+      target: migration
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mentoring}:${POSTGRES_PASSWORD:-mentoring}@postgres:5432/${POSTGRES_DB:-mentoring}
+    volumes:
+      - ../backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: alembic upgrade head
+    restart: "no"
+
   backend:
     build: ../backend
     environment:
       APP_ENV: development
       APP_DEBUG: "true"
+      DEV_AUTH_ENABLED: "true"
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mentoring}:${POSTGRES_PASSWORD:-mentoring}@postgres:5432/${POSTGRES_DB:-mentoring}
       CORS_ORIGINS: http://localhost:5173
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
@@ -173,13 +189,15 @@ services:
       INTERVIEW_AI_QUOTA_TIMEZONE: ${INTERVIEW_AI_QUOTA_TIMEZONE:-Europe/Moscow}
       TELEGRAM_INIT_DATA_TTL_SECONDS: ${TELEGRAM_INIT_DATA_TTL_SECONDS:-86400}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ../backend:/app
       - interview_legacy_transcode:/var/lib/mentoring/interview-legacy-transcode
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       minio-init:
         condition: service_completed_successfully
       redis:
@@ -239,6 +257,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       minio-init:
         condition: service_completed_successfully
       redis:
@@ -304,6 +324,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       minio-init:
         condition: service_completed_successfully
       redis:
@@ -322,7 +344,27 @@ services:
       retries: 3
       start_period: 40s
 
+  # Keep the persistent dependency volume in sync with the bind-mounted
+  # package files. This one-shot service also repairs volumes created by the
+  # older root-based frontend image before the application starts as `node`.
+  frontend-deps:
+    image: infra-frontend
+    user: "0:0"
+    environment:
+      CI: "true"
+    volumes:
+      - ../frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command:
+      - sh
+      - -ec
+      - |
+        chown -R node:node /app/node_modules
+        exec su node -s /bin/sh -c 'pnpm install --frozen-lockfile'
+    restart: "no"
+
   frontend:
+    image: infra-frontend
     build: ../frontend
     environment:
       VITE_API_URL: http://localhost:8000
@@ -330,12 +372,18 @@ services:
       VITE_DEV_MENTOR_ID: ${VITE_DEV_MENTOR_ID:-10000000-0000-4000-8000-000000000001}
       VITE_DEV_ADMIN_ID: ${VITE_DEV_ADMIN_ID:-90000000-0000-4000-8000-000000000001}
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     volumes:
       - ../frontend:/app
       - frontend_node_modules:/app/node_modules
+    # Calling Vite directly avoids pnpm's interactive dependency-status check.
+    # Dependency installation is handled by the one-shot service above.
+    command: ["node", "node_modules/vite/bin/vite.js", "--host", "0.0.0.0"]
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+      frontend-deps:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:

@@ -29,6 +29,9 @@ def _rows(path: Path) -> list[dict[str, str]]:
 
 
 def _import_assignments(connection: sa.Connection) -> None:
+    # Legacy PII exports are intentionally absent from deployment images.
+    if not ASSOCIATION_FILE.is_file() or not USER_FILE.is_file():
+        return
     raw = ASSOCIATION_FILE.read_bytes()
     if hashlib.sha256(raw).hexdigest() != ASSOCIATION_HASH:
         raise RuntimeError("Mentorship association checksum does not match")

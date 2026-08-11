@@ -64,7 +64,9 @@ function initialForm(student?: AdminStudentDetail): StudentFormState {
     track_ids: student?.tracks.map((track) => track.id) ?? [],
     repayment_percent: student?.repayment_percent ?? 200,
     mentor_reward_percent: student?.mentor_reward_percent ?? 60,
-    entry_payment_rubles: student ? student.entry_payment_kopecks / 100 : 45_000,
+    entry_payment_rubles: student
+      ? student.entry_payment_kopecks / 100
+      : 45_000,
     entry_payment_paid: Boolean(student?.entry_payment_paid_at),
     program_excluded: Boolean(student?.program_excluded_at),
     program_exclusion_reason: student?.program_exclusion_reason ?? null,

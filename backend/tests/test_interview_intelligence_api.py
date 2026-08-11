@@ -53,7 +53,8 @@ from app.interviews.models import (
     InterviewTopicSelection,
 )
 from app.interviews.uploads import InterviewStorageReadError, StoredUpload
-from app.tracks.models import LearningTrackEnrollment
+from app.mentors.models import MentorTrackAssignment
+from app.tracks.models import LearningTrack, LearningTrackEnrollment
 from app.users.models import User, UserRole
 from tests.conftest import SeededData, TestSession, auth, test_engine
 
@@ -209,6 +210,68 @@ async def test_student_creates_and_roles_only_see_authorized_interview(
     )
     assert duplicate.status_code == 409
     assert duplicate.json()["detail"]["code"] == "interview_ai_analysis_already_requested"
+
+
+@pytest.mark.asyncio
+async def test_mentor_cannot_access_assigned_student_analysis_outside_mentor_direction(
+    client: AsyncClient, seeded: SeededData, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with TestSession() as session:
+        session.add(
+            LearningTrackEnrollment(
+                user_id=seeded.student_id,
+                track_id=seeded.go_track_id,
+            )
+        )
+        await session.commit()
+
+    created, _, _ = await create_analysis_from_journal(
+        client,
+        seeded,
+        monkeypatch,
+        track_id=seeded.go_track_id,
+    )
+    assert created.status_code == 201, created.text
+    interview_id = created.json()["id"]
+
+    forbidden_detail = await client.get(
+        f"/api/v1/mentor/interviews/{interview_id}",
+        headers=auth(seeded.mentor_id),
+    )
+    mentor_queue = await client.get(
+        "/api/v1/mentor/interviews?status=all",
+        headers=auth(seeded.mentor_id),
+    )
+    go_mentor_detail = await client.get(
+        f"/api/v1/mentor/interviews/{interview_id}",
+        headers=auth(seeded.other_mentor_id),
+    )
+
+    assert forbidden_detail.status_code == 404
+    assert mentor_queue.status_code == 200
+    assert interview_id not in {item["id"] for item in mentor_queue.json()["items"]}
+    # Direction access alone is insufficient: the Go mentor is not assigned to
+    # this student.
+    assert go_mentor_detail.status_code == 404
+
+    # An obsolete assignment to an unpublished direction must not reopen the
+    # analysis to the mentor.
+    async with TestSession() as session:
+        session.add(
+            MentorTrackAssignment(
+                mentor_id=seeded.mentor_id,
+                track_id=seeded.go_track_id,
+            )
+        )
+        go_track = await session.get(LearningTrack, seeded.go_track_id)
+        assert go_track is not None
+        go_track.is_published = False
+        await session.commit()
+    unpublished = await client.get(
+        f"/api/v1/mentor/interviews/{interview_id}",
+        headers=auth(seeded.mentor_id),
+    )
+    assert unpublished.status_code == 404
 
 
 @pytest.mark.asyncio

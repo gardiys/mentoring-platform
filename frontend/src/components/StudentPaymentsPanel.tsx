@@ -179,7 +179,9 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
                     label="Причина"
                     placeholder="Например, сокращение"
                     value={endReason}
-                    onChange={(event) => setEndReason(event.currentTarget.value)}
+                    onChange={(event) =>
+                      setEndReason(event.currentTarget.value)
+                    }
                     autosize
                     minRows={1}
                   />
@@ -202,7 +204,8 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
                         onSuccess: () =>
                           notifications.show({
                             color: "green",
-                            message: "Трудоустройство закрыто, платежи отменены",
+                            message:
+                              "Трудоустройство закрыто, платежи отменены",
                           }),
                         onError: (error) =>
                           notifications.show({

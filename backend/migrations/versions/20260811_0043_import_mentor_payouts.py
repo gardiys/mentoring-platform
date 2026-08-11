@@ -64,6 +64,7 @@ PAYOUT_FILES = {
         "23",
     ),
 }
+IMPORT_FILES = (USER_FILE, PAYMENT_FILE, *PAYOUT_FILES)
 PAYOUT_FIELDS = {
     "Имя",
     "Фамилия",
@@ -472,6 +473,9 @@ def upgrade() -> None:
     with op.get_context().autocommit_block():
         op.execute("ALTER TYPE mentor_reward_kind ADD VALUE IF NOT EXISTS 'legacy_fixed'")
 
+    # Legacy PII exports are intentionally absent from deployment images.
+    if not all(path.is_file() for path in IMPORT_FILES):
+        return
     connection = op.get_bind()
     source_users = _read_users()
     platform_users = _resolve_platform_users(connection, source_users)
@@ -508,6 +512,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if not all(path.is_file() for path in IMPORT_FILES):
+        return
     payout_ids = [
         _identity("payout", mentor_legacy_id)
         for _path, (_hash, _count, mentor_legacy_id) in PAYOUT_FILES.items()

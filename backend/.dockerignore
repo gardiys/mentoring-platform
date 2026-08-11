@@ -1,6 +1,17 @@
 .venv
+.env
+.env.*
 __pycache__
 .pytest_cache
 .mypy_cache
 .ruff_cache
 tests
+
+# Historical production exports are retained outside new Docker build contexts.
+# Keep non-sensitive roadmap and interview-question seed assets available.
+migrations/data/legacy_users.csv
+migrations/data/legacy_interviews.csv
+migrations/data/legacy_offers.csv
+migrations/data/legacy_student_payments.csv
+migrations/data/mentor_payouts_*.csv
+migrations/data/mentorship_associations.csv

@@ -26,10 +26,24 @@ class IntelligenceInterviewCreate(BaseModel):
     company_name: str = Field(min_length=1, max_length=240)
     company_id: UUID | None = None
     company_alias: str | None = Field(default=None, max_length=240)
+    company_alias_confirmed: bool = False
     track_id: UUID
     position_name: str | None = Field(default=None, max_length=240)
     interview_type: IntelligenceInterviewType
     interviewed_at: datetime
+
+    @model_validator(mode="after")
+    def validate_company_alias_confirmation(self) -> "IntelligenceInterviewCreate":
+        if self.company_alias is not None and (
+            self.company_id is None or not self.company_alias_confirmed
+        ):
+            raise ValueError(
+                "An alternative company name requires a selected company "
+                "and explicit confirmation"
+            )
+        if self.company_alias_confirmed and self.company_alias is None:
+            raise ValueError("No alternative company name was provided")
+        return self
 
 
 class IntelligenceInterviewSummary(BaseModel):

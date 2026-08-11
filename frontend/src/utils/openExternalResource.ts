@@ -10,14 +10,24 @@ export async function openExternalResource(
   if (popup) popup.opener = null;
 
   try {
-    const url = await request;
+    const rawUrl = await request;
+    let url: URL;
+    try {
+      url = new URL(rawUrl);
+    } catch {
+      throw new Error("Разрешены только абсолютные HTTPS-ссылки");
+    }
+    if (url.protocol !== "https:" || url.username || url.password) {
+      throw new Error("Разрешены только абсолютные HTTPS-ссылки");
+    }
+
     if (popup && !popup.closed) {
-      popup.location.replace(url);
+      popup.location.replace(url.href);
       return;
     }
 
     const anchor = document.createElement("a");
-    anchor.href = url;
+    anchor.href = url.href;
     anchor.target = "_blank";
     anchor.rel = "noopener noreferrer";
     anchor.click();

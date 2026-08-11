@@ -9,13 +9,24 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import SecretStr
 
 from app.core.config import Settings
-from app.payments.tochka import TochkaError, TochkaPaymentService, parse_webhook_body
+from app.payments.tochka import (
+    TochkaError,
+    TochkaPaymentService,
+    extract_payment_status,
+    parse_payment_operation,
+    parse_webhook_body,
+    parse_webhook_event,
+)
 
 
 def _settings() -> Settings:
     return Settings(
+        _env_file=None,
         app_env="production",
+        app_debug=False,
+        database_url="postgresql+asyncpg://app:password@postgres:5432/mentoring",
         web_frontend_url="https://platform.example.com",
+        cors_origins=["https://platform.example.com"],
         tochka_client_id="client-id",
         tochka_jwt_token="token",
         tochka_customer_code="300000092",
@@ -143,6 +154,174 @@ async def test_payment_link_rejects_http_redirect_before_provider_request() -> N
     assert provider_called is False
 
 
+@pytest.mark.parametrize(
+    "payment_url",
+    [
+        "javascript:alert(1)",
+        "http://payment.example.com/link",
+        "https://user:password@payment.example.com/link",
+        "https://payment.example.com/video\nLocation: https://evil.example.com",
+        "https://payment.example.com:invalid/link",
+        "//payment.example.com/link",
+    ],
+)
+async def test_payment_link_rejects_unsafe_provider_url(payment_url: str) -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "Data": {
+                    "paymentLinkId": "payment-link-id",
+                    "paymentLink": payment_url,
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(
+        base_url="https://enter.tochka.com/uapi",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        with pytest.raises(TochkaError, match="invalid payment URL"):
+            await TochkaPaymentService(_settings(), client).create_payment_link(
+                installment_id=uuid4(),
+                payment_link_id="payment-link-id",
+                amount_kopecks=6_250_000,
+                client_name="Иван",
+                client_email="ivan@example.com",
+            )
+
+
+async def test_operation_lookup_rejects_path_injection_before_provider_request() -> None:
+    provider_called = False
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal provider_called
+        provider_called = True
+        return httpx.Response(200, json={})
+
+    async with httpx.AsyncClient(
+        base_url="https://enter.tochka.com/uapi",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        with pytest.raises(ValueError, match="Invalid Tochka operationId"):
+            await TochkaPaymentService(_settings(), client).get_payment_operation_info(
+                "../../webhook/v1.0/client-id?poison=true"
+            )
+
+    assert provider_called is False
+
+
+@pytest.mark.parametrize(
+    "provider_response",
+    [
+        ["not", "an", "object"],
+        "not-json",
+    ],
+)
+async def test_payment_link_rejects_malformed_provider_response(
+    provider_response: object,
+) -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        if isinstance(provider_response, str):
+            return httpx.Response(200, text=provider_response)
+        return httpx.Response(200, json=provider_response)
+
+    async with httpx.AsyncClient(
+        base_url="https://enter.tochka.com/uapi",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        with pytest.raises(TochkaError, match="invalid"):
+            await TochkaPaymentService(_settings(), client).create_payment_link(
+                installment_id=uuid4(),
+                payment_link_id="payment-link-id",
+                amount_kopecks=6_250_000,
+                client_name="Иван",
+                client_email="ivan@example.com",
+            )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "event": "acquiringInternetPayment",
+            "Data": {
+                "paymentLinkId": "payment-link-id",
+                "operationId": "../../other-endpoint",
+                "status": "APPROVED",
+            },
+        },
+        {
+            "event": "acquiringInternetPayment",
+            "Data": {
+                "paymentLinkId": "x" * 65,
+                "operationId": "operation-id",
+                "status": "APPROVED",
+            },
+        },
+    ],
+)
+def test_webhook_rejects_invalid_provider_identifiers(payload: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match="Invalid Tochka"):
+        parse_webhook_event(payload)
+
+
+def test_webhook_rejects_invalid_payment_status() -> None:
+    with pytest.raises(ValueError, match="Invalid Tochka payment status"):
+        parse_webhook_event(
+            {
+                "event": "acquiringInternetPayment",
+                "Data": {
+                    "paymentLinkId": "payment-link-id",
+                    "status": "APPROVED\u0000POISONED",
+                },
+            }
+        )
+
+    with pytest.raises(ValueError, match="Invalid Tochka payment status"):
+        extract_payment_status({"Data": {"status": "APPROVED\u0000POISONED"}})
+
+
+def test_payment_operation_extracts_binding_fields_and_amount() -> None:
+    installment_id = uuid4()
+
+    operation = parse_payment_operation(
+        {
+            "Data": {
+                "Operation": [
+                    {
+                        "paymentLinkId": "payment-link-id",
+                        "operationId": "operation-id",
+                        "consumerId": str(installment_id),
+                        "amount": "62500.01",
+                        "status": "APPROVED",
+                    }
+                ]
+            }
+        }
+    )
+
+    assert operation.payment_link_id == "payment-link-id"
+    assert operation.operation_id == "operation-id"
+    assert operation.consumer_id == str(installment_id)
+    assert operation.amount_kopecks == 6_250_001
+    assert operation.status == "APPROVED"
+
+
+@pytest.mark.parametrize("amount", [True, "1.001", "NaN", "Infinity", "1e100"])
+def test_payment_operation_rejects_invalid_amount(amount: object) -> None:
+    with pytest.raises(ValueError, match="Invalid Tochka payment amount"):
+        parse_payment_operation({"Data": {"amount": amount}})
+
+
+def test_webhook_normalizes_excessive_json_nesting_to_value_error() -> None:
+    settings = _settings()
+    body = ('{"Data":' * 10_000 + "{}" + "}" * 10_000).encode()
+
+    with pytest.raises(ValueError, match="too deeply nested"):
+        parse_webhook_body(body, "application/json", settings)
+
+
 async def test_webhook_configuration_error_contains_safe_provider_detail() -> None:
     async def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -187,9 +366,7 @@ def test_signed_webhook_accepts_official_jwk_json_public_key() -> None:
         update={"tochka_public_key": SecretStr(json.dumps(public_jwk))}
     )
 
-    payload, is_signed = parse_webhook_body(
-        token.encode(), "text/plain; charset=utf-8", settings
-    )
+    payload, is_signed = parse_webhook_body(token.encode(), "text/plain; charset=utf-8", settings)
 
     assert is_signed is True
     assert payload["event"] == "acquiringInternetPayment"

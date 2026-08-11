@@ -10,6 +10,8 @@ import { clearDevUserId, setDevUserId } from "../src/features/auth/devAuth";
 afterEach(() => {
   vi.useRealTimers();
   delete window.Telegram;
+  delete (window as Window & { TelegramWebviewProxy?: unknown })
+    .TelegramWebviewProxy;
   window.sessionStorage.removeItem("__telegram__initParams");
   window.history.replaceState({}, "", "/");
   clearDevUserId();
@@ -17,7 +19,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("использует подписанный initData из Mini App URL до загрузки SDK", async () => {
+it("игнорирует initData из URL вне доверенного Telegram-контекста", async () => {
   const fetchMock = successfulFetch();
   window.history.replaceState(
     {},
@@ -28,7 +30,7 @@ it("использует подписанный initData из Mini App URL до 
   await apiRequest("/api/v1/me");
 
   const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-  expect(headers.get("Authorization")).toBe("tma query_id=raw&hash=signed");
+  expect(headers.has("Authorization")).toBe(false);
   expect(headers.has("X-Dev-User-Id")).toBe(false);
 });
 
@@ -41,6 +43,11 @@ function successfulFetch() {
 
 it("передаёт Telegram initData в Authorization без localStorage", async () => {
   const fetchMock = successfulFetch();
+  (
+    window as Window & {
+      TelegramWebviewProxy?: { postEvent: () => void };
+    }
+  ).TelegramWebviewProxy = { postEvent: vi.fn() };
   window.Telegram = {
     WebApp: {
       initData: "query_id=test&hash=signed",

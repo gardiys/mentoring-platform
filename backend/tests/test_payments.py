@@ -1,14 +1,20 @@
+import json
 from datetime import date
 from decimal import Decimal
 from urllib.parse import parse_qs, urlparse
+from uuid import UUID, uuid4
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
 from httpx import AsyncClient
+from pydantic import SecretStr
 from sqlalchemy import select
 
 from app.interviews.uploads import StoredUpload
 from app.mentors.models import MentorStudent
+from app.payments import router as payment_router
 from app.payments.models import (
     MentorPayout,
     MentorPayoutAllocation,
@@ -183,10 +189,7 @@ async def test_admin_can_cancel_paid_mentor_payout_and_restore_balance(
         json={},
     )
     assert without_reason.status_code == 422
-    assert (
-        without_reason.json()["detail"]["code"]
-        == "mentor_payout_cancellation_reason_required"
-    )
+    assert without_reason.json()["detail"]["code"] == "mentor_payout_cancellation_reason_required"
 
     cancelled = await client.post(
         f"/api/v1/admin/payments/payouts/{payout_id}/cancel",
@@ -947,6 +950,191 @@ async def test_development_payment_link_is_idempotent(
     )
     assert first.status_code == second.status_code == 200
     assert first.json()["payment_url"] == second.json()["payment_url"]
+
+
+async def _create_test_payment_attempt(client: AsyncClient, seeded: SeededData) -> tuple[UUID, str]:
+    dashboard = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.mentor_id),
+        json={
+            "company_name": "Yandex",
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 200_000,
+        },
+    )
+    installment_id = UUID(dashboard.json()["installments"][0]["id"])
+    link = await client.post(
+        f"/api/v1/payments/installments/{installment_id}/link",
+        headers=auth(seeded.student_id),
+    )
+    payment_link_id = parse_qs(urlparse(link.json()["payment_url"]).query)["local_payment"][0]
+    return installment_id, payment_link_id
+
+
+def _signed_tochka_payload(payload: dict[str, object], monkeypatch: pytest.MonkeyPatch) -> str:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_jwk = jwt.algorithms.RSAAlgorithm.to_jwk(private_key.public_key(), as_dict=True)
+    production_settings = payment_router.settings.model_copy(
+        update={
+            "app_env": "production",
+            "tochka_client_id": "client-id",
+            "tochka_jwt_token": SecretStr("bank-token"),
+            "tochka_public_key": SecretStr(json.dumps(public_jwk)),
+        }
+    )
+    monkeypatch.setattr(payment_router, "settings", production_settings)
+    return jwt.encode(payload, private_key, algorithm="RS256")
+
+
+async def test_tochka_webhook_rejects_body_over_endpoint_limit(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/payments/tochka/webhook",
+        content=b"x" * (1_048_576 + 1),
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"]["code"] == "request_too_large"
+
+
+async def test_signed_webhook_cannot_credit_unbound_provider_payment(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    installment_id, payment_link_id = await _create_test_payment_attempt(client, seeded)
+    provider_calls: list[str] = []
+
+    async def provider_lookup(_service: object, operation_id: str) -> dict[str, object]:
+        provider_calls.append(operation_id)
+        return {
+            "Data": {
+                "paymentLinkId": payment_link_id,
+                "operationId": operation_id,
+                "consumerId": str(uuid4()),
+                "amount": "50000.00",
+                "status": "APPROVED",
+            }
+        }
+
+    monkeypatch.setattr(
+        payment_router.TochkaPaymentService,
+        "get_payment_operation_info",
+        provider_lookup,
+    )
+
+    unknown_token = _signed_tochka_payload(
+        {
+            "eventType": "acquiringInternetPayment",
+            "eventId": "evt-unknown-signed-payment",
+            "Data": {
+                "paymentLinkId": "unknown-payment-link",
+                "operationId": "unknown-operation",
+                "status": "APPROVED",
+            },
+        },
+        monkeypatch,
+    )
+    unsigned = await client.post(
+        "/api/v1/payments/tochka/webhook",
+        json={
+            "eventType": "acquiringInternetPayment",
+            "eventId": "evt-unsigned-production-payment",
+            "Data": {
+                "paymentLinkId": payment_link_id,
+                "operationId": "unsigned-operation",
+                "status": "APPROVED",
+            },
+        },
+    )
+    assert unsigned.status_code == 200, unsigned.text
+    assert unsigned.json() == {"status": "unverified"}
+    assert provider_calls == []
+
+    unknown = await client.post(
+        "/api/v1/payments/tochka/webhook",
+        content=unknown_token,
+        headers={"Content-Type": "text/plain"},
+    )
+    assert unknown.status_code == 200, unknown.text
+    assert unknown.json() == {"status": "unverified"}
+    assert provider_calls == []
+
+    attacker_token = _signed_tochka_payload(
+        {
+            "eventType": "acquiringInternetPayment",
+            "eventId": "evt-unbound-signed-payment",
+            "Data": {
+                "paymentLinkId": payment_link_id,
+                "operationId": "attacker-operation",
+                "status": "APPROVED",
+            },
+        },
+        monkeypatch,
+    )
+    response = await client.post(
+        "/api/v1/payments/tochka/webhook",
+        content=attacker_token,
+        headers={"Content-Type": "text/plain"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {"status": "unverified"}
+    assert provider_calls == ["attacker-operation"]
+
+    async with TestSession() as session:
+        installment = await session.get(PaymentInstallment, installment_id)
+        assert installment is not None
+        assert installment.status is not PaymentInstallmentStatus.PAID
+
+
+async def test_production_webhook_credits_only_fully_bound_provider_payment(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    installment_id, payment_link_id = await _create_test_payment_attempt(client, seeded)
+
+    async def provider_lookup(_service: object, operation_id: str) -> dict[str, object]:
+        return {
+            "Data": {
+                "paymentLinkId": payment_link_id,
+                "operationId": operation_id,
+                "consumerId": str(installment_id),
+                "amount": "50000.00",
+                "status": "APPROVED",
+            }
+        }
+
+    monkeypatch.setattr(
+        payment_router.TochkaPaymentService,
+        "get_payment_operation_info",
+        provider_lookup,
+    )
+    token = _signed_tochka_payload(
+        {
+            "eventType": "acquiringInternetPayment",
+            "eventId": "evt-bound-signed-payment",
+            "Data": {
+                "paymentLinkId": payment_link_id,
+                "operationId": "bound-operation",
+                "status": "FAILED",
+            },
+        },
+        monkeypatch,
+    )
+
+    response = await client.post(
+        "/api/v1/payments/tochka/webhook",
+        content=token,
+        headers={"Content-Type": "text/plain"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"status": "ok"}
+    async with TestSession() as session:
+        installment = await session.get(PaymentInstallment, installment_id)
+        assert installment is not None
+        assert installment.status is PaymentInstallmentStatus.PAID
 
 
 async def test_tochka_webhook_confirms_payment_once(

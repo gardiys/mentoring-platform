@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+import hashlib
 import re
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
-from app.interviews.models import Company, CompanyAlias, InterviewProcess
+from app.interviews.models import (
+    Company,
+    CompanyAlias,
+    CompanyAliasProposal,
+    CompanyAliasProposalStatus,
+    InterviewProcess,
+)
+from app.users.models import User
 
 LEGAL_FORM_PATTERN = re.compile(
     r"(?:^|[\s,.;:()\-])(?:"
@@ -20,6 +30,7 @@ LEGAL_FORM_PATTERN = re.compile(
 NON_SEARCH_CHARACTER = re.compile(r"[^0-9a-zа-я]+", flags=re.IGNORECASE)
 SPACE_PATTERN = re.compile(r"\s+")
 EDGE_QUOTES = " \t\r\n\"'`«»„“”()[]{}.,;:—–-"
+MAX_PENDING_ALIAS_PROPOSALS_PER_USER = 20
 
 TRANSLITERATION = {
     "а": "a",
@@ -233,25 +244,356 @@ async def remember_company_alias(
     return company
 
 
+async def submit_company_alias_proposal(
+    session: AsyncSession,
+    company: Company,
+    raw_alias: str,
+    suggested_by: User,
+) -> CompanyAliasProposal | None:
+    alias_name = normalize_company_name(raw_alias)
+    alias_key = company_search_key(alias_name)
+    if not alias_key or alias_key == company.normalized_name:
+        return None
+
+    approved_alias = await session.scalar(
+        select(CompanyAlias).where(CompanyAlias.normalized_name == alias_key)
+    )
+    if approved_alias is not None and approved_alias.company_id == company.id:
+        return None
+
+    # Serialize proposals from one account so parallel requests cannot bypass
+    # the pending-queue cap. The lock is scoped to the current transaction.
+    proposal_lock_key = int.from_bytes(suggested_by.id.bytes[:8], "big", signed=True)
+    await session.scalar(select(func.pg_advisory_xact_lock(proposal_lock_key)))
+
+    existing = await session.scalar(
+        select(CompanyAliasProposal).where(
+            CompanyAliasProposal.company_id == company.id,
+            CompanyAliasProposal.normalized_name == alias_key,
+            CompanyAliasProposal.suggested_by_user_id == suggested_by.id,
+        )
+    )
+    if existing is not None:
+        return existing
+
+    pending_count = int(
+        await session.scalar(
+            select(func.count(CompanyAliasProposal.id)).where(
+                CompanyAliasProposal.suggested_by_user_id == suggested_by.id,
+                CompanyAliasProposal.status == CompanyAliasProposalStatus.PENDING,
+            )
+        )
+        or 0
+    )
+    if pending_count >= MAX_PENDING_ALIAS_PROPOSALS_PER_USER:
+        api_error(
+            429,
+            "company_alias_proposal_limit_reached",
+            "Too many alternative company names are awaiting review",
+        )
+
+    proposal: CompanyAliasProposal | None = CompanyAliasProposal(
+        company_id=company.id,
+        company_name=company.name,
+        name=alias_name,
+        normalized_name=alias_key,
+        transliterated_name=transliterate_company_name(alias_name),
+        suggested_by_user_id=suggested_by.id,
+    )
+    try:
+        async with session.begin_nested():
+            session.add(proposal)
+            await session.flush()
+    except IntegrityError:
+        proposal = await session.scalar(
+            select(CompanyAliasProposal).where(
+                CompanyAliasProposal.company_id == company.id,
+                CompanyAliasProposal.normalized_name == alias_key,
+                CompanyAliasProposal.suggested_by_user_id == suggested_by.id,
+            )
+        )
+        if proposal is None:
+            raise
+    return proposal
+
+
 async def resolve_company(
     session: AsyncSession,
     raw_name: str,
     *,
     company_id: UUID | None = None,
     raw_alias: str | None = None,
-    allow_company_merge: bool = False,
+    alias_confirmed: bool = False,
+    suggested_by: User | None = None,
 ) -> Company:
     if company_id is None:
+        if raw_alias is not None or alias_confirmed:
+            api_error(
+                422,
+                "invalid_company_alias_proposal",
+                "Select a company before suggesting an alternative name",
+            )
         return await get_or_create_company(session, raw_name)
 
     company = await session.get(Company, company_id)
     if company is None:
         api_error(422, "invalid_company", "The selected company no longer exists")
-    return await remember_company_alias(
-        session,
-        company,
-        raw_alias or raw_name,
-        allow_company_merge=allow_company_merge,
+    if raw_alias is None:
+        if alias_confirmed:
+            api_error(
+                422,
+                "invalid_company_alias_proposal",
+                "No alternative company name was provided",
+            )
+        # A selected company is authoritative. In particular, never learn the
+        # free-form raw_name as an alias unless the user explicitly confirmed it.
+        return company
+    if not alias_confirmed or suggested_by is None:
+        api_error(
+            422,
+            "company_alias_confirmation_required",
+            "Confirm that the entered value is an alternative company name",
+        )
+    await submit_company_alias_proposal(session, company, raw_alias, suggested_by)
+    return company
+
+
+@dataclass(frozen=True)
+class CompanyAliasProposalView:
+    proposal: CompanyAliasProposal
+    suggested_by: User | None
+    reviewed_by: User | None
+    conflicting_company: Company | None
+
+
+async def _conflicting_company(
+    session: AsyncSession,
+    normalized_name: str,
+    company_id: UUID,
+) -> Company | None:
+    company = await session.scalar(
+        select(Company).where(
+            Company.normalized_name == normalized_name,
+            Company.id != company_id,
+        )
+    )
+    if company is not None:
+        return company
+    aliased_company: Company | None = await session.scalar(
+        select(Company)
+        .join(CompanyAlias, CompanyAlias.company_id == Company.id)
+        .where(
+            CompanyAlias.normalized_name == normalized_name,
+            Company.id != company_id,
+        )
+    )
+    return aliased_company
+
+
+async def list_company_alias_proposals(
+    session: AsyncSession,
+    status: CompanyAliasProposalStatus | None,
+    *,
+    query: str | None,
+    limit: int,
+    offset: int,
+) -> tuple[list[CompanyAliasProposalView], int]:
+    filters = []
+    if status is not None:
+        filters.append(CompanyAliasProposal.status == status)
+    if query:
+        normalized_query = normalize_company_name(query)
+        filters.append(
+            or_(
+                CompanyAliasProposal.name.ilike(f"%{normalized_query}%"),
+                CompanyAliasProposal.company_name.ilike(f"%{normalized_query}%"),
+            )
+        )
+
+    total = int(
+        await session.scalar(
+            select(func.count(CompanyAliasProposal.id)).where(*filters)
+        )
+        or 0
+    )
+    proposals = list(
+        await session.scalars(
+            select(CompanyAliasProposal)
+            .where(*filters)
+            .order_by(CompanyAliasProposal.created_at.desc(), CompanyAliasProposal.id)
+            .limit(limit)
+            .offset(offset)
+        )
+    )
+    user_ids = {
+        user_id
+        for proposal in proposals
+        for user_id in (proposal.suggested_by_user_id, proposal.reviewed_by_user_id)
+        if user_id is not None
+    }
+    users = {
+        user.id: user
+        for user in (
+            list(await session.scalars(select(User).where(User.id.in_(user_ids))))
+            if user_ids
+            else []
+        )
+    }
+    views: list[CompanyAliasProposalView] = []
+    for proposal in proposals:
+        conflict = (
+            await _conflicting_company(
+                session,
+                proposal.normalized_name,
+                proposal.company_id,
+            )
+            if proposal.company_id is not None
+            else None
+        )
+        views.append(
+            CompanyAliasProposalView(
+                proposal=proposal,
+                suggested_by=(
+                    users.get(proposal.suggested_by_user_id)
+                    if proposal.suggested_by_user_id is not None
+                    else None
+                ),
+                reviewed_by=(
+                    users.get(proposal.reviewed_by_user_id)
+                    if proposal.reviewed_by_user_id is not None
+                    else None
+                ),
+                conflicting_company=conflict,
+            )
+        )
+    return views, total
+
+
+async def moderate_company_alias_proposal(
+    session: AsyncSession,
+    proposal_id: UUID,
+    admin: User,
+    *,
+    action: str,
+    merge_conflicting_company: bool,
+    rejection_reason: str | None,
+) -> CompanyAliasProposalView:
+    proposal_hint = await session.scalar(
+        select(CompanyAliasProposal).where(CompanyAliasProposal.id == proposal_id)
+    )
+    if proposal_hint is None:
+        api_error(404, "company_alias_proposal_not_found", "Alias proposal was not found")
+    # Acquire the alias-wide lock before any proposal row lock. This order is
+    # important: approving one alias updates other pending proposals with the
+    # same key, so the inverse order could deadlock concurrent admin decisions.
+    alias_lock_key = int.from_bytes(
+        hashlib.blake2b(
+            proposal_hint.normalized_name.encode("utf-8"), digest_size=8
+        ).digest(),
+        "big",
+        signed=True,
+    )
+    await session.scalar(select(func.pg_advisory_xact_lock(alias_lock_key)))
+
+    proposal = await session.scalar(
+        select(CompanyAliasProposal)
+        .where(CompanyAliasProposal.id == proposal_id)
+        .with_for_update()
+    )
+    if proposal is None:
+        api_error(404, "company_alias_proposal_not_found", "Alias proposal was not found")
+    if proposal.status is not CompanyAliasProposalStatus.PENDING:
+        api_error(
+            409,
+            "company_alias_proposal_already_reviewed",
+            "This alias proposal has already been reviewed",
+        )
+
+    now = datetime.now(UTC)
+    conflict: Company | None = None
+    if action == "approve":
+        if proposal.company_id is None:
+            api_error(
+                409,
+                "company_alias_target_missing",
+                "The target company no longer exists",
+            )
+        company = await session.get(Company, proposal.company_id)
+        if company is None:
+            api_error(
+                409,
+                "company_alias_target_missing",
+                "The target company no longer exists",
+            )
+        conflict = await _conflicting_company(
+            session,
+            proposal.normalized_name,
+            company.id,
+        )
+        if conflict is not None and not merge_conflicting_company:
+            api_error(
+                409,
+                "company_alias_merge_confirmation_required",
+                f"The name already belongs to {conflict.name}. Confirm the company merge",
+            )
+        await remember_company_alias(
+            session,
+            company,
+            proposal.name,
+            allow_company_merge=merge_conflicting_company,
+        )
+        await session.execute(
+            update(CompanyAliasProposal)
+            .where(
+                CompanyAliasProposal.normalized_name == proposal.normalized_name,
+                CompanyAliasProposal.status == CompanyAliasProposalStatus.PENDING,
+                CompanyAliasProposal.company_id == company.id,
+            )
+            .values(
+                status=CompanyAliasProposalStatus.APPROVED,
+                reviewed_by_user_id=admin.id,
+                reviewed_at=now,
+                rejection_reason=None,
+            )
+        )
+        await session.execute(
+            update(CompanyAliasProposal)
+            .where(
+                CompanyAliasProposal.normalized_name == proposal.normalized_name,
+                CompanyAliasProposal.status == CompanyAliasProposalStatus.PENDING,
+                or_(
+                    CompanyAliasProposal.company_id != company.id,
+                    CompanyAliasProposal.company_id.is_(None),
+                ),
+            )
+            .values(
+                status=CompanyAliasProposalStatus.REJECTED,
+                reviewed_by_user_id=admin.id,
+                reviewed_at=now,
+                rejection_reason="Название одобрено для другой компании",
+            )
+        )
+    else:
+        proposal.status = CompanyAliasProposalStatus.REJECTED
+        proposal.reviewed_by_user_id = admin.id
+        proposal.reviewed_at = now
+        proposal.rejection_reason = rejection_reason
+
+    await session.commit()
+    await session.refresh(proposal)
+    target_id = proposal.company_id
+    current_conflict = (
+        await _conflicting_company(session, proposal.normalized_name, target_id)
+        if target_id is not None
+        else None
+    )
+    return CompanyAliasProposalView(
+        proposal=proposal,
+        suggested_by=await session.get(User, proposal.suggested_by_user_id)
+        if proposal.suggested_by_user_id is not None
+        else None,
+        reviewed_by=admin,
+        conflicting_company=current_conflict,
     )
 
 

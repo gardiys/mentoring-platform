@@ -165,6 +165,9 @@ def _accrued_from_paid_installments(
 
 
 def upgrade() -> None:
+    # Legacy PII exports are intentionally absent from deployment images.
+    if not all(path.is_file() for path in PAYOUT_FILES):
+        return
     connection = op.get_bind()
     reward_ids = _imported_reward_ids()
     imported_rewards = list(
@@ -241,6 +244,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if not all(path.is_file() for path in PAYOUT_FILES):
+        return
     connection = op.get_bind()
     reward_ids = _imported_reward_ids()
     rewards = list(

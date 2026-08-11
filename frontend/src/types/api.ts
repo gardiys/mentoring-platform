@@ -220,6 +220,13 @@ export type AdminInterviewProcessPage = Schemas["AdminInterviewProcessPage"];
 export type InterviewProcessDetail = Schemas["InterviewProcessDetail"];
 export type CompanyOption = Schemas["CompanyOption"];
 export type InterviewDirectionOption = Schemas["InterviewDirectionOption"];
+export type CompanyAliasProposalStatus = Schemas["CompanyAliasProposalStatus"];
+export type AdminCompanyAliasProposalRead =
+  Schemas["AdminCompanyAliasProposalRead"];
+export type AdminCompanyAliasProposalPage =
+  Schemas["AdminCompanyAliasProposalPage"];
+export type AdminCompanyAliasProposalMutation =
+  Schemas["AdminCompanyAliasProposalMutation"];
 export type InterviewUploadIntent = StorageUploadIntent;
 export type InterviewDownloadUrl = Schemas["InterviewDownloadUrl"];
 export type InterviewCatalogCompanyListItem =
@@ -746,6 +753,7 @@ export interface IntelligenceInterviewCreate {
   company_name: string;
   company_id?: string | null;
   company_alias?: string | null;
+  company_alias_confirmed?: boolean;
   track_id: string;
   position_name?: string | null;
   interview_type: IntelligenceInterviewType;

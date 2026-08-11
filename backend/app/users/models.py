@@ -11,6 +11,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Enum,
+    Integer,
     Numeric,
     String,
     true,
@@ -39,6 +40,10 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(
             "entry_payment_kopecks >= 0",
             name="entry_payment_non_negative",
+        ),
+        CheckConstraint(
+            "session_version >= 1",
+            name="session_version_positive",
         ),
     )
     email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True, nullable=True)
@@ -77,6 +82,12 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=true(), nullable=False
+    )
+    session_version: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        server_default="1",
+        nullable=False,
     )
 
     enrollments = relationship("RoadmapEnrollment", back_populates="user")

@@ -69,7 +69,12 @@ export function InterviewProcessCreatePage() {
       {
         onSuccess: (process) => {
           allowNavigation();
-          notifications.show({ color: "green", message: "Трек создан" });
+          notifications.show({
+            color: "green",
+            message: payload.company_alias
+              ? "Трек создан, альтернативное название отправлено администратору на проверку"
+              : "Трек создан",
+          });
           navigate(`/interviews/journal/${process.id}`);
         },
         onError: (error) =>
@@ -96,6 +101,7 @@ export function InterviewProcessCreatePage() {
         company_name: companyName.trim(),
         company_id: selectedCompanyId,
         company_alias: companyAlias,
+        company_alias_confirmed: companyAlias !== null,
       });
       return;
     }
@@ -111,6 +117,7 @@ export function InterviewProcessCreatePage() {
           company_name: enteredName,
           company_id: null,
           company_alias: null,
+          company_alias_confirmed: false,
         });
       }
     } catch (error) {
@@ -198,9 +205,10 @@ export function InterviewProcessCreatePage() {
             <Text size="xs" c="dimmed">
               ООО, ИП, АО и другие юридические формы будут удалены. Если вы
               выберете существующую компанию после другого ввода, платформа
-              уточнит, нужно ли запомнить его как альтернативное название. Если
-              ничего не выбрать, перед созданием будут ещё раз показаны
-              возможные совпадения.
+              уточнит, нужно ли предложить его как альтернативное название.
+              Предложение начнёт влиять на поиск только после проверки
+              администратором. Если ничего не выбрать, перед созданием будут ещё
+              раз показаны возможные совпадения.
             </Text>
             <TagsInput
               label="Telegram рекрутеров"
@@ -295,6 +303,7 @@ export function InterviewProcessCreatePage() {
                     company_name: company.name,
                     company_id: company.id,
                     company_alias: enteredName,
+                    company_alias_confirmed: true,
                   });
                 }}
               >
@@ -313,6 +322,7 @@ export function InterviewProcessCreatePage() {
                 company_name: enteredName,
                 company_id: null,
                 company_alias: null,
+                company_alias_confirmed: false,
               });
             }}
           >

@@ -134,6 +134,7 @@ it("создаёт новый трек компании", async () => {
       track_id: pythonDirection.id,
       company_id: null,
       company_alias: null,
+      company_alias_confirmed: false,
       recruiter_telegram_usernames: ["@avito_hr"],
     }),
   );
@@ -169,6 +170,7 @@ it("предлагает связать свободный ввод с найд�
     track_id: pythonDirection.id,
     company_id: "72000000-0000-4000-8000-000000000001",
     company_alias: "WB",
+    company_alias_confirmed: true,
     recruiter_telegram_usernames: [],
   });
 });
@@ -202,6 +204,7 @@ it("создаёт новую компанию после отказа от на
     track_id: pythonDirection.id,
     company_id: null,
     company_alias: null,
+    company_alias_confirmed: false,
     recruiter_telegram_usernames: [],
   });
 });
@@ -239,6 +242,7 @@ it("запоминает введённое название как алиас �
     track_id: pythonDirection.id,
     company_id: "72000000-0000-4000-8000-000000000001",
     company_alias: "WB",
+    company_alias_confirmed: true,
     recruiter_telegram_usernames: [],
   });
 });
@@ -269,6 +273,7 @@ it("не связывает незавершённый ввод с выбран�
     track_id: pythonDirection.id,
     company_id: "72000000-0000-4000-8000-000000000001",
     company_alias: null,
+    company_alias_confirmed: false,
     recruiter_telegram_usernames: [],
   });
 });

@@ -28,6 +28,7 @@ from app.core.config import Settings
 
 logger = logging.getLogger(__name__)
 _URL_PATTERN = re.compile(r"https?://[^\s\"']+", re.IGNORECASE)
+_SAFE_JOB_DIAGNOSTIC_FIELDS = frozenset({"status", "created_at", "completed_at"})
 
 
 class TranscriptionProviderError(RuntimeError):
@@ -315,7 +316,15 @@ class NexaraTranscriptionProvider:
 
     @staticmethod
     def _safe_job_payload(data: dict[str, object]) -> dict[str, object]:
-        return {key: value for key, value in data.items() if key not in {"result", "error"}}
+        # Provider schemas evolve. Persist only the small diagnostic allowlist
+        # instead of trying to denylist every possible URL, credential, input
+        # filename or transcript field a future SDK response may add.
+        return {
+            key: value
+            for key, value in data.items()
+            if key in _SAFE_JOB_DIAGNOSTIC_FIELDS
+            and (value is None or isinstance(value, str | int | float | bool))
+        }
 
     @staticmethod
     def _provider_error(error: NexaraError) -> TranscriptionProviderError:

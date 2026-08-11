@@ -92,6 +92,7 @@ async def test_admin_creates_and_removes_unassigned_mentor(
         user = await session.get(User, created.json()["id"])
         assert user is not None
         assert user.role is UserRole.STUDENT
+        assert user.session_version == 2
         track_ids = set(
             await session.scalars(
                 select(LearningTrackEnrollment.track_id).where(
@@ -121,6 +122,7 @@ async def test_admin_promotes_student_and_keeps_account_data(
         )
         assert user is not None
         assert user.role is UserRole.MENTOR
+        assert user.session_version == 2
         assert relation is None
 
 

@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
@@ -16,6 +17,12 @@ OAUTH_STATE_COOKIE = "mentoring_oauth_state"
 
 class SignedPayloadError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class BrowserSession:
+    user_id: UUID
+    version: int
 
 
 def _base64url_encode(value: bytes) -> str:
@@ -58,23 +65,37 @@ def verify_payload(token: str, secret: str, *, expected_kind: str) -> dict[str, 
     return payload
 
 
-def create_browser_session(user_id: UUID, secret: str, ttl_seconds: int) -> str:
+def create_browser_session(
+    user_id: UUID,
+    session_version: int,
+    secret: str,
+    ttl_seconds: int,
+) -> str:
+    if session_version < 1:
+        raise ValueError("session_version must be positive")
     return sign_payload(
         {
             "kind": "browser_session",
             "user_id": str(user_id),
+            "version": session_version,
             "exp": _timestamp() + ttl_seconds,
         },
         secret,
     )
 
 
-def read_browser_session(token: str, secret: str) -> UUID:
+def read_browser_session(token: str, secret: str) -> BrowserSession:
     payload = verify_payload(token, secret, expected_kind="browser_session")
     try:
-        return UUID(str(payload["user_id"]))
+        user_id = UUID(str(payload["user_id"]))
     except (KeyError, ValueError, TypeError) as exc:
         raise SignedPayloadError("Invalid user id") from exc
+    # Cookies issued before session revocation support implicitly belong to
+    # version 1, so deploying this migration does not log everybody out.
+    version = payload.get("version", 1)
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        raise SignedPayloadError("Invalid session version")
+    return BrowserSession(user_id=user_id, version=version)
 
 
 def create_oauth_state(secret: str, ttl_seconds: int, next_path: str) -> tuple[str, str, str]:
@@ -110,9 +131,18 @@ def code_challenge(verifier: str) -> str:
 
 
 def safe_next_path(value: str | None) -> str:
-    if not value or not value.startswith("/") or value.startswith("//"):
+    if (
+        not value
+        or not value.startswith("/")
+        or value.startswith("//")
+        or "\\" in value
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
         return "/roadmaps"
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return "/roadmaps"
     if parsed.scheme or parsed.netloc:
         return "/roadmaps"
     return value

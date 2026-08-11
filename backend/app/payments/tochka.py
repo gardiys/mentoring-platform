@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal
@@ -16,6 +17,15 @@ import jwt
 from app.core.config import Settings
 
 logger = logging.getLogger(__name__)
+
+_PROVIDER_IDENTIFIER_PATTERN = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
+_PROVIDER_STATUS_PATTERN = re.compile(r"\A[A-Z][A-Z0-9_-]*\Z")
+_MAX_PROVIDER_IDENTIFIER_LENGTH = 255
+_MAX_PAYMENT_LINK_IDENTIFIER_LENGTH = 64
+_MAX_PAYMENT_URL_LENGTH = 2_048
+_MAX_PROVIDER_RESPONSE_NODES = 10_000
+_MAX_PROVIDER_RESPONSE_DEPTH = 20
+_MAX_PAYMENT_AMOUNT_KOPECKS = 9_223_372_036_854_775_807
 
 
 class TochkaError(RuntimeError):
@@ -47,6 +57,15 @@ class TochkaWebhookEvent:
         )
 
 
+@dataclass(frozen=True)
+class TochkaPaymentOperation:
+    payment_link_id: str | None
+    operation_id: str | None
+    consumer_id: str | None
+    amount_kopecks: int | None
+    status: str | None
+
+
 class TochkaPaymentService:
     def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None) -> None:
         self.settings = settings
@@ -61,6 +80,11 @@ class TochkaPaymentService:
         client_name: str,
         client_email: str,
     ) -> PaymentLinkResult:
+        payment_link_id = _validate_provider_identifier(
+            payment_link_id,
+            name="paymentLinkId",
+            max_length=_MAX_PAYMENT_LINK_IDENTIFIER_LENGTH,
+        )
         if not self.settings.tochka_client_id or self.settings.tochka_jwt_token is None:
             if self.settings.app_env == "development":
                 return PaymentLinkResult(
@@ -145,31 +169,44 @@ class TochkaPaymentService:
                 raise TochkaError(
                     f"Tochka Bank rejected the payment: HTTP {response.status_code}{suffix}"
                 )
-            return cast(dict[str, Any], response.json())
+            return _provider_response_object(response)
 
         raw = await self._request(request)
         response_data = raw.get("Data") if isinstance(raw.get("Data"), dict) else raw
         assert isinstance(response_data, dict)
-        payment_url = _find_first(
-            response_data,
-            ("paymentLink", "paymentUrl", "payment_url", "link", "url"),
-        )
-        if not payment_url:
-            raise TochkaError("Tochka Bank response does not contain a payment URL")
+        try:
+            payment_url = _find_first(
+                response_data,
+                ("paymentLink", "paymentUrl", "payment_url", "link", "url"),
+            )
+            if not payment_url:
+                raise TochkaError("Tochka Bank response does not contain a payment URL")
+            returned_payment_link_id = _validate_provider_identifier(
+                str(
+                    _find_first(response_data, ("paymentLinkId", "payment_link_id"))
+                    or payment_link_id
+                ),
+                name="paymentLinkId",
+                max_length=_MAX_PAYMENT_LINK_IDENTIFIER_LENGTH,
+            )
+            operation_id = _optional_provider_identifier(
+                _find_first(response_data, ("operationId", "operation_id")),
+                name="operationId",
+            )
+        except ValueError as error:
+            raise TochkaError("Tochka Bank returned an invalid response") from error
+        validated_payment_url = _validate_payment_url(str(payment_url))
         return PaymentLinkResult(
-            payment_link_id=str(
-                _find_first(response_data, ("paymentLinkId", "payment_link_id")) or payment_link_id
-            ),
-            provider_operation_id=_string_or_none(
-                _find_first(response_data, ("operationId", "operation_id"))
-            ),
-            payment_url=str(payment_url),
+            payment_link_id=returned_payment_link_id,
+            provider_operation_id=operation_id,
+            payment_url=validated_payment_url,
             raw_response=raw,
         )
 
     async def get_payment_operation_info(self, operation_id: str) -> dict[str, Any]:
         if not self.settings.tochka_client_id or self.settings.tochka_jwt_token is None:
             raise TochkaError("Tochka Bank payments are not configured")
+        operation_id = _validate_provider_identifier(operation_id, name="operationId")
         token = self.settings.tochka_jwt_token.get_secret_value()
 
         async def request(client: httpx.AsyncClient) -> dict[str, Any]:
@@ -182,7 +219,7 @@ class TochkaPaymentService:
             )
             if response.is_error:
                 raise TochkaError(f"Could not verify Tochka payment: HTTP {response.status_code}")
-            return cast(dict[str, Any], response.json())
+            return _provider_response_object(response)
 
         return await self._request(request)
 
@@ -211,7 +248,7 @@ class TochkaPaymentService:
                 raise TochkaError(
                     f"Could not configure Tochka webhook: HTTP {response.status_code}{suffix}"
                 )
-            return cast(dict[str, Any], response.json())
+            return _provider_response_object(response)
 
         return await self._request(request)
 
@@ -237,12 +274,14 @@ class TochkaPaymentService:
 def parse_webhook_body(
     body: bytes, content_type: str, settings: Settings
 ) -> tuple[dict[str, Any], bool]:
-    text = body.decode("utf-8").strip()
+    try:
+        text = body.decode("utf-8").strip()
+    except UnicodeDecodeError as error:
+        raise ValueError("Webhook body must be valid UTF-8") from error
+    if not text:
+        raise ValueError("Webhook body must not be empty")
     if "application/json" in content_type:
-        payload = json.loads(text)
-        if not isinstance(payload, dict):
-            raise ValueError("Webhook JSON must be an object")
-        return payload, False
+        return _decode_json_object(text, context="Webhook JSON"), False
     if text.count(".") >= 2:
         public_key = (
             settings.tochka_public_key.get_secret_value().replace("\\n", "\n")
@@ -257,7 +296,7 @@ def parse_webhook_body(
                     algorithms=["RS256"],
                     options={"verify_aud": False},
                 )
-            except (jwt.PyJWTError, TypeError, ValueError) as error:
+            except (jwt.PyJWTError, TypeError, ValueError, RecursionError) as error:
                 raise ValueError("Invalid Tochka webhook signature") from error
             if not isinstance(payload, dict):
                 raise ValueError("Webhook JWT payload must be an object")
@@ -265,10 +304,7 @@ def parse_webhook_body(
         if settings.app_env == "production":
             raise ValueError("TOCHKA_PUBLIC_KEY is required for signed production webhooks")
         return _decode_unverified_jwt(text), False
-    payload = json.loads(text)
-    if not isinstance(payload, dict):
-        raise ValueError("Webhook JSON must be an object")
-    return payload, False
+    return _decode_json_object(text, context="Webhook JSON"), False
 
 
 def parse_webhook_event(payload: dict[str, Any]) -> TochkaWebhookEvent | None:
@@ -285,14 +321,20 @@ def parse_webhook_event(payload: dict[str, Any]) -> TochkaWebhookEvent | None:
     status = _find_first(data, ("status", "operationStatus"))
     if not status:
         raise ValueError("Webhook does not contain a payment status")
+    normalized_status = _normalize_provider_status(status)
     return TochkaWebhookEvent(
-        event_id=_string_or_none(
+        event_id=_optional_provider_identifier(
             _find_first(payload, ("eventId", "event_id"))
-            or _find_first(data, ("eventId", "event_id"))
+            or _find_first(data, ("eventId", "event_id")),
+            name="eventId",
         ),
-        payment_link_id=_string_or_none(payment_link_id),
-        status=str(status).upper(),
-        operation_id=_string_or_none(operation_id),
+        payment_link_id=_optional_provider_identifier(
+            payment_link_id,
+            name="paymentLinkId",
+            max_length=_MAX_PAYMENT_LINK_IDENTIFIER_LENGTH,
+        ),
+        status=normalized_status,
+        operation_id=_optional_provider_identifier(operation_id, name="operationId"),
         raw_payload=payload,
     )
 
@@ -301,7 +343,37 @@ def extract_payment_status(payload: dict[str, Any]) -> str | None:
     data = payload.get("Data") if isinstance(payload.get("Data"), dict) else payload
     assert isinstance(data, dict)
     value = _find_first(data, ("status", "operationStatus"))
-    return str(value).upper() if value else None
+    return _normalize_provider_status(value) if value else None
+
+
+def parse_payment_operation(payload: dict[str, Any]) -> TochkaPaymentOperation:
+    """Parse identity fields returned by Get Payment Operation Info.
+
+    Unlike a webhook signature, this response is fetched with this merchant's
+    credentials and can therefore be used to bind an event to a local payment.
+    """
+    data = payload.get("Data") if isinstance(payload.get("Data"), dict) else payload
+    assert isinstance(data, dict)
+    raw_amount = _find_first(data, ("amount", "Amount"))
+    if isinstance(raw_amount, dict):
+        raw_amount = _find_first(raw_amount, ("value", "amount", "sum"))
+    return TochkaPaymentOperation(
+        payment_link_id=_optional_provider_identifier(
+            _find_first(data, ("paymentLinkId", "payment_link_id", "orderId")),
+            name="paymentLinkId",
+            max_length=_MAX_PAYMENT_LINK_IDENTIFIER_LENGTH,
+        ),
+        operation_id=_optional_provider_identifier(
+            _find_first(data, ("operationId", "operation_id")),
+            name="operationId",
+        ),
+        consumer_id=_optional_provider_identifier(
+            _find_first(data, ("consumerId", "consumer_id")),
+            name="consumerId",
+        ),
+        amount_kopecks=_optional_amount_kopecks(raw_amount),
+        status=extract_payment_status(data),
+    )
 
 
 def map_payment_status(status: str) -> str:
@@ -335,7 +407,7 @@ def _provider_error_detail(response: httpx.Response) -> str | None:
     """Extract a bounded provider error without logging the request or credentials."""
     try:
         payload = response.json()
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, RecursionError):
         payload = None
 
     candidates: list[object] = []
@@ -415,9 +487,26 @@ def _decode_unverified_jwt(token: str) -> dict[str, Any]:
     if len(parts) < 2:
         raise ValueError("Invalid JWT")
     decoded = base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4))
-    payload = json.loads(decoded)
+    return _decode_json_object(decoded, context="JWT payload")
+
+
+def _decode_json_object(value: str | bytes, *, context: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(value)
+    except RecursionError as error:
+        raise ValueError(f"{context} is too deeply nested") from error
     if not isinstance(payload, dict):
-        raise ValueError("JWT payload must be an object")
+        raise ValueError(f"{context} must be an object")
+    return payload
+
+
+def _provider_response_object(response: httpx.Response) -> dict[str, Any]:
+    try:
+        payload = response.json()
+    except (ValueError, UnicodeDecodeError, RecursionError) as error:
+        raise TochkaError("Tochka Bank returned invalid JSON") from error
+    if not isinstance(payload, dict):
+        raise TochkaError("Tochka Bank returned an invalid response")
     return payload
 
 
@@ -430,20 +519,23 @@ def _event_data(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _find_first(payload: dict[str, Any], keys: tuple[str, ...]) -> object | None:
-    for key in keys:
-        if payload.get(key) not in (None, ""):
-            return cast(object, payload[key])
-    for value in payload.values():
-        if isinstance(value, dict):
-            nested = _find_first(value, keys)
-            if nested not in (None, ""):
-                return nested
-        elif isinstance(value, list):
-            for item in value:
-                if isinstance(item, dict):
-                    nested = _find_first(item, keys)
-                    if nested not in (None, ""):
-                        return nested
+    pending: list[tuple[dict[str, Any], int]] = [(payload, 0)]
+    visited = 0
+    while pending:
+        current, depth = pending.pop()
+        visited += 1
+        if visited > _MAX_PROVIDER_RESPONSE_NODES or depth > _MAX_PROVIDER_RESPONSE_DEPTH:
+            raise ValueError("Provider payload is too deeply nested or complex")
+        for key in keys:
+            if current.get(key) not in (None, ""):
+                return cast(object, current[key])
+        for value in reversed(tuple(current.values())):
+            if isinstance(value, dict):
+                pending.append((value, depth + 1))
+            elif isinstance(value, list):
+                pending.extend(
+                    (item, depth + 1) for item in reversed(value) if isinstance(item, dict)
+                )
     return None
 
 
@@ -456,3 +548,73 @@ def _add_query_params(url: str, **params: str) -> str:
 
 def _string_or_none(value: object) -> str | None:
     return str(value) if value is not None else None
+
+
+def _validate_provider_identifier(
+    value: str,
+    *,
+    name: str,
+    max_length: int = _MAX_PROVIDER_IDENTIFIER_LENGTH,
+) -> str:
+    if not 1 <= len(value) <= max_length or _PROVIDER_IDENTIFIER_PATTERN.fullmatch(value) is None:
+        raise ValueError(f"Invalid Tochka {name}")
+    return value
+
+
+def _optional_provider_identifier(
+    value: object | None,
+    *,
+    name: str,
+    max_length: int = _MAX_PROVIDER_IDENTIFIER_LENGTH,
+) -> str | None:
+    if value is None:
+        return None
+    return _validate_provider_identifier(str(value), name=name, max_length=max_length)
+
+
+def _normalize_provider_status(value: object) -> str:
+    normalized = str(value).strip().upper()
+    if (
+        not normalized
+        or len(normalized) > 64
+        or _PROVIDER_STATUS_PATTERN.fullmatch(normalized) is None
+    ):
+        raise ValueError("Invalid Tochka payment status")
+    return normalized
+
+
+def _optional_amount_kopecks(value: object | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError("Invalid Tochka payment amount")
+    try:
+        amount = Decimal(str(value))
+    except (ArithmeticError, ValueError) as error:
+        raise ValueError("Invalid Tochka payment amount") from error
+    if not amount.is_finite() or amount <= 0:
+        raise ValueError("Invalid Tochka payment amount")
+    kopecks = amount * 100
+    if kopecks != kopecks.to_integral_value() or kopecks > _MAX_PAYMENT_AMOUNT_KOPECKS:
+        raise ValueError("Invalid Tochka payment amount")
+    return int(kopecks)
+
+
+def _validate_payment_url(value: str) -> str:
+    if len(value) > _MAX_PAYMENT_URL_LENGTH or any(
+        ord(character) < 32 or ord(character) == 127 for character in value
+    ):
+        raise TochkaError("Tochka Bank returned an invalid payment URL")
+    try:
+        parts = urlsplit(value)
+        _ = parts.port
+    except ValueError as error:
+        raise TochkaError("Tochka Bank returned an invalid payment URL") from error
+    if (
+        parts.scheme.lower() != "https"
+        or not parts.hostname
+        or parts.username is not None
+        or parts.password is not None
+    ):
+        raise TochkaError("Tochka Bank returned an invalid payment URL")
+    return value

@@ -3,6 +3,7 @@ const TELEGRAM_SDK_SCRIPT_ATTRIBUTE = "telegramSdk";
 const TELEGRAM_SDK_SCRIPT_SELECTOR = "script[data-telegram-sdk]";
 const TELEGRAM_INIT_PARAMS_STORAGE_KEY = "__telegram__initParams";
 const DEFAULT_TELEGRAM_SDK_TIMEOUT_MS = 3_000;
+const TELEGRAM_WEB_ORIGIN = "https://web.telegram.org";
 
 export const TELEGRAM_SDK_READY_EVENT = "mentoring:telegram-sdk-ready";
 
@@ -16,15 +17,61 @@ type TelegramLaunchParams = {
 };
 
 type TelegramBridgeWindow = Window & {
-  TelegramWebviewProxy?: unknown;
+  TelegramWebviewProxy?: {
+    postEvent?: unknown;
+  };
+  external: External & {
+    notify?: unknown;
+  };
   webkit?: {
     messageHandlers?: {
-      TelegramWebviewProxy?: unknown;
+      TelegramWebviewProxy?: {
+        postMessage?: unknown;
+      };
     };
   };
 };
 
 let sdkLoadPromise: Promise<TelegramSdkLoadResult> | null = null;
+
+function isTrustedNativeBridge(windowValue: Window): boolean {
+  const bridgeWindow = windowValue as TelegramBridgeWindow;
+  return Boolean(
+    typeof bridgeWindow.TelegramWebviewProxy?.postEvent === "function" ||
+    typeof bridgeWindow.external?.notify === "function" ||
+    typeof bridgeWindow.webkit?.messageHandlers?.TelegramWebviewProxy
+      ?.postMessage === "function",
+  );
+}
+
+function originOf(value: string): string | null {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function isTrustedTelegramWebFrame(windowValue: Window): boolean {
+  try {
+    if (windowValue.parent === windowValue) return false;
+
+    const ancestorOrigins = windowValue.location.ancestorOrigins;
+    if (ancestorOrigins?.length) {
+      return ancestorOrigins.item(0) === TELEGRAM_WEB_ORIGIN;
+    }
+
+    return originOf(windowValue.document.referrer) === TELEGRAM_WEB_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
+function isTrustedTelegramContext(windowValue: Window): boolean {
+  return (
+    isTrustedNativeBridge(windowValue) || isTrustedTelegramWebFrame(windowValue)
+  );
+}
 
 function parseUrlLaunchParams(windowValue: Window): TelegramLaunchParams {
   const sources: URLSearchParams[] = [];
@@ -84,6 +131,8 @@ function launchParams(windowValue: Window): TelegramLaunchParams {
 export function getTelegramInitData(
   windowValue: Window = window,
 ): string | null {
+  if (!isTrustedTelegramContext(windowValue)) return null;
+
   const sdkInitData = windowValue.Telegram?.WebApp?.initData;
   if (typeof sdkInitData === "string" && sdkInitData.length > 0) {
     return sdkInitData;
@@ -95,30 +144,7 @@ export function getTelegramInitData(
 }
 
 export function isTelegramLaunchContext(windowValue: Window = window): boolean {
-  if (getTelegramInitData(windowValue)) return true;
-
-  const sdkPlatform = windowValue.Telegram?.WebApp?.platform;
-  if (
-    typeof sdkPlatform === "string" &&
-    sdkPlatform.length > 0 &&
-    sdkPlatform !== "unknown"
-  ) {
-    return true;
-  }
-
-  const params = launchParams(windowValue);
-  if (
-    typeof params.tgWebAppPlatform === "string" ||
-    typeof params.tgWebAppVersion === "string"
-  ) {
-    return true;
-  }
-
-  const bridgeWindow = windowValue as TelegramBridgeWindow;
-  return Boolean(
-    bridgeWindow.TelegramWebviewProxy ||
-    bridgeWindow.webkit?.messageHandlers?.TelegramWebviewProxy,
-  );
+  return isTrustedTelegramContext(windowValue);
 }
 
 export function loadTelegramSdk(

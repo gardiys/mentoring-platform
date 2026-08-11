@@ -8,6 +8,8 @@ from app.core.errors import api_error
 from app.interviews.uploads import StoredUpload, UploadIntent
 from app.media import router as media_router
 from app.media.models import ContentMediaProcessingStatus, ProtectedContentMedia
+from app.roadmaps.models import Roadmap
+from app.tracks.models import LearningTrack
 from tests.conftest import SeededData, TestSession, auth
 
 
@@ -113,6 +115,94 @@ async def create_knowledge_entry(
     assert created.status_code == 201, created.text
     payload = created.json()
     return payload["id"], payload["entries"][0]["id"], payload["entries"][0]["slug"]
+
+
+async def test_unpublished_direction_revokes_knowledge_media_access(
+    client: AsyncClient,
+    seeded: SeededData,
+) -> None:
+    _topic_id, entry_id, entry_slug = await create_knowledge_entry(client, seeded)
+    media_id = uuid4()
+    async with TestSession() as session:
+        session.add(
+            ProtectedContentMedia(
+                id=media_id,
+                knowledge_entry_id=UUID(entry_id),
+                uploaded_by_user_id=seeded.admin_id,
+                storage_key=f"knowledge-media/{seeded.admin_id}/{media_id.hex}",
+                filename="lesson.mp3",
+                content_type="audio/mpeg",
+                size=1_024,
+                processing_status=ContentMediaProcessingStatus.READY,
+            )
+        )
+        track = await session.get(LearningTrack, seeded.python_track_id)
+        assert track is not None
+        track.is_published = False
+        await session.commit()
+
+    entry = await client.get(
+        f"/api/v1/knowledge/entries/{entry_slug}",
+        headers=auth(seeded.student_id),
+    )
+    playback = await client.get(
+        f"/api/v1/knowledge/entries/{entry_slug}/media/{media_id}/playback",
+        headers=auth(seeded.student_id),
+    )
+    admin_playback = await client.get(
+        f"/api/v1/knowledge/entries/{entry_slug}/media/{media_id}/playback",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert entry.status_code == 404
+    assert playback.status_code == 404
+    assert admin_playback.status_code == 200
+
+
+async def test_unpublished_roadmap_revokes_existing_media_playback_ticket(
+    client: AsyncClient,
+    seeded: SeededData,
+) -> None:
+    media_id = uuid4()
+    topic_id = seeded.topic_ids[0]
+    async with TestSession() as session:
+        session.add(
+            ProtectedContentMedia(
+                id=media_id,
+                roadmap_topic_id=topic_id,
+                uploaded_by_user_id=seeded.admin_id,
+                storage_key=f"roadmap-media/{seeded.admin_id}/{media_id.hex}",
+                filename="lesson.mp3",
+                content_type="audio/mpeg",
+                size=1_024,
+                processing_status=ContentMediaProcessingStatus.READY,
+            )
+        )
+        await session.commit()
+
+    playback = await client.get(
+        f"/api/v1/topics/{topic_id}/media/{media_id}/playback",
+        headers=auth(seeded.student_id),
+    )
+    assert playback.status_code == 200, playback.text
+
+    async with TestSession() as session:
+        roadmap = await session.get(Roadmap, seeded.roadmap_id)
+        assert roadmap is not None
+        roadmap.is_published = False
+        await session.commit()
+
+    playback_after_unpublish = await client.get(
+        f"/api/v1/topics/{topic_id}/media/{media_id}/playback",
+        headers=auth(seeded.student_id),
+    )
+    stream_with_existing_ticket = await client.get(
+        playback.json()["url"],
+        headers={"Sec-Fetch-Dest": "audio"},
+    )
+
+    assert playback_after_unpublish.status_code == 404
+    assert stream_with_existing_ticket.status_code == 404
 
 
 async def test_knowledge_media_private_upload_playback_scope_and_delete(

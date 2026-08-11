@@ -102,6 +102,7 @@ async def get_roadmap_model(session: AsyncSession, slug: str) -> Roadmap | None:
 async def has_roadmap_access(session: AsyncSession, user_id: UUID, roadmap_id: UUID) -> bool:
     track_id = await session.scalar(
         select(LearningTrackRoadmap.track_id)
+        .join(Roadmap, Roadmap.id == LearningTrackRoadmap.roadmap_id)
         .join(
             LearningTrackEnrollment,
             LearningTrackEnrollment.track_id == LearningTrackRoadmap.track_id,
@@ -109,6 +110,7 @@ async def has_roadmap_access(session: AsyncSession, user_id: UUID, roadmap_id: U
         .join(LearningTrack, LearningTrack.id == LearningTrackRoadmap.track_id)
         .where(
             LearningTrackRoadmap.roadmap_id == roadmap_id,
+            Roadmap.is_published.is_(True),
             LearningTrackEnrollment.user_id == user_id,
             LearningTrack.is_published.is_(True),
         )
@@ -123,9 +125,11 @@ async def roadmap_in_tracks(session: AsyncSession, roadmap_id: UUID, track_ids: 
     return (
         await session.scalar(
             select(LearningTrackRoadmap.roadmap_id)
+            .join(Roadmap, Roadmap.id == LearningTrackRoadmap.roadmap_id)
             .where(
                 LearningTrackRoadmap.roadmap_id == roadmap_id,
                 LearningTrackRoadmap.track_id.in_(track_ids),
+                Roadmap.is_published.is_(True),
             )
             .limit(1)
         )
@@ -235,7 +239,13 @@ async def get_topic_model(session: AsyncSession, topic_id: UUID) -> Topic | None
         Topic | None,
         await session.scalar(
             select(Topic)
-            .where(Topic.id == topic_id, Topic.is_published.is_(True))
+            .join(RoadmapSection, RoadmapSection.id == Topic.section_id)
+            .join(Roadmap, Roadmap.id == RoadmapSection.roadmap_id)
+            .where(
+                Topic.id == topic_id,
+                Topic.is_published.is_(True),
+                Roadmap.is_published.is_(True),
+            )
             .options(
                 selectinload(Topic.section).selectinload(RoadmapSection.roadmap),
                 selectinload(Topic.media),

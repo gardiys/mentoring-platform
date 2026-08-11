@@ -373,6 +373,18 @@ export function AppLayout() {
                 )}
                 onClick={close}
               />
+              <NavLink
+                component={Link}
+                to="/admin/company-alias-proposals"
+                label="Названия компаний"
+                description="Модерация альтернативных имён"
+                leftSection={<span className="nav-index">AKA</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith(
+                  "/admin/company-alias-proposals",
+                )}
+                onClick={close}
+              />
             </>
           )}
           {import.meta.env.DEV && !platform.isTelegram && (

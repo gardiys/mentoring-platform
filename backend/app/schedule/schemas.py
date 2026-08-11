@@ -1,9 +1,11 @@
 from datetime import UTC, datetime, time
 from enum import StrEnum
+from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
+    AfterValidator,
     AnyHttpUrl,
     BaseModel,
     ConfigDict,
@@ -13,6 +15,20 @@ from pydantic import (
 )
 
 from app.schedule.models import ScheduleEventKind
+
+
+def _student_facing_https_url(value: AnyHttpUrl) -> AnyHttpUrl:
+    if value.scheme != "https":
+        raise ValueError("URL must use HTTPS")
+    if value.username is not None or value.password is not None:
+        raise ValueError("URL must not contain credentials")
+    return value
+
+
+StudentFacingHttpsUrl = Annotated[
+    AnyHttpUrl,
+    AfterValidator(_student_facing_https_url),
+]
 
 
 def _future_aware_datetime(value: datetime) -> datetime:
@@ -35,8 +51,8 @@ class ScheduleEventSource(StrEnum):
 class MentorProfileMutation(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    consultation_url: AnyHttpUrl | None = Field(default=None, max_length=2_048)
-    group_calendar_url: AnyHttpUrl | None = Field(default=None, max_length=2_048)
+    consultation_url: StudentFacingHttpsUrl | None = Field(default=None, max_length=2_048)
+    group_calendar_url: StudentFacingHttpsUrl | None = Field(default=None, max_length=2_048)
 
 
 class MentorWeeklyCallMutation(BaseModel):
@@ -48,7 +64,7 @@ class MentorWeeklyCallMutation(BaseModel):
     weekday: int = Field(ge=0, le=6)
     starts_at_time: time | None = None
     timezone: str = Field(default="Europe/Moscow", min_length=1, max_length=64)
-    meeting_url: AnyHttpUrl = Field(max_length=2_048)
+    meeting_url: StudentFacingHttpsUrl = Field(max_length=2_048)
 
     @field_validator("starts_at_time")
     @classmethod
@@ -73,7 +89,7 @@ class MentorMeetingMutation(BaseModel):
     track_id: UUID
     title: str = Field(min_length=1, max_length=240)
     description: str | None = Field(default=None, max_length=5_000)
-    meeting_url: AnyHttpUrl | None = Field(default=None, max_length=2_048)
+    meeting_url: StudentFacingHttpsUrl | None = Field(default=None, max_length=2_048)
     starts_at: datetime
 
     @field_validator("starts_at")
@@ -137,7 +153,7 @@ class AdminScheduleEventMutation(BaseModel):
     kind: ScheduleEventKind
     title: str = Field(min_length=1, max_length=240)
     description: str | None = Field(default=None, max_length=5_000)
-    meeting_url: AnyHttpUrl | None = Field(default=None, max_length=2_048)
+    meeting_url: StudentFacingHttpsUrl | None = Field(default=None, max_length=2_048)
     weekday: int | None = Field(default=None, ge=0, le=6)
     starts_at_time: time | None = None
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
@@ -188,7 +204,7 @@ class PinnedResourceLinkMutation(BaseModel):
 
     title: str = Field(min_length=1, max_length=240)
     description: str | None = Field(default=None, max_length=5_000)
-    url: AnyHttpUrl = Field(max_length=2_048)
+    url: StudentFacingHttpsUrl = Field(max_length=2_048)
     position: int = Field(default=0, ge=0, le=2_147_483_647)
 
 

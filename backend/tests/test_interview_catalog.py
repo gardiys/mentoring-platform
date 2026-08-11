@@ -13,7 +13,7 @@ from app.interviews.models import (
     InterviewStageComment,
 )
 from app.interviews.uploads import StoredUpload
-from app.tracks.models import LearningTrackEnrollment
+from app.tracks.models import LearningTrack, LearningTrackEnrollment
 from app.users.models import User, UserRole
 from tests.conftest import SeededData, TestSession, auth
 
@@ -700,6 +700,54 @@ async def test_catalog_view_history_lists_viewed_stages(
     assert history.json()["items"][0]["company_name"] == "Timeline Systems"
     assert history.json()["items"][0]["track_title"] == "Python"
     assert other_student_history.json()["items"] == []
+
+
+async def test_catalog_history_hides_stages_after_direction_access_is_revoked(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={
+            "company_name": "Revoked Direction Corp",
+            "track_id": str(seeded.python_track_id),
+        },
+    )
+    stage = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "technical_interview",
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "description": "Must disappear after access is revoked",
+        },
+    )
+    stage_id = stage.json()["stages"][0]["id"]
+    marked = await client.put(
+        f"/api/v1/interviews/catalog/stages/{stage_id}/view",
+        headers=auth(seeded.student_id),
+    )
+
+    async with TestSession() as session:
+        track = await session.get(LearningTrack, seeded.python_track_id)
+        assert track is not None
+        track.is_published = False
+        await session.commit()
+
+    history = await client.get(
+        "/api/v1/interviews/catalog/history",
+        headers=auth(seeded.student_id),
+    )
+    stage_after_revocation = await client.put(
+        f"/api/v1/interviews/catalog/stages/{stage_id}/view",
+        headers=auth(seeded.student_id),
+    )
+
+    assert marked.status_code == 204
+    assert history.status_code == 200
+    assert history.json()["total"] == 0
+    assert history.json()["items"] == []
+    assert stage_after_revocation.status_code == 404
 
 
 async def test_catalog_favorite_stage(client: AsyncClient, seeded: SeededData) -> None:

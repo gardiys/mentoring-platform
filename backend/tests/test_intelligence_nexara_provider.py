@@ -124,9 +124,38 @@ def test_nexara_rate_limit_is_retryable_and_does_not_leak_provider_detail() -> N
     assert "account" not in error.safe_message
 
 
+def test_nexara_persisted_diagnostics_use_an_explicit_safe_allowlist() -> None:
+    payload = NexaraTranscriptionProvider._safe_job_payload(
+        {
+            "status": "in_progress",
+            "created_at": "2026-08-11T00:00:00Z",
+            "completed_at": None,
+            "url": "https://s3.example/private.mp3?signature=secret",
+            "api_key": "provider-secret",
+            "input": {"filename": "private-interview.mp3"},
+            "result": {"text": "private transcript"},
+            "error": "private provider detail",
+        }
+    )
+
+    assert payload == {
+        "status": "in_progress",
+        "created_at": "2026-08-11T00:00:00Z",
+        "completed_at": None,
+    }
+
+
 def test_fake_transcription_provider_is_forbidden_in_production() -> None:
     with pytest.raises(RuntimeError, match="forbidden"):
-        build_transcription_provider(Settings(app_env="production", transcription_provider="fake"))
+        build_transcription_provider(
+            Settings(
+                _env_file=None,
+                app_env="production",
+                app_debug=False,
+                database_url="postgresql+asyncpg://app:password@postgres:5432/mentoring",
+                transcription_provider="fake",
+            )
+        )
 
 
 def test_nexara_requires_api_key() -> None:

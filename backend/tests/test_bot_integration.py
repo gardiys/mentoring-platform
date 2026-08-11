@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import UUID
 
 from httpx import AsyncClient
 from pydantic import SecretStr
@@ -168,7 +169,7 @@ async def test_bot_sets_custom_mentor_terms_and_entry_reward(
         assert reward.basis_kopecks == 5_000_000
 
 
-async def test_bot_provisioning_is_idempotent_and_updates_student_data(
+async def test_bot_provisioning_is_idempotent_without_overwriting_student_data(
     client: AsyncClient,
     seeded: SeededData,
     monkeypatch: MonkeyPatch,
@@ -208,11 +209,39 @@ async def test_bot_provisioning_is_idempotent_and_updates_student_data(
     assert second.json()["created"] is False
     assert second.json()["access_created"] is False
     assert second.json()["user"]["id"] == first.json()["user"]["id"]
-    assert second.json()["user"]["first_name"] == "Новое имя"
+    assert second.json()["user"]["first_name"] == "Оплаченный"
     assert user_count == enrollment_count == access_count == 1
 
 
-async def test_bot_payment_restores_suspended_student_access(
+async def test_replayed_bot_event_cannot_clear_confirmed_entry_payment(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        integration_dependencies.settings,
+        "bot_integration_token",
+        SecretStr(INTEGRATION_TOKEN),
+    )
+    first = await client.post(
+        "/api/v1/integrations/telegram/students",
+        headers=integration_auth(),
+        json=student_payload(entry_payment_paid=True),
+    )
+    replay = await client.post(
+        "/api/v1/integrations/telegram/students",
+        headers=integration_auth(),
+        json=student_payload(entry_payment_paid=False),
+    )
+
+    assert first.status_code == replay.status_code == 200
+    async with TestSession() as session:
+        student = await session.scalar(select(User).where(User.telegram_id == 987654321))
+        assert student is not None
+        assert student.entry_payment_paid_at is not None
+
+
+async def test_replayed_bot_event_cannot_restore_suspended_student_access(
     client: AsyncClient,
     seeded: SeededData,
     monkeypatch: MonkeyPatch,
@@ -232,6 +261,10 @@ async def test_bot_payment_restores_suspended_student_access(
         headers={"X-Dev-User-Id": str(seeded.admin_id)},
         json={"is_active": False},
     )
+    revoked = await client.delete(
+        f"/api/v1/admin/tracks/{seeded.python_track_id}/students/{first.json()['user']['id']}",
+        headers={"X-Dev-User-Id": str(seeded.admin_id)},
+    )
 
     restored = await client.post(
         "/api/v1/integrations/telegram/students",
@@ -239,8 +272,109 @@ async def test_bot_payment_restores_suspended_student_access(
         json=student_payload(),
     )
 
+    assert revoked.status_code == 204
     assert restored.status_code == 200
-    assert restored.json()["user"]["is_active"] is True
+    assert restored.json()["access_created"] is False
+    assert restored.json()["roadmaps"] == []
+    assert restored.json()["user"]["is_active"] is False
+    async with TestSession() as session:
+        access = await session.get(
+            LearningTrackEnrollment,
+            {
+                "user_id": UUID(first.json()["user"]["id"]),
+                "track_id": seeded.python_track_id,
+            },
+        )
+        assert access is None
+
+
+async def test_replayed_bot_event_cannot_overwrite_admin_managed_student_terms(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        integration_dependencies.settings,
+        "bot_integration_token",
+        SecretStr(INTEGRATION_TOKEN),
+    )
+    async with TestSession() as session:
+        mentor = await session.get(User, seeded.mentor_id)
+        other_mentor = await session.get(User, seeded.other_mentor_id)
+        assert mentor is not None and other_mentor is not None
+        mentor.telegram_id = 123450001
+        other_mentor.telegram_id = 123450002
+        await session.commit()
+
+    first = await client.post(
+        "/api/v1/integrations/telegram/students",
+        headers=integration_auth(),
+        json=student_payload(
+            mentor_telegram_id=123450001,
+            repayment_percent=210,
+            mentor_reward_percent=55,
+            entry_payment_rubles=50_000,
+            entry_payment_paid=True,
+        ),
+    )
+    assert first.status_code == 200, first.text
+    student_id = first.json()["user"]["id"]
+
+    async with TestSession() as session:
+        student = await session.get(User, student_id)
+        relation = await session.scalar(
+            select(MentorStudent).where(MentorStudent.student_id == student_id)
+        )
+        assert student is not None and relation is not None
+        student.first_name = "Исправленное имя"
+        student.last_name = "Администратором"
+        student.email = "canonical@example.com"
+        student.is_active = False
+        student.repayment_percent = Decimal("180")
+        student.entry_payment_kopecks = 4_500_000
+        relation.mentor_id = seeded.other_mentor_id
+        relation.reward_percent = Decimal("40")
+        await session.commit()
+
+    replay = await client.post(
+        "/api/v1/integrations/telegram/students",
+        headers=integration_auth(),
+        json=student_payload(
+            first_name="Устаревшее имя",
+            last_name="Из бота",
+            email="stale@example.com",
+            track_slug="go",
+            mentor_telegram_id=123450001,
+            repayment_percent=300,
+            mentor_reward_percent=90,
+            entry_payment_rubles=90_000,
+            entry_payment_paid=False,
+        ),
+    )
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["created"] is False
+    assert replay.json()["access_created"] is False
+
+    async with TestSession() as session:
+        student = await session.get(User, student_id)
+        relation = await session.scalar(
+            select(MentorStudent).where(MentorStudent.student_id == student_id)
+        )
+        go_access = await session.get(
+            LearningTrackEnrollment,
+            {"user_id": student_id, "track_id": seeded.go_track_id},
+        )
+        assert student is not None and relation is not None
+        assert go_access is None
+        assert student.first_name == "Исправленное имя"
+        assert student.last_name == "Администратором"
+        assert student.email == "canonical@example.com"
+        assert student.is_active is False
+        assert student.repayment_percent == Decimal("180.00")
+        assert student.entry_payment_kopecks == 4_500_000
+        assert student.entry_payment_paid_at is not None
+        assert relation.mentor_id == seeded.other_mentor_id
+        assert relation.reward_percent == Decimal("40.00")
 
 
 async def test_bot_rejects_unknown_direction_without_creating_student(

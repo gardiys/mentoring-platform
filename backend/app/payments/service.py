@@ -143,7 +143,7 @@ async def set_employment(
     student_id: UUID,
     payload: EmploymentMutation,
 ) -> StudentPaymentDashboard:
-    student, _relation = await assigned_student(session, actor, student_id)
+    student, _relation = await assigned_student(session, actor, student_id, lock=True)
     employment = await session.scalar(
         select(StudentEmployment)
         .where(
@@ -213,7 +213,7 @@ async def terminate_employment(
     student_id: UUID,
     payload: EmploymentTerminationMutation,
 ) -> StudentPaymentDashboard:
-    student, _relation = await assigned_student(session, actor, student_id)
+    student, _relation = await assigned_student(session, actor, student_id, lock=True)
     employment = await _active_employment_for_update(session, student.id)
     if employment is None:
         api_error(409, "active_employment_not_found", "The student has no active employment")

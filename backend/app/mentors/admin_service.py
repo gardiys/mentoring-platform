@@ -228,6 +228,7 @@ async def promote_student_to_mentor(session: AsyncSession, student_id: UUID) -> 
         api_error(422, "mentor_directions_required", "Assign a direction before promotion")
     student.role = UserRole.MENTOR
     student.is_active = True
+    student.session_version += 1
     await _sync_mentor_tracks(session, student.id, track_ids)
     await session.commit()
     await session.refresh(student)
@@ -301,7 +302,9 @@ async def reassign_student(session: AsyncSession, student_id: UUID, mentor_id: U
             "Ментор должен вести все направления выбранного ученика",
         )
     relation = await session.scalar(
-        select(MentorStudent).where(MentorStudent.student_id == student.id)
+        select(MentorStudent)
+        .where(MentorStudent.student_id == student.id)
+        .with_for_update()
     )
     if relation is None:
         session.add(MentorStudent(mentor_id=mentor.id, student_id=student.id))
@@ -329,6 +332,7 @@ async def demote_mentor_to_student(session: AsyncSession, mentor_id: UUID) -> No
             "Reassign the mentor's students before removing the mentor role",
         )
     mentor.role = UserRole.STUDENT
+    mentor.session_version += 1
     mentor.learning_start_date = mentor.learning_start_date or datetime.now(UTC).date()
     track_ids = list(
         await session.scalars(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Any
@@ -14,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import AdminUser, MentorUser, StudentUser
 from app.core.config import get_settings
 from app.core.errors import api_error
+from app.core.middleware import read_limited_request_body
 from app.db.session import get_db_session
 from app.interviews.schemas import (
     InterviewDownloadUrl,
@@ -85,8 +85,9 @@ from app.payments.service import (
 )
 from app.payments.tochka import (
     TochkaPaymentService,
-    extract_payment_status,
+    TochkaWebhookEvent,
     map_payment_status,
+    parse_payment_operation,
     parse_webhook_body,
     parse_webhook_event,
 )
@@ -511,18 +512,18 @@ async def configure_tochka_webhook(_admin: AdminUser) -> dict[str, Any]:
 
 @router.post("/tochka/webhook", response_model=WebhookResult)
 async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
-    body = await request.body()
-    if len(body) > 1_048_576:
-        api_error(413, "webhook_too_large", "Webhook payload is too large")
+    body = await read_limited_request_body(request, max_bytes=1_048_576)
     try:
         payload, is_signed = parse_webhook_body(
             body, request.headers.get("content-type", ""), settings
         )
         event = parse_webhook_event(payload)
-    except (ValueError, json.JSONDecodeError) as error:
+    except ValueError as error:
         api_error(400, "invalid_tochka_webhook", str(error))
     if event is None:
         return WebhookResult(status="ignored")
+    if settings.app_env == "production" and not is_signed:
+        return WebhookResult(status="unverified")
 
     existing = await session.scalar(
         select(PaymentWebhookEvent.id).where(
@@ -546,16 +547,41 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
             .with_for_update()
         )
 
+    if (
+        attempt is None
+        or event.payment_link_id is None
+        or event.operation_id is None
+        or event.payment_link_id != attempt.payment_link_id
+        or (
+            attempt.provider_operation_id is not None
+            and event.operation_id != attempt.provider_operation_id
+        )
+    ):
+        return WebhookResult(status="unverified")
+
+    operation_attempt_id = await session.scalar(
+        select(PaymentAttempt.id).where(PaymentAttempt.provider_operation_id == event.operation_id)
+    )
+    if operation_attempt_id is not None and operation_attempt_id != attempt.id:
+        return WebhookResult(status="unverified")
+
+    installment = await session.scalar(
+        select(PaymentInstallment)
+        .where(PaymentInstallment.id == attempt.installment_id)
+        .with_for_update()
+    )
+    if installment is None:
+        return WebhookResult(status="unverified")
+
     verified_status = await _verified_status(
-        event.status,
-        event.operation_id,
-        is_signed,
+        event,
         attempt=attempt,
+        installment=installment,
     )
     if verified_status is None:
         return WebhookResult(status="unverified")
     webhook_event = PaymentWebhookEvent(
-        attempt_id=attempt.id if attempt else None,
+        attempt_id=attempt.id,
         provider="tochka",
         event_id=event.event_id,
         deduplication_key=event.deduplication_key,
@@ -563,39 +589,26 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
         raw_payload=event.raw_payload,
     )
     session.add(webhook_event)
-    if attempt is None:
-        try:
-            await session.commit()
-        except IntegrityError:
-            await session.rollback()
-            return WebhookResult(status="duplicate")
-        return WebhookResult(status="unknown_payment")
 
-    if attempt.provider_operation_id is None and event.operation_id:
+    if attempt.provider_operation_id is None:
         attempt.provider_operation_id = event.operation_id
     mapped = PaymentAttemptStatus(map_payment_status(verified_status))
     attempt_was_revoked = attempt.status is PaymentAttemptStatus.REVOKED
     attempt.status = mapped
-    installment = await session.scalar(
-        select(PaymentInstallment)
-        .where(PaymentInstallment.id == attempt.installment_id)
-        .with_for_update()
-    )
-    if installment is not None:
-        if mapped is PaymentAttemptStatus.APPROVED:
-            if installment.status is PaymentInstallmentStatus.CANCELLED or attempt_was_revoked:
-                attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
-            else:
-                attempt.approved_at = datetime.now(UTC)
-                await mark_installment_paid(
-                    session,
-                    installment,
-                    confirmed_by=None,
-                    approved_at=attempt.approved_at,
-                )
-        elif mapped in {PaymentAttemptStatus.FAILED, PaymentAttemptStatus.CANCELLED}:
-            if installment.status is not PaymentInstallmentStatus.CANCELLED:
-                installment.status = PaymentInstallmentStatus.SCHEDULED
+    if mapped is PaymentAttemptStatus.APPROVED:
+        if installment.status is PaymentInstallmentStatus.CANCELLED or attempt_was_revoked:
+            attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+        else:
+            attempt.approved_at = datetime.now(UTC)
+            await mark_installment_paid(
+                session,
+                installment,
+                confirmed_by=None,
+                approved_at=attempt.approved_at,
+            )
+    elif mapped in {PaymentAttemptStatus.FAILED, PaymentAttemptStatus.CANCELLED}:
+        if installment.status is not PaymentInstallmentStatus.CANCELLED:
+            installment.status = PaymentInstallmentStatus.SCHEDULED
     try:
         await session.commit()
     except IntegrityError:
@@ -605,28 +618,29 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
 
 
 async def _verified_status(
-    webhook_status: str,
-    operation_id: str | None,
-    is_signed: bool,
+    event: TochkaWebhookEvent,
     *,
-    attempt: PaymentAttempt | None,
+    attempt: PaymentAttempt,
+    installment: PaymentInstallment,
 ) -> str | None:
-    if is_signed or settings.app_env != "production":
-        return webhook_status
-    if not operation_id or attempt is None:
-        return None
+    if settings.app_env != "production":
+        return event.status
+    assert event.payment_link_id is not None
+    assert event.operation_id is not None
     try:
-        raw = await TochkaPaymentService(settings).get_payment_operation_info(operation_id)
+        raw = await TochkaPaymentService(settings).get_payment_operation_info(event.operation_id)
+        operation = parse_payment_operation(raw)
     except Exception:
         return None
-    if attempt.provider_operation_id is not None:
-        if attempt.provider_operation_id != operation_id:
-            return None
-    else:
-        try:
-            verified_event = parse_webhook_event(raw)
-        except ValueError:
-            return None
-        if verified_event is None or verified_event.payment_link_id != attempt.payment_link_id:
-            return None
-    return extract_payment_status(raw)
+    if (
+        operation.payment_link_id != attempt.payment_link_id
+        or operation.operation_id != event.operation_id
+        or operation.consumer_id != str(installment.id)
+        or operation.status is None
+        or (
+            operation.amount_kopecks is not None
+            and operation.amount_kopecks != installment.amount_kopecks
+        )
+    ):
+        return None
+    return operation.status

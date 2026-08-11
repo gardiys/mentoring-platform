@@ -33,7 +33,7 @@ from app.interviews.schemas import (
 from app.interviews.uploads import StoredUpload
 from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack
-from app.users.models import User, UserRole
+from app.users.models import User
 
 
 def _attachment(
@@ -500,7 +500,8 @@ async def create_process(
         payload.company_name,
         company_id=payload.company_id,
         raw_alias=payload.company_alias,
-        allow_company_merge=user.role is UserRole.ADMIN,
+        alias_confirmed=payload.company_alias_confirmed,
+        suggested_by=user,
     )
     process = InterviewProcess(
         user_id=user.id,
@@ -527,7 +528,8 @@ async def update_process(
         payload.company_name,
         company_id=payload.company_id,
         raw_alias=payload.company_alias,
-        allow_company_merge=user.role is UserRole.ADMIN,
+        alias_confirmed=payload.company_alias_confirmed,
+        suggested_by=user,
     )
     process.company_id = company.id
     process.company_name = company.name

@@ -50,6 +50,12 @@ class InterviewProcessStatus(StrEnum):
     OFFER = "offer"
 
 
+class CompanyAliasProposalStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class InterviewStageType(StrEnum):
     SCREENING = "screening"
     TECHNICAL_SCREENING = "technical_screening"
@@ -272,6 +278,59 @@ class CompanyAlias(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     transliterated_name: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
 
     company = relationship("Company", back_populates="aliases")
+
+
+class CompanyAliasProposal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "company_alias_proposals"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "normalized_name",
+            "suggested_by_user_id",
+            name="uq_company_alias_proposals_company_alias_suggester",
+        ),
+        Index(
+            "ix_company_alias_proposals_status_created",
+            "status",
+            "created_at",
+        ),
+    )
+
+    company_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    company_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    name: Mapped[str] = mapped_column(String(240), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(
+        String(240), nullable=False, index=True
+    )
+    transliterated_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    suggested_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[CompanyAliasProposalStatus] = mapped_column(
+        Enum(
+            CompanyAliasProposalStatus,
+            name="company_alias_proposal_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        default=CompanyAliasProposalStatus.PENDING,
+        server_default=CompanyAliasProposalStatus.PENDING.value,
+        nullable=False,
+    )
+    reviewed_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class InterviewProcess(UUIDPrimaryKeyMixin, TimestampMixin, Base):
