@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import MentorUser, StudentUser
+from app.auth.dependencies import AdminUser, MentorUser, StudentUser
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
@@ -32,7 +32,7 @@ from app.interviews.uploads import (
     InterviewUploadStore,
     StoredUpload,
 )
-from app.mentors.analytics_service import interview_analytics
+from app.mentors.analytics_service import interview_analytics, mentor_efficiency_analytics
 from app.mentors.models import (
     MentorDocumentKind,
     MentorStudentDocument,
@@ -42,6 +42,7 @@ from app.mentors.schemas import (
     MentorAnalyticsPeriod,
     MentorDocumentContentMutation,
     MentorDocumentRead,
+    MentorEfficiencyAnalytics,
     MentorInterviewAnalytics,
     MentorInterviewDetail,
     MentorNoteMutation,
@@ -245,6 +246,23 @@ async def mentor_students_analytics(
         without_mentor=without_mentor,
         is_active=is_active,
         learning_statuses=learning_status,
+    )
+
+
+@router.get("/students/mentor-efficiency", response_model=MentorEfficiencyAnalytics)
+async def mentor_students_efficiency(
+    session: Session,
+    admin: AdminUser,
+    period: MentorAnalyticsPeriod = MentorAnalyticsPeriod.WEEK,
+    track_id: UUID | None = None,
+    is_active: bool | None = None,
+) -> MentorEfficiencyAnalytics:
+    return await mentor_efficiency_analytics(
+        session,
+        admin,
+        period=period,
+        track_id=track_id,
+        is_active=is_active,
     )
 
 

@@ -15,22 +15,28 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { MentorInterviewAnalytics } from "../components/MentorInterviewAnalytics";
+import { MentorEfficiencyAnalytics } from "../components/MentorEfficiencyAnalytics";
 import { PageHeader } from "../components/PageHeader";
 import { ProgressBar } from "../components/ProgressBar";
 import { TelegramChatLink } from "../components/TelegramChatLink";
-import { useMentorStudents } from "../features/mentor/queries";
+import {
+  useMentorStudents,
+  useUpdateMentorStudentState,
+} from "../features/mentor/queries";
 import type {
   MentorStudentActivityKind,
   MentorAnalyticsPeriod,
   MentorStudentSort,
   StudentAccessFilter,
   StudentLearningStatus,
+  StudentStrengthLevel,
 } from "../types/api";
 import {
   readStoredStudentListFilters,
@@ -85,6 +91,58 @@ function personName(firstName: string, lastName: string | null): string {
   return [firstName, lastName].filter(Boolean).join(" ");
 }
 
+function InlineStudentStatus({
+  studentId,
+  value,
+  strengthLevel,
+  studentName,
+}: {
+  studentId: string;
+  value: StudentLearningStatus;
+  strengthLevel: StudentStrengthLevel | null;
+  studentName: string;
+}) {
+  const update = useUpdateMentorStudentState(studentId);
+  const [selectedStatus, setSelectedStatus] = useState(value);
+
+  useEffect(() => setSelectedStatus(value), [value]);
+
+  return (
+    <Select
+      aria-label={`Статус ученика ${studentName}`}
+      data={Object.entries(statusLabels).map(([status, label]) => ({
+        value: status,
+        label,
+      }))}
+      value={selectedStatus}
+      allowDeselect={false}
+      size="xs"
+      miw={190}
+      disabled={update.isPending}
+      onChange={(nextValue) => {
+        if (!nextValue || nextValue === selectedStatus) return;
+        const previousStatus = selectedStatus;
+        const nextStatus = nextValue as StudentLearningStatus;
+        setSelectedStatus(nextStatus);
+        update.mutate(
+          { learningStatus: nextStatus, strengthLevel },
+          {
+            onSuccess: () =>
+              notifications.show({
+                color: "green",
+                message: `Статус ученика ${studentName} обновлён`,
+              }),
+            onError: (error) => {
+              setSelectedStatus(previousStatus);
+              notifications.show({ color: "red", message: error.message });
+            },
+          },
+        );
+      }}
+    />
+  );
+}
+
 export function MentorStudentsPage() {
   const [initialFilters] = useState(() =>
     readStoredStudentListFilters(STUDENT_PROGRESS_FILTERS_STORAGE_KEY),
@@ -100,7 +158,9 @@ export function MentorStudentsPage() {
   );
   const [mentorFilter, setMentorFilter] = useState(initialFilters.mentorFilter);
   const [sort, setSort] = useState<MentorStudentSort>(initialFilters.sort);
-  const [view, setView] = useState<"students" | "analytics">("students");
+  const [view, setView] = useState<
+    "students" | "analytics" | "mentor-efficiency"
+  >("students");
   const [analyticsPeriod, setAnalyticsPeriod] =
     useState<MentorAnalyticsPeriod>("week");
   const [page, setPage] = useState(1);
@@ -164,12 +224,20 @@ export function MentorStudentsPage() {
       <Tabs
         value={view}
         onChange={(value) =>
-          setView((value as "students" | "analytics" | null) ?? "students")
+          setView(
+            (value as "students" | "analytics" | "mentor-efficiency" | null) ??
+              "students",
+          )
         }
       >
         <Tabs.List>
           <Tabs.Tab value="students">Ученики</Tabs.Tab>
           <Tabs.Tab value="analytics">Аналитика собеседований</Tabs.Tab>
+          {query.data.can_filter_by_mentor && (
+            <Tabs.Tab value="mentor-efficiency">
+              Эффективность менторов
+            </Tabs.Tab>
+          )}
         </Tabs.List>
       </Tabs>
       <Card withBorder>
@@ -194,19 +262,21 @@ export function MentorStudentsPage() {
               label: direction.title,
             }))}
           />
-          <MultiSelect
-            label="Текущий статус"
-            placeholder="Все статусы"
-            clearable
-            value={statuses}
-            onChange={(values) =>
-              setStatuses(values as StudentLearningStatus[])
-            }
-            data={Object.entries(statusLabels).map(([value, label]) => ({
-              value,
-              label,
-            }))}
-          />
+          {view !== "mentor-efficiency" && (
+            <MultiSelect
+              label="Текущий статус"
+              placeholder="Все статусы"
+              clearable
+              value={statuses}
+              onChange={(values) =>
+                setStatuses(values as StudentLearningStatus[])
+              }
+              data={Object.entries(statusLabels).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+            />
+          )}
           <Select
             label="Доступ"
             value={access}
@@ -219,7 +289,7 @@ export function MentorStudentsPage() {
               { value: "all", label: "Любой доступ" },
             ]}
           />
-          {query.data.can_filter_by_mentor && (
+          {query.data.can_filter_by_mentor && view !== "mentor-efficiency" && (
             <Select
               label="Ментор"
               value={mentorFilter}
@@ -255,6 +325,13 @@ export function MentorStudentsPage() {
           mentorFilter={mentorFilter}
           access={access}
           learningStatuses={statuses}
+        />
+      ) : view === "mentor-efficiency" ? (
+        <MentorEfficiencyAnalytics
+          period={analyticsPeriod}
+          onPeriodChange={setAnalyticsPeriod}
+          trackId={trackId}
+          access={access}
         />
       ) : (
         <>
@@ -326,9 +403,15 @@ export function MentorStudentsPage() {
                             {student.is_overdue && (
                               <Badge color="red">Не в срок</Badge>
                             )}
-                            <Badge variant="light" size="sm">
-                              {statusLabels[student.learning_status]}
-                            </Badge>
+                            <InlineStudentStatus
+                              studentId={student.id}
+                              value={student.learning_status}
+                              strengthLevel={student.strength_level}
+                              studentName={personName(
+                                student.first_name,
+                                student.last_name,
+                              )}
+                            />
                             {student.strength_level && (
                               <Badge color="gray" variant="outline" size="sm">
                                 {levelLabels[student.strength_level]}

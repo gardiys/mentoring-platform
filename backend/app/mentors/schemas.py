@@ -107,6 +107,42 @@ class MentorInterviewAnalytics(BaseModel):
     ranking: list[MentorInterviewRankingItem]
 
 
+class MentorEfficiencyItem(BaseModel):
+    mentor_id: UUID
+    role: UserRole
+    first_name: str
+    last_name: str | None
+    telegram_username: str | None
+    assigned_students: int
+    interviewing_students: int
+    active_interviewing_students: int
+    recording_students: int
+    inactive_interviewing_students: int
+    interview_count: int
+    recording_count: int
+    ai_analysis_count: int
+    offer_count: int
+    upcoming_students: int
+    participation_percent: float
+    recording_participation_percent: float
+    average_interviews_per_active_student: float
+    last_interview_at: datetime | None
+
+
+class MentorEfficiencyAnalytics(BaseModel):
+    period: MentorAnalyticsPeriod
+    period_start: datetime | None
+    period_end: datetime
+    mentor_count: int
+    assigned_students: int
+    interviewing_students: int
+    active_interviewing_students: int
+    inactive_interviewing_students: int
+    unassigned_students: int
+    unassigned_interviewing_students: int
+    mentors: list[MentorEfficiencyItem]
+
+
 class MentorStudentStatusPeriod(BaseModel):
     status: StudentLearningStatus
     started_at: datetime

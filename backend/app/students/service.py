@@ -2,12 +2,16 @@ from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
-from sqlalchemy import String, cast, delete, func, or_, select, update
+from sqlalchemy import String, and_, cast, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
-from app.mentors.models import MentorStudent, StudentLearningStatus
+from app.mentors.models import (
+    MentorStudent,
+    StudentLearningStatus,
+    StudentMentorshipState,
+)
 from app.payments.service import (
     change_student_repayment_percent,
     sync_one_time_mentor_rewards,
@@ -114,14 +118,26 @@ async def _student_learning_statuses(
 ) -> dict[UUID, StudentLearningStatus]:
     if not student_ids:
         return {}
-    rows = (
+    state_rows = (
         await session.execute(
-            select(MentorStudent.student_id, MentorStudent.learning_status).where(
-                MentorStudent.student_id.in_(student_ids)
-            )
+            select(
+                StudentMentorshipState.student_id,
+                StudentMentorshipState.learning_status,
+            ).where(StudentMentorshipState.student_id.in_(student_ids))
         )
     ).all()
-    return {student_id: learning_status for student_id, learning_status in rows}
+    result = {student_id: learning_status for student_id, learning_status in state_rows}
+    missing_ids = set(student_ids) - set(result)
+    if missing_ids:
+        legacy_rows = (
+            await session.execute(
+                select(MentorStudent.student_id, MentorStudent.learning_status).where(
+                    MentorStudent.student_id.in_(missing_ids)
+                )
+            )
+        ).all()
+        result.update({student_id: learning_status for student_id, learning_status in legacy_rows})
+    return result
 
 
 async def _student_reward_percentages(
@@ -215,13 +231,28 @@ async def list_students(
         )
     mentor_relation = select(MentorStudent.student_id).where(MentorStudent.student_id == User.id)
     if learning_statuses:
-        matching_status = mentor_relation.where(
+        matching_state = select(StudentMentorshipState.student_id).where(
+            StudentMentorshipState.student_id == User.id,
+            StudentMentorshipState.learning_status.in_(learning_statuses),
+        )
+        matching_legacy_status = mentor_relation.where(
             MentorStudent.learning_status.in_(learning_statuses)
         )
         if StudentLearningStatus.LEARNING in learning_statuses:
-            conditions.append(or_(matching_status.exists(), ~mentor_relation.exists()))
+            conditions.append(
+                or_(
+                    matching_state.exists(),
+                    matching_legacy_status.exists(),
+                    and_(
+                        ~select(StudentMentorshipState.student_id)
+                        .where(StudentMentorshipState.student_id == User.id)
+                        .exists(),
+                        ~mentor_relation.exists(),
+                    ),
+                )
+            )
         else:
-            conditions.append(matching_status.exists())
+            conditions.append(or_(matching_state.exists(), matching_legacy_status.exists()))
     if mentor_id is not None:
         conditions.append(mentor_relation.where(MentorStudent.mentor_id == mentor_id).exists())
     elif without_mentor:
@@ -365,20 +396,24 @@ async def _sync_student_mentor(
     reward_percent: Decimal | None = None,
 ) -> None:
     relation = await session.scalar(
-        select(MentorStudent)
-        .where(MentorStudent.student_id == student_id)
-        .with_for_update()
+        select(MentorStudent).where(MentorStudent.student_id == student_id).with_for_update()
     )
     if mentor_id is None:
         if relation is not None:
             await session.delete(relation)
         return
     if relation is None:
+        state = await session.get(StudentMentorshipState, student_id)
         session.add(
             MentorStudent(
                 mentor_id=mentor_id,
                 student_id=student_id,
                 reward_percent=reward_percent,
+                learning_status=(
+                    state.learning_status if state else StudentLearningStatus.LEARNING
+                ),
+                strength_level=state.strength_level if state else None,
+                status_updated_at=state.status_updated_at if state else datetime.now(UTC),
             )
         )
     else:
@@ -466,6 +501,13 @@ async def create_student(
     session.add(student)
     try:
         await session.flush()
+        session.add(
+            StudentMentorshipState(
+                student_id=student.id,
+                learning_status=StudentLearningStatus.LEARNING,
+                status_updated_at=now,
+            )
+        )
         await _sync_student_tracks(session, student.id, payload.track_ids)
         await _sync_student_mentor(
             session,
@@ -491,9 +533,7 @@ async def update_student(
     # then employment/payment rows) so reassignment cannot race an old
     # mentor's write and concurrent requests do not deadlock each other.
     await session.scalar(
-        select(MentorStudent)
-        .where(MentorStudent.student_id == student.id)
-        .with_for_update()
+        select(MentorStudent).where(MentorStudent.student_id == student.id).with_for_update()
     )
     await _validate_student_payload(session, payload, student_id=student_id)
     revoke_browser_sessions = student.telegram_id != payload.telegram_id or (
@@ -508,14 +548,10 @@ async def update_student(
     student.repayment_percent = payload.repayment_percent
     student.entry_payment_kopecks = _rubles_to_kopecks(payload.entry_payment_rubles)
     student.entry_payment_paid_at = (
-        student.entry_payment_paid_at or datetime.now(UTC)
-        if payload.entry_payment_paid
-        else None
+        student.entry_payment_paid_at or datetime.now(UTC) if payload.entry_payment_paid else None
     )
     student.program_excluded_at = (
-        student.program_excluded_at or datetime.now(UTC)
-        if payload.program_excluded
-        else None
+        student.program_excluded_at or datetime.now(UTC) if payload.program_excluded else None
     )
     student.program_exclusion_reason = (
         payload.program_exclusion_reason or None if payload.program_excluded else None

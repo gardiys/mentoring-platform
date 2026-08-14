@@ -742,6 +742,42 @@ export interface MentorInterviewAnalytics {
   ranking: MentorInterviewRankingItem[];
 }
 
+export interface MentorEfficiencyItem {
+  mentor_id: string;
+  role: Schemas["UserRole"];
+  first_name: string;
+  last_name: string | null;
+  telegram_username: string | null;
+  assigned_students: number;
+  interviewing_students: number;
+  active_interviewing_students: number;
+  recording_students: number;
+  inactive_interviewing_students: number;
+  interview_count: number;
+  recording_count: number;
+  ai_analysis_count: number;
+  offer_count: number;
+  upcoming_students: number;
+  participation_percent: number;
+  recording_participation_percent: number;
+  average_interviews_per_active_student: number;
+  last_interview_at: string | null;
+}
+
+export interface MentorEfficiencyAnalytics {
+  period: MentorAnalyticsPeriod;
+  period_start: string | null;
+  period_end: string;
+  mentor_count: number;
+  assigned_students: number;
+  interviewing_students: number;
+  active_interviewing_students: number;
+  inactive_interviewing_students: number;
+  unassigned_students: number;
+  unassigned_interviewing_students: number;
+  mentors: MentorEfficiencyItem[];
+}
+
 export interface MentorStudentStatusPeriod {
   status: StudentLearningStatus;
   started_at: string;

@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from app.interviews.intelligence_models import (
     IntelligenceInterview,
@@ -15,7 +16,11 @@ from app.interviews.models import (
     InterviewProcessStatus,
     InterviewStageType,
 )
-from app.mentors.models import MentorStudent, StudentLearningStatus
+from app.mentors.models import (
+    MentorStudent,
+    StudentLearningStatus,
+    StudentMentorshipState,
+)
 from app.tracks.models import LearningTrackEnrollment
 from app.users.models import User, UserRole
 from tests.conftest import SeededData, TestSession, auth
@@ -94,6 +99,49 @@ async def test_student_status_history_tracks_transitions_without_resetting_uncha
     assert unchanged.status_code == 200
     assert len(unchanged.json()["status_history"]) == 2
     assert unchanged.json()["status_history"][0]["started_at"] == history[0]["started_at"]
+
+
+async def test_admin_updates_state_for_student_without_assigning_a_mentor(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    student_id = uuid4()
+    async with TestSession() as session:
+        session.add(User(id=student_id, first_name="Без ментора", role=UserRole.STUDENT))
+        await session.commit()
+
+    updated = await client.patch(
+        f"/api/v1/mentor/students/{student_id}/state",
+        headers=auth(seeded.admin_id),
+        json={"learning_status": "interviewing", "strength_level": "strong"},
+    )
+    admin_detail = await client.get(
+        f"/api/v1/admin/students/{student_id}",
+        headers=auth(seeded.admin_id),
+    )
+    filtered = await client.get(
+        "/api/v1/mentor/students",
+        headers=auth(seeded.admin_id),
+        params=[
+            ("without_mentor", "true"),
+            ("learning_status", "interviewing"),
+        ],
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["learning_status"] == "interviewing"
+    assert updated.json()["strength_level"] == "strong"
+    assert updated.json()["status_history"][0]["status"] == "interviewing"
+    assert admin_detail.status_code == 200
+    assert admin_detail.json()["mentor"] is None
+    assert admin_detail.json()["learning_status"] == "interviewing"
+    assert [item["id"] for item in filtered.json()["items"]] == [str(student_id)]
+    async with TestSession() as session:
+        assert await session.scalar(
+            select(MentorStudent).where(MentorStudent.student_id == student_id)
+        ) is None
+        state = await session.get(StudentMentorshipState, student_id)
+        assert state is not None
+        assert state.learning_status is StudentLearningStatus.INTERVIEWING
 
 
 async def test_interview_analytics_respects_period_and_reports_operational_metrics(
@@ -200,6 +248,120 @@ async def test_interview_analytics_respects_period_and_reports_operational_metri
     assert stage_counts["other"] == 0
     assert monthly.status_code == 200
     assert monthly.json()["total_interviews"] == 4
+
+
+async def test_admin_compares_mentor_efficiency_by_real_interview_activity(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    now = datetime.now(UTC)
+    inactive_student_id = uuid4()
+    unassigned_student_id = uuid4()
+    async with TestSession() as session:
+        primary_relation = await session.scalar(
+            select(MentorStudent).where(MentorStudent.student_id == seeded.student_id)
+        )
+        assert primary_relation is not None
+        primary_relation.learning_status = StudentLearningStatus.INTERVIEWING
+        session.add_all(
+            [
+                User(
+                    id=inactive_student_id,
+                    first_name="Неактивный",
+                    role=UserRole.STUDENT,
+                ),
+                User(
+                    id=unassigned_student_id,
+                    first_name="Без ментора",
+                    role=UserRole.STUDENT,
+                ),
+            ]
+        )
+        await session.flush()
+        session.add_all(
+            [
+                MentorStudent(
+                    mentor_id=seeded.other_mentor_id,
+                    student_id=inactive_student_id,
+                    learning_status=StudentLearningStatus.INTERVIEWING,
+                ),
+                StudentMentorshipState(
+                    student_id=unassigned_student_id,
+                    learning_status=StudentLearningStatus.INTERVIEWING,
+                ),
+                LearningTrackEnrollment(
+                    user_id=inactive_student_id,
+                    track_id=seeded.python_track_id,
+                ),
+                LearningTrackEnrollment(
+                    user_id=unassigned_student_id,
+                    track_id=seeded.python_track_id,
+                ),
+            ]
+        )
+        company = Company(
+            name="Активная компания",
+            normalized_name="активная компания",
+            transliterated_name="aktivnaya kompaniya",
+        )
+        session.add(company)
+        await session.flush()
+        process = InterviewProcess(
+            user_id=seeded.student_id,
+            track_id=seeded.python_track_id,
+            company_id=company.id,
+            company_name=company.name,
+            status=InterviewProcessStatus.OFFER,
+            offer_received_at=now - timedelta(days=1),
+        )
+        session.add(process)
+        await session.flush()
+        session.add(
+            InterviewProcessStage(
+                process_id=process.id,
+                stage_type=InterviewStageType.TECHNICAL_INTERVIEW,
+                scheduled_at=now - timedelta(days=2),
+                media_storage_key="interviews/mentor-efficiency.mp4",
+                media_filename="mentor-efficiency.mp4",
+                media_content_type="video/mp4",
+                media_size=1024,
+                ai_analysis_requested_at=now - timedelta(days=1),
+            )
+        )
+        await session.commit()
+
+    response = await client.get(
+        "/api/v1/mentor/students/mentor-efficiency",
+        headers=auth(seeded.admin_id),
+        params={"period": "week", "track_id": str(seeded.python_track_id)},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mentor_count"] == 2
+    assert data["assigned_students"] == 2
+    assert data["interviewing_students"] == 3
+    assert data["active_interviewing_students"] == 1
+    assert data["inactive_interviewing_students"] == 2
+    assert data["unassigned_students"] == 1
+    assert data["unassigned_interviewing_students"] == 1
+    by_mentor = {item["mentor_id"]: item for item in data["mentors"]}
+    active = by_mentor[str(seeded.mentor_id)]
+    assert active["active_interviewing_students"] == 1
+    assert active["recording_students"] == 1
+    assert active["interview_count"] == 1
+    assert active["ai_analysis_count"] == 1
+    assert active["offer_count"] == 1
+    assert active["participation_percent"] == 100.0
+    assert active["recording_participation_percent"] == 100.0
+    inactive = by_mentor[str(seeded.other_mentor_id)]
+    assert inactive["inactive_interviewing_students"] == 1
+    assert inactive["participation_percent"] == 0
+
+    forbidden = await client.get(
+        "/api/v1/mentor/students/mentor-efficiency",
+        headers=auth(seeded.mentor_id),
+    )
+    assert forbidden.status_code == 403
 
 
 async def test_mentor_cannot_see_unassigned_student(

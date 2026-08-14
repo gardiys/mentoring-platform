@@ -23,6 +23,9 @@ afterEach(() => {
 });
 
 it("MentorStudentsPage отображает учеников", async () => {
+  const updateState = vi
+    .spyOn(api, "updateMentorStudentState")
+    .mockResolvedValue({} as MentorStudentDetail);
   const students = vi.spyOn(api, "mentorStudents").mockResolvedValue({
     items: [
       {
@@ -125,6 +128,7 @@ it("MentorStudentsPage отображает учеников", async () => {
   expect(
     await screen.findByText("Администратор · администратор"),
   ).toBeInTheDocument();
+  await userEvent.keyboard("{Escape}");
   const telegramLink = screen.getByRole("link", {
     name: "Написать в Telegram · @ivan_student",
   });
@@ -132,6 +136,21 @@ it("MentorStudentsPage отображает учеников", async () => {
   expect(telegramLink).toHaveAttribute("target", "_blank");
   expect(telegramLink).toHaveAttribute("rel", "noopener noreferrer");
   expect(screen.getByText("Telegram не указан")).toBeInTheDocument();
+  const statusInput = screen
+    .getAllByLabelText("Статус ученика Иван Иванов")
+    .find((element) => element.tagName === "INPUT")!;
+  await userEvent.click(statusInput);
+  await waitFor(() => expect(statusInput).toHaveAttribute("aria-controls"));
+  const statusOptions = document.getElementById(
+    statusInput.getAttribute("aria-controls")!,
+  );
+  expect(statusOptions).not.toBeNull();
+  await userEvent.click(
+    within(statusOptions!).getByText("Ходит на собеседования"),
+  );
+  await waitFor(() =>
+    expect(updateState).toHaveBeenCalledWith("u1", "interviewing", null),
+  );
 });
 
 it("показывает аналитику собеседований и переключает период", async () => {
@@ -214,6 +233,83 @@ it("показывает аналитику собеседований и пер
     expect(analytics).toHaveBeenLastCalledWith(
       expect.objectContaining({ period: "month" }),
     ),
+  );
+});
+
+it("показывает администратору эффективность менторов", async () => {
+  vi.spyOn(api, "mentorStudents").mockResolvedValue({
+    items: [],
+    total: 4,
+    limit: 25,
+    offset: 0,
+    directions: [{ id: "python", slug: "python", title: "Python" }],
+    mentors: [
+      {
+        id: "mentor-1",
+        role: "mentor",
+        first_name: "Антон",
+        last_name: "Менторов",
+        telegram_username: "mentor",
+      },
+    ],
+    can_filter_by_mentor: true,
+  });
+  const efficiency = vi
+    .spyOn(api, "mentorEfficiencyAnalytics")
+    .mockResolvedValue({
+      period: "week",
+      period_start: "2026-08-08T00:00:00Z",
+      period_end: "2026-08-15T00:00:00Z",
+      mentor_count: 1,
+      assigned_students: 4,
+      interviewing_students: 3,
+      active_interviewing_students: 2,
+      inactive_interviewing_students: 1,
+      unassigned_students: 1,
+      unassigned_interviewing_students: 1,
+      mentors: [
+        {
+          mentor_id: "mentor-1",
+          role: "mentor",
+          first_name: "Антон",
+          last_name: "Менторов",
+          telegram_username: "mentor",
+          assigned_students: 3,
+          interviewing_students: 2,
+          active_interviewing_students: 1,
+          recording_students: 1,
+          inactive_interviewing_students: 1,
+          interview_count: 4,
+          recording_count: 2,
+          ai_analysis_count: 1,
+          offer_count: 1,
+          upcoming_students: 1,
+          participation_percent: 50,
+          recording_participation_percent: 100,
+          average_interviews_per_active_student: 4,
+          last_interview_at: "2026-08-14T10:00:00Z",
+        },
+      ],
+    });
+
+  renderPage(<MentorStudentsPage />);
+  await userEvent.click(
+    await screen.findByRole("tab", { name: "Эффективность менторов" }),
+  );
+
+  expect(
+    await screen.findByRole("heading", { name: "Эффективность менторов" }),
+  ).toBeInTheDocument();
+  expect(screen.getAllByText("Реально активны")).toHaveLength(2);
+  expect(screen.getByText("Ученики без ментора")).toBeInTheDocument();
+  expect(screen.getByText("Антон Менторов")).toBeInTheDocument();
+  expect(screen.getByText("1 из 2")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(efficiency).toHaveBeenLastCalledWith({
+      period: "week",
+      trackId: null,
+      isActive: true,
+    }),
   );
 });
 

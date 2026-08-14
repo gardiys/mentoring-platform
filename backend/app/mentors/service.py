@@ -32,6 +32,7 @@ from app.mentors.models import (
     MockInterview,
     MockInterviewStatus,
     StudentLearningStatus,
+    StudentMentorshipState,
 )
 from app.mentors.schemas import (
     MentorCurrentTopic,
@@ -307,6 +308,7 @@ async def _student_item(
     session: AsyncSession,
     student: User,
     relation: MentorStudent | None,
+    state: StudentMentorshipState | None = None,
     *,
     roadmap_details: list[RoadmapDetail] | None = None,
 ) -> MentorStudentListItem:
@@ -341,8 +343,20 @@ async def _student_item(
         telegram_username=student.telegram_username,
         learning_start_date=student.learning_start_date,
         is_active=student.is_active,
-        learning_status=(relation.learning_status if relation else StudentLearningStatus.LEARNING),
-        strength_level=relation.strength_level if relation else None,
+        learning_status=(
+            state.learning_status
+            if state is not None
+            else relation.learning_status
+            if relation is not None
+            else StudentLearningStatus.LEARNING
+        ),
+        strength_level=(
+            state.strength_level
+            if state is not None
+            else relation.strength_level
+            if relation is not None
+            else None
+        ),
         roadmaps=[
             StudentRoadmapSummary(
                 id=roadmap.id,
@@ -390,14 +404,16 @@ async def list_students(
 
     if mentor.role is UserRole.ADMIN:
         statement = (
-            select(User, MentorStudent)
+            select(User, MentorStudent, StudentMentorshipState)
             .outerjoin(MentorStudent, MentorStudent.student_id == User.id)
+            .outerjoin(StudentMentorshipState, StudentMentorshipState.student_id == User.id)
             .where(User.role == UserRole.STUDENT)
         )
     else:
         statement = (
-            select(User, MentorStudent)
+            select(User, MentorStudent, StudentMentorshipState)
             .join(MentorStudent, MentorStudent.student_id == User.id)
+            .outerjoin(StudentMentorshipState, StudentMentorshipState.student_id == User.id)
             .where(MentorStudent.mentor_id == mentor.id)
         )
 
@@ -428,15 +444,22 @@ async def list_students(
     elif without_mentor:
         statement = statement.where(MentorStudent.student_id.is_(None))
     if learning_statuses:
-        if mentor.role is UserRole.ADMIN and StudentLearningStatus.LEARNING in learning_statuses:
-            statement = statement.where(
-                or_(
-                    MentorStudent.learning_status.in_(learning_statuses),
+        status_matches = or_(
+            StudentMentorshipState.learning_status.in_(learning_statuses),
+            and_(
+                StudentMentorshipState.student_id.is_(None),
+                MentorStudent.learning_status.in_(learning_statuses),
+            ),
+        )
+        if StudentLearningStatus.LEARNING in learning_statuses:
+            status_matches = or_(
+                status_matches,
+                and_(
+                    StudentMentorshipState.student_id.is_(None),
                     MentorStudent.student_id.is_(None),
-                )
+                ),
             )
-        else:
-            statement = statement.where(MentorStudent.learning_status.in_(learning_statuses))
+        statement = statement.where(status_matches)
 
     total = int(
         await session.scalar(select(func.count()).select_from(statement.order_by(None).subquery()))
@@ -486,7 +509,9 @@ async def list_students(
     )
     return MentorStudentPage(
         items=await _batch_student_items(
-            session, [(student, relation) for student, relation in rows], mentor
+            session,
+            [(student, relation, state) for student, relation, state in rows],
+            mentor,
         ),
         total=total,
         limit=limit,
@@ -511,12 +536,12 @@ async def list_students(
 
 async def _batch_student_items(
     session: AsyncSession,
-    user_rows: list[tuple[User, MentorStudent | None]],
+    user_rows: list[tuple[User, MentorStudent | None, StudentMentorshipState | None]],
     mentor: User,
 ) -> list[MentorStudentListItem]:
     if not user_rows:
         return []
-    student_ids = [student.id for student, _ in user_rows]
+    student_ids = [student.id for student, _, _ in user_rows]
     now = datetime.now(UTC)
     allowed_track_ids = await accessible_track_ids(session, mentor)
     roadmap_statement = (
@@ -612,7 +637,7 @@ async def _batch_student_items(
     mock_counts = {student_id: int(count) for student_id, count in mock_rows}
 
     result: list[MentorStudentListItem] = []
-    for student, relation in user_rows:
+    for student, relation, state in user_rows:
         summaries: list[StudentRoadmapSummary] = []
         current_topics: list[MentorCurrentTopic] = []
         student_is_overdue = False
@@ -690,9 +715,19 @@ async def _batch_student_items(
                 learning_start_date=student.learning_start_date,
                 is_active=student.is_active,
                 learning_status=(
-                    relation.learning_status if relation else StudentLearningStatus.LEARNING
+                    state.learning_status
+                    if state is not None
+                    else relation.learning_status
+                    if relation is not None
+                    else StudentLearningStatus.LEARNING
                 ),
-                strength_level=relation.strength_level if relation else None,
+                strength_level=(
+                    state.strength_level
+                    if state is not None
+                    else relation.strength_level
+                    if relation is not None
+                    else None
+                ),
                 roadmaps=summaries,
                 current_topics=current_topics,
                 last_progress_at=last_progress,
@@ -792,7 +827,14 @@ async def student_detail(
     student, relation = await assigned_student(session, mentor, student_id)
     allowed_track_ids = await accessible_track_ids(session, mentor)
     roadmaps = await _roadmap_details(session, student.id, allowed_track_ids)
-    item = await _student_item(session, student, relation, roadmap_details=roadmaps)
+    state = await session.get(StudentMentorshipState, student.id)
+    item = await _student_item(
+        session,
+        student,
+        relation,
+        state,
+        roadmap_details=roadmaps,
+    )
     return MentorStudentDetail(
         **item.model_dump(exclude={"roadmaps"}),
         roadmaps=roadmaps,
@@ -800,7 +842,7 @@ async def student_detail(
         mock_interviews=await _student_mocks(session, student.id, mentor),
         documents=await _student_documents(session, student.id, mentor),
         notes=await _student_notes(session, student.id, mentor),
-        status_history=await _student_status_history(session, student.id, relation),
+        status_history=await _student_status_history(session, student.id, relation, state),
     )
 
 
@@ -808,6 +850,7 @@ async def _student_status_history(
     session: AsyncSession,
     student_id: UUID,
     relation: MentorStudent | None,
+    state: StudentMentorshipState | None,
 ) -> list[MentorStudentStatusPeriod]:
     rows = list(
         await session.scalars(
@@ -817,11 +860,23 @@ async def _student_status_history(
         )
     )
     now = datetime.now(UTC)
+    if not rows and state is not None:
+        learning_status = state.learning_status
+        started_at = state.status_updated_at
+        return [
+            MentorStudentStatusPeriod(
+                status=learning_status,
+                started_at=started_at,
+                ended_at=None,
+                days=max(0, (now - started_at).days),
+            )
+        ]
     if not rows and relation is not None:
+        learning_status = relation.learning_status
         started_at = relation.status_updated_at or relation.assigned_at
         return [
             MentorStudentStatusPeriod(
-                status=relation.learning_status,
+                status=learning_status,
                 started_at=started_at,
                 ended_at=None,
                 days=max(0, (now - started_at).days),
@@ -844,10 +899,28 @@ async def update_student_state(
     student_id: UUID,
     payload: MentorStudentStateMutation,
 ) -> MentorStudentDetail:
-    _, relation = await assigned_student(session, mentor, student_id, lock=True)
-    if relation is None:
-        api_error(409, "student_has_no_mentor", "Assign a mentor to the student first")
-    if relation.learning_status is not payload.learning_status:
+    student, relation = await assigned_student(session, mentor, student_id, lock=True)
+    state = await session.scalar(
+        select(StudentMentorshipState)
+        .where(StudentMentorshipState.student_id == student_id)
+        .with_for_update()
+    )
+    if state is None:
+        state = StudentMentorshipState(
+            student_id=student_id,
+            learning_status=(
+                relation.learning_status if relation else StudentLearningStatus.LEARNING
+            ),
+            strength_level=relation.strength_level if relation else None,
+            status_updated_at=(
+                relation.status_updated_at or relation.assigned_at
+                if relation is not None
+                else student.created_at
+            ),
+        )
+        session.add(state)
+        await session.flush()
+    if state.learning_status is not payload.learning_status:
         now = datetime.now(UTC)
         current_period = await session.scalar(
             select(MentorStudentStatusHistory)
@@ -863,8 +936,8 @@ async def update_student_state(
             session.add(
                 MentorStudentStatusHistory(
                     student_id=student_id,
-                    status=relation.learning_status,
-                    started_at=relation.status_updated_at or relation.assigned_at,
+                    status=state.learning_status,
+                    started_at=state.status_updated_at,
                     ended_at=now,
                     changed_by_user_id=mentor.id,
                 )
@@ -877,9 +950,13 @@ async def update_student_state(
                 changed_by_user_id=mentor.id,
             )
         )
-        relation.learning_status = payload.learning_status
-        relation.status_updated_at = now
-    relation.strength_level = payload.strength_level
+        state.learning_status = payload.learning_status
+        state.status_updated_at = now
+    state.strength_level = payload.strength_level
+    if relation is not None:
+        relation.learning_status = state.learning_status
+        relation.strength_level = state.strength_level
+        relation.status_updated_at = state.status_updated_at
     await session.commit()
     return await student_detail(session, mentor, student_id)
 

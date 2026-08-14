@@ -60,6 +60,7 @@ from app.mentors.models import (
     MockInterview,
     MockInterviewStatus,
     StudentLearningStatus,
+    StudentMentorshipState,
     StudentStrengthLevel,
 )
 from app.payments.models import (
@@ -99,6 +100,7 @@ __all__ = [
     "MentorStudentDocument",
     "MentorStudentNote",
     "MentorStudentStatusHistory",
+    "StudentMentorshipState",
     "MentorDocumentKind",
     "MockInterview",
     "MockInterviewStatus",

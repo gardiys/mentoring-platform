@@ -92,6 +92,42 @@ class MentorStudent(Base):
     reward_percent: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
 
 
+class StudentMentorshipState(Base):
+    __tablename__ = "student_mentorship_states"
+
+    student_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    learning_status: Mapped[StudentLearningStatus] = mapped_column(
+        Enum(
+            StudentLearningStatus,
+            name="student_learning_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        default=StudentLearningStatus.LEARNING,
+        nullable=False,
+    )
+    strength_level: Mapped[StudentStrengthLevel | None] = mapped_column(
+        Enum(
+            StudentStrengthLevel,
+            name="student_strength_level",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=True,
+    )
+    status_updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class MentorStudentStatusHistory(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "mentor_student_status_history"
     __table_args__ = (

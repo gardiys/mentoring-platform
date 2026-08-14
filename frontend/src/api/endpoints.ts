@@ -90,6 +90,7 @@ import type {
   MentorDocumentRead,
   MentorAnalyticsPeriod,
   MentorInterviewAnalytics,
+  MentorEfficiencyAnalytics,
   MentorInterviewDetail,
   MentorNoteRead,
   MentorOneOffActivityMutation,
@@ -693,6 +694,20 @@ export const api = {
     );
     return apiRequest<MentorInterviewAnalytics>(
       `/api/v1/mentor/students/analytics?${params}`,
+    );
+  },
+  mentorEfficiencyAnalytics: (options: {
+    period: MentorAnalyticsPeriod;
+    trackId?: string | null;
+    isActive?: boolean | null;
+  }) => {
+    const params = new URLSearchParams({ period: options.period });
+    if (options.trackId) params.set("track_id", options.trackId);
+    if (options.isActive !== undefined && options.isActive !== null) {
+      params.set("is_active", String(options.isActive));
+    }
+    return apiRequest<MentorEfficiencyAnalytics>(
+      `/api/v1/mentor/students/mentor-efficiency?${params}`,
     );
   },
   updateMentorStudentState: (

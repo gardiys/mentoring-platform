@@ -18,6 +18,8 @@ export const mentorKeys = {
     ["mentor", "students", "list", options] as const,
   interviewAnalytics: (options: MentorInterviewAnalyticsOptions) =>
     ["mentor", "students", "analytics", options] as const,
+  mentorEfficiency: (options: MentorEfficiencyAnalyticsOptions) =>
+    ["mentor", "students", "mentor-efficiency", options] as const,
   student: (id: string) => ["mentor", "students", id] as const,
   interview: (studentId: string, processId: string) =>
     ["mentor", "students", studentId, "interviews", processId] as const,
@@ -41,6 +43,12 @@ export interface MentorInterviewAnalyticsOptions {
   mentorFilter: string;
   access: StudentAccessFilter;
   learningStatuses: StudentLearningStatus[];
+}
+
+export interface MentorEfficiencyAnalyticsOptions {
+  period: MentorAnalyticsPeriod;
+  trackId: string | null;
+  access: StudentAccessFilter;
 }
 
 const STUDENTS_PAGE_SIZE = 25;
@@ -86,6 +94,22 @@ export function useMentorInterviewAnalytics(
         withoutMentor: options.mentorFilter === "unassigned",
         isActive: options.access === "all" ? null : options.access === "active",
         learningStatuses: options.learningStatuses,
+      }),
+    enabled,
+  });
+}
+
+export function useMentorEfficiencyAnalytics(
+  options: MentorEfficiencyAnalyticsOptions,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: mentorKeys.mentorEfficiency(options),
+    queryFn: () =>
+      api.mentorEfficiencyAnalytics({
+        period: options.period,
+        trackId: options.trackId,
+        isActive: options.access === "all" ? null : options.access === "active",
       }),
     enabled,
   });
