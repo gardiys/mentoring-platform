@@ -703,6 +703,21 @@ a {
   border-top: 4px solid var(--brand-blue);
 }
 
+.student-progress-row {
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.student-progress-row--overdue {
+  background: color-mix(in srgb, var(--mantine-color-red-6) 7%, transparent);
+  box-shadow: inset 4px 0 var(--mantine-color-red-6);
+}
+
+.student-progress-row--overdue:hover {
+  background: color-mix(in srgb, var(--mantine-color-red-6) 11%, transparent);
+}
+
 .schedule-event-card {
   min-width: 0;
 }

@@ -88,12 +88,15 @@ import type {
   ContentMediaUploadMetadata,
   MentorDocumentKind,
   MentorDocumentRead,
+  MentorAnalyticsPeriod,
+  MentorInterviewAnalytics,
   MentorInterviewDetail,
   MentorNoteRead,
   MentorOneOffActivityMutation,
   MentorProfileRead,
   MentorStudentDetail,
   MentorStudentPage,
+  MentorStudentSort,
   MentorWeeklyCallMutation,
   MentorWeeklyCallRescheduleMutation,
   MockInterviewRead,
@@ -646,6 +649,7 @@ export const api = {
       withoutMentor?: boolean;
       isActive?: boolean | null;
       learningStatuses?: StudentLearningStatus[];
+      sort?: MentorStudentSort;
       limit?: number;
       offset?: number;
     } = {},
@@ -664,10 +668,33 @@ export const api = {
     options.learningStatuses?.forEach((status) =>
       params.append("learning_status", status),
     );
+    if (options.sort) params.set("sort", options.sort);
     return apiRequest<MentorStudentPage>(`/api/v1/mentor/students?${params}`);
   },
   mentorStudent: (id: string) =>
     apiRequest<MentorStudentDetail>(`/api/v1/mentor/students/${id}`),
+  mentorInterviewAnalytics: (options: {
+    period: MentorAnalyticsPeriod;
+    trackId?: string | null;
+    mentorId?: string | null;
+    withoutMentor?: boolean;
+    isActive?: boolean | null;
+    learningStatuses?: StudentLearningStatus[];
+  }) => {
+    const params = new URLSearchParams({ period: options.period });
+    if (options.trackId) params.set("track_id", options.trackId);
+    if (options.mentorId) params.set("mentor_id", options.mentorId);
+    if (options.withoutMentor) params.set("without_mentor", "true");
+    if (options.isActive !== undefined && options.isActive !== null) {
+      params.set("is_active", String(options.isActive));
+    }
+    options.learningStatuses?.forEach((status) =>
+      params.append("learning_status", status),
+    );
+    return apiRequest<MentorInterviewAnalytics>(
+      `/api/v1/mentor/students/analytics?${params}`,
+    );
+  },
   updateMentorStudentState: (
     id: string,
     learningStatus: StudentLearningStatus,

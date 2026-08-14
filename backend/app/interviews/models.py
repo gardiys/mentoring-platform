@@ -304,9 +304,7 @@ class CompanyAliasProposal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     company_name: Mapped[str] = mapped_column(String(240), nullable=False)
     name: Mapped[str] = mapped_column(String(240), nullable=False)
-    normalized_name: Mapped[str] = mapped_column(
-        String(240), nullable=False, index=True
-    )
+    normalized_name: Mapped[str] = mapped_column(String(240), nullable=False, index=True)
     transliterated_name: Mapped[str] = mapped_column(String(500), nullable=False)
     suggested_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -367,6 +365,9 @@ class InterviewProcess(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     close_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    offer_received_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     offer_storage_key: Mapped[str | None] = mapped_column(String(180), nullable=True)
     offer_filename: Mapped[str | None] = mapped_column(String(500), nullable=True)
     offer_content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)

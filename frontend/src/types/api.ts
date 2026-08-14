@@ -644,18 +644,30 @@ export interface MentorCurrentTopic {
   is_overdue: boolean;
 }
 
+export type MentorStudentActivityKind =
+  "roadmap" | "interview" | "interview_cards";
+
+export type MentorStudentSort =
+  | "name_asc"
+  | "learning_start_desc"
+  | "learning_start_asc"
+  | "last_activity_desc"
+  | "last_activity_asc";
+
 export interface MentorStudentListItem {
   id: string;
   first_name: string;
   last_name: string | null;
   email: string | null;
   telegram_username: string | null;
+  learning_start_date: string | null;
   is_active: boolean;
   learning_status: StudentLearningStatus;
   strength_level: StudentStrengthLevel | null;
   roadmaps: MentorStudentRoadmapSummary[];
   current_topics: MentorCurrentTopic[];
   last_progress_at: string | null;
+  last_activity_kind: MentorStudentActivityKind | null;
   completed_topics_this_week: number;
   is_overdue: boolean;
   mock_interview_count: number;
@@ -683,6 +695,58 @@ export interface MentorStudentPage {
   directions: MentorStudentDirectionOption[];
   mentors: MentorStudentMentorOption[];
   can_filter_by_mentor: boolean;
+}
+
+export type MentorAnalyticsPeriod = "week" | "month" | "all";
+
+export interface MentorInterviewStageCount {
+  stage_type: InterviewStageType;
+  count: number;
+}
+
+export interface MentorInterviewRankingItem {
+  position: number;
+  student_id: string;
+  first_name: string;
+  last_name: string | null;
+  telegram_username: string | null;
+  interview_count: number;
+  company_count: number;
+  offer_count: number;
+  ai_analysis_count: number;
+  last_interview_at: string | null;
+}
+
+export interface MentorInterviewAnalytics {
+  period: MentorAnalyticsPeriod;
+  period_start: string | null;
+  period_end: string;
+  selected_student_count: number;
+  current_interviewing_students: number;
+  students_with_interviews: number;
+  students_without_interviews: number;
+  total_interviews: number;
+  unique_companies: number;
+  active_processes: number;
+  offers_received: number;
+  ai_analyses_started: number;
+  ai_analyses_ready: number;
+  ai_analyses_failed: number;
+  interviews_with_recording: number;
+  upcoming_interviews_next_week: number;
+  average_interviews_per_participant: number;
+  offer_conversion_percent: number;
+  ai_success_rate_percent: number;
+  recording_coverage_percent: number;
+  stage_counts: MentorInterviewStageCount[];
+  ranking: MentorInterviewRankingItem[];
+}
+
+export interface MentorStudentStatusPeriod {
+  status: StudentLearningStatus;
+  started_at: string;
+  ended_at: string | null;
+  days: number;
 }
 
 export interface MentorNoteRead {
@@ -726,6 +790,7 @@ export interface MentorStudentDetail extends Omit<
   mock_interviews: MockInterviewRead[];
   documents: MentorDocumentRead[];
   notes: MentorNoteRead[];
+  status_history: MentorStudentStatusPeriod[];
 }
 
 export interface MentorInterviewDetail {

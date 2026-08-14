@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select
@@ -11,8 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import api_error
 from app.interviews.journal_service import list_processes, process_detail
 from app.interviews.models import (
+    InterviewCardProgress,
     InterviewProcess,
     InterviewProcessStage,
+    InterviewProcessStageAttachment,
     InterviewStageComment,
 )
 from app.interviews.schemas import (
@@ -26,6 +28,7 @@ from app.mentors.models import (
     MentorStudent,
     MentorStudentDocument,
     MentorStudentNote,
+    MentorStudentStatusHistory,
     MockInterview,
     MockInterviewStatus,
     StudentLearningStatus,
@@ -37,12 +40,15 @@ from app.mentors.schemas import (
     MentorInterviewDetail,
     MentorInterviewStageFeedback,
     MentorNoteRead,
+    MentorStudentActivityKind,
     MentorStudentDetail,
     MentorStudentDirectionOption,
     MentorStudentListItem,
     MentorStudentMentorOption,
     MentorStudentPage,
+    MentorStudentSort,
     MentorStudentStateMutation,
+    MentorStudentStatusPeriod,
     MockInterviewFeedbackMutation,
     MockInterviewMutation,
     MockInterviewRead,
@@ -150,6 +156,153 @@ async def _current_topics(
     return result
 
 
+def _last_activity_sort_expression() -> Any:
+    """Return the latest meaningful student activity as a correlated SQL expression."""
+    roadmap_activity = (
+        select(func.max(TopicProgress.updated_at))
+        .where(TopicProgress.user_id == User.id)
+        .correlate(User)
+        .scalar_subquery()
+    )
+    process_activity = (
+        select(func.max(InterviewProcess.updated_at))
+        .where(InterviewProcess.user_id == User.id)
+        .correlate(User)
+        .scalar_subquery()
+    )
+    stage_activity = (
+        select(func.max(InterviewProcessStage.updated_at))
+        .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
+        .where(InterviewProcess.user_id == User.id)
+        .correlate(User)
+        .scalar_subquery()
+    )
+    attachment_activity = (
+        select(func.max(InterviewProcessStageAttachment.created_at))
+        .join(
+            InterviewProcessStage,
+            InterviewProcessStage.id == InterviewProcessStageAttachment.stage_id,
+        )
+        .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
+        .where(InterviewProcess.user_id == User.id)
+        .correlate(User)
+        .scalar_subquery()
+    )
+    comment_activity = (
+        select(func.max(InterviewStageComment.created_at))
+        .where(InterviewStageComment.user_id == User.id)
+        .correlate(User)
+        .scalar_subquery()
+    )
+    card_activity = (
+        select(func.max(InterviewCardProgress.last_reviewed_at))
+        .where(InterviewCardProgress.user_id == User.id)
+        .correlate(User)
+        .scalar_subquery()
+    )
+    return func.greatest(
+        roadmap_activity,
+        process_activity,
+        stage_activity,
+        attachment_activity,
+        comment_activity,
+        card_activity,
+    )
+
+
+async def _student_activity(
+    session: AsyncSession, student_ids: list[UUID]
+) -> dict[UUID, tuple[datetime | None, MentorStudentActivityKind | None]]:
+    if not student_ids:
+        return {}
+    result: dict[UUID, tuple[datetime | None, MentorStudentActivityKind | None]] = {
+        student_id: (None, None) for student_id in student_ids
+    }
+
+    def remember(
+        student_id: UUID,
+        activity_at: datetime | None,
+        kind: MentorStudentActivityKind,
+    ) -> None:
+        current_at, _ = result[student_id]
+        if activity_at is not None and (current_at is None or activity_at > current_at):
+            result[student_id] = (activity_at, kind)
+
+    roadmap_rows = (
+        await session.execute(
+            select(TopicProgress.user_id, func.max(TopicProgress.updated_at))
+            .where(TopicProgress.user_id.in_(student_ids))
+            .group_by(TopicProgress.user_id)
+        )
+    ).all()
+    for student_id, activity_at in roadmap_rows:
+        remember(student_id, activity_at, MentorStudentActivityKind.ROADMAP)
+
+    process_rows = (
+        await session.execute(
+            select(InterviewProcess.user_id, func.max(InterviewProcess.updated_at))
+            .where(InterviewProcess.user_id.in_(student_ids))
+            .group_by(InterviewProcess.user_id)
+        )
+    ).all()
+    for student_id, activity_at in process_rows:
+        remember(student_id, activity_at, MentorStudentActivityKind.INTERVIEW)
+
+    stage_rows = (
+        await session.execute(
+            select(InterviewProcess.user_id, func.max(InterviewProcessStage.updated_at))
+            .join(InterviewProcessStage, InterviewProcessStage.process_id == InterviewProcess.id)
+            .where(InterviewProcess.user_id.in_(student_ids))
+            .group_by(InterviewProcess.user_id)
+        )
+    ).all()
+    for student_id, activity_at in stage_rows:
+        remember(student_id, activity_at, MentorStudentActivityKind.INTERVIEW)
+
+    attachment_rows = (
+        await session.execute(
+            select(
+                InterviewProcess.user_id,
+                func.max(InterviewProcessStageAttachment.created_at),
+            )
+            .join(InterviewProcessStage, InterviewProcessStage.process_id == InterviewProcess.id)
+            .join(
+                InterviewProcessStageAttachment,
+                InterviewProcessStageAttachment.stage_id == InterviewProcessStage.id,
+            )
+            .where(InterviewProcess.user_id.in_(student_ids))
+            .group_by(InterviewProcess.user_id)
+        )
+    ).all()
+    for student_id, activity_at in attachment_rows:
+        remember(student_id, activity_at, MentorStudentActivityKind.INTERVIEW)
+
+    comment_rows = (
+        await session.execute(
+            select(InterviewStageComment.user_id, func.max(InterviewStageComment.created_at))
+            .where(InterviewStageComment.user_id.in_(student_ids))
+            .group_by(InterviewStageComment.user_id)
+        )
+    ).all()
+    for student_id, activity_at in comment_rows:
+        if student_id is not None:
+            remember(student_id, activity_at, MentorStudentActivityKind.INTERVIEW)
+
+    card_rows = (
+        await session.execute(
+            select(
+                InterviewCardProgress.user_id,
+                func.max(InterviewCardProgress.last_reviewed_at),
+            )
+            .where(InterviewCardProgress.user_id.in_(student_ids))
+            .group_by(InterviewCardProgress.user_id)
+        )
+    ).all()
+    for student_id, activity_at in card_rows:
+        remember(student_id, activity_at, MentorStudentActivityKind.INTERVIEW_CARDS)
+    return result
+
+
 async def _student_item(
     session: AsyncSession,
     student: User,
@@ -160,9 +313,8 @@ async def _student_item(
     now = datetime.now(UTC)
     roadmaps = roadmap_details or await _roadmap_details(session, student.id)
     overdue_by_roadmap = {roadmap.id: _overdue_sections(roadmap, now) for roadmap in roadmaps}
-    last_progress_at = await session.scalar(
-        select(func.max(TopicProgress.updated_at)).where(TopicProgress.user_id == student.id)
-    )
+    last_activity = await _student_activity(session, [student.id])
+    last_progress_at, last_activity_kind = last_activity.get(student.id, (None, None))
     weekly_completed = int(
         await session.scalar(
             select(func.count(TopicProgress.topic_id)).where(
@@ -187,6 +339,7 @@ async def _student_item(
         last_name=student.last_name,
         email=student.email,
         telegram_username=student.telegram_username,
+        learning_start_date=student.learning_start_date,
         is_active=student.is_active,
         learning_status=(relation.learning_status if relation else StudentLearningStatus.LEARNING),
         strength_level=relation.strength_level if relation else None,
@@ -206,6 +359,7 @@ async def _student_item(
         ],
         current_topics=await _current_topics(session, student.id, roadmaps),
         last_progress_at=last_progress_at,
+        last_activity_kind=last_activity_kind,
         completed_topics_this_week=weekly_completed,
         is_overdue=any(overdue_by_roadmap.values()),
         mock_interview_count=mock_count,
@@ -222,6 +376,7 @@ async def list_students(
     without_mentor: bool = False,
     is_active: bool | None = None,
     learning_statuses: list[StudentLearningStatus] | None = None,
+    sort: MentorStudentSort = MentorStudentSort.NAME_ASC,
     limit: int = 12,
     offset: int = 0,
 ) -> MentorStudentPage:
@@ -287,10 +442,26 @@ async def list_students(
         await session.scalar(select(func.count()).select_from(statement.order_by(None).subquery()))
         or 0
     )
-    rows = (
-        await session.execute(
-            statement.order_by(User.first_name, User.last_name, User.id).limit(limit).offset(offset)
+    ordering: tuple[Any, ...]
+    if sort is MentorStudentSort.LEARNING_START_DESC:
+        ordering = (User.learning_start_date.desc().nulls_last(), User.first_name, User.last_name)
+    elif sort is MentorStudentSort.LEARNING_START_ASC:
+        ordering = (User.learning_start_date.asc().nulls_last(), User.first_name, User.last_name)
+    elif sort in {
+        MentorStudentSort.LAST_ACTIVITY_DESC,
+        MentorStudentSort.LAST_ACTIVITY_ASC,
+    }:
+        activity_at = _last_activity_sort_expression()
+        activity_order = (
+            activity_at.desc().nulls_last()
+            if sort is MentorStudentSort.LAST_ACTIVITY_DESC
+            else activity_at.asc().nulls_first()
         )
+        ordering = (activity_order, User.first_name, User.last_name)
+    else:
+        ordering = (User.first_name, User.last_name)
+    rows = (
+        await session.execute(statement.order_by(*ordering, User.id).limit(limit).offset(offset))
     ).all()
     directions = list(
         await session.scalars(
@@ -416,7 +587,6 @@ async def _batch_student_items(
         await session.execute(
             select(
                 TopicProgress.user_id,
-                func.max(TopicProgress.updated_at),
                 func.count(TopicProgress.topic_id).filter(
                     TopicProgress.last_completed_at >= now - timedelta(days=7)
                 ),
@@ -425,10 +595,10 @@ async def _batch_student_items(
             .group_by(TopicProgress.user_id)
         )
     ).all()
-    activity = {
-        student_id: (last_progress, int(weekly_completed))
-        for student_id, last_progress, weekly_completed in progress_rows
+    weekly_completed_by_student = {
+        student_id: int(weekly_completed) for student_id, weekly_completed in progress_rows
     }
+    activity = await _student_activity(session, student_ids)
     mock_rows = (
         await session.execute(
             select(MockInterview.student_id, func.count(MockInterview.id))
@@ -509,7 +679,7 @@ async def _batch_student_items(
                     overdue_sections=overdue_sections,
                 )
             )
-        last_progress, weekly_completed = activity.get(student.id, (None, 0))
+        last_progress, last_activity_kind = activity.get(student.id, (None, None))
         result.append(
             MentorStudentListItem(
                 id=student.id,
@@ -517,6 +687,7 @@ async def _batch_student_items(
                 last_name=student.last_name,
                 email=student.email,
                 telegram_username=student.telegram_username,
+                learning_start_date=student.learning_start_date,
                 is_active=student.is_active,
                 learning_status=(
                     relation.learning_status if relation else StudentLearningStatus.LEARNING
@@ -525,7 +696,8 @@ async def _batch_student_items(
                 roadmaps=summaries,
                 current_topics=current_topics,
                 last_progress_at=last_progress,
-                completed_topics_this_week=weekly_completed,
+                last_activity_kind=last_activity_kind,
+                completed_topics_this_week=weekly_completed_by_student.get(student.id, 0),
                 is_overdue=student_is_overdue,
                 mock_interview_count=mock_counts.get(student.id, 0),
             )
@@ -628,7 +800,42 @@ async def student_detail(
         mock_interviews=await _student_mocks(session, student.id, mentor),
         documents=await _student_documents(session, student.id, mentor),
         notes=await _student_notes(session, student.id, mentor),
+        status_history=await _student_status_history(session, student.id, relation),
     )
+
+
+async def _student_status_history(
+    session: AsyncSession,
+    student_id: UUID,
+    relation: MentorStudent | None,
+) -> list[MentorStudentStatusPeriod]:
+    rows = list(
+        await session.scalars(
+            select(MentorStudentStatusHistory)
+            .where(MentorStudentStatusHistory.student_id == student_id)
+            .order_by(MentorStudentStatusHistory.started_at.desc())
+        )
+    )
+    now = datetime.now(UTC)
+    if not rows and relation is not None:
+        started_at = relation.status_updated_at or relation.assigned_at
+        return [
+            MentorStudentStatusPeriod(
+                status=relation.learning_status,
+                started_at=started_at,
+                ended_at=None,
+                days=max(0, (now - started_at).days),
+            )
+        ]
+    return [
+        MentorStudentStatusPeriod(
+            status=row.status,
+            started_at=row.started_at,
+            ended_at=row.ended_at,
+            days=max(0, ((row.ended_at or now) - row.started_at).days),
+        )
+        for row in rows
+    ]
 
 
 async def update_student_state(
@@ -640,9 +847,39 @@ async def update_student_state(
     _, relation = await assigned_student(session, mentor, student_id, lock=True)
     if relation is None:
         api_error(409, "student_has_no_mentor", "Assign a mentor to the student first")
-    relation.learning_status = payload.learning_status
+    if relation.learning_status is not payload.learning_status:
+        now = datetime.now(UTC)
+        current_period = await session.scalar(
+            select(MentorStudentStatusHistory)
+            .where(
+                MentorStudentStatusHistory.student_id == student_id,
+                MentorStudentStatusHistory.ended_at.is_(None),
+            )
+            .with_for_update()
+        )
+        if current_period is not None:
+            current_period.ended_at = now
+        else:
+            session.add(
+                MentorStudentStatusHistory(
+                    student_id=student_id,
+                    status=relation.learning_status,
+                    started_at=relation.status_updated_at or relation.assigned_at,
+                    ended_at=now,
+                    changed_by_user_id=mentor.id,
+                )
+            )
+        session.add(
+            MentorStudentStatusHistory(
+                student_id=student_id,
+                status=payload.learning_status,
+                started_at=now,
+                changed_by_user_id=mentor.id,
+            )
+        )
+        relation.learning_status = payload.learning_status
+        relation.status_updated_at = now
     relation.strength_level = payload.strength_level
-    relation.status_updated_at = datetime.now(UTC)
     await session.commit()
     return await student_detail(session, mentor, student_id)
 

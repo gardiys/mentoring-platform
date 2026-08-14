@@ -64,6 +64,10 @@ const levelOptions = [
   { value: "strong", label: "Сильный" },
 ];
 
+function statusLabel(status: StudentLearningStatus): string {
+  return statusOptions.find((item) => item.value === status)?.label ?? status;
+}
+
 function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleString("ru-RU") : "—";
 }
@@ -378,6 +382,9 @@ export function MentorStudentPage() {
       <ErrorState error={query.error} retry={() => void query.refetch()} />
     );
   const student = query.data;
+  const currentStatusPeriod = student.status_history.find(
+    (period) => period.ended_at === null,
+  );
 
   return (
     <Stack gap="xl">
@@ -453,7 +460,7 @@ export function MentorStudentPage() {
         </Stack>
       </Card>
 
-      <SimpleGrid cols={{ base: 1, sm: 3 }}>
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
         <Card withBorder>
           <Text className="technical-label">За последние 7 дней</Text>
           <Title order={2}>{student.completed_topics_this_week} тем</Title>
@@ -466,7 +473,58 @@ export function MentorStudentPage() {
           <Text className="technical-label">Последняя активность</Text>
           <Text fw={700}>{formatDate(student.last_progress_at)}</Text>
         </Card>
+        <Card withBorder>
+          <Text className="technical-label">В текущем статусе</Text>
+          <Title order={2}>{currentStatusPeriod?.days ?? 0} дн.</Title>
+          <Text size="xs" c="dimmed">
+            {statusLabel(student.learning_status)}
+          </Text>
+        </Card>
       </SimpleGrid>
+
+      <Card withBorder>
+        <Stack>
+          <div>
+            <Title order={3}>История статусов</Title>
+            <Text size="sm" c="dimmed">
+              Сколько времени ученик провёл на каждом этапе программы.
+            </Text>
+          </div>
+          {student.status_history.length === 0 ? (
+            <Text c="dimmed">
+              История начнёт собираться после смены статуса.
+            </Text>
+          ) : (
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
+              {student.status_history.map((period) => (
+                <Card
+                  key={`${period.status}-${period.started_at}`}
+                  withBorder
+                  padding="sm"
+                >
+                  <Stack gap={4}>
+                    <Group justify="space-between" wrap="nowrap">
+                      <Text fw={700} size="sm">
+                        {statusLabel(period.status)}
+                      </Text>
+                      {period.ended_at === null && (
+                        <Badge color="blue" variant="light" size="xs">
+                          Сейчас
+                        </Badge>
+                      )}
+                    </Group>
+                    <Title order={3}>{period.days} дн.</Title>
+                    <Text size="xs" c="dimmed">
+                      {formatDate(period.started_at)} —{" "}
+                      {period.ended_at ? formatDate(period.ended_at) : "сейчас"}
+                    </Text>
+                  </Stack>
+                </Card>
+              ))}
+            </SimpleGrid>
+          )}
+        </Stack>
+      </Card>
 
       <Tabs defaultValue="progress" keepMounted={false}>
         <ScrollArea type="auto" scrollbarSize={6} offsetScrollbars>

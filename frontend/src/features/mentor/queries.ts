@@ -3,9 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/endpoints";
 import type { UploadOptions } from "../../api/client";
 import type {
+  MentorAnalyticsPeriod,
   MentorDocumentKind,
   StudentAccessFilter,
   StudentLearningStatus,
+  MentorStudentSort,
   StudentStrengthLevel,
 } from "../../types/api";
 
@@ -14,6 +16,8 @@ export const mentorKeys = {
   students: ["mentor", "students"] as const,
   studentList: (options: MentorStudentListOptions) =>
     ["mentor", "students", "list", options] as const,
+  interviewAnalytics: (options: MentorInterviewAnalyticsOptions) =>
+    ["mentor", "students", "analytics", options] as const,
   student: (id: string) => ["mentor", "students", id] as const,
   interview: (studentId: string, processId: string) =>
     ["mentor", "students", studentId, "interviews", processId] as const,
@@ -28,9 +32,18 @@ export interface MentorStudentListOptions {
   access: StudentAccessFilter;
   learningStatuses: StudentLearningStatus[];
   page: number;
+  sort: MentorStudentSort;
 }
 
-const STUDENTS_PAGE_SIZE = 12;
+export interface MentorInterviewAnalyticsOptions {
+  period: MentorAnalyticsPeriod;
+  trackId: string | null;
+  mentorFilter: string;
+  access: StudentAccessFilter;
+  learningStatuses: StudentLearningStatus[];
+}
+
+const STUDENTS_PAGE_SIZE = 25;
 
 export function useMentorStudents(options: MentorStudentListOptions) {
   return useQuery({
@@ -47,10 +60,34 @@ export function useMentorStudents(options: MentorStudentListOptions) {
         withoutMentor: options.mentorFilter === "unassigned",
         isActive: options.access === "all" ? null : options.access === "active",
         learningStatuses: options.learningStatuses,
+        sort: options.sort,
         limit: STUDENTS_PAGE_SIZE,
         offset: (options.page - 1) * STUDENTS_PAGE_SIZE,
       }),
     placeholderData: (previousData) => previousData,
+  });
+}
+
+export function useMentorInterviewAnalytics(
+  options: MentorInterviewAnalyticsOptions,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: mentorKeys.interviewAnalytics(options),
+    queryFn: () =>
+      api.mentorInterviewAnalytics({
+        period: options.period,
+        trackId: options.trackId,
+        mentorId:
+          options.mentorFilter !== "all" &&
+          options.mentorFilter !== "unassigned"
+            ? options.mentorFilter
+            : null,
+        withoutMentor: options.mentorFilter === "unassigned",
+        isActive: options.access === "all" ? null : options.access === "active",
+        learningStatuses: options.learningStatuses,
+      }),
+    enabled,
   });
 }
 

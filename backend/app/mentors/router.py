@@ -32,19 +32,23 @@ from app.interviews.uploads import (
     InterviewUploadStore,
     StoredUpload,
 )
+from app.mentors.analytics_service import interview_analytics
 from app.mentors.models import (
     MentorDocumentKind,
     MentorStudentDocument,
     StudentLearningStatus,
 )
 from app.mentors.schemas import (
+    MentorAnalyticsPeriod,
     MentorDocumentContentMutation,
     MentorDocumentRead,
+    MentorInterviewAnalytics,
     MentorInterviewDetail,
     MentorNoteMutation,
     MentorNoteRead,
     MentorStudentDetail,
     MentorStudentPage,
+    MentorStudentSort,
     MentorStudentStateMutation,
     MockInterviewFeedbackMutation,
     MockInterviewMutation,
@@ -202,6 +206,7 @@ async def mentor_students(
     without_mentor: bool = False,
     is_active: bool | None = None,
     learning_status: Annotated[list[StudentLearningStatus] | None, Query()] = None,
+    sort: MentorStudentSort = MentorStudentSort.NAME_ASC,
     limit: int = Query(default=12, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> MentorStudentPage:
@@ -214,8 +219,32 @@ async def mentor_students(
         without_mentor=without_mentor,
         is_active=is_active,
         learning_statuses=learning_status,
+        sort=sort,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/students/analytics", response_model=MentorInterviewAnalytics)
+async def mentor_students_analytics(
+    session: Session,
+    mentor: MentorUser,
+    period: MentorAnalyticsPeriod = MentorAnalyticsPeriod.WEEK,
+    track_id: UUID | None = None,
+    mentor_id: UUID | None = None,
+    without_mentor: bool = False,
+    is_active: bool | None = None,
+    learning_status: Annotated[list[StudentLearningStatus] | None, Query()] = None,
+) -> MentorInterviewAnalytics:
+    return await interview_analytics(
+        session,
+        mentor,
+        period=period,
+        track_id=track_id,
+        mentor_id=mentor_id,
+        without_mentor=without_mentor,
+        is_active=is_active,
+        learning_statuses=learning_status,
     )
 
 

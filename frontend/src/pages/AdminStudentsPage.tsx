@@ -20,6 +20,11 @@ import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useAdminStudents } from "../features/admin/studentQueries";
 import type { StudentAccessFilter, StudentLearningStatus } from "../types/api";
+import {
+  ADMIN_STUDENTS_FILTERS_STORAGE_KEY,
+  readStoredStudentListFilters,
+  storeStudentListFilters,
+} from "../utils/studentListFilters";
 
 const PAGE_SIZE = 50;
 
@@ -39,12 +44,19 @@ function formatDate(value: string | null) {
 }
 
 export function AdminStudentsPage() {
-  const [search, setSearch] = useState("");
+  const [initialFilters] = useState(() =>
+    readStoredStudentListFilters(ADMIN_STUDENTS_FILTERS_STORAGE_KEY),
+  );
+  const [search, setSearch] = useState(initialFilters.search);
   const [debouncedSearch] = useDebouncedValue(search.trim(), 250);
-  const [trackId, setTrackId] = useState<string | null>(null);
-  const [statuses, setStatuses] = useState<StudentLearningStatus[]>([]);
-  const [access, setAccess] = useState<StudentAccessFilter>("active");
-  const [mentorFilter, setMentorFilter] = useState("all");
+  const [trackId, setTrackId] = useState<string | null>(initialFilters.trackId);
+  const [statuses, setStatuses] = useState<StudentLearningStatus[]>(
+    initialFilters.statuses,
+  );
+  const [access, setAccess] = useState<StudentAccessFilter>(
+    initialFilters.access,
+  );
+  const [mentorFilter, setMentorFilter] = useState(initialFilters.mentorFilter);
   const [page, setPage] = useState(1);
   const query = useAdminStudents({
     query: debouncedSearch,
@@ -59,6 +71,31 @@ export function AdminStudentsPage() {
     () => setPage(1),
     [debouncedSearch, trackId, statuses, access, mentorFilter],
   );
+
+  useEffect(() => {
+    storeStudentListFilters(ADMIN_STUDENTS_FILTERS_STORAGE_KEY, {
+      search,
+      trackId,
+      statuses,
+      access,
+      mentorFilter,
+      sort: initialFilters.sort,
+    });
+  }, [search, trackId, statuses, access, mentorFilter, initialFilters.sort]);
+
+  useEffect(() => {
+    if (!query.data) return;
+    if (trackId && !query.data.tracks.some((track) => track.id === trackId)) {
+      setTrackId(null);
+    }
+    if (
+      mentorFilter !== "all" &&
+      mentorFilter !== "unassigned" &&
+      !query.data.mentors.some((mentor) => mentor.id === mentorFilter)
+    ) {
+      setMentorFilter("all");
+    }
+  }, [mentorFilter, query.data, trackId]);
 
   return (
     <Stack gap="xl">

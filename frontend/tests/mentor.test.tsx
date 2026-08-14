@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
 import { MentorStudentPage } from "../src/pages/MentorStudentPage";
@@ -10,9 +10,17 @@ import type {
   MentorInterviewDetail,
   MentorStudentDetail,
 } from "../src/types/api";
+import { STUDENT_PROGRESS_FILTERS_STORAGE_KEY } from "../src/utils/studentListFilters";
 import { renderPage } from "./render";
 
-afterEach(() => vi.restoreAllMocks());
+beforeEach(() => {
+  window.localStorage.removeItem(STUDENT_PROGRESS_FILTERS_STORAGE_KEY);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  window.localStorage.removeItem(STUDENT_PROGRESS_FILTERS_STORAGE_KEY);
+});
 
 it("MentorStudentsPage отображает учеников", async () => {
   const students = vi.spyOn(api, "mentorStudents").mockResolvedValue({
@@ -23,12 +31,14 @@ it("MentorStudentsPage отображает учеников", async () => {
         last_name: "Иванов",
         email: "student@example.com",
         telegram_username: "  @@ivan_student  ",
+        learning_start_date: "2026-07-01",
         is_active: true,
         learning_status: "learning",
         strength_level: null,
         roadmaps: [],
         current_topics: [],
-        last_progress_at: null,
+        last_progress_at: "2026-08-10T10:00:00Z",
+        last_activity_kind: "interview",
         completed_topics_this_week: 0,
         is_overdue: false,
         mock_interview_count: 0,
@@ -39,19 +49,21 @@ it("MentorStudentsPage отображает учеников", async () => {
         last_name: null,
         email: null,
         telegram_username: null,
+        learning_start_date: null,
         is_active: false,
         learning_status: "learning",
         strength_level: null,
         roadmaps: [],
         current_topics: [],
         last_progress_at: null,
+        last_activity_kind: null,
         completed_topics_this_week: 0,
         is_overdue: false,
         mock_interview_count: 0,
       },
     ],
     total: 2,
-    limit: 12,
+    limit: 25,
     offset: 0,
     directions: [{ id: "python", slug: "python", title: "Python" }],
     mentors: [
@@ -78,7 +90,10 @@ it("MentorStudentsPage отображает учеников", async () => {
   expect(screen.getAllByLabelText("Текущий статус")[0]).toBeInTheDocument();
   expect(screen.getAllByLabelText("Доступ")[0]).toHaveValue("Доступ открыт");
   expect(screen.getAllByLabelText("Ментор")[0]).toBeInTheDocument();
+  expect(screen.getAllByLabelText("Сортировка")[0]).toHaveValue("По имени");
   expect(screen.getByText("Найдено учеников: 2")).toBeInTheDocument();
+  expect(screen.getByText(/Собеседования ·/)).toBeInTheDocument();
+  expect(screen.getByText("01.07.2026")).toBeInTheDocument();
   expect(screen.getAllByText("Доступ закрыт").length).toBeGreaterThan(0);
   await waitFor(() =>
     expect(students).toHaveBeenCalledWith(
@@ -98,6 +113,14 @@ it("MentorStudentsPage отображает учеников", async () => {
       expect.objectContaining({ isActive: false }),
     ),
   );
+  await waitFor(() =>
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(STUDENT_PROGRESS_FILTERS_STORAGE_KEY) ??
+          "{}",
+      ),
+    ).toEqual(expect.objectContaining({ access: "blocked" })),
+  );
   await userEvent.click(screen.getAllByLabelText("Ментор")[0]!);
   expect(
     await screen.findByText("Администратор · администратор"),
@@ -111,6 +134,157 @@ it("MentorStudentsPage отображает учеников", async () => {
   expect(screen.getByText("Telegram не указан")).toBeInTheDocument();
 });
 
+it("показывает аналитику собеседований и переключает период", async () => {
+  vi.spyOn(api, "mentorStudents").mockResolvedValue({
+    items: [],
+    total: 2,
+    limit: 25,
+    offset: 0,
+    directions: [{ id: "python", slug: "python", title: "Python" }],
+    mentors: [],
+    can_filter_by_mentor: false,
+  });
+  const analytics = vi
+    .spyOn(api, "mentorInterviewAnalytics")
+    .mockResolvedValue({
+      period: "week",
+      period_start: "2026-08-08T00:00:00Z",
+      period_end: "2026-08-15T00:00:00Z",
+      selected_student_count: 2,
+      current_interviewing_students: 2,
+      students_with_interviews: 2,
+      students_without_interviews: 0,
+      total_interviews: 8,
+      unique_companies: 5,
+      active_processes: 4,
+      offers_received: 1,
+      ai_analyses_started: 3,
+      ai_analyses_ready: 2,
+      ai_analyses_failed: 1,
+      interviews_with_recording: 4,
+      upcoming_interviews_next_week: 2,
+      average_interviews_per_participant: 4,
+      offer_conversion_percent: 20,
+      ai_success_rate_percent: 66.7,
+      recording_coverage_percent: 50,
+      stage_counts: [
+        { stage_type: "screening", count: 3 },
+        { stage_type: "technical_screening", count: 1 },
+        { stage_type: "technical_interview", count: 2 },
+        { stage_type: "system_design", count: 0 },
+        { stage_type: "final_interview", count: 1 },
+        { stage_type: "other", count: 1 },
+      ],
+      ranking: [
+        {
+          position: 1,
+          student_id: "u1",
+          first_name: "Иван",
+          last_name: "Иванов",
+          telegram_username: "ivan",
+          interview_count: 5,
+          company_count: 3,
+          offer_count: 1,
+          ai_analysis_count: 2,
+          last_interview_at: "2026-08-14T10:00:00Z",
+        },
+      ],
+    });
+
+  renderPage(<MentorStudentsPage />);
+  await userEvent.click(
+    await screen.findByRole("tab", { name: "Аналитика собеседований" }),
+  );
+
+  expect(await screen.findByText("Рейтинг активности")).toBeInTheDocument();
+  expect(screen.getByText("Офферов получено")).toBeInTheDocument();
+  expect(screen.getByText("Технические интервью")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Иван Иванов" })).toHaveAttribute(
+    "href",
+    "/mentor/students/u1",
+  );
+  await waitFor(() =>
+    expect(analytics).toHaveBeenLastCalledWith(
+      expect.objectContaining({ period: "week", isActive: true }),
+    ),
+  );
+
+  await userEvent.click(screen.getByText("Последние 30 дней"));
+  await waitFor(() =>
+    expect(analytics).toHaveBeenLastCalledWith(
+      expect.objectContaining({ period: "month" }),
+    ),
+  );
+});
+
+it("восстанавливает фильтры прогресса после повторного открытия", async () => {
+  window.localStorage.setItem(
+    STUDENT_PROGRESS_FILTERS_STORAGE_KEY,
+    JSON.stringify({
+      search: "Мария",
+      trackId: "go",
+      statuses: ["learning", "interviewing"],
+      access: "blocked",
+      mentorFilter: "mentor-1",
+      sort: "learning_start_asc",
+    }),
+  );
+  const students = vi.spyOn(api, "mentorStudents").mockResolvedValue({
+    items: [],
+    total: 0,
+    limit: 12,
+    offset: 0,
+    directions: [{ id: "go", slug: "go", title: "Go" }],
+    mentors: [
+      {
+        id: "mentor-1",
+        role: "mentor",
+        first_name: "Антон",
+        last_name: "Менторов",
+        telegram_username: "mentor",
+      },
+    ],
+    can_filter_by_mentor: true,
+  });
+
+  renderPage(<MentorStudentsPage />);
+
+  expect(await screen.findByLabelText("Поиск")).toHaveValue("Мария");
+  expect(
+    screen
+      .getAllByLabelText("Направление")
+      .find((element) => element.tagName === "INPUT"),
+  ).toHaveValue("Go");
+  expect(
+    screen
+      .getAllByLabelText("Доступ")
+      .find((element) => element.tagName === "INPUT"),
+  ).toHaveValue("Доступ закрыт");
+  expect(
+    screen
+      .getAllByLabelText("Ментор")
+      .find((element) => element.tagName === "INPUT"),
+  ).toHaveValue("Антон Менторов");
+  expect(
+    screen
+      .getAllByLabelText("Сортировка")
+      .find((element) => element.tagName === "INPUT"),
+  ).toHaveValue("Старт обучения: ранние сначала");
+  await waitFor(() =>
+    expect(students).toHaveBeenLastCalledWith({
+      query: "Мария",
+      trackId: "go",
+      mentorId: "mentor-1",
+      withoutMentor: false,
+      isActive: false,
+      learningStatuses: ["learning", "interviewing"],
+      sort: "learning_start_asc",
+      limit: 25,
+      offset: 0,
+    }),
+  );
+});
+
 it("показывает Telegram-чат в детальной карточке ученика", async () => {
   const student: MentorStudentDetail = {
     id: "student-1",
@@ -118,12 +292,14 @@ it("показывает Telegram-чат в детальной карточке 
     last_name: "Иванов",
     email: "student@example.com",
     telegram_username: "@ivan_detail",
+    learning_start_date: "2026-07-01",
     is_active: true,
     learning_status: "learning",
     strength_level: null,
     roadmaps: [],
     current_topics: [],
     last_progress_at: null,
+    last_activity_kind: null,
     completed_topics_this_week: 0,
     is_overdue: false,
     mock_interview_count: 0,
@@ -131,6 +307,14 @@ it("показывает Telegram-чат в детальной карточке 
     mock_interviews: [],
     documents: [],
     notes: [],
+    status_history: [
+      {
+        status: "learning",
+        started_at: "2026-07-01T10:00:00Z",
+        ended_at: null,
+        days: 45,
+      },
+    ],
   };
   vi.spyOn(api, "mentorStudent").mockResolvedValue(student);
 
@@ -146,6 +330,8 @@ it("показывает Telegram-чат в детальной карточке 
   expect(telegramLink).toHaveAttribute("href", "https://t.me/ivan_detail");
   expect(telegramLink).toHaveAttribute("target", "_blank");
   expect(telegramLink).toHaveAttribute("rel", "noopener noreferrer");
+  expect(screen.getByText("История статусов")).toBeInTheDocument();
+  expect(screen.getAllByText("45 дн.")).toHaveLength(2);
 });
 
 it.each([

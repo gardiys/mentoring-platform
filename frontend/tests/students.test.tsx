@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
 import { AdminStudentForm } from "../src/features/admin/AdminStudentForm";
@@ -10,6 +10,7 @@ import type {
   AdminStudentOptions,
   AdminStudentPage,
 } from "../src/types/api";
+import { ADMIN_STUDENTS_FILTERS_STORAGE_KEY } from "../src/utils/studentListFilters";
 import { renderPage } from "./render";
 
 const mentor = {
@@ -78,7 +79,14 @@ const options: AdminStudentOptions = {
   ],
 };
 
-afterEach(() => vi.restoreAllMocks());
+beforeEach(() => {
+  window.localStorage.removeItem(ADMIN_STUDENTS_FILTERS_STORAGE_KEY);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  window.localStorage.removeItem(ADMIN_STUDENTS_FILTERS_STORAGE_KEY);
+});
 
 async function selectOption(label: string, option: string) {
   const input = screen
@@ -138,6 +146,75 @@ it("показывает данные, треки и статус ученика
       isActive: false,
       mentorId: mentor.id,
       withoutMentor: false,
+      limit: 50,
+      offset: 0,
+    }),
+  );
+  await waitFor(() =>
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(ADMIN_STUDENTS_FILTERS_STORAGE_KEY) ?? "{}",
+      ),
+    ).toEqual({
+      search: "Иван",
+      trackId: student.tracks[0]!.id,
+      statuses: ["learning"],
+      access: "blocked",
+      mentorFilter: mentor.id,
+      sort: "name_asc",
+    }),
+  );
+});
+
+it("восстанавливает фильтры раздела учеников из браузера", async () => {
+  window.localStorage.setItem(
+    ADMIN_STUDENTS_FILTERS_STORAGE_KEY,
+    JSON.stringify({
+      search: "Иван",
+      trackId: student.tracks[0]!.id,
+      statuses: ["learning", "interviewing"],
+      access: "all",
+      mentorFilter: "unassigned",
+    }),
+  );
+  const page: AdminStudentPage = {
+    items: [],
+    total: 0,
+    limit: 50,
+    offset: 0,
+    mentors: [mentor],
+    tracks: options.tracks,
+  };
+  const list = vi.spyOn(api, "adminStudents").mockResolvedValue(page);
+
+  renderPage(<AdminStudentsPage />);
+
+  expect(await screen.findByLabelText("Поиск")).toHaveValue("Иван");
+  await waitFor(() =>
+    expect(
+      screen
+        .getAllByLabelText("Направление")
+        .find((element) => element.tagName === "INPUT"),
+    ).toHaveValue("Python"),
+  );
+  expect(
+    screen
+      .getAllByLabelText("Доступ")
+      .find((element) => element.tagName === "INPUT"),
+  ).toHaveValue("Любой доступ");
+  expect(
+    screen
+      .getAllByLabelText("Ментор")
+      .find((element) => element.tagName === "INPUT"),
+  ).toHaveValue("Без ментора");
+  await waitFor(() =>
+    expect(list).toHaveBeenLastCalledWith({
+      query: "Иван",
+      trackId: student.tracks[0]!.id,
+      learningStatuses: ["learning", "interviewing"],
+      isActive: null,
+      mentorId: null,
+      withoutMentor: true,
       limit: 50,
       offset: 0,
     }),

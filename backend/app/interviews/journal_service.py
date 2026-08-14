@@ -574,6 +574,8 @@ async def set_process_outcome(
     if payload.status is InterviewProcessStatus.CLOSED:
         process.close_reason = payload.close_reason
         process.closed_at = datetime.now(UTC)
+    elif payload.status is InterviewProcessStatus.OFFER:
+        process.offer_received_at = process.offer_received_at or datetime.now(UTC)
     await session.commit()
     return await process_detail(session, user, process.id)
 
@@ -745,6 +747,7 @@ async def cancel_offer(
         api_error(409, "interview_offer_not_marked", "The process has no offer to cancel")
     previous_key = process.offer_storage_key
     process.status = InterviewProcessStatus.ACTIVE
+    process.offer_received_at = None
     process.offer_storage_key = None
     process.offer_filename = None
     process.offer_content_type = None

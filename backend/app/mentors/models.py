@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -89,6 +90,40 @@ class MentorStudent(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     reward_percent: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+
+
+class MentorStudentStatusHistory(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "mentor_student_status_history"
+    __table_args__ = (
+        CheckConstraint("ended_at IS NULL OR ended_at >= started_at", name="valid_period"),
+        Index("ix_mentor_student_status_history_student_started", "student_id", "started_at"),
+        Index(
+            "uq_mentor_student_status_history_open",
+            "student_id",
+            unique=True,
+            postgresql_where=text("ended_at IS NULL"),
+        ),
+    )
+
+    student_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[StudentLearningStatus] = mapped_column(
+        Enum(
+            StudentLearningStatus,
+            name="student_learning_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    changed_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class MentorTrackAssignment(Base):
