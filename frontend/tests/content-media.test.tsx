@@ -680,7 +680,9 @@ it("показывает видео статьи перед текстом и о
   );
 
   expect(await screen.findByText("Разбор asyncio")).toBeInTheDocument();
-  const video = await screen.findByLabelText("Видео: Разбор asyncio");
+  const video = (await screen.findByLabelText(
+    "Видео: Разбор asyncio",
+  )) as HTMLVideoElement;
   const mediaHeading = screen.getByRole("heading", { name: "Аудио и видео" });
   const articleHeading = screen
     .getAllByRole("heading", { name: "Asyncio" })
@@ -697,9 +699,24 @@ it("показывает видео статьи перед текстом и о
   expect(video).toHaveAttribute("controlsList", "nodownload noremoteplayback");
   expect(video).toHaveAttribute("disablePictureInPicture");
   expect(video).toHaveAttribute("preload", "metadata");
+  Object.defineProperty(video, "currentTime", {
+    configurable: true,
+    value: 42,
+    writable: true,
+  });
   await waitFor(() => expect(playback).toHaveBeenCalledTimes(2), {
     timeout: 1_600,
   });
+  const renewedVideo = (await screen.findByLabelText(
+    "Видео: Разбор asyncio",
+  )) as HTMLVideoElement;
+  expect(renewedVideo).not.toBe(video);
+  Object.defineProperty(renewedVideo, "duration", {
+    configurable: true,
+    value: 120,
+  });
+  fireEvent.loadedMetadata(renewedVideo);
+  expect(renewedVideo.currentTime).toBe(42);
 });
 
 it("сохраняет воспроизведение legacy media без полей нового контракта", async () => {

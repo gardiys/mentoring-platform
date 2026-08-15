@@ -412,7 +412,14 @@ def _set_playback_ticket(
     )
     return ContentMediaPlayback(
         url=f"{media_path}/stream",
-        expires_in=settings.interview_stream_ticket_ttl_seconds,
+        # The player has to renew before either the application ticket or the
+        # redirected S3 URL expires. Returning only the ticket lifetime caused
+        # long videos to continue requesting byte ranges with an expired S3
+        # signature.
+        expires_in=min(
+            settings.interview_stream_ticket_ttl_seconds,
+            settings.media_stream_redirect_ttl_seconds,
+        ),
     )
 
 

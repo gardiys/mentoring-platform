@@ -8,7 +8,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useProtectedContentMediaPlayback } from "../features/media/queries";
 import type {
@@ -99,6 +99,34 @@ function ProtectedContentMediaPlayer({
   const playbackDataUpdatedAt = playback.dataUpdatedAt;
   const refetchPlayback = playback.refetch;
 
+  const renewPlaybackSource = useCallback(
+    async (reportFailure = true) => {
+      const element = mediaElementRef.current;
+      if (element) {
+        resumeTimeRef.current = Number.isFinite(element.currentTime)
+          ? element.currentTime
+          : 0;
+        resumePlaybackRef.current = !element.paused && !element.ended;
+      }
+      const result = await refetchPlayback();
+      if (result.isError || !result.data) {
+        if (reportFailure) {
+          setFailureMessage(
+            "Не удалось обновить доступ к записи. Проверьте соединение и повторите попытку.",
+          );
+        }
+        return false;
+      }
+      setFailureMessage(null);
+      // The application playback URL is stable, but it redirects to a
+      // short-lived S3 URL. Remount the element so the browser follows the
+      // redirect again before the current S3 signature expires.
+      setReloadKey((current) => current + 1);
+      return true;
+    },
+    [refetchPlayback],
+  );
+
   useEffect(() => {
     if (!playbackAvailable || initialPlaybackRequestedRef.current) return;
     initialPlaybackRequestedRef.current = true;
@@ -118,8 +146,8 @@ function ProtectedContentMediaPlayer({
     );
 
     const refresh = async () => {
-      const result = await refetchPlayback();
-      if (active && result.isError) {
+      const renewed = await renewPlaybackSource(false);
+      if (active && !renewed) {
         timer = window.setTimeout(() => void refresh(), retryMilliseconds);
       }
     };
@@ -131,36 +159,17 @@ function ProtectedContentMediaPlayer({
       active = false;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [opened, playbackData, playbackDataUpdatedAt, refetchPlayback]);
-
-  const renewPlaybackSource = async () => {
-    const element = mediaElementRef.current;
-    if (element) {
-      resumeTimeRef.current = Number.isFinite(element.currentTime)
-        ? element.currentTime
-        : 0;
-      resumePlaybackRef.current = !element.paused && !element.ended;
-    }
-    const result = await playback.refetch();
-    if (!result.data) {
-      setFailureMessage(
-        "Не удалось обновить доступ к записи. Проверьте соединение и повторите попытку.",
-      );
-      return;
-    }
-    setFailureMessage(null);
-    setReloadKey((current) => current + 1);
-  };
+  }, [opened, playbackData, playbackDataUpdatedAt, renewPlaybackSource]);
 
   const restorePlayback = async () => {
     automaticRecoveryAttemptedRef.current = true;
-    await renewPlaybackSource();
+    await renewPlaybackSource(true);
   };
 
   const handlePlaybackError = (element: HTMLMediaElement) => {
     if (!automaticRecoveryAttemptedRef.current) {
       automaticRecoveryAttemptedRef.current = true;
-      void renewPlaybackSource();
+      void renewPlaybackSource(true);
       return;
     }
     setFailureMessage(playbackFailureMessage(element, item.kind));
