@@ -2,13 +2,14 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from httpx import AsyncClient
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app.interviews.models import (
     InterviewProcess,
     InterviewProcessStage,
     InterviewProcessStatus,
 )
+from app.mentors.models import MentorStudent, StudentMentorshipState
 from app.progress.models import TopicProgress
 from app.roadmaps.models import RoadmapEnrollment
 from tests.conftest import SeededData, TestSession, auth
@@ -50,10 +51,87 @@ async def test_mentor_dashboard_shows_current_topic_week_and_overdue_state(
     student = listing.json()["items"][0]
 
     assert student["is_overdue"] is True
+    assert student["attention_reason"] == "roadmap_overdue"
     assert student["roadmaps"][0]["overdue_sections"] == 1
     assert student["current_topics"][0]["title"] == "Типы"
     assert student["current_topics"][0]["days_in_topic"] >= 5
     assert student["completed_topics_this_week"] == 0
+
+
+async def test_progress_attention_depends_on_current_learning_status_and_interviews(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await client.post(
+        "/api/v1/roadmaps/python-backend/start",
+        headers=auth(seeded.student_id),
+    )
+    old_date = datetime.now(UTC) - timedelta(days=10)
+    async with TestSession() as session:
+        await session.execute(
+            update(RoadmapEnrollment)
+            .where(
+                RoadmapEnrollment.user_id == seeded.student_id,
+                RoadmapEnrollment.roadmap_id == seeded.roadmap_id,
+            )
+            .values(started_at=old_date)
+        )
+        await session.commit()
+
+    switched = await client.patch(
+        f"/api/v1/mentor/students/{seeded.student_id}/state",
+        headers=auth(seeded.mentor_id),
+        json={"learning_status": "interviewing", "strength_level": "medium"},
+    )
+    assert switched.status_code == 200
+    async with TestSession() as session:
+        relation = await session.scalar(
+            select(MentorStudent).where(MentorStudent.student_id == seeded.student_id)
+        )
+        state = await session.get(StudentMentorshipState, seeded.student_id)
+        assert relation is not None
+        assert state is not None
+        relation.status_updated_at = old_date
+        state.status_updated_at = old_date
+        await session.commit()
+
+    inactive = await client.get("/api/v1/mentor/students", headers=auth(seeded.mentor_id))
+    inactive_student = inactive.json()["items"][0]
+    assert inactive_student["is_overdue"] is False
+    assert inactive_student["attention_reason"] == "interviews_not_published"
+    assert inactive_student["roadmaps"][0]["overdue_sections"] == 0
+
+    process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={
+            "company_name": "Свежая компания",
+            "track_id": str(seeded.python_track_id),
+        },
+    )
+    staged = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={
+            "stage_type": "screening",
+            "scheduled_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+            "description": "Недавнее собеседование",
+        },
+    )
+    assert staged.status_code == 200
+    active = await client.get("/api/v1/mentor/students", headers=auth(seeded.mentor_id))
+    assert active.json()["items"][0]["attention_reason"] is None
+
+    finished = await client.patch(
+        f"/api/v1/mentor/students/{seeded.student_id}/state",
+        headers=auth(seeded.mentor_id),
+        json={"learning_status": "finished", "strength_level": "medium"},
+    )
+    assert finished.status_code == 200
+    completed = await client.get("/api/v1/mentor/students", headers=auth(seeded.mentor_id))
+    completed_student = completed.json()["items"][0]
+    assert completed_student["is_overdue"] is False
+    assert completed_student["attention_reason"] is None
+    assert completed_student["roadmaps"][0]["overdue_sections"] == 0
 
 
 async def test_mentor_manages_student_state_notes_documents_and_mocks(

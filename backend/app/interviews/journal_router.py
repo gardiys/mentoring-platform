@@ -20,7 +20,9 @@ from app.interviews.journal_service import (
     clear_stage_media,
     create_process,
     create_stage,
+    delete_own_process,
     ensure_stage_attachment_capacity,
+    ensure_stage_editable,
     get_process_model,
     get_stage_attachment_model,
     get_stage_model,
@@ -218,6 +220,20 @@ async def journal_track(
     return await process_detail(session, student, process_id)
 
 
+@router.delete(
+    "/tracks/{process_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def journal_delete_track(
+    process_id: UUID, session: Session, student: JournalUser
+) -> Response:
+    storage_keys = await delete_own_process(session, student, process_id)
+    for storage_key in storage_keys:
+        await delete_upload_if_unreferenced(session, store, storage_key)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.put("/tracks/{process_id}", response_model=InterviewProcessDetail)
 async def journal_update_track(
     process_id: UUID,
@@ -305,12 +321,7 @@ async def journal_create_stage_media_upload(
     student: JournalUser,
 ) -> InterviewUploadIntentResponse:
     stage = await get_stage_model(session, student, process_id, stage_id)
-    if stage.ai_analysis_requested_at is not None:
-        api_error(
-            409,
-            "interview_recording_locked_for_ai_analysis",
-            "The recording cannot be replaced after AI analysis was requested",
-        )
+    ensure_stage_editable(stage)
     allowed_types, max_bytes = _media_upload_rules(payload.content_type)
     return await _create_upload_intent(
         student.id,

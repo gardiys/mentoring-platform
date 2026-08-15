@@ -6418,6 +6418,14 @@ export interface components {
             /** Stages */
             stages: components["schemas"]["InterviewProcessStageRead"][];
             offer: components["schemas"]["InterviewAttachmentRead"] | null;
+            /** Can Delete */
+            can_delete: boolean;
+            delete_locked_reason: components["schemas"]["InterviewProcessDeleteLockReason"] | null;
+            /**
+             * Deletable Until
+             * Format: date-time
+             */
+            deletable_until: string;
         };
         /** InterviewProcessMutation */
         InterviewProcessMutation: {
@@ -6487,6 +6495,14 @@ export interface components {
             ai_analysis_status?: components["schemas"]["IntelligenceProcessingStatus"] | null;
             /** Ai Analysis Requested At */
             ai_analysis_requested_at?: string | null;
+            /** Can Edit */
+            can_edit: boolean;
+            edit_locked_reason: components["schemas"]["InterviewStageEditLockReason"] | null;
+            /**
+             * Editable Until
+             * Format: date-time
+             */
+            editable_until: string;
             /**
              * Created At
              * Format: date-time
@@ -6503,6 +6519,11 @@ export interface components {
          * @enum {string}
          */
         InterviewProcessStatus: "active" | "closed" | "offer";
+        /**
+         * InterviewProcessDeleteLockReason
+         * @enum {string}
+         */
+        InterviewProcessDeleteLockReason: "window_expired" | "ai_analysis_requested";
         /** InterviewProcessSummary */
         InterviewProcessSummary: {
             /**
@@ -6599,6 +6620,11 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * InterviewStageEditLockReason
+         * @enum {string}
+         */
+        InterviewStageEditLockReason: "window_expired" | "ai_analysis_requested";
         /**
          * InterviewStageType
          * @enum {string}
@@ -7270,6 +7296,11 @@ export interface components {
          * @enum {string}
          */
         MentorStudentActivityKind: "roadmap" | "interview" | "interview_cards";
+        /**
+         * MentorStudentAttentionReason
+         * @enum {string}
+         */
+        MentorStudentAttentionReason: "roadmap_overdue" | "interviews_not_published";
         /** MentorStudentDetail */
         MentorStudentDetail: {
             /**
@@ -7302,6 +7333,7 @@ export interface components {
             completed_topics_this_week: number;
             /** Is Overdue */
             is_overdue: boolean;
+            attention_reason: components["schemas"]["MentorStudentAttentionReason"] | null;
             /** Mock Interview Count */
             mock_interview_count: number;
             /** Interviews */
@@ -7359,6 +7391,7 @@ export interface components {
             completed_topics_this_week: number;
             /** Is Overdue */
             is_overdue: boolean;
+            attention_reason: components["schemas"]["MentorStudentAttentionReason"] | null;
             /** Mock Interview Count */
             mock_interview_count: number;
         };

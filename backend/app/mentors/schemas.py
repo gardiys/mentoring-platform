@@ -50,6 +50,11 @@ class MentorStudentActivityKind(StrEnum):
     INTERVIEW_CARDS = "interview_cards"
 
 
+class MentorStudentAttentionReason(StrEnum):
+    ROADMAP_OVERDUE = "roadmap_overdue"
+    INTERVIEWS_NOT_PUBLISHED = "interviews_not_published"
+
+
 class MentorStudentSort(StrEnum):
     NAME_ASC = "name_asc"
     LEARNING_START_DESC = "learning_start_desc"
@@ -166,6 +171,7 @@ class MentorStudentListItem(BaseModel):
     last_activity_kind: MentorStudentActivityKind | None
     completed_topics_this_week: int
     is_overdue: bool
+    attention_reason: MentorStudentAttentionReason | None
     mock_interview_count: int
 
 
@@ -282,6 +288,7 @@ class MentorStudentDetail(BaseModel):
     last_activity_kind: MentorStudentActivityKind | None
     completed_topics_this_week: int
     is_overdue: bool
+    attention_reason: MentorStudentAttentionReason | None
     mock_interview_count: int
     interviews: list[InterviewProcessSummary]
     mock_interviews: list[MockInterviewRead]

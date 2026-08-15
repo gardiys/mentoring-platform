@@ -42,6 +42,7 @@ from app.mentors.schemas import (
     MentorInterviewStageFeedback,
     MentorNoteRead,
     MentorStudentActivityKind,
+    MentorStudentAttentionReason,
     MentorStudentDetail,
     MentorStudentDirectionOption,
     MentorStudentListItem,
@@ -64,6 +65,8 @@ from app.roadmaps.schemas import RoadmapDetail
 from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack, LearningTrackEnrollment, LearningTrackRoadmap
 from app.users.models import MENTOR_CAPABLE_ROLES, User, UserRole
+
+INTERVIEW_ACTIVITY_WINDOW = timedelta(days=7)
 
 
 async def assigned_student(
@@ -111,6 +114,74 @@ def _overdue_sections(roadmap: RoadmapDetail, now: datetime) -> int:
         and section.deadline_at < now
         and any(topic.status is not ProgressStatus.COMPLETED for topic in section.topics)
     )
+
+
+def _learning_status(
+    relation: MentorStudent | None, state: StudentMentorshipState | None
+) -> StudentLearningStatus:
+    if state is not None:
+        return state.learning_status
+    if relation is not None:
+        return relation.learning_status
+    return StudentLearningStatus.LEARNING
+
+
+def _status_updated_at(
+    student: User,
+    relation: MentorStudent | None,
+    state: StudentMentorshipState | None,
+) -> datetime:
+    if state is not None:
+        return state.status_updated_at
+    if relation is not None:
+        return relation.status_updated_at or relation.assigned_at
+    return student.created_at
+
+
+async def _latest_interview_activity(
+    session: AsyncSession, student_ids: list[UUID], now: datetime
+) -> dict[UUID, datetime]:
+    if not student_ids:
+        return {}
+    activity_at = func.greatest(
+        InterviewProcessStage.created_at,
+        InterviewProcessStage.scheduled_at,
+    )
+    rows = (
+        await session.execute(
+            select(InterviewProcess.user_id, func.max(activity_at))
+            .join(
+                InterviewProcessStage,
+                InterviewProcessStage.process_id == InterviewProcess.id,
+            )
+            .where(
+                InterviewProcess.user_id.in_(student_ids),
+                InterviewProcessStage.scheduled_at <= now,
+            )
+            .group_by(InterviewProcess.user_id)
+        )
+    ).all()
+    return {student_id: interview_at for student_id, interview_at in rows}
+
+
+def _attention_reason(
+    status: StudentLearningStatus,
+    *,
+    has_roadmap_overdue: bool,
+    status_updated_at: datetime,
+    latest_interview_at: datetime | None,
+    now: datetime,
+) -> MentorStudentAttentionReason | None:
+    if status is StudentLearningStatus.LEARNING and has_roadmap_overdue:
+        return MentorStudentAttentionReason.ROADMAP_OVERDUE
+    if status is not StudentLearningStatus.INTERVIEWING:
+        return None
+    cutoff = now - INTERVIEW_ACTIVITY_WINDOW
+    if status_updated_at > cutoff:
+        return None
+    if latest_interview_at is None or latest_interview_at < cutoff:
+        return MentorStudentAttentionReason.INTERVIEWS_NOT_PUBLISHED
+    return None
 
 
 async def _current_topics(
@@ -315,8 +386,24 @@ async def _student_item(
     roadmap_details: list[RoadmapDetail] | None = None,
 ) -> MentorStudentListItem:
     now = datetime.now(UTC)
+    learning_status = _learning_status(relation, state)
     roadmaps = roadmap_details or await _roadmap_details(session, student.id)
-    overdue_by_roadmap = {roadmap.id: _overdue_sections(roadmap, now) for roadmap in roadmaps}
+    raw_overdue_by_roadmap = {roadmap.id: _overdue_sections(roadmap, now) for roadmap in roadmaps}
+    has_roadmap_overdue = any(raw_overdue_by_roadmap.values())
+    overdue_by_roadmap = {
+        roadmap_id: count if learning_status is StudentLearningStatus.LEARNING else 0
+        for roadmap_id, count in raw_overdue_by_roadmap.items()
+    }
+    latest_interview_at = (await _latest_interview_activity(session, [student.id], now)).get(
+        student.id
+    )
+    attention_reason = _attention_reason(
+        learning_status,
+        has_roadmap_overdue=has_roadmap_overdue,
+        status_updated_at=_status_updated_at(student, relation, state),
+        latest_interview_at=latest_interview_at,
+        now=now,
+    )
     last_activity = await _student_activity(session, [student.id])
     last_progress_at, last_activity_kind = last_activity.get(student.id, (None, None))
     weekly_completed = int(
@@ -345,13 +432,7 @@ async def _student_item(
         telegram_username=student.telegram_username,
         learning_start_date=student.learning_start_date,
         is_active=student.is_active,
-        learning_status=(
-            state.learning_status
-            if state is not None
-            else relation.learning_status
-            if relation is not None
-            else StudentLearningStatus.LEARNING
-        ),
+        learning_status=learning_status,
         strength_level=(
             state.strength_level
             if state is not None
@@ -373,11 +454,17 @@ async def _student_item(
             )
             for roadmap in roadmaps
         ],
-        current_topics=await _current_topics(session, student.id, roadmaps),
+        current_topics=[
+            topic
+            if learning_status is StudentLearningStatus.LEARNING
+            else topic.model_copy(update={"is_overdue": False})
+            for topic in await _current_topics(session, student.id, roadmaps)
+        ],
         last_progress_at=last_progress_at,
         last_activity_kind=last_activity_kind,
         completed_topics_this_week=weekly_completed,
-        is_overdue=any(overdue_by_roadmap.values()),
+        is_overdue=attention_reason is MentorStudentAttentionReason.ROADMAP_OVERDUE,
+        attention_reason=attention_reason,
         mock_interview_count=mock_count,
     )
 
@@ -626,6 +713,7 @@ async def _batch_student_items(
         student_id: int(weekly_completed) for student_id, weekly_completed in progress_rows
     }
     activity = await _student_activity(session, student_ids)
+    latest_interview_activity = await _latest_interview_activity(session, student_ids, now)
     mock_rows = (
         await session.execute(
             select(MockInterview.student_id, func.count(MockInterview.id))
@@ -640,6 +728,7 @@ async def _batch_student_items(
 
     result: list[MentorStudentListItem] = []
     for student, relation, state in user_rows:
+        learning_status = _learning_status(relation, state)
         summaries: list[StudentRoadmapSummary] = []
         current_topics: list[MentorCurrentTopic] = []
         student_is_overdue = False
@@ -687,7 +776,11 @@ async def _batch_student_items(
                                 started_at=progress.started_at,
                                 days_in_topic=max(0, (now - progress.started_at).days),
                                 deadline_at=deadline,
-                                is_overdue=deadline is not None and deadline < now,
+                                is_overdue=(
+                                    learning_status is StudentLearningStatus.LEARNING
+                                    and deadline is not None
+                                    and deadline < now
+                                ),
                             )
                         )
                 if deadline is not None and deadline < now and not section_completed:
@@ -703,10 +796,19 @@ async def _batch_student_items(
                     progress_percent=round(completed / total * 100) if total else 0,
                     started_at=enrollment.started_at if enrollment else None,
                     completed_at=enrollment.completed_at if enrollment else None,
-                    overdue_sections=overdue_sections,
+                    overdue_sections=(
+                        overdue_sections if learning_status is StudentLearningStatus.LEARNING else 0
+                    ),
                 )
             )
         last_progress, last_activity_kind = activity.get(student.id, (None, None))
+        attention_reason = _attention_reason(
+            learning_status,
+            has_roadmap_overdue=student_is_overdue,
+            status_updated_at=_status_updated_at(student, relation, state),
+            latest_interview_at=latest_interview_activity.get(student.id),
+            now=now,
+        )
         result.append(
             MentorStudentListItem(
                 id=student.id,
@@ -716,13 +818,7 @@ async def _batch_student_items(
                 telegram_username=student.telegram_username,
                 learning_start_date=student.learning_start_date,
                 is_active=student.is_active,
-                learning_status=(
-                    state.learning_status
-                    if state is not None
-                    else relation.learning_status
-                    if relation is not None
-                    else StudentLearningStatus.LEARNING
-                ),
+                learning_status=learning_status,
                 strength_level=(
                     state.strength_level
                     if state is not None
@@ -735,7 +831,8 @@ async def _batch_student_items(
                 last_progress_at=last_progress,
                 last_activity_kind=last_activity_kind,
                 completed_topics_this_week=weekly_completed_by_student.get(student.id, 0),
-                is_overdue=student_is_overdue,
+                is_overdue=(attention_reason is MentorStudentAttentionReason.ROADMAP_OVERDUE),
+                attention_reason=attention_reason,
                 mock_interview_count=mock_counts.get(student.id, 0),
             )
         )

@@ -1253,6 +1253,10 @@ export const api = {
     apiRequest<InterviewProcessDetail>(
       `/api/v1/interviews/journal/tracks/${id}`,
     ),
+  deleteInterviewProcess: (id: string) =>
+    apiRequest<void>(`/api/v1/interviews/journal/tracks/${id}`, {
+      method: "DELETE",
+    }),
   createInterviewProcess: (payload: InterviewProcessMutation) =>
     apiRequest<InterviewProcessDetail>("/api/v1/interviews/journal/tracks", {
       method: "POST",

@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -66,6 +66,9 @@ const student = {
 
 const processDetail: InterviewProcessDetail = {
   ...processSummary,
+  can_delete: true,
+  delete_locked_reason: null,
+  deletable_until: "2026-08-06T12:00:00Z",
   stages: [
     {
       id: "71000000-0000-4000-8000-000000000001",
@@ -78,6 +81,9 @@ const processDetail: InterviewProcessDetail = {
       ai_analysis_id: null,
       ai_analysis_status: null,
       ai_analysis_requested_at: null,
+      can_edit: true,
+      edit_locked_reason: null,
+      editable_until: "2026-08-06T12:00:00Z",
       created_at: "2026-08-01T10:00:00Z",
       updated_at: "2026-08-01T10:00:00Z",
     },
@@ -342,6 +348,70 @@ it("добавляет этап и позволяет закрыть проце�
     status: "closed",
     close_reason: "Позиция заморожена",
   });
+});
+
+it("редактирует описание и параметры этапа в доступное окно", async () => {
+  vi.spyOn(api, "interviewProcess").mockResolvedValue(processDetail);
+  const update = vi
+    .spyOn(api, "updateInterviewProcessStage")
+    .mockReturnValue(new Promise(() => undefined));
+  renderPage(
+    <InterviewProcessPage />,
+    `/interviews/journal/${processDetail.id}`,
+    "/interviews/journal/:processId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Редактировать этап" }),
+  );
+  const dialog = await screen.findByRole("dialog");
+  const description = within(dialog).getByRole("textbox", {
+    name: "Описание",
+  });
+  await userEvent.clear(description);
+  await userEvent.type(description, "Новое подробное описание этапа");
+  await userEvent.click(
+    within(dialog).getByRole("button", { name: "Сохранить изменения" }),
+  );
+
+  expect(update).toHaveBeenCalledWith(
+    processDetail.id,
+    processDetail.stages[0]!.id,
+    expect.objectContaining({
+      stage_type: "technical_screening",
+      description: "Новое подробное описание этапа",
+    }),
+  );
+});
+
+it("объясняет блокировку редактирования после AI-разбора", async () => {
+  const lockedProcess: InterviewProcessDetail = {
+    ...processDetail,
+    stages: [
+      {
+        ...processDetail.stages[0]!,
+        can_edit: false,
+        edit_locked_reason: "ai_analysis_requested",
+        ai_analysis_requested_at: "2026-08-05T13:00:00Z",
+      },
+    ],
+  };
+  vi.spyOn(api, "interviewProcess").mockResolvedValue(lockedProcess);
+  renderPage(
+    <InterviewProcessPage />,
+    `/interviews/journal/${lockedProcess.id}`,
+    "/interviews/journal/:processId",
+  );
+
+  expect(
+    await screen.findByText(/для записи уже был запущен AI-разбор/),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Редактировать этап" }),
+  ).not.toBeInTheDocument();
+  expect(
+    document.querySelector('input[type="file"][accept="audio/*,video/*"]'),
+  ).toBeNull();
 });
 
 it("восстанавливает закрытый трек и сохраняет причину прошлого отказа", async () => {
@@ -617,4 +687,46 @@ it("отменяет ошибочно отмеченный оффер и воз�
 
   expect(window.confirm).toHaveBeenCalled();
   expect(cancel).toHaveBeenCalledWith(processWithOffer.id);
+});
+
+it("удаляет недавний личный трек после подтверждения", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "interviewProcess").mockResolvedValue(processDetail);
+  const remove = vi.spyOn(api, "deleteInterviewProcess").mockResolvedValue();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  renderPage(
+    <InterviewProcessPage />,
+    `/interviews/journal/${processDetail.id}`,
+    "/interviews/journal/:processId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Удалить трек" }),
+  );
+
+  expect(window.confirm).toHaveBeenCalledWith(
+    `Удалить трек «${processDetail.company_name}» без возможности восстановления?`,
+  );
+  expect(remove).toHaveBeenCalledWith(processDetail.id);
+});
+
+it("объясняет почему личный трек с AI-разбором нельзя удалить", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "interviewProcess").mockResolvedValue({
+    ...processDetail,
+    can_delete: false,
+    delete_locked_reason: "ai_analysis_requested",
+  });
+  renderPage(
+    <InterviewProcessPage />,
+    `/interviews/journal/${processDetail.id}`,
+    "/interviews/journal/:processId",
+  );
+
+  expect(
+    await screen.findByText(
+      "Удаление недоступно: по одному из этапов уже запускался AI-разбор.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Удалить трек" })).toBeDisabled();
 });

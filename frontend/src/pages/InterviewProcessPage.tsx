@@ -5,6 +5,7 @@ import {
   Card,
   FileInput,
   Group,
+  Modal,
   Select,
   SimpleGrid,
   Stack,
@@ -29,12 +30,15 @@ import { useMe } from "../features/auth/queries";
 import {
   useCancelInterviewOffer,
   useCreateInterviewStage,
+  useDeleteInterviewProcess,
   useDeleteInterviewStageAttachment,
+  useDeleteInterviewStageMedia,
   useInterviewProcess,
   useMarkInterviewOffer,
   useSetInterviewProcessOutcome,
   useSetInterviewProcessRecruiters,
   useStartInterviewStageAnalysis,
+  useUpdateInterviewStage,
   useUploadInterviewStageMedia,
   useUploadInterviewStageAttachments,
 } from "../features/interviews/journalQueries";
@@ -61,8 +65,10 @@ const stageLabels = Object.fromEntries(
 const OFFER_MAX_BYTES = 20 * 1024 * 1024;
 const ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
 
-function dateTimeInputValue() {
-  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
+function dateTimeInputValue(
+  value: string | number = Date.now() + 24 * 60 * 60 * 1000,
+) {
+  const date = new Date(value);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
   return date.toISOString().slice(0, 16);
 }
@@ -127,6 +133,7 @@ function StageMedia({
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
   const uploadController = useRef<AbortController | null>(null);
   const mutation = useUploadInterviewStageMedia();
+  const deleteMutation = useDeleteInterviewStageMedia();
   const analysisMutation = useStartInterviewStageAnalysis();
   const storedMediaKind = stage.media
     ? mediaKind(stage.media.content_type, stage.media.filename)
@@ -251,6 +258,35 @@ function StageMedia({
               >
                 Скачать
               </Button>
+              {stage.can_edit && (
+                <Button
+                  size="xs"
+                  color="red"
+                  variant="subtle"
+                  loading={deleteMutation.isPending}
+                  onClick={() => {
+                    if (!window.confirm("Удалить запись собеседования?"))
+                      return;
+                    deleteMutation.mutate(
+                      { processId, stageId: stage.id },
+                      {
+                        onSuccess: () =>
+                          notifications.show({
+                            color: "green",
+                            message: "Запись удалена",
+                          }),
+                        onError: (error) =>
+                          notifications.show({
+                            color: "red",
+                            message: error.message,
+                          }),
+                      },
+                    );
+                  }}
+                >
+                  Удалить
+                </Button>
+              )}
             </Group>
           </Group>
           {playerUrl && storedMediaKind === "video" && (
@@ -341,7 +377,7 @@ function StageMedia({
           </Group>
         </>
       )}
-      {!stage.ai_analysis_requested_at && (
+      {stage.can_edit && (
         <Stack gap="xs">
           <Group align="flex-end" className="upload-control-row">
             <FileInput
@@ -512,60 +548,66 @@ function StageAttachments({
               >
                 Скачать
               </Button>
-              <Button
-                size="xs"
-                color="red"
-                variant="subtle"
-                loading={
-                  deleteMutation.isPending &&
-                  deleteMutation.variables?.attachmentId === attachment.id
-                }
-                onClick={() => {
-                  if (!window.confirm(`Удалить файл «${attachment.filename}»?`))
-                    return;
-                  deleteMutation.mutate(
-                    {
-                      processId,
-                      stageId: stage.id,
-                      attachmentId: attachment.id,
-                    },
-                    {
-                      onError: (error) =>
-                        notifications.show({
-                          color: "red",
-                          message: error.message,
-                        }),
-                    },
-                  );
-                }}
-              >
-                Удалить
-              </Button>
+              {stage.can_edit && (
+                <Button
+                  size="xs"
+                  color="red"
+                  variant="subtle"
+                  loading={
+                    deleteMutation.isPending &&
+                    deleteMutation.variables?.attachmentId === attachment.id
+                  }
+                  onClick={() => {
+                    if (
+                      !window.confirm(`Удалить файл «${attachment.filename}»?`)
+                    )
+                      return;
+                    deleteMutation.mutate(
+                      {
+                        processId,
+                        stageId: stage.id,
+                        attachmentId: attachment.id,
+                      },
+                      {
+                        onError: (error) =>
+                          notifications.show({
+                            color: "red",
+                            message: error.message,
+                          }),
+                      },
+                    );
+                  }}
+                >
+                  Удалить
+                </Button>
+              )}
             </Group>
           </Group>
         );
       })}
-      <Group align="flex-end" className="upload-control-row">
-        <FileInput
-          flex={1}
-          multiple
-          label="Добавить файлы или изображения"
-          placeholder="Выберите один или несколько файлов"
-          description="До 50 МБ на файл, максимум 20 файлов"
-          value={files}
-          onChange={setFiles}
-          disabled={uploadMutation.isPending}
-          clearable
-        />
-        <Button
-          variant="light"
-          disabled={files.length === 0}
-          loading={uploadMutation.isPending}
-          onClick={upload}
-        >
-          Загрузить файлы
-        </Button>
-      </Group>
+      {stage.can_edit && (
+        <Group align="flex-end" className="upload-control-row">
+          <FileInput
+            flex={1}
+            multiple
+            label="Добавить файлы или изображения"
+            placeholder="Выберите один или несколько файлов"
+            description="До 50 МБ на файл, максимум 20 файлов"
+            value={files}
+            onChange={setFiles}
+            disabled={uploadMutation.isPending}
+            clearable
+          />
+          <Button
+            variant="light"
+            disabled={files.length === 0}
+            loading={uploadMutation.isPending}
+            onClick={upload}
+          >
+            Загрузить файлы
+          </Button>
+        </Group>
+      )}
       {uploadMutation.isPending && uploadStatus && (
         <UploadProgressPanel
           status={uploadStatus}
@@ -577,12 +619,121 @@ function StageAttachments({
   );
 }
 
+function EditStageModal({
+  processId,
+  stage,
+  onClose,
+}: {
+  processId: string;
+  stage: InterviewProcessStageRead | null;
+  onClose: () => void;
+}) {
+  const mutation = useUpdateInterviewStage();
+  const [stageType, setStageType] = useState<InterviewStageType>("other");
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    if (!stage) return;
+    setStageType(stage.stage_type);
+    setScheduledAt(dateTimeInputValue(stage.scheduled_at));
+    setDescription(stage.description ?? "");
+  }, [stage]);
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!stage || !scheduledAt || mutation.isPending) return;
+    mutation.mutate(
+      {
+        processId,
+        stageId: stage.id,
+        payload: {
+          stage_type: stageType,
+          scheduled_at: new Date(scheduledAt).toISOString(),
+          description: description.trim() || null,
+        },
+      },
+      {
+        onSuccess: () => {
+          onClose();
+          notifications.show({
+            color: "green",
+            message: "Этап собеседования обновлён",
+          });
+        },
+        onError: (error) =>
+          notifications.show({ color: "red", message: error.message }),
+      },
+    );
+  };
+
+  return (
+    <Modal
+      opened={stage !== null}
+      onClose={onClose}
+      title="Редактировать этап"
+      size="lg"
+      centered
+      closeOnClickOutside={!mutation.isPending}
+      closeOnEscape={!mutation.isPending}
+    >
+      <form onSubmit={submit}>
+        <Stack>
+          <Select
+            label="Тип собеседования"
+            required
+            data={stageOptions}
+            value={stageType}
+            onChange={(value) =>
+              setStageType((value as InterviewStageType | null) ?? "other")
+            }
+          />
+          <TextInput
+            label="Дата и время"
+            type="datetime-local"
+            required
+            value={scheduledAt}
+            onChange={(event) => setScheduledAt(event.currentTarget.value)}
+          />
+          <Textarea
+            label="Описание"
+            placeholder="Опишите вопросы, задачи, участников и важные детали этапа"
+            autosize
+            minRows={10}
+            maxRows={20}
+            maxLength={10_000}
+            value={description}
+            onChange={(event) => setDescription(event.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="subtle"
+              onClick={onClose}
+              disabled={mutation.isPending}
+            >
+              Отмена
+            </Button>
+            <Button
+              type="submit"
+              loading={mutation.isPending}
+              disabled={!scheduledAt}
+            >
+              Сохранить изменения
+            </Button>
+          </Group>
+        </Stack>
+      </form>
+    </Modal>
+  );
+}
+
 export function InterviewProcessPage() {
   const { processId = "" } = useParams();
   const navigate = useNavigate();
   const me = useMe();
   const query = useInterviewProcess(processId);
-  const deleteProcess = useDeleteAdminInterviewProcess();
+  const deleteOwnProcess = useDeleteInterviewProcess();
+  const deleteAdminProcess = useDeleteAdminInterviewProcess();
   const stageMutation = useCreateInterviewStage();
   const outcomeMutation = useSetInterviewProcessOutcome();
   const recruiterMutation = useSetInterviewProcessRecruiters();
@@ -591,6 +742,8 @@ export function InterviewProcessPage() {
   const [stageType, setStageType] = useState<InterviewStageType>("screening");
   const [scheduledAt, setScheduledAt] = useState(dateTimeInputValue);
   const [description, setDescription] = useState("");
+  const [editingStage, setEditingStage] =
+    useState<InterviewProcessStageRead | null>(null);
   const [closeReason, setCloseReason] = useState("");
   const [offerFile, setOfferFile] = useState<File | null>(null);
   const [offerUploadStatus, setOfferUploadStatus] =
@@ -928,10 +1081,32 @@ export function InterviewProcessPage() {
                     <Badge variant="light">{index + 1}</Badge>
                     <Title order={3}>{stageLabels[stage.stage_type]}</Title>
                   </Group>
-                  <Text size="sm" c="dimmed">
-                    {formatDate(stage.scheduled_at)}
-                  </Text>
+                  <Group gap="xs">
+                    <Text size="sm" c="dimmed">
+                      {formatDate(stage.scheduled_at)}
+                    </Text>
+                    {stage.can_edit && (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={() => setEditingStage(stage)}
+                      >
+                        Редактировать этап
+                      </Button>
+                    )}
+                  </Group>
                 </Group>
+                {stage.can_edit ? (
+                  <Text size="xs" c="dimmed">
+                    Изменения доступны до {formatDate(stage.editable_until)}
+                  </Text>
+                ) : (
+                  <Alert color="yellow" variant="light">
+                    {stage.edit_locked_reason === "ai_analysis_requested"
+                      ? "Редактирование отключено: для записи уже был запущен AI-разбор."
+                      : "Редактирование отключено: после этапа прошло больше суток."}
+                  </Alert>
+                )}
                 {stage.description && <Text>{stage.description}</Text>}
                 <StageMedia processId={processId} stage={stage} />
                 <StageAttachments processId={processId} stage={stage} />
@@ -1007,7 +1182,10 @@ export function InterviewProcessPage() {
                 <Textarea
                   label="Описание"
                   placeholder="Что будут проверять, кто проводит, что подготовить"
-                  minRows={4}
+                  autosize
+                  minRows={10}
+                  maxRows={20}
+                  maxLength={10_000}
                   value={description}
                   onChange={(event) =>
                     setDescription(event.currentTarget.value)
@@ -1108,47 +1286,63 @@ export function InterviewProcessPage() {
         </Card>
       )}
 
-      {me.data?.role === "admin" && (
-        <Card withBorder style={{ borderColor: "var(--mantine-color-red-6)" }}>
-          <Group justify="space-between" align="center">
-            <div>
-              <Text fw={700}>Удалить трек собеседований</Text>
-              <Text size="sm" c="dimmed">
-                Будут удалены этапы, файлы, комментарии и связанные AI-разборы.
+      <Card withBorder style={{ borderColor: "var(--mantine-color-red-6)" }}>
+        <Group justify="space-between" align="center">
+          <div>
+            <Text fw={700}>Удалить трек собеседований</Text>
+            <Text size="sm" c="dimmed">
+              Будут удалены этапы, файлы, комментарии и связанные AI-разборы.
+            </Text>
+            {me.data?.role !== "admin" && !process.can_delete && (
+              <Text size="sm" c="red" mt={6}>
+                {process.delete_locked_reason === "ai_analysis_requested"
+                  ? "Удаление недоступно: по одному из этапов уже запускался AI-разбор."
+                  : "Удаление недоступно: истекло 24 часа с момента доступного редактирования одного из этапов."}
               </Text>
-            </div>
-            <Button
-              color="red"
-              variant="light"
-              loading={deleteProcess.isPending}
-              onClick={() => {
-                if (
-                  !window.confirm(
-                    `Удалить трек «${process.company_name}» без возможности восстановления?`,
-                  )
+            )}
+          </div>
+          <Button
+            color="red"
+            variant="light"
+            loading={deleteOwnProcess.isPending || deleteAdminProcess.isPending}
+            disabled={me.data?.role !== "admin" && !process.can_delete}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  `Удалить трек «${process.company_name}» без возможности восстановления?`,
                 )
-                  return;
-                deleteProcess.mutate(process.id, {
-                  onSuccess: () => {
-                    notifications.show({
-                      color: "green",
-                      message: "Трек собеседований удалён",
-                    });
-                    navigate("/interviews", { replace: true });
-                  },
-                  onError: (error) =>
-                    notifications.show({
-                      color: "red",
-                      message: error.message,
-                    }),
-                });
-              }}
-            >
-              Удалить трек
-            </Button>
-          </Group>
-        </Card>
-      )}
+              )
+                return;
+              const mutation =
+                me.data?.role === "admin"
+                  ? deleteAdminProcess
+                  : deleteOwnProcess;
+              mutation.mutate(process.id, {
+                onSuccess: () => {
+                  notifications.show({
+                    color: "green",
+                    message: "Трек собеседований удалён",
+                  });
+                  navigate("/interviews", { replace: true });
+                },
+                onError: (error) =>
+                  notifications.show({
+                    color: "red",
+                    message: error.message,
+                  }),
+              });
+            }}
+          >
+            Удалить трек
+          </Button>
+        </Group>
+      </Card>
+
+      <EditStageModal
+        processId={processId}
+        stage={editingStage}
+        onClose={() => setEditingStage(null)}
+      />
     </Stack>
   );
 }

@@ -93,3 +93,50 @@ it("запускает роадмап и показывает рассчитан
   ).toBeInTheDocument();
   expect(screen.getByText(/до 3 января 2030/)).toBeInTheDocument();
 });
+
+it("быстро фильтрует темы и раскрывает найденный раздел", async () => {
+  vi.spyOn(api, "roadmap").mockResolvedValue({
+    ...detail,
+    total_topics: 2,
+    sections: [
+      ...detail.sections,
+      {
+        id: "s2",
+        title: "Базы данных",
+        description: "Хранение и обработка данных",
+        duration_days: 3,
+        deadline_at: null,
+        topics: [
+          {
+            id: "t2",
+            slug: "postgresql-indexes",
+            title: "Индексы PostgreSQL",
+            description: "B-tree и планы запросов",
+            estimated_minutes: 20,
+            status: "completed",
+            first_completed_at: "2026-08-01T10:00:00Z",
+            last_completed_at: "2026-08-01T10:00:00Z",
+          },
+        ],
+      },
+    ],
+  });
+  renderPage(
+    <RoadmapPage />,
+    "/roadmaps/python-backend",
+    "/roadmaps/:roadmapSlug",
+  );
+
+  const search = await screen.findByRole("textbox", {
+    name: "Поиск по темам",
+  });
+  await userEvent.type(search, "postgresql");
+
+  expect(screen.getByText("Индексы PostgreSQL")).toBeVisible();
+  expect(screen.queryByText("Типы данных")).not.toBeInTheDocument();
+  expect(screen.getByText("Найдено тем: 1")).toBeVisible();
+
+  await userEvent.clear(search);
+  await userEvent.type(search, "несуществующая тема");
+  expect(screen.getByText("Темы не найдены")).toBeVisible();
+});

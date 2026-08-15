@@ -224,6 +224,104 @@ async def test_only_admin_can_delete_interview_track_and_its_files(
         assert await session.get(InterviewProcessStageAttachment, attachment_id) is None
 
 
+async def test_owner_deletes_recent_interview_track_and_its_files(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    store = FakeInterviewUploadStore()
+    monkeypatch.setattr(journal_router, "store", store)
+    created = await create_process(client, seeded, "Личный удаляемый трек")
+    process_id = UUID(str(created["id"]))
+    stage_response = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process_id}/stages",
+        headers=auth(seeded.student_id),
+        json=stage_payload(),
+    )
+    stage_id = UUID(stage_response.json()["stages"][0]["id"])
+
+    async with TestSession() as session:
+        process = await session.get(InterviewProcess, process_id)
+        stage = await session.get(InterviewProcessStage, stage_id)
+        assert process is not None
+        assert stage is not None
+        process.offer_storage_key = "offers/owner-offer.pdf"
+        process.offer_filename = "offer.pdf"
+        process.offer_content_type = "application/pdf"
+        process.offer_size = 128
+        stage.media_storage_key = "interview-media/owner-recording.mp3"
+        stage.media_filename = "recording.mp3"
+        stage.media_content_type = "audio/mpeg"
+        stage.media_size = 256
+        session.add(
+            InterviewProcessStageAttachment(
+                stage_id=stage.id,
+                storage_key="interview-attachments/owner-notes.pdf",
+                filename="notes.pdf",
+                content_type="application/pdf",
+                size=64,
+            )
+        )
+        await session.commit()
+
+    deleted = await client.delete(
+        f"/api/v1/interviews/journal/tracks/{process_id}",
+        headers=auth(seeded.student_id),
+    )
+
+    assert deleted.status_code == 204, deleted.text
+    assert set(store.deleted) == {
+        "offers/owner-offer.pdf",
+        "interview-media/owner-recording.mp3",
+        "interview-attachments/owner-notes.pdf",
+    }
+    async with TestSession() as session:
+        assert await session.get(InterviewProcess, process_id) is None
+
+
+async def test_owner_cannot_delete_expired_or_ai_analyzed_interview_track(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    expired = await create_process(client, seeded, "Старый трек")
+    expired_stage_response = await client.post(
+        f"/api/v1/interviews/journal/tracks/{expired['id']}/stages",
+        headers=auth(seeded.student_id),
+        json=stage_payload(),
+    )
+    expired_stage_id = UUID(expired_stage_response.json()["stages"][0]["id"])
+    analyzed = await create_process(client, seeded, "Трек с AI")
+    analyzed_stage_response = await client.post(
+        f"/api/v1/interviews/journal/tracks/{analyzed['id']}/stages",
+        headers=auth(seeded.student_id),
+        json=stage_payload(),
+    )
+    analyzed_stage_id = UUID(analyzed_stage_response.json()["stages"][0]["id"])
+
+    async with TestSession() as session:
+        expired_stage = await session.get(InterviewProcessStage, expired_stage_id)
+        analyzed_stage = await session.get(InterviewProcessStage, analyzed_stage_id)
+        assert expired_stage is not None
+        assert analyzed_stage is not None
+        expired_stage.created_at = datetime.now(UTC) - timedelta(days=3)
+        expired_stage.scheduled_at = datetime.now(UTC) - timedelta(days=2)
+        analyzed_stage.ai_analysis_requested_at = datetime.now(UTC)
+        await session.commit()
+
+    expired_delete = await client.delete(
+        f"/api/v1/interviews/journal/tracks/{expired['id']}",
+        headers=auth(seeded.student_id),
+    )
+    analyzed_delete = await client.delete(
+        f"/api/v1/interviews/journal/tracks/{analyzed['id']}",
+        headers=auth(seeded.student_id),
+    )
+
+    assert expired_delete.status_code == 409
+    assert expired_delete.json()["detail"]["code"] == ("interview_process_delete_window_expired")
+    assert analyzed_delete.status_code == 409
+    assert analyzed_delete.json()["detail"]["code"] == ("interview_process_locked_for_ai_analysis")
+
+
 async def test_mentor_creates_own_track_only_in_assigned_direction_and_publishes_to_catalog(
     client: AsyncClient, seeded: SeededData
 ) -> None:
@@ -313,6 +411,89 @@ async def test_student_creates_process_and_multiple_interview_stages(
     assert listing.json()[0]["company_name"] == "Яндекс"
     assert listing.json()[0]["stage_count"] == 2
     assert listing.json()[0]["next_stage_at"] is not None
+
+
+async def test_stage_editing_is_locked_after_window_or_ai_analysis(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    process = await create_process(client, seeded)
+    created = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages",
+        headers=auth(seeded.student_id),
+        json=stage_payload("screening"),
+    )
+    stage = created.json()["stages"][0]
+    stage_id = UUID(stage["id"])
+    edited_payload = {
+        "stage_type": "technical_interview",
+        "scheduled_at": (datetime.now(UTC) + timedelta(days=3)).isoformat(),
+        "description": "Обновлённое подробное описание этапа",
+    }
+    edited = await client.put(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}",
+        headers=auth(seeded.student_id),
+        json=edited_payload,
+    )
+
+    assert created.status_code == 200
+    assert stage["can_edit"] is True
+    assert stage["edit_locked_reason"] is None
+    assert stage["editable_until"] is not None
+    assert edited.status_code == 200
+    assert edited.json()["stages"][0]["stage_type"] == "technical_interview"
+    assert edited.json()["stages"][0]["description"] == edited_payload["description"]
+
+    expired_at = datetime.now(UTC) - timedelta(days=2)
+    async with TestSession() as session:
+        model = await session.get(InterviewProcessStage, stage_id)
+        assert model is not None
+        model.created_at = expired_at
+        model.scheduled_at = expired_at
+        await session.commit()
+
+    expired_update = await client.put(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}",
+        headers=auth(seeded.student_id),
+        json=edited_payload,
+    )
+    expired_media = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}/media/upload",
+        headers=auth(seeded.student_id),
+        json={"filename": "recording.mp4", "content_type": "video/mp4", "size": 10},
+    )
+    expired_attachment = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}/attachments/upload",
+        headers=auth(seeded.student_id),
+        json={"filename": "notes.txt", "content_type": "text/plain", "size": 10},
+    )
+
+    for response in (expired_update, expired_media, expired_attachment):
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "interview_stage_edit_window_expired"
+
+    async with TestSession() as session:
+        model = await session.get(InterviewProcessStage, stage_id)
+        assert model is not None
+        model.created_at = datetime.now(UTC)
+        model.scheduled_at = datetime.now(UTC)
+        model.ai_analysis_requested_at = datetime.now(UTC)
+        await session.commit()
+
+    ai_locked = await client.put(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}",
+        headers=auth(seeded.student_id),
+        json=edited_payload,
+    )
+    ai_locked_media = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}/media/upload",
+        headers=auth(seeded.student_id),
+        json={"filename": "recording.mp4", "content_type": "video/mp4", "size": 10},
+    )
+
+    assert ai_locked.status_code == 409
+    assert ai_locked.json()["detail"]["code"] == "interview_stage_locked_for_ai_analysis"
+    assert ai_locked_media.status_code == 409
+    assert ai_locked_media.json()["detail"]["code"] == "interview_stage_locked_for_ai_analysis"
 
 
 async def test_student_adds_and_edits_recruiter_telegram_usernames(
@@ -488,9 +669,7 @@ async def test_company_alias_requires_confirmation_and_admin_moderation(
     async with TestSession() as session:
         aliases = list(await session.scalars(select(CompanyAlias)))
         proposals = list(await session.scalars(select(CompanyAliasProposal)))
-        assert [(alias.name, alias.company_id) for alias in aliases] == [
-            ("WB", UUID(canonical_id))
-        ]
+        assert [(alias.name, alias.company_id) for alias in aliases] == [("WB", UUID(canonical_id))]
         assert proposals[0].status is CompanyAliasProposalStatus.APPROVED
 
 
@@ -703,6 +882,10 @@ async def test_other_student_cannot_read_or_mutate_personal_journal_track(
 
     attempts = [
         await client.get(
+            f"/api/v1/interviews/journal/tracks/{process['id']}",
+            headers=other_headers,
+        ),
+        await client.delete(
             f"/api/v1/interviews/journal/tracks/{process['id']}",
             headers=other_headers,
         ),

@@ -9,7 +9,7 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
@@ -42,19 +42,49 @@ export function RoadmapPage() {
   const query = useRoadmap(roadmapSlug);
   const startMutation = useStartRoadmap(roadmapSlug);
   const [startedOn, setStartedOn] = useState(currentLocalDate);
+  const [search, setSearch] = useState("");
+  const [openedSections, setOpenedSections] = useState<string[]>([]);
+  const initializedRoadmap = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!query.data || initializedRoadmap.current === query.data.id) return;
+    initializedRoadmap.current = query.data.id;
+    setOpenedSections(
+      query.data.sections
+        .filter(
+          (section) =>
+            section.topics.length === 0 ||
+            section.topics.some((topic) => topic.status !== "completed"),
+        )
+        .map((section) => section.id),
+    );
+  }, [query.data]);
+
   if (query.isPending) return <LoadingState />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />
     );
 
-  const initiallyOpenedSections = query.data.sections
-    .filter(
-      (section) =>
-        section.topics.length === 0 ||
-        section.topics.some((topic) => topic.status !== "completed"),
-    )
-    .map((section) => section.id);
+  const normalizedSearch = search.trim().toLocaleLowerCase("ru-RU");
+  const visibleSections = query.data.sections.flatMap((section) => {
+    if (!normalizedSearch) return [section];
+    const sectionMatches = [section.title, section.description]
+      .filter(Boolean)
+      .some((value) =>
+        value!.toLocaleLowerCase("ru-RU").includes(normalizedSearch),
+      );
+    const topics = sectionMatches
+      ? section.topics
+      : section.topics.filter((topic) =>
+          [topic.title, topic.description]
+            .filter(Boolean)
+            .some((value) =>
+              value!.toLocaleLowerCase("ru-RU").includes(normalizedSearch),
+            ),
+        );
+    return sectionMatches || topics.length > 0 ? [{ ...section, topics }] : [];
+  });
 
   return (
     <Stack gap="xl">
@@ -112,12 +142,32 @@ export function RoadmapPage() {
           </Alert>
         )}
       </Paper>
+      <TextInput
+        label="Поиск по темам"
+        placeholder="Например: PostgreSQL, функции или Docker"
+        value={search}
+        onChange={(event) => setSearch(event.currentTarget.value)}
+      />
+      {normalizedSearch && (
+        <Text size="sm" c="dimmed">
+          Найдено тем:{" "}
+          {visibleSections.reduce(
+            (total, section) => total + section.topics.length,
+            0,
+          )}
+        </Text>
+      )}
       <Accordion
         multiple
-        defaultValue={initiallyOpenedSections}
+        value={
+          normalizedSearch
+            ? visibleSections.map((section) => section.id)
+            : openedSections
+        }
+        onChange={setOpenedSections}
         className="brand-accordion"
       >
-        {query.data.sections.map((section) => {
+        {visibleSections.map((section) => {
           const completed =
             section.topics.length > 0 &&
             section.topics.every((topic) => topic.status === "completed");
@@ -209,6 +259,14 @@ export function RoadmapPage() {
           );
         })}
       </Accordion>
+      {normalizedSearch && visibleSections.length === 0 && (
+        <Paper withBorder p="lg">
+          <Text fw={600}>Темы не найдены</Text>
+          <Text size="sm" c="dimmed">
+            Попробуйте сократить запрос или проверить написание.
+          </Text>
+        </Paper>
+      )}
     </Stack>
   );
 }

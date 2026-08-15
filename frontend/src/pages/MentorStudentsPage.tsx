@@ -364,8 +364,8 @@ export function MentorStudentsPage() {
                       <Table.Tr
                         key={student.id}
                         className={
-                          student.is_overdue
-                            ? "student-progress-row student-progress-row--overdue"
+                          student.attention_reason
+                            ? "student-progress-row student-progress-row--attention"
                             : "student-progress-row"
                         }
                       >
@@ -400,8 +400,14 @@ export function MentorStudentsPage() {
                                 ? "Доступ открыт"
                                 : "Доступ закрыт"}
                             </Badge>
-                            {student.is_overdue && (
+                            {student.attention_reason === "roadmap_overdue" && (
                               <Badge color="red">Не в срок</Badge>
+                            )}
+                            {student.attention_reason ===
+                              "interviews_not_published" && (
+                              <Badge color="red">
+                                Нет собеседований за 7 дней
+                              </Badge>
                             )}
                             <InlineStudentStatus
                               studentId={student.id}
@@ -437,7 +443,12 @@ export function MentorStudentsPage() {
                                     </Text>
                                   </div>
                                   <Badge
-                                    color={topic.is_overdue ? "red" : "blue"}
+                                    color={
+                                      student.learning_status === "learning" &&
+                                      topic.is_overdue
+                                        ? "red"
+                                        : "blue"
+                                    }
                                     variant="light"
                                   >
                                     {topic.days_in_topic === 0
@@ -465,15 +476,16 @@ export function MentorStudentsPage() {
                                   <Text size="xs" fw={600} lineClamp={1}>
                                     {roadmap.title}
                                   </Text>
-                                  {roadmap.overdue_sections > 0 && (
-                                    <Badge
-                                      size="xs"
-                                      color="red"
-                                      variant="light"
-                                    >
-                                      {roadmap.overdue_sections} просрочено
-                                    </Badge>
-                                  )}
+                                  {student.learning_status === "learning" &&
+                                    roadmap.overdue_sections > 0 && (
+                                      <Badge
+                                        size="xs"
+                                        color="red"
+                                        variant="light"
+                                      >
+                                        {roadmap.overdue_sections} просрочено
+                                      </Badge>
+                                    )}
                                 </Group>
                                 <ProgressBar
                                   completed={roadmap.completed_topics}

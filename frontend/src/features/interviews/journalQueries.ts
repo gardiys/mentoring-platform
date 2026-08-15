@@ -104,6 +104,10 @@ export function useUpdateInterviewProcess() {
   );
 }
 
+export function useDeleteInterviewProcess() {
+  return useJournalMutation((id: string) => api.deleteInterviewProcess(id));
+}
+
 export function useSetInterviewProcessOutcome() {
   return useJournalMutation(
     ({
@@ -140,6 +144,20 @@ export function useCreateInterviewStage() {
   );
 }
 
+export function useUpdateInterviewStage() {
+  return useJournalMutation(
+    ({
+      processId,
+      stageId,
+      payload,
+    }: {
+      processId: string;
+      stageId: string;
+      payload: InterviewProcessStageMutation;
+    }) => api.updateInterviewProcessStage(processId, stageId, payload),
+  );
+}
+
 export function useStartInterviewStageAnalysis() {
   return useJournalMutation(
     ({ processId, stageId }: { processId: string; stageId: string }) =>
@@ -169,6 +187,13 @@ export function useUploadInterviewStageMedia() {
         onStatus,
         signal,
       }),
+  );
+}
+
+export function useDeleteInterviewStageMedia() {
+  return useJournalMutation(
+    ({ processId, stageId }: { processId: string; stageId: string }) =>
+      api.deleteInterviewStageMedia(processId, stageId),
   );
 }
 

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import case, func, select
@@ -22,6 +22,7 @@ from app.interviews.schemas import (
     InterviewCatalogAuthorRead,
     InterviewCatalogCommentRead,
     InterviewDirectionOption,
+    InterviewProcessDeleteLockReason,
     InterviewProcessDetail,
     InterviewProcessMutation,
     InterviewProcessOutcomeMutation,
@@ -30,6 +31,7 @@ from app.interviews.schemas import (
     InterviewProcessStageRead,
     InterviewProcessSummary,
     InterviewStageAttachmentRead,
+    InterviewStageEditLockReason,
 )
 from app.interviews.uploads import StoredUpload
 from app.notifications.models import NotificationKind
@@ -52,6 +54,79 @@ def _attachment(
 
 
 MAX_STAGE_ATTACHMENTS = 20
+STAGE_EDIT_WINDOW = timedelta(hours=24)
+PROCESS_DELETE_WINDOW = timedelta(hours=24)
+
+
+def stage_editable_until(stage: InterviewProcessStage) -> datetime:
+    # Planned stages stay editable through the interview. Retrospectively
+    # created stages receive the same 24-hour correction window.
+    return max(stage.created_at, stage.scheduled_at) + STAGE_EDIT_WINDOW
+
+
+def stage_edit_lock_reason(
+    stage: InterviewProcessStage, *, now: datetime | None = None
+) -> InterviewStageEditLockReason | None:
+    if stage.ai_analysis_requested_at is not None:
+        return InterviewStageEditLockReason.AI_ANALYSIS_REQUESTED
+    if (now or datetime.now(UTC)) >= stage_editable_until(stage):
+        return InterviewStageEditLockReason.WINDOW_EXPIRED
+    return None
+
+
+def ensure_stage_editable(stage: InterviewProcessStage) -> None:
+    reason = stage_edit_lock_reason(stage)
+    if reason is InterviewStageEditLockReason.AI_ANALYSIS_REQUESTED:
+        api_error(
+            409,
+            "interview_stage_locked_for_ai_analysis",
+            "The interview stage cannot be edited after AI analysis was requested",
+        )
+    if reason is InterviewStageEditLockReason.WINDOW_EXPIRED:
+        api_error(
+            409,
+            "interview_stage_edit_window_expired",
+            "The interview stage editing window has expired",
+        )
+
+
+def process_deletable_until(
+    process: InterviewProcess, stages: list[InterviewProcessStage]
+) -> datetime:
+    if not stages:
+        return process.created_at + PROCESS_DELETE_WINDOW
+    return min(stage_editable_until(stage) for stage in stages)
+
+
+def process_delete_lock_reason(
+    process: InterviewProcess,
+    stages: list[InterviewProcessStage],
+    *,
+    now: datetime | None = None,
+) -> InterviewProcessDeleteLockReason | None:
+    if any(stage.ai_analysis_requested_at is not None for stage in stages):
+        return InterviewProcessDeleteLockReason.AI_ANALYSIS_REQUESTED
+    if (now or datetime.now(UTC)) >= process_deletable_until(process, stages):
+        return InterviewProcessDeleteLockReason.WINDOW_EXPIRED
+    return None
+
+
+def ensure_process_deletable(
+    process: InterviewProcess, stages: list[InterviewProcessStage]
+) -> None:
+    reason = process_delete_lock_reason(process, stages)
+    if reason is InterviewProcessDeleteLockReason.AI_ANALYSIS_REQUESTED:
+        api_error(
+            409,
+            "interview_process_locked_for_ai_analysis",
+            "The interview process cannot be deleted after AI analysis was requested",
+        )
+    if reason is InterviewProcessDeleteLockReason.WINDOW_EXPIRED:
+        api_error(
+            409,
+            "interview_process_delete_window_expired",
+            "The interview process deletion window has expired",
+        )
 
 
 def _stage_attachment_read(
@@ -73,6 +148,7 @@ def _stage_read(
     analysis: IntelligenceInterview | None,
     current_user: User,
 ) -> InterviewProcessStageRead:
+    lock_reason = stage_edit_lock_reason(stage)
     return InterviewProcessStageRead(
         id=stage.id,
         stage_type=stage.stage_type,
@@ -110,6 +186,9 @@ def _stage_read(
         ai_analysis_id=analysis.id if analysis else None,
         ai_analysis_status=analysis.processing_status if analysis else None,
         ai_analysis_requested_at=stage.ai_analysis_requested_at,
+        can_edit=lock_reason is None,
+        edit_locked_reason=lock_reason,
+        editable_until=stage_editable_until(stage),
         created_at=stage.created_at,
         updated_at=stage.updated_at,
     )
@@ -262,7 +341,8 @@ async def get_stage_attachment_model(
 async def ensure_stage_attachment_capacity(
     session: AsyncSession, user: User, process_id: UUID, stage_id: UUID
 ) -> None:
-    await get_stage_model(session, user, process_id, stage_id)
+    stage = await get_stage_model(session, user, process_id, stage_id)
+    ensure_stage_editable(stage)
     count = await session.scalar(
         select(func.count(InterviewProcessStageAttachment.id)).where(
             InterviewProcessStageAttachment.stage_id == stage_id
@@ -380,6 +460,23 @@ async def delete_admin_process(session: AsyncSession, process_id: UUID) -> list[
     if process is None:
         api_error(404, "interview_process_not_found", "Interview process was not found")
 
+    return await _delete_process(session, process)
+
+
+async def delete_own_process(session: AsyncSession, user: User, process_id: UUID) -> list[str]:
+    process = await get_process_model(session, user, process_id, lock=True)
+    stages = list(
+        await session.scalars(
+            select(InterviewProcessStage)
+            .where(InterviewProcessStage.process_id == process.id)
+            .with_for_update()
+        )
+    )
+    ensure_process_deletable(process, stages)
+    return await _delete_process(session, process)
+
+
+async def _delete_process(session: AsyncSession, process: InterviewProcess) -> list[str]:
     stage_rows = (
         await session.execute(
             select(
@@ -474,6 +571,7 @@ async def process_detail(
         None,
     )
     summary = _summary(process, track, len(stages), next_stage_at)
+    delete_lock_reason = process_delete_lock_reason(process, stages, now=now)
     return InterviewProcessDetail(
         **summary.model_dump(),
         stages=[
@@ -491,6 +589,9 @@ async def process_detail(
             process.offer_content_type,
             process.offer_size,
         ),
+        can_delete=delete_lock_reason is None,
+        delete_locked_reason=delete_lock_reason,
+        deletable_until=process_deletable_until(process, stages),
     )
 
 
@@ -589,10 +690,7 @@ async def set_process_outcome(
                 session,
                 student_id=process.user_id,
                 actor=user,
-                event_key=(
-                    f"interview-offer:{process.id}:"
-                    f"{process.offer_received_at.isoformat()}"
-                ),
+                event_key=(f"interview-offer:{process.id}:{process.offer_received_at.isoformat()}"),
                 kind=NotificationKind.OFFER,
                 title="Трек отмечен как оффер",
                 body=f"{user.first_name} отметил оффер от {process.company_name}.",
@@ -631,6 +729,7 @@ async def update_stage(
     payload: InterviewProcessStageMutation,
 ) -> InterviewProcessDetail:
     stage = await get_stage_model(session, user, process_id, stage_id, lock=True)
+    ensure_stage_editable(stage)
     stage.stage_type = payload.stage_type
     stage.scheduled_at = payload.scheduled_at
     stage.description = payload.description or None
@@ -649,12 +748,7 @@ async def set_stage_media(
     previous_key = stage.media_storage_key
     if previous_key == upload.storage_key:
         return await process_detail(session, user, process_id), previous_key
-    if stage.ai_analysis_requested_at is not None:
-        api_error(
-            409,
-            "interview_recording_locked_for_ai_analysis",
-            "The recording cannot be replaced after AI analysis was requested",
-        )
+    ensure_stage_editable(stage)
     stage.media_storage_key = upload.storage_key
     stage.media_filename = upload.filename
     stage.media_content_type = upload.content_type
@@ -675,12 +769,7 @@ async def clear_stage_media(
     session: AsyncSession, user: User, process_id: UUID, stage_id: UUID
 ) -> tuple[InterviewProcessDetail, str | None]:
     stage = await get_stage_model(session, user, process_id, stage_id, lock=True)
-    if stage.ai_analysis_requested_at is not None:
-        api_error(
-            409,
-            "interview_recording_locked_for_ai_analysis",
-            "The recording cannot be deleted after AI analysis was requested",
-        )
+    ensure_stage_editable(stage)
     previous_key = stage.media_storage_key
     stage.media_storage_key = None
     stage.media_filename = None
@@ -697,7 +786,7 @@ async def add_stage_attachment(
     stage_id: UUID,
     upload: StoredUpload,
 ) -> InterviewProcessDetail:
-    await get_stage_model(session, user, process_id, stage_id, lock=True)
+    stage = await get_stage_model(session, user, process_id, stage_id, lock=True)
     existing = await session.scalar(
         select(InterviewProcessStageAttachment.id).where(
             InterviewProcessStageAttachment.stage_id == stage_id,
@@ -706,6 +795,7 @@ async def add_stage_attachment(
     )
     if existing is not None:
         return await process_detail(session, user, process_id)
+    ensure_stage_editable(stage)
     count = await session.scalar(
         select(func.count(InterviewProcessStageAttachment.id)).where(
             InterviewProcessStageAttachment.stage_id == stage_id
@@ -737,6 +827,8 @@ async def clear_stage_attachment(
     stage_id: UUID,
     attachment_id: UUID,
 ) -> tuple[InterviewProcessDetail, str]:
+    stage = await get_stage_model(session, user, process_id, stage_id, lock=True)
+    ensure_stage_editable(stage)
     attachment = await get_stage_attachment_model(
         session,
         user,

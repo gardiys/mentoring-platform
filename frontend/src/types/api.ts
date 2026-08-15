@@ -655,6 +655,8 @@ export interface MentorCurrentTopic {
 
 export type MentorStudentActivityKind =
   "roadmap" | "interview" | "interview_cards";
+export type MentorStudentAttentionReason =
+  "roadmap_overdue" | "interviews_not_published";
 
 export type MentorStudentSort =
   | "name_asc"
@@ -679,6 +681,7 @@ export interface MentorStudentListItem {
   last_activity_kind: MentorStudentActivityKind | null;
   completed_topics_this_week: number;
   is_overdue: boolean;
+  attention_reason: MentorStudentAttentionReason | null;
   mock_interview_count: number;
 }
 

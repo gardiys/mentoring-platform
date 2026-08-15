@@ -169,7 +169,11 @@ a {
 }
 
 .notification-item.is-unread {
-  background: color-mix(in srgb, var(--mantine-primary-color-filled) 9%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--mantine-primary-color-filled) 9%,
+    transparent
+  );
 }
 
 .notification-unread-dot {
@@ -183,7 +187,8 @@ a {
 
 .notification-item.is-unread .notification-unread-dot {
   background: var(--mantine-primary-color-filled);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--mantine-primary-color-filled) 14%, transparent);
+  box-shadow: 0 0 0 4px
+    color-mix(in srgb, var(--mantine-primary-color-filled) 14%, transparent);
 }
 
 .notification-item-copy {
@@ -758,12 +763,12 @@ a {
     box-shadow 140ms ease;
 }
 
-.student-progress-row--overdue {
+.student-progress-row--attention {
   background: color-mix(in srgb, var(--mantine-color-red-6) 7%, transparent);
   box-shadow: inset 4px 0 var(--mantine-color-red-6);
 }
 
-.student-progress-row--overdue:hover {
+.student-progress-row--attention:hover {
   background: color-mix(in srgb, var(--mantine-color-red-6) 11%, transparent);
 }
 

@@ -382,6 +382,16 @@ class InterviewProcessStageMutation(BaseModel):
     description: str | None = Field(default=None, max_length=10_000)
 
 
+class InterviewStageEditLockReason(StrEnum):
+    WINDOW_EXPIRED = "window_expired"
+    AI_ANALYSIS_REQUESTED = "ai_analysis_requested"
+
+
+class InterviewProcessDeleteLockReason(StrEnum):
+    WINDOW_EXPIRED = "window_expired"
+    AI_ANALYSIS_REQUESTED = "ai_analysis_requested"
+
+
 class InterviewProcessOutcomeMutation(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -423,6 +433,9 @@ class InterviewProcessStageRead(BaseModel):
     ai_analysis_id: UUID | None = None
     ai_analysis_status: IntelligenceProcessingStatus | None = None
     ai_analysis_requested_at: datetime | None = None
+    can_edit: bool
+    edit_locked_reason: InterviewStageEditLockReason | None
+    editable_until: datetime
     created_at: datetime
     updated_at: datetime
 
@@ -501,6 +514,9 @@ class AdminCompanyAliasProposalMutation(BaseModel):
 class InterviewProcessDetail(InterviewProcessSummary):
     stages: list[InterviewProcessStageRead]
     offer: InterviewAttachmentRead | None
+    can_delete: bool
+    delete_locked_reason: InterviewProcessDeleteLockReason | None
+    deletable_until: datetime
 
 
 class InterviewCatalogMediaKind(StrEnum):

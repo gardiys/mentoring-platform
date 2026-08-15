@@ -44,6 +44,7 @@ it("MentorStudentsPage отображает учеников", async () => {
         last_activity_kind: "interview",
         completed_topics_this_week: 0,
         is_overdue: false,
+        attention_reason: null,
         mock_interview_count: 0,
       },
       {
@@ -62,6 +63,7 @@ it("MentorStudentsPage отображает учеников", async () => {
         last_activity_kind: null,
         completed_topics_this_week: 0,
         is_overdue: false,
+        attention_reason: null,
         mock_interview_count: 0,
       },
     ],
@@ -398,6 +400,7 @@ it("показывает Telegram-чат в детальной карточке 
     last_activity_kind: null,
     completed_topics_this_week: 0,
     is_overdue: false,
+    attention_reason: null,
     mock_interview_count: 0,
     interviews: [],
     mock_interviews: [],
@@ -453,6 +456,9 @@ it.each([
         has_offer_file: false,
         created_at: "2026-08-01T10:00:00Z",
         updated_at: "2026-08-01T10:00:00Z",
+        can_delete: false,
+        delete_locked_reason: "window_expired",
+        deletable_until: "2026-08-06T12:00:00Z",
         offer: null,
         stages: [
           {
@@ -468,6 +474,9 @@ it.each([
               size: 0,
             },
             attachments: [],
+            can_edit: false,
+            edit_locked_reason: "window_expired",
+            editable_until: "2026-08-06T12:00:00Z",
             created_at: "2026-08-01T10:00:00Z",
             updated_at: "2026-08-01T10:00:00Z",
           },
