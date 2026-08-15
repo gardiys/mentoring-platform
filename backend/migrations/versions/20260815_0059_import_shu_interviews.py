@@ -27,10 +27,8 @@ depends_on: str | Sequence[str] | None = None
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 INTERVIEW_FILE = DATA_DIR / "shu_interviews_20260815.csv"
 COMPANY_FILE = DATA_DIR / "shu_companies_20260815.csv"
-USER_FILE = DATA_DIR / "legacy_users.csv"
 INTERVIEW_CHECKSUM = "1615971c2f94fecb7d1c6e229c9ce822c08cdf4f17da335a3d8e5f1ef094c4bd"
 COMPANY_CHECKSUM = "05c36decd9d5a5039887bd96fa625efe404d4a65130547f90289c42ca0843822"
-USER_CHECKSUM = "4a9627d3d88cdc261fd59ece53aadfaf74d9f56bca841cc3fd49383671aa8773"
 INTERVIEW_FIELDS = {
     "id",
     "created_at",
@@ -46,19 +44,21 @@ INTERVIEW_FIELDS = {
     "specialization",
 }
 COMPANY_FIELDS = {"id", "created_at", "updated_at", "name", "additional_names"}
-USER_FIELDS = {
-    "id",
-    "telegram_username",
-    "role",
-    "telegram_id",
-    "chat_id",
-    "name",
-    "surname",
-    "daily_notifications",
-    "specialization",
-    "extra_specialization",
-}
 IMPORT_NAMESPACE = UUID("b4e13c60-0a0d-4b35-9237-270166e00440")
+# Only irreversible fingerprints are kept in the image. The full legacy user
+# export contains personal data and is intentionally excluded by .dockerignore.
+AUTHOR_TELEGRAM_FINGERPRINTS = {
+    "51": "9345355039293a60ed2cd45acd289145538344ca22ecbd9018ed7859ff0e9f0b",
+    "99": "941f7607886f23231f9648533ce1fdaa74cebdee6107a28f1878727bcda71dc8",
+    "176": "6f4d42c67ce45352d1dfb17286950bee0c4c84efa024b734e858e3bcfb48bb06",
+    "364": "35e94b7575ee32af5546b6e8ab28c0b2a89c112e9efd9f2b1f59c3441ead92b6",
+    "369": "7564758a6fb3db23d3cf134f7543ee504bc4500ecc6db76dbb3ce5daf89ee607",
+    "2587": "dedde0d48451d7dd4bd819637b0e396b998ff3a438bb063fa4166aebe58bf0b2",
+    "2773": "a546a2ba6986c462206b1383001655fe8cc2e074e218ccccbb7d657f817d38f4",
+    "2777": "ac4f13ba45ae95059b4f7ce71dc04447e8f7e1b6f1801413d735da2bd5f2ab47",
+    "2782": "f407cb89dad95c8acc5bcd39e94314a43631f86b64a51846691ac57567ef4fa4",
+    "3185": "a082861dac56eb61ae7e4aa8975493dad3adbf25364c9c9161d7e80692b0595d",
+}
 EXTERNAL_MEDIA_PREFIX = "https://s3.firstvds.ru:443/interviews/"
 STAGE_MAP = {
     "screaning": "screening",
@@ -120,9 +120,7 @@ TRANSLITERATION = dict(
 )
 
 
-def _read_rows(
-    path: Path, *, checksum: str, count: int, fields: set[str]
-) -> list[dict[str, str]]:
+def _read_rows(path: Path, *, checksum: str, count: int, fields: set[str]) -> list[dict[str, str]]:
     raw = path.read_bytes()
     if hashlib.sha256(raw).hexdigest() != checksum:
         raise RuntimeError(f"Import checksum does not match for {path.name}")
@@ -138,6 +136,10 @@ def _read_rows(
 
 def _identity(kind: str, source_id: str) -> UUID:
     return uuid5(IMPORT_NAMESPACE, f"{kind}:{source_id}")
+
+
+def _telegram_fingerprint(telegram_id: int | str) -> str:
+    return hashlib.sha256(f"shu:{telegram_id}".encode()).hexdigest()
 
 
 def _parse_datetime(value: str) -> datetime:
@@ -173,9 +175,7 @@ def _recruiters(value: str) -> set[str]:
     return {
         username
         for part in re.split(r"[,\n]+", source)
-        if TELEGRAM_USERNAME_PATTERN.fullmatch(
-            username := part.strip().lstrip("@").casefold()
-        )
+        if TELEGRAM_USERNAME_PATTERN.fullmatch(username := part.strip().lstrip("@").casefold())
     }
 
 
@@ -208,22 +208,20 @@ def _media(row: dict[str, str]) -> tuple[str | None, str | None, str | None, int
 def _resolve_users(
     connection: sa.Connection,
     interviews: list[dict[str, str]],
-    user_rows: list[dict[str, str]],
 ) -> dict[str, UUID]:
-    source_users = {row["id"]: row for row in user_rows}
-    existing_by_telegram = {
-        str(row["telegram_id"]): row["id"]
+    author_ids = {row["author_id"] for row in interviews}
+    unknown_authors = author_ids - AUTHOR_TELEGRAM_FINGERPRINTS.keys()
+    if unknown_authors:
+        raise RuntimeError(f"Unknown Shu interview authors: {sorted(unknown_authors)}")
+    existing_by_fingerprint = {
+        _telegram_fingerprint(row["telegram_id"]): row["id"]
         for row in connection.execute(
             sa.text("SELECT id, telegram_id FROM users WHERE telegram_id IS NOT NULL")
         ).mappings()
     }
     result: dict[str, UUID] = {}
-    for author_id in {row["author_id"] for row in interviews}:
-        source_user = source_users.get(author_id)
-        if source_user is None or source_user["role"].strip() == "Гость":
-            raise RuntimeError(f"Shu interview author {author_id} is not importable")
-        telegram_id = source_user["telegram_id"].strip()
-        user_id = existing_by_telegram.get(telegram_id)
+    for author_id in author_ids:
+        user_id = existing_by_fingerprint.get(AUTHOR_TELEGRAM_FINGERPRINTS[author_id])
         if user_id is None:
             candidate = _identity("user", author_id)
             user_id = connection.scalar(
@@ -330,12 +328,6 @@ def upgrade() -> None:
         count=694,
         fields=COMPANY_FIELDS,
     )
-    users = _read_rows(
-        USER_FILE,
-        checksum=USER_CHECKSUM,
-        count=238,
-        fields=USER_FIELDS,
-    )
     connection = op.get_bind()
     track_ids = {
         row["slug"]: row["id"]
@@ -345,7 +337,7 @@ def upgrade() -> None:
     }
     if set(track_ids) != {"python", "go"}:
         raise RuntimeError("Python and Go learning tracks are required for Shu import")
-    user_ids = _resolve_users(connection, interviews, users)
+    user_ids = _resolve_users(connection, interviews)
     company_ids = _resolve_companies(
         connection,
         interviews,
