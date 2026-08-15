@@ -1,0 +1,117 @@
+id,created_at,updated_at,author_id,company_id,recruiter_telegram_login,stage,telegram_file_id,video_url,text,type,specialization
+2537,2026-08-03 14:55:10.517 +0300,2026-08-03 15:04:14.396 +0300,176,667,AnnaSavostyanova85,tech,BAACAgIAAxkBAAEGIttqcICevVaEVSKoa3DVtW3WI65QsgACYKIAAoIciUuOprkRmGwyyjsE,https://s3.firstvds.ru:443/interviews/смотрим/tech/03-08-2026-14-55-10-AgADYKIAAoIciUs.mp4,"Так жёстко меня ещё не сливали) К такому не подготовится, просто копает легенду глубже и глубже. Меня слили на кафке, через 15 минут)",video,Python
+2536,2026-08-03 12:39:47.068 +0300,2026-08-03 12:44:59.933 +0300,176,747,Dasha_IT_HR,screaning,BAACAgIAAxkBAAEGIndqcGE-26LabwcGGPdSYAaRUE4nDAACw6AAAoIciUv3BtehXRzvajsE,https://s3.firstvds.ru:443/interviews/сателлит/screaning/03-08-2026-12-39-47-AgADw6AAAoIciUs.mp4,"Создалось впечатление, что эйчарка тоже вкатилась в хр) Ничего толком не рассказала, удалёнка, зп 250 в вилке, проект в ЮниКредитБанке. Вот тех вопросы, на которые нужно ответить
+Вопросы для скрининга: 
+Вопрос 1: 
+def fоо(): 
+>>>>return ([""foo"",1]) 
+D = {""A"": [1,2], foo: False, foo(): True, (1,): ""123""} 
+Что будет в переменной D и почему? 
+Вопрос 2: 
+def f_g(): 
+>>>>yield 43 
+>>>>return 66 
+print(f_g()) 
+Что будет выведено на экран в результате выполнения кода? 
+Вопрос 3: 
+counter = 0 
+def incrеmеnt(): 
+>>>>counter += 1 
+incremеnt() 
+print(countеr) 
+Что будет выведено на экран и почему? 
+Вопрос 4: 
+999999 in range(1,99999999) 
+За какую алгоритмическую сложность по времени выполнится выражение? 
+Вопрос 5: 
+В чем отличие между стеком, очередью и декой в Python? 
+Вопрос 6: 
+Когда связные списки эффективней массива? 
+Вопрос 7: 
+Как вы понимаете термины ""слабая связь(low coupling)"" и ""высокая связность (high cohesion)"" в контексте 
+ООП 
+Вопрос 8: 
+В чем разница между паттернами проектирования ""Стратегия"" и ""Шаблонный метод""? 
+Вопрос 9: 
+Что такое DLQ? 
+Вопрос 10: 
+Что такое API Gateway и зачем он нужен?",video,Python
+2538,2026-08-03 17:31:27.960 +0300,2026-08-03 17:35:32.885 +0300,99,132,AnnaIvakina,screaning,BAACAgIAAxkBAAEGI29qcKWOrCTq0JrdJSt9jho_rJ3AgQACb58AAiV2iUsdzYgAAb15tsA7BA,https://s3.firstvds.ru:443/interviews/ЯндексАлиса/screaning/03-08-2026-17-31-27-AgADb58AAiV2iUs.mp4,"3-й скрининг, первые 2 не смог записать, а теперь смог.
+Все стандартно, вопросы, этапы и общение, спасибо ментору, за подготовку.
+Назначили 1-й тех, но учитывая, что там будет, думаю, что обосрусь, так как с лф у меня беда(((
+Предупредили, чтобы отключить весь AI, интересно, если юзнуть hint sage запалят ли?",video,Python
+2539,2026-08-05 12:33:02.805 +0300,2026-08-05 12:33:02.805 +0300,2777,667,AnnaSavostyanova85,screaning,,,"Скрининг в формате разговора по телефону. Были технические вопросы, была вакансия на ML, сказал, что прям на прямую с ML не работал, задали базовые питонячие вопросы на вакансию бэкендера. Вилка 250-300 сказали нормал. Только офис на м. Савеловская, второй этап в офисе, без лайвкодинга, просто технические вопросы и знакомство с руководителем. Как бы вообще звучит прикольно, но офис облом конечно",text,Python
+2545,2026-08-05 14:34:10.301 +0300,2026-08-05 14:34:10.301 +0300,176,752,-,screaning,,,"Общались в чате хх. Созванивались по телефону. Подразделение роскомнадзора. Будет 2 часовой тех со всеми извращениями. После теха нужно пройти полиграф. Созвон длился минуты 3. В моменте спросила меня есть ли вопросы, я спросил про проект и команду, а она просто сказала ""хорошо, до свидания"" и сбросила) Но потом написала и пригласила на тех.",text,Python
+2548,2026-08-05 16:24:09.600 +0300,2026-08-05 16:31:18.905 +0300,2587,207,paramonova_me,screaning,BAACAgIAAxkBAAEGKiFqczlOK4PnC5G-dgI4CAABLBx-wwgAAqulAALlxJhLHmx18eOQXHs7BA,https://s3.firstvds.ru:443/interviews/АтомБезопасность/screaning/05-08-2026-16-24-09-AgADq6UAAuXEmEs.mp4,,video,Python
+2551,2026-08-06 10:22:15.499 +0300,2026-08-06 10:24:13.168 +0300,51,712,qwazplm,screaning,BQACAgIAAxkBAAEGK3hqdDSU5Ld6ULTBUX83rcayboSTjQACDZ4AArI2qUvffGOcWcHhtjsE,https://s3.firstvds.ru:443/interviews/трим/screaning/06-08-2026-10-22-15-AgADDZ4AArI2qUs.mp4,,video,Python
+2554,2026-08-06 18:51:52.874 +0300,2026-08-06 18:52:21.323 +0300,364,17,IT_recruiter_Anna,screaning,CQACAgIAAxkBAAEGLRBqdK2Mle4T8EYJPZBjF8D4OwoJZQAC7K4AAhsuqEu3WsF9bbNYKjsE,https://s3.firstvds.ru:443/interviews/Sber/screaning/06-08-2026-18-51-52-AgAD7K4AAhsuqEs.mp3,,audio,Python
+2555,2026-08-06 19:38:54.698 +0300,2026-08-06 19:40:05.600 +0300,364,17,SvetlanaElosova,tech,BAACAgIAAxkBAAEGLTlqdLY3eA3a5WQ61EkENYBnOJw_WQACR68AAhsuqEvJooCSXghFvTsE,https://s3.firstvds.ru:443/interviews/Sber/tech/06-08-2026-19-38-54-AgADR68AAhsuqEs.mp4,"Приятный не душный тех, во время задач показал себя не очень. Конец собеса обрезался, но больше задач и вопросов не было.
+Задачи:
+1. Написать декоратор, считающий время выполнения функции.
+2. Есть список ссылок, нужно написать асинхронную функцию, чтобы их обкачать",video,Python
+2558,2026-08-07 09:27:27.084 +0300,2026-08-07 09:30:21.928 +0300,364,17,just_margo,tech,BAACAgIAAxkBAAEGLsVqdXq6akTV3O1rPArq3PSegWmzJAACSpwAAhsusEsCgG8wwlDsmjsE,https://s3.firstvds.ru:443/interviews/Sber/tech/07-08-2026-09-27-27-AgADSpwAAhsusEs.mp4,,video,Python
+2560,2026-08-07 16:55:10.395 +0300,2026-08-07 17:00:45.204 +0300,3185,132,Netlogina,screaning,BAACAgIAAxkBAAEGL_JqdeOY2zNbRr2_bLPzvHIMefTx3gACx58AAoulsEuQunEdrkyWSzsE,https://s3.firstvds.ru:443/interviews/ЯндексАлиса/screaning/07-08-2026-16-55-10-AgADx58AAoulsEs.mp4,Первый скрин,video,Python
+2561,2026-08-08 09:37:57.173 +0300,2026-08-08 09:43:42.203 +0300,369,17,LenBevz,tech,BAACAgIAAxkBAAEGMQABanbNRgj5GvPGXNBkRlt5xjqx6fwAAuKgAAL1z7FLXy4H9_5CC2U7BA,https://s3.firstvds.ru:443/interviews/Sber/tech/08-08-2026-09-37-57-AgAD4qAAAvXPsUs.mp4,"Пришлось судорожно скачивать яндекс браузер, т.к. иначе к собесу было не подключиться. Заранее об этом никто не предупреждал, так что в начале собеса сильно нервничал, к тому же shadowhint отвалился. Тех вопросы довольно базовые, но я чуть потупил в части ооп. Софтовые вопросы буквально ""как взаимодействуете в команде, бухаете, балуетесь солями?"" В целом не особо приятные типы",video,Python
+2564,2026-08-10 22:47:22.888 +0300,2026-08-10 22:47:52.364 +0300,2773,256,-,tech,CQACAgIAAxkBAAEGNXtqeipWQBlbDiV951iK5LOfl0FdnAACeqoAArmG0EsiIhunZD_NtTsE,https://s3.firstvds.ru:443/interviews/Алабуга/tech/10-08-2026-22-47-22-AgADeqoAArmG0Es.mp3,"Самый важный вопрос, на который надо правильно ответить: ваше отношение к специальной военной операции?
+
+Так немного с кроликом и декораторами подкачал, но уже усилил эти слабые места",audio,Python
+2540,2026-08-05 12:40:11.096 +0300,2026-08-05 12:42:32.097 +0300,99,749,Dinara_HRPSY,screaning,BAACAgIAAxkBAAEGKNxqcwSlmiDonmXhtpdaMvLWTFe2ywACJ6YAArHPmEvh315pVzQmCDsE,https://s3.firstvds.ru:443/interviews/enterprisesolutions/screaning/05-08-2026-12-40-11-AgADJ6YAArHPmEs.mp4,"В целом неплохо, но жду ОС от ментора, с ней договорились что ответ придется ожидать, но там посмотрим. Важно то, что ищут они синьора для менторства одного джуна, поэтому, если одобрят, будем смотреть, что выйдет из этого.",video,Python
+2546,2026-08-05 16:01:08.119 +0300,2026-08-05 16:13:43.730 +0300,2587,701,Tamara_IT,tech,BAACAgIAAxkBAAEGKglqczPcogpy12MXgNqMgAl9TSPuYwACfaUAAuXEmEs2fxCCZJcRQTsE,https://s3.firstvds.ru:443/interviews/simplecompany/tech/05-08-2026-16-01-08-AgADfaUAAuXEmEs.mp4,"Весь тех проходил вокруг одного декоратора, интервьюер хороший а я плохо отвечал. Хз, когда вокруг кода вопросы задают, теряюсь сильно, не понимаю что от меня требуется.",video,Python
+2547,2026-08-05 16:22:18.139 +0300,2026-08-05 16:28:07.380 +0300,2587,695,lidiia_ithr,screaning,BAACAgIAAxkBAAEGKhZqczkIHzKabyycBfLCEvLK458dFAACpqUAAuXEmEsDs-fkF48pdjsE,https://s3.firstvds.ru:443/interviews/б1/screaning/05-08-2026-16-22-18-AgADpqUAAuXEmEs.mp4,,video,Python
+2541,2026-08-05 12:51:23.126 +0300,2026-08-05 12:57:44.508 +0300,176,750,Belyi_Kot_V_doroge,screaning,BAACAgIAAxkBAAEGKWJqcwcqwRC1QbWTqybfbnKLh1BTcQACU58AAnAxmEum3JMUx464yTsE,https://s3.firstvds.ru:443/interviews/cyberbird/screaning/05-08-2026-12-51-23-AgADU58AAnAxmEs.mp4,"Удалёнка, вилку назвал от 220, можно наверно больше просить. Будет один этап, подобие сисдиза, нужно будет спроектировать в устной форме архитектуру сервиса. Эйчарка очень труднодоступная) 2 раза переносила, 3 раз опоздала",video,Python
+2544,2026-08-05 14:28:53.229 +0300,2026-08-05 14:52:08.063 +0300,176,751,pavelgul,screaning,BAACAgIAAxkBAAEGKaZqcx3wEleb-1S983hlvti8hjZzbAACNKAAAnAxmEtya-pFBG0J9TsE,https://s3.firstvds.ru:443/interviews/funflow/screaning/05-08-2026-14-28-53-AgADNKAAAnAxmEs.mp4,"Фулл офис. Этапы: софтовый собес с этим же челом, тех в офисе. зп назвал 180+. Судя по его рассказу у них не налажены процессы и большой объём работы.",video,Python
+2550,2026-08-06 08:26:26.380 +0300,2026-08-06 08:31:08.635 +0300,51,7,timyana_hr,screaning,BQACAgIAAxkBAAEGK2lqdBgjS3kvSDrquq9aA0FSzO2ZWwACB50AArI2qUuqvnMNW1v9JTsE,https://s3.firstvds.ru:443/interviews/MTS/screaning/06-08-2026-08-26-26-AgADB50AArI2qUs.mp4,"Middle Python разработчик [Иртея]
+
+Разрабатывают новое приложение, аналогов нет на рынке, бэклог на 200 тысяч лет вперёд раписан
+
+Испыталка - гибрид, по вилке 220к вроде ок
+
+Душный скрин, много спрашивает по леге
+
+Тех.вопросы:
+
+1) Какой тип данных используется для хранения уникальных элементов?
+2) Какой метод используется для удаления последнего элемента из списка и его возвращения? 
+3) Какая версия питона сейчас актуальная?
+4) Язык пайтон - интерпретируемый  или компилируемый?
+5) Какой тип  занимает больше памяти при одинаковых элементах tuple или список?
+6) Можно ли пройти по данным генератора больше 1-го раза?
+7) Является ли декоратор имплементацией паттерна декоратор? 
+8) Если в теле try объявить return из функции, выполнится ли finally?
+9) Как называется способ оценки сложности алгоритма?",video,Python
+2552,2026-08-06 14:54:45.481 +0300,2026-08-06 15:00:27.745 +0300,176,754,-,screaning,BAACAgIAAxkBAAEGLMVqdHV-5roixJFmuEQ3JYO1edeUUwACwKcAAlHIoEtoQiV9zpvbiDsE,https://s3.firstvds.ru:443/interviews/стоун/screaning/06-08-2026-14-54-45-AgADwKcAAlHIoEs.mp4,"Общались в чате хх. Похоже на компанию, которую лучше обойти стороной. Испыталка офис, потом гибрид, вилка 200+. У них огромное количество задач разного плана, но при этом нет айти отдела. Хотят нанять 2 разрабов, которые будут делать всё и во всех областях.",video,Python
+2542,2026-08-05 12:54:03.409 +0300,2026-08-05 13:01:44.329 +0300,176,567,Diana_Senior_Soft,screaning,BAACAgIAAxkBAAEGKX9qcwflC0yTuiuS5mbkvRtpKbuWBgACVZ8AAnAxmEsKdWuJCbHm6TsE,https://s3.firstvds.ru:443/interviews/seniorsoft/screaning/05-08-2026-12-54-03-AgADVZ8AAnAxmEs.mp4,"Второй скрин к ним. Что-то у них поменялось. Аутстаф, очень большое количество крупных компаний. Посмотрим что дальше будет, но она обещает очень много собесов в крупные банки.",video,Python
+2543,2026-08-05 14:22:27.290 +0300,2026-08-05 14:52:07.920 +0300,176,745,gyngazov,tech,BAACAgIAAxkBAAEGKZlqcxyS3WVkgK14qmaEFLOBlpNrUQACHqAAAnAxmEushPA7QkMmuzsE,https://s3.firstvds.ru:443/interviews/энерготрансгрупп/tech/05-08-2026-14-22-27-AgADHqAAAnAxmEs.mp4,"Как обычно я на тупняках. Спрашивал в основном по pytest, fastapi, sqlalchemy, про сессии в бд. В целом вопросы не сложные, можно подготовиться.  Но для меня это скорее всего конечная)",video,Python
+2553,2026-08-06 18:10:59.516 +0300,2026-08-06 18:22:34.668 +0300,2587,17,trkaterina,tech,BAACAgIAAxkBAAEGLPRqdKOAvpvVP13ClWYdPyOQbF3xBAAC26AAAsIXqUuQI5pL3GUU_TsE,https://s3.firstvds.ru:443/interviews/Sber/tech/06-08-2026-18-10-59-AgAD26AAAsIXqUs.mp4,"(Selecty) Максимально крутой и лайтовый собес. С кайфом пообщались с типом, в конце он меня попытался расстроить словами ""Ты же через аутсорс идешь? Там просто возможно слишком много уже набирают, го в мою команду в штат в офис ездить будешь"". Короче как собес вроде всё окей прошел, жду фитбек.",video,Python
+2556,2026-08-06 19:48:44.418 +0300,2026-08-06 19:54:29.087 +0300,2777,17,maryyannn,tech,BAACAgIAAxkBAAEGLUdqdLluwcsIpPrPFYN1Bb8R0SKi0wACxakAAqV_qUu9nY4ocsPiIjsE,https://s3.firstvds.ru:443/interviews/Sber/tech/06-08-2026-19-48-44-AgADxakAAqV_qUs.mp4,"В ВИДЕО НЕТ ЗВУКА СОБЕСЕДНИКОВ (только мой)
+
+Python-разработчик AI-агентов (Ликвидность и обязательства)
+Вакансия: https://rabota.sber.ru/search/python-razrabotchik-ai-agentov-likvidnost-i-obyazatel-stva-4539770/
+
+Мой первый тех, жестко конечно, не настроил нормально собес тех, поэтому не записался голос собеседников и ии никак не помог, отвечал чисто сам как знаю. Зато понимаю теперь, что надо все получше подучить, буду на выходных этим заниматься. 
+Ищут разработчика ai-агентов и им важно умение их разрабатывать. 
+
+Кратко что было, так как в видео только мои посредственные ответы:
+В начале рассказали про проект, потом по базе попросили рассказать что как делал. По легенде спрашивали по достижениям. Как понял им важно, чтобы умел работать и разрабатывать агентов и имел опыт в этом. Справшивали чем агентная система отличается от обычной LLM. Для чего используешь нейронки. Спрашивали про обучение моделей: эмбединги, векторыне базы данных. Спрашивали по базе зачем rabbit и kafka была, а не что-то одно. Какие были метрики на сервисах. Что логгировалось. Что такое Полиморфизм. Какая типизация в питоне, в чем различия видов типизации. Работал ли с параметрами LLM. По легенде снова где REST, где нет. Как работала авторизация соединений, что запрос пришел не абы откуда как проверялось.",video,Python
+2562,2026-08-08 09:45:26.700 +0300,2026-08-08 09:48:25.555 +0300,369,695,lidiia_ithr,screaning,BAACAgIAAxkBAAEGMQ1qdtBMXpBMJXgxdbiQn8JFjLgkAwAC7KAAAvXPsUtTfcaKNFzQizsE,https://s3.firstvds.ru:443/interviews/б1/screaning/08-08-2026-09-45-26-AgAD7KAAAvXPsUs.mp4,"Максимально базовый скрин, рассказал о текущих проектах и команде, почему ищу работу, на какую вилку ориентируюсь. Всё.",video,Python
+2549,2026-08-06 08:11:45.214 +0300,2026-08-06 08:13:53.482 +0300,51,753,wwassup_p,screaning,BQACAgIAAxkBAAEGK1NqdBWrYFp4PO9-eXEDlcqFJJFwJQAC95wAArI2qUsFp6mhUenlOzsE,https://s3.firstvds.ru:443/interviews/techsearch/screaning/06-08-2026-08-11-45-AgAD95wAArI2qUs.mp4,-,video,Python
+2557,2026-08-06 19:54:15.099 +0300,2026-08-06 19:54:15.099 +0300,2777,750,Belyi_Kot_V_doroge,screaning,,,"Компания: ООО Кибертех
+
+Backend-разработчик (Pyton)
+
+Также не записался звук. Базовый скрин, ничего такого не спрашивали. Являются микрозаймовой организацией, спрашивали на этот счет много. Название сервиса ""Привет сосед"" забавляло конечно. Следующий этап что-то вроде теха с техническими вопросами и проектированием сервиса на словах",text,Python
+2563,2026-08-09 12:28:20.494 +0300,2026-08-09 12:28:20.494 +0300,2782,731,Yana_Stokoloss,screaning,,,"в поиске AI-инженера в компанию «Русал» 
+
+Вакансия: https://spb.hh.ru/vacancy/135941591?hhtmFrom=resume
+
+Возможен вариант оформления как по ИП, так и по ТК.
+Возможен удалённый и гибридный формат работы.
+вопросы (опыт работы,чем занимался на прошлой работе, какую зп ожидаю), хотят оформление по ИП, вилку назвал 300+, могут предложить 250 )",text,Python
+2559,2026-08-07 09:39:36.305 +0300,2026-08-07 09:41:16.363 +0300,364,215,meowther,screaning,BAACAgIAAxkBAAEGLtJqdX2iypyc9NtoZxUBnVJJxbhLfQACVZwAAhsusEsgYK-kidFrcjsE,https://s3.firstvds.ru:443/interviews/SnapIT/screaning/07-08-2026-09-39-36-AgADVZwAAhsusEs.mp4,,video,Python
+2565,2026-08-15 15:00:49.177 +0300,2026-08-15 15:04:18.966 +0300,2773,17,ktarasenko,tech,CQACAgIAAxkBAAEGQCpqgFTF3QHnUvIqRAf-yr_e-tYjwQACm6kAAuAiCEjgEHe7GG3lojsE,https://s3.firstvds.ru:443/interviews/Sber/tech/15-08-2026-15-00-49-AgADm6kAAuAiCEg.mp3,"1 day offer от сбера. Тех проходит в 2 этапа: опыт, потом теория. Это первая часть",audio,Python
+2567,2026-08-15 15:06:07.054 +0300,2026-08-15 15:09:29.274 +0300,2773,670,canasstasia,screaning,CQACAgIAAxkBAAEGQFRqgFYaJfBQIfMFwCpART06YrIIaAACq6kAAuAiCEiaavSB7AkYODsE,https://s3.firstvds.ru:443/interviews/исходныйкод/screaning/15-08-2026-15-06-07-AgADq6kAAuAiCEg.mp3,"Обычный скрин. Надеюсь на тех позовут, к которому по записям подготовлюсь",audio,Python
+2566,2026-08-15 15:03:54.001 +0300,2026-08-15 15:07:06.935 +0300,2773,17,ktarasenko,tech,CQACAgIAAxkBAAEGQEZqgFV0Qbid3G8Ls78IrxeCCLoEkgACoqkAAuAiCEgHpTCACyrtwTsE,https://s3.firstvds.ru:443/interviews/Sber/tech/15-08-2026-15-03-54-AgADoqkAAuAiCEg.mp3,1 day offer от сбера. Вторая часть теха,audio,Python
+2568,2026-08-15 15:12:28.249 +0300,2026-08-15 15:15:48.776 +0300,2773,176,C_Nemtceva,screaning,CQACAgIAAxkBAAEGQGJqgFdjjV72Hwl08ee0a3dHDG847AACvKkAAuAiCEh10JvKTvSkiTsE,https://s3.firstvds.ru:443/interviews/юзтех/screaning/15-08-2026-15-12-28-AgADvKkAAuAiCEg.mp3,"Забыл про оконные функции и не рассказал про Pandas. Из-за того что ищут того, кто будет работать с большими данными, ака ETL разраб, меня нахуй и послали за проебы из первого предложения",audio,Python
+2569,2026-08-15 15:15:13.050 +0300,2026-08-15 15:18:42.466 +0300,2773,100,KatrinNeretina,tech,CQACAgIAAxkBAAEGQHJqgFgMeGrRNpQAAev-QdENd7h8QewAAsKpAALgIghIG3VCQ9iQzAw7BA,https://s3.firstvds.ru:443/interviews/ProductionIT/tech/15-08-2026-15-15-13-AgADwqkAAuAiCEg.mp3,"Вроде все четко прошел, должны на финал позвать. Если не позовут, Илюха @ibochkarev878, послушай пж
+
+Вопросы базовые: опыт, потом теория",audio,Python

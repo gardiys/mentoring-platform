@@ -60,6 +60,11 @@ import type {
   InterviewProcessStageMutation,
   InterviewProcessStatus,
   InterviewProcessSummary,
+  RecruiterContactPage,
+  RecruiterContactOpenRead,
+  RecruiterFeedbackMutation,
+  RecruiterFeedbackRead,
+  RecruiterSort,
   AdminPaymentPage,
   AdminPaymentStudentPage,
   AdminEmploymentPaymentStatus,
@@ -1391,6 +1396,8 @@ export const api = {
     if (filters.mediaKind) params.set("media_kind", filters.mediaKind);
     if (filters.hasAiReview) params.set("has_ai_review", "true");
     if (filters.favoritesOnly) params.set("favorites_only", "true");
+    if (filters.recruiterUsername)
+      params.set("recruiter_username", filters.recruiterUsername);
     const query = params.toString();
     return apiRequest<InterviewCatalogCompanyPage>(
       `/api/v1/interviews/catalog/companies${query ? `?${query}` : ""}`,
@@ -1408,6 +1415,8 @@ export const api = {
     if (filters.mediaKind) params.set("media_kind", filters.mediaKind);
     if (filters.hasAiReview) params.set("has_ai_review", "true");
     if (filters.favoritesOnly) params.set("favorites_only", "true");
+    if (filters.recruiterUsername)
+      params.set("recruiter_username", filters.recruiterUsername);
     const query = params.toString();
     return apiRequest<InterviewCatalogCompanyDetail>(
       `/api/v1/interviews/catalog/companies/${companyId}${query ? `?${query}` : ""}`,
@@ -1466,6 +1475,45 @@ export const api = {
     ),
   deleteInterviewCatalogComment: (commentId: string) =>
     apiRequest<void>(`/api/v1/interviews/catalog/comments/${commentId}`, {
+      method: "DELETE",
+    }),
+  interviewRecruiters: (
+    filters: {
+      query: string;
+      trackId: string | null;
+      contacted: boolean | null;
+      sort: RecruiterSort;
+    },
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = new URLSearchParams({
+      limit: String(options.limit ?? 24),
+      offset: String(options.offset ?? 0),
+    });
+    if (filters.query) params.set("q", filters.query);
+    if (filters.trackId) params.set("track_id", filters.trackId);
+    if (filters.contacted !== null)
+      params.set("contacted", String(filters.contacted));
+    params.set("sort", filters.sort);
+    return apiRequest<RecruiterContactPage>(
+      `/api/v1/interviews/recruiters?${params.toString()}`,
+    );
+  },
+  openRecruiterContact: (recruiterId: string) =>
+    apiRequest<RecruiterContactOpenRead>(
+      `/api/v1/interviews/recruiters/${recruiterId}/contact`,
+      { method: "POST" },
+    ),
+  setRecruiterFeedback: (
+    recruiterId: string,
+    payload: RecruiterFeedbackMutation,
+  ) =>
+    apiRequest<RecruiterFeedbackRead>(
+      `/api/v1/interviews/recruiters/${recruiterId}/feedback`,
+      { method: "PUT", body: JSON.stringify(payload) },
+    ),
+  deleteRecruiterFeedback: (recruiterId: string) =>
+    apiRequest<void>(`/api/v1/interviews/recruiters/${recruiterId}/feedback`, {
       method: "DELETE",
     }),
   reviewInterviewCard: (cardId: string, rating: InterviewReviewRating) =>

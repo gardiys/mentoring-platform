@@ -65,6 +65,14 @@ class InterviewStageType(StrEnum):
     OTHER = "other"
 
 
+class RecruiterFeedbackKind(StrEnum):
+    HELPFUL = "helpful"
+    IGNORES = "ignores"
+    NO_LONGER_WORKS = "no_longer_works"
+    ACCOUNT_MISSING = "account_missing"
+    OTHER = "other"
+
+
 class InterviewDeck(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "interview_decks"
     __table_args__ = (
@@ -498,4 +506,83 @@ class InterviewCatalogFavorite(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class RecruiterContact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "recruiter_contacts"
+
+    telegram_username: Mapped[str] = mapped_column(String(32), nullable=False)
+    normalized_username: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+
+
+class RecruiterContactProcess(Base):
+    __tablename__ = "recruiter_contact_processes"
+    __table_args__ = (Index("ix_recruiter_contact_processes_process", "process_id"),)
+
+    recruiter_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("recruiter_contacts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    process_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("interview_processes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class RecruiterContactOpen(Base):
+    __tablename__ = "recruiter_contact_opens"
+    __table_args__ = (
+        CheckConstraint("open_count > 0", name="open_count_positive"),
+        Index("ix_recruiter_contact_opens_recruiter_last", "recruiter_id", "last_opened_at"),
+    )
+
+    recruiter_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("recruiter_contacts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    open_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    first_opened_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_opened_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class RecruiterFeedback(Base):
+    __tablename__ = "recruiter_feedback"
+    __table_args__ = (Index("ix_recruiter_feedback_recruiter_kind", "recruiter_id", "kind"),)
+
+    recruiter_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("recruiter_contacts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    kind: Mapped[RecruiterFeedbackKind] = mapped_column(
+        Enum(
+            RecruiterFeedbackKind,
+            name="recruiter_feedback_kind",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

@@ -42,6 +42,11 @@ from app.interviews.models import (
     InterviewStageComment,
     InterviewStageType,
     InterviewTopicSelection,
+    RecruiterContact,
+    RecruiterContactOpen,
+    RecruiterContactProcess,
+    RecruiterFeedback,
+    RecruiterFeedbackKind,
 )
 from app.knowledge.models import (
     KnowledgeEntry,
@@ -135,6 +140,11 @@ __all__ = [
     "InterviewProcessStageAttachment",
     "InterviewProcessStatus",
     "InterviewReviewRating",
+    "RecruiterContact",
+    "RecruiterContactOpen",
+    "RecruiterContactProcess",
+    "RecruiterFeedback",
+    "RecruiterFeedbackKind",
     "InterviewStageType",
     "InterviewStageComment",
     "InterviewTopicSelection",

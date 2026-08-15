@@ -52,12 +52,27 @@ def _catalog_process_filters(
     current_user_id: UUID,
     has_ai_review: bool = False,
     favorites_only: bool = False,
+    recruiter_username: str | None = None,
 ) -> list[ColumnElement[bool]]:
     conditions: list[ColumnElement[bool]] = []
     if author_id is not None:
         conditions.append(InterviewProcess.user_id == author_id)
     if track_id is not None:
         conditions.append(InterviewProcess.track_id == track_id)
+    if recruiter_username and recruiter_username.strip():
+        escaped = (
+            recruiter_username.strip()
+            .lstrip("@")
+            .casefold()
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        conditions.append(
+            func.array_to_string(InterviewProcess.recruiter_telegram_usernames, ",").ilike(
+                f"%{escaped}%", escape="\\"
+            )
+        )
     if has_offer:
         conditions.append(InterviewProcess.status == InterviewProcessStatus.OFFER)
     if stage_type is not None or media_kind is not None:
@@ -263,6 +278,7 @@ async def list_catalog_companies(
     media_kind: InterviewCatalogMediaKind | None = None,
     has_ai_review: bool = False,
     favorites_only: bool = False,
+    recruiter_username: str | None = None,
     limit: int = 24,
     offset: int = 0,
 ) -> InterviewCatalogCompanyPage:
@@ -332,6 +348,7 @@ async def list_catalog_companies(
                 current_user_id=current_user.id,
                 has_ai_review=has_ai_review,
                 favorites_only=favorites_only,
+                recruiter_username=recruiter_username,
             ),
         )
     )
@@ -430,6 +447,7 @@ async def catalog_company_detail(
     media_kind: InterviewCatalogMediaKind | None = None,
     has_ai_review: bool = False,
     favorites_only: bool = False,
+    recruiter_username: str | None = None,
 ) -> InterviewCatalogCompanyDetail:
     company = await session.get(Company, company_id)
     if company is None:
@@ -471,6 +489,7 @@ async def catalog_company_detail(
                     current_user_id=current_user.id,
                     has_ai_review=has_ai_review,
                     favorites_only=favorites_only,
+                    recruiter_username=recruiter_username,
                 ),
             )
             .order_by(InterviewProcess.updated_at.desc())

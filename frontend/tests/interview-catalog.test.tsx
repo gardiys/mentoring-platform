@@ -112,6 +112,10 @@ it("ищет компании в каталоге", async () => {
     screen.getByRole("textbox", { name: "Найти компанию" }),
     "Yandex",
   );
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "Рекрутер" }),
+    "yandex_hr",
+  );
 
   await userEvent.click(screen.getByRole("textbox", { name: "Направление" }));
   await userEvent.keyboard("{ArrowDown}{Enter}");
@@ -143,6 +147,7 @@ it("ищет компании в каталоге", async () => {
         mediaKind: "any",
         hasAiReview: true,
         favoritesOnly: false,
+        recruiterUsername: "yandex_hr",
       },
       { limit: 24, offset: 0 },
     ),
@@ -151,7 +156,7 @@ it("ищет компании в каталоге", async () => {
     await screen.findByRole("link", { name: "Смотреть собеседования" }),
   ).toHaveAttribute(
     "href",
-    `/interviews/catalog/${company.id}?q=Yandex&track_id=${pythonTrackId}&author_id=${authorId}&stage_type=technical_interview&media_kind=any&has_offer=true&has_ai_review=true`,
+    `/interviews/catalog/${company.id}?q=Yandex&recruiter=yandex_hr&track_id=${pythonTrackId}&author_id=${authorId}&stage_type=technical_interview&media_kind=any&has_offer=true&has_ai_review=true`,
   );
 });
 
@@ -191,6 +196,7 @@ it("показывает треки, запись, файлы и отправл�
     mediaKind: null,
     hasAiReview: false,
     favoritesOnly: false,
+    recruiterUsername: "",
   });
   expect(
     screen.getByText("Алгоритмы, Python и проектирование API"),

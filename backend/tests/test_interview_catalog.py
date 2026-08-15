@@ -142,6 +142,14 @@ async def test_students_browse_company_tracks_files_and_comments(
         "/api/v1/interviews/catalog/companies?stage_type=screening&media_kind=video",
         headers=auth(second_student_id),
     )
+    recruiter_listing = await client.get(
+        "/api/v1/interviews/catalog/companies?recruiter_username=@yandex_recr",
+        headers=auth(second_student_id),
+    )
+    wrong_recruiter_listing = await client.get(
+        "/api/v1/interviews/catalog/companies?recruiter_username=other_recruiter",
+        headers=auth(second_student_id),
+    )
     comment = await client.post(
         f"/api/v1/interviews/catalog/stages/{stage_id}/comments",
         headers=auth(second_student_id),
@@ -162,6 +170,10 @@ async def test_students_browse_company_tracks_files_and_comments(
     filtered_detail = await client.get(
         f"/api/v1/interviews/catalog/companies/{company_id}"
         "?stage_type=technical_interview&has_offer=true&media_kind=video",
+        headers=auth(second_student_id),
+    )
+    recruiter_detail = await client.get(
+        f"/api/v1/interviews/catalog/companies/{company_id}?recruiter_username=yandex_recruiter",
         headers=auth(second_student_id),
     )
     missing_ticket = await client.get(
@@ -222,6 +234,8 @@ async def test_students_browse_company_tracks_files_and_comments(
     assert wrong_media_listing.json()["items"] == []
     assert any_recording_listing.json()["items"][0]["id"] == company_id
     assert wrong_stage_listing.json()["items"] == []
+    assert recruiter_listing.json()["items"][0]["id"] == company_id
+    assert wrong_recruiter_listing.json()["items"] == []
     assert detail.status_code == 200
     catalog_stage = detail.json()["tracks"][0]["stages"][0]
     author = detail.json()["tracks"][0]["author"]
@@ -240,6 +254,7 @@ async def test_students_browse_company_tracks_files_and_comments(
     assert catalog_stage["attachments"][0]["filename"] == "diagram.png"
     assert catalog_stage["comments"][0]["is_own"] is True
     assert len(filtered_detail.json()["tracks"]) == 1
+    assert len(recruiter_detail.json()["tracks"]) == 1
     assert missing_ticket.status_code == 401
     assert media.json()["url"].endswith(f"/{stage_id}/media/stream")
     assert "s3.example.test" not in media.json()["url"]
@@ -480,9 +495,7 @@ async def test_catalog_filters_by_ai_review(client: AsyncClient, seeded: SeededD
     )
     reviewed_company_id = listing.json()["items"][0]["id"]
     plain_company_id = next(
-        item["id"]
-        for item in unfiltered_listing.json()["items"]
-        if item["name"] == "Borealis Labs"
+        item["id"] for item in unfiltered_listing.json()["items"] if item["name"] == "Borealis Labs"
     )
     filtered_out_detail = await client.get(
         f"/api/v1/interviews/catalog/companies/{plain_company_id}?has_ai_review=true",
@@ -668,9 +681,7 @@ async def test_catalog_view_history_lists_viewed_stages(
     )
     first_stage_id = first_stage.json()["stages"][0]["id"]
     second_stage_id = next(
-        item["id"]
-        for item in second_stage.json()["stages"]
-        if item["description"] == "Final round"
+        item["id"] for item in second_stage.json()["stages"] if item["description"] == "Final round"
     )
 
     empty_history = await client.get(
@@ -684,9 +695,7 @@ async def test_catalog_view_history_lists_viewed_stages(
         f"/api/v1/interviews/catalog/stages/{second_stage_id}/view",
         headers=auth(seeded.mentor_id),
     )
-    history = await client.get(
-        "/api/v1/interviews/catalog/history", headers=auth(seeded.mentor_id)
-    )
+    history = await client.get("/api/v1/interviews/catalog/history", headers=auth(seeded.mentor_id))
     other_student_history = await client.get(
         "/api/v1/interviews/catalog/history", headers=auth(seeded.student_id)
     )
@@ -826,21 +835,15 @@ async def test_catalog_favorite_stage(client: AsyncClient, seeded: SeededData) -
     )
 
     listed_names = {item["name"] for item in listing.json()["items"]}
-    favorite_flags = {
-        item["name"]: item["has_favorite"] for item in listing.json()["items"]
-    }
-    stages_by_id = {
-        stage["id"]: stage for stage in detail.json()["tracks"][0]["stages"]
-    }
+    favorite_flags = {item["name"]: item["has_favorite"] for item in listing.json()["items"]}
+    stages_by_id = {stage["id"]: stage for stage in detail.json()["tracks"][0]["stages"]}
 
     assert unauthorized_favorite.status_code == 404
     assert favorited.status_code == 204
     assert {"Favorite Systems", "Ignored Systems"} <= listed_names
     assert favorite_flags["Favorite Systems"] is True
     assert favorite_flags["Ignored Systems"] is False
-    assert {item["name"] for item in favorites_only_listing.json()["items"]} == {
-        "Favorite Systems"
-    }
+    assert {item["name"] for item in favorites_only_listing.json()["items"]} == {"Favorite Systems"}
     favorites_only_item = favorites_only_listing.json()["items"][0]
     assert favorites_only_item["track_count"] == 1
     assert favorites_only_item["interview_count"] == 1

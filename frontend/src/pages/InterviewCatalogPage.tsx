@@ -56,7 +56,15 @@ export function InterviewCatalogPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentFilters = interviewCatalogFiltersFromParams(searchParams);
   const [debouncedSearch] = useDebouncedValue(currentFilters.query.trim(), 250);
-  const filters = { ...currentFilters, query: debouncedSearch };
+  const [debouncedRecruiter] = useDebouncedValue(
+    currentFilters.recruiterUsername.trim(),
+    250,
+  );
+  const filters = {
+    ...currentFilters,
+    query: debouncedSearch,
+    recruiterUsername: debouncedRecruiter,
+  };
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const directions = useInterviewCatalogDirections();
   const authors = useInterviewCatalogAuthors();
@@ -69,7 +77,8 @@ export function InterviewCatalogPage() {
     currentFilters.hasOffer ||
     currentFilters.mediaKind ||
     currentFilters.hasAiReview ||
-    currentFilters.favoritesOnly,
+    currentFilters.favoritesOnly ||
+    currentFilters.recruiterUsername,
   );
 
   const updateFilter = (name: string, value: string | null) => {
@@ -142,6 +151,15 @@ export function InterviewCatalogPage() {
               value={currentFilters.authorId}
               disabled={authors.isPending || authors.isError}
               onChange={(value) => updateFilter("author_id", value)}
+            />
+            <TextInput
+              label="Рекрутер"
+              placeholder="@username рекрутера"
+              value={currentFilters.recruiterUsername}
+              maxLength={32}
+              onChange={(event) =>
+                updateFilter("recruiter", event.currentTarget.value)
+              }
             />
             <Select
               clearable

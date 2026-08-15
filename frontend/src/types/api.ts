@@ -258,6 +258,14 @@ export type InterviewCatalogHistoryItem =
 export type InterviewCatalogHistoryPage =
   Schemas["InterviewCatalogHistoryPage"];
 
+export type RecruiterFeedbackKind = Schemas["RecruiterFeedbackKind"];
+export type RecruiterFeedbackRead = Schemas["RecruiterFeedbackRead"];
+export type RecruiterContactRead = Schemas["RecruiterContactRead"];
+export type RecruiterContactPage = Schemas["RecruiterContactPage"];
+export type RecruiterContactOpenRead = Schemas["RecruiterContactOpenRead"];
+export type RecruiterFeedbackMutation = Schemas["RecruiterFeedbackMutation"];
+export type RecruiterSort = Schemas["RecruiterSort"];
+
 export interface InterviewCatalogFilters {
   query: string;
   authorId: string | null;
@@ -267,6 +275,7 @@ export interface InterviewCatalogFilters {
   mediaKind: InterviewCatalogMediaKind | null;
   hasAiReview: boolean;
   favoritesOnly: boolean;
+  recruiterUsername: string;
 }
 
 export type StudentLearningStatus =

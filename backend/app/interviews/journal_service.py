@@ -14,6 +14,7 @@ from app.interviews.models import (
     InterviewProcessStatus,
     InterviewStageComment,
 )
+from app.interviews.recruiter_service import sync_process_recruiters
 from app.interviews.schemas import (
     AdminInterviewProcessPage,
     AdminInterviewProcessSummary,
@@ -513,6 +514,8 @@ async def create_process(
         recruiter_telegram_usernames=payload.recruiter_telegram_usernames or [],
     )
     session.add(process)
+    await session.flush()
+    await sync_process_recruiters(session, process, process.recruiter_telegram_usernames)
     await session.commit()
     return await process_detail(session, user, process.id)
 
@@ -538,6 +541,7 @@ async def update_process(
     process.track_id = track.id
     if payload.recruiter_telegram_usernames is not None:
         process.recruiter_telegram_usernames = payload.recruiter_telegram_usernames
+        await sync_process_recruiters(session, process, process.recruiter_telegram_usernames)
     await session.commit()
     return await process_detail(session, user, process.id)
 
@@ -550,6 +554,7 @@ async def set_process_recruiters(
 ) -> InterviewProcessDetail:
     process = await get_process_model(session, user, process_id, lock=True)
     process.recruiter_telegram_usernames = payload.recruiter_telegram_usernames
+    await sync_process_recruiters(session, process, process.recruiter_telegram_usernames)
     await session.commit()
     return await process_detail(session, user, process.id)
 

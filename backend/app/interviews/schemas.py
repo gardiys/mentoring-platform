@@ -14,8 +14,10 @@ from app.interviews.models import (
     InterviewProcessStatus,
     InterviewReviewRating,
     InterviewStageType,
+    RecruiterFeedbackKind,
 )
 from app.roadmaps.admin_schemas import SLUG_PATTERN
+from app.users.models import UserRole
 
 
 class InterviewDeckStats(BaseModel):
@@ -351,8 +353,7 @@ class InterviewProcessMutation(BaseModel):
             self.company_id is None or not self.company_alias_confirmed
         ):
             raise ValueError(
-                "An alternative company name requires a selected company "
-                "and explicit confirmation"
+                "An alternative company name requires a selected company and explicit confirmation"
             )
         if self.company_alias_confirmed and self.company_alias is None:
             raise ValueError("No alternative company name was provided")
@@ -583,3 +584,94 @@ class InterviewCatalogHistoryPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class RecruiterContactCompanyRead(BaseModel):
+    id: UUID
+    name: str
+
+
+class RecruiterContactTrackRead(BaseModel):
+    id: UUID
+    slug: str
+    title: str
+
+
+class RecruiterSort(StrEnum):
+    RECOMMENDED = "recommended"
+    MOST_HELPFUL = "most_helpful"
+    MOST_CONTACTED = "most_contacted"
+    RECENTLY_CONTACTED = "recently_contacted"
+    USERNAME = "username"
+
+
+class RecruiterFeedbackMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    kind: RecruiterFeedbackKind
+    reason: str | None = Field(default=None, max_length=1_000)
+
+    @model_validator(mode="after")
+    def validate_reason(self) -> "RecruiterFeedbackMutation":
+        if self.kind is RecruiterFeedbackKind.OTHER and not self.reason:
+            raise ValueError("A reason is required for other recruiter feedback")
+        return self
+
+
+class RecruiterFeedbackRead(BaseModel):
+    kind: RecruiterFeedbackKind
+    reason: str | None
+    updated_at: datetime
+
+
+class RecruiterIssueCommentRead(BaseModel):
+    author_id: UUID
+    author_first_name: str
+    author_telegram_username: str | None
+    author_role: UserRole
+    kind: RecruiterFeedbackKind
+    reason: str
+    updated_at: datetime
+
+
+class RecruiterContactRead(BaseModel):
+    id: UUID
+    telegram_username: str
+    companies: list[RecruiterContactCompanyRead]
+    tracks: list[RecruiterContactTrackRead]
+    total_contact_opens: int
+    students_contacted_count: int
+    last_contacted_at: datetime | None
+    helpful_count: int
+    ignores_count: int
+    no_longer_works_count: int
+    account_missing_count: int
+    other_issue_count: int
+    issue_comments: list[RecruiterIssueCommentRead]
+    issue_comments_total: int
+    has_contacted: bool
+    my_contact_opens: int
+    my_last_contacted_at: datetime | None
+    my_feedback: RecruiterFeedbackRead | None
+
+
+class RecruiterCompanyGroupRead(BaseModel):
+    company: RecruiterContactCompanyRead
+    recruiters: list[RecruiterContactRead]
+
+
+class RecruiterContactPage(BaseModel):
+    items: list[RecruiterCompanyGroupRead]
+    total: int
+    limit: int
+    offset: int
+
+
+class RecruiterContactOpenRead(BaseModel):
+    recruiter_id: UUID
+    url: str
+    total_contact_opens: int
+    students_contacted_count: int
+    last_contacted_at: datetime
+    my_contact_opens: int
+    my_last_contacted_at: datetime

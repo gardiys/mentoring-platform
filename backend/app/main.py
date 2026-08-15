@@ -22,6 +22,7 @@ from app.interviews.intelligence_router import admin_router as admin_intelligenc
 from app.interviews.intelligence_router import mentor_router as mentor_intelligence_router
 from app.interviews.intelligence_router import router as interview_intelligence_router
 from app.interviews.journal_router import router as interview_journal_router
+from app.interviews.recruiter_router import router as interview_recruiter_router
 from app.interviews.router import router as interviews_router
 from app.interviews.upload_router import router as private_uploads_router
 from app.knowledge.admin_router import router as admin_knowledge_router
@@ -98,6 +99,7 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     application.include_router(interviews_router, prefix="/api/v1")
     application.include_router(interview_catalog_router, prefix="/api/v1")
     application.include_router(interview_journal_router, prefix="/api/v1")
+    application.include_router(interview_recruiter_router, prefix="/api/v1")
     application.include_router(private_uploads_router, prefix="/api/v1")
     application.include_router(admin_interviews_router, prefix="/api/v1")
     application.include_router(admin_interview_processes_router, prefix="/api/v1")

@@ -86,6 +86,7 @@ async def catalog_companies(
     media_kind: InterviewCatalogMediaKind | None = None,
     has_ai_review: bool = False,
     favorites_only: bool = False,
+    recruiter_username: str | None = Query(default=None, min_length=1, max_length=32),
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> InterviewCatalogCompanyPage:
@@ -100,6 +101,7 @@ async def catalog_companies(
         media_kind=media_kind,
         has_ai_review=has_ai_review,
         favorites_only=favorites_only,
+        recruiter_username=recruiter_username,
         limit=limit,
         offset=offset,
     )
@@ -117,6 +119,7 @@ async def catalog_company(
     media_kind: InterviewCatalogMediaKind | None = None,
     has_ai_review: bool = False,
     favorites_only: bool = False,
+    recruiter_username: str | None = Query(default=None, min_length=1, max_length=32),
 ) -> InterviewCatalogCompanyDetail:
     return await catalog_company_detail(
         session,
@@ -129,6 +132,7 @@ async def catalog_company(
         media_kind=media_kind,
         has_ai_review=has_ai_review,
         favorites_only=favorites_only,
+        recruiter_username=recruiter_username,
     )
 
 

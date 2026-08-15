@@ -53,6 +53,13 @@ const studentRoutes = [
     ),
   },
   {
+    path: "/interviews/recruiters",
+    lazy: lazyPage(
+      () => import("../pages/InterviewRecruitersPage"),
+      "InterviewRecruitersPage",
+    ),
+  },
+  {
     path: "/interviews/catalog/history",
     lazy: lazyPage(
       () => import("../pages/InterviewCatalogHistoryPage"),

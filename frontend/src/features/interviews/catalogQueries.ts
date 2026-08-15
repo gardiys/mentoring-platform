@@ -37,6 +37,7 @@ export function interviewCatalogFiltersFromParams(
     mediaKind: mediaKind && mediaKinds.has(mediaKind) ? mediaKind : null,
     hasAiReview: params.get("has_ai_review") === "true",
     favoritesOnly: params.get("favorites_only") === "true",
+    recruiterUsername: params.get("recruiter") ?? "",
   };
 }
 
@@ -57,6 +58,7 @@ export const interviewCatalogKeys = {
       filters.mediaKind,
       filters.hasAiReview,
       filters.favoritesOnly,
+      filters.recruiterUsername,
       page,
     ] as const,
   companyRoot: (companyId: string) =>
@@ -73,6 +75,7 @@ export const interviewCatalogKeys = {
       filters.mediaKind,
       filters.hasAiReview,
       filters.favoritesOnly,
+      filters.recruiterUsername,
     ] as const,
 };
 

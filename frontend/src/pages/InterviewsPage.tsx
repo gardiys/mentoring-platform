@@ -174,6 +174,13 @@ export function InterviewsPage() {
               </Text>
             </div>
             <Group>
+              <Button
+                component={Link}
+                to="/interviews/recruiters"
+                variant="light"
+              >
+                База рекрутеров
+              </Button>
               <Button component={Link} to="/interviews/catalog" variant="light">
                 Каталог собеседований
               </Button>
