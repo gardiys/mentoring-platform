@@ -63,6 +63,12 @@ from app.mentors.models import (
     StudentMentorshipState,
     StudentStrengthLevel,
 )
+from app.notifications.models import (
+    NotificationKind,
+    PlatformNotification,
+    TelegramOutbox,
+    TelegramOutboxStatus,
+)
 from app.payments.models import (
     MentorPayout,
     MentorPayoutAllocation,
@@ -110,6 +116,10 @@ __all__ = [
     "ScheduleEventKind",
     "StudentLearningStatus",
     "StudentStrengthLevel",
+    "NotificationKind",
+    "PlatformNotification",
+    "TelegramOutbox",
+    "TelegramOutboxStatus",
     "KnowledgeEntry",
     "KnowledgeEntryKind",
     "KnowledgeTopic",

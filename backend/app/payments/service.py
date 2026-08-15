@@ -17,6 +17,8 @@ from app.interviews.models import Company
 from app.interviews.uploads import StoredUpload
 from app.mentors.models import MentorStudent
 from app.mentors.service import assigned_student
+from app.notifications.models import NotificationKind
+from app.notifications.service import actor_name, notify_student
 from app.payments.models import (
     MentorPayout,
     MentorPayoutAllocation,
@@ -162,6 +164,7 @@ async def set_employment(
     )
     salary_kopecks = _rubles_to_kopecks(payload.net_salary_rubles)
     company = await _resolve_company(session, payload.company_id, payload.company_name)
+    created_employment = employment is None
     if employment is None:
         remaining_percent = await remaining_repayment_percent(session, student)
         if remaining_percent <= 0:
@@ -223,6 +226,21 @@ async def set_employment(
             await _recalculate_installments_after_salary_correction(session, employment)
         elif not paid_count:
             await _regenerate_unpaid_installments(session, employment)
+    if created_employment:
+        salary_rubles = f"{salary_kopecks / 100:,.0f}".replace(",", " ")
+        await notify_student(
+            session,
+            student_id=student.id,
+            actor=actor,
+            event_key=f"student-employment:{employment.id}",
+            kind=NotificationKind.OFFER,
+            title="Зафиксирован выход на работу",
+            body=(
+                f"{actor_name(actor)} добавил оффер: {company.name}, "
+                f"выход {payload.start_date:%d.%m.%Y}, {salary_rubles} ₽ на руки."
+            ),
+            action_url="/payments",
+        )
     await session.commit()
     return await payment_dashboard(session, actor, student.id)
 

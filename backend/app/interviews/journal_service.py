@@ -31,6 +31,8 @@ from app.interviews.schemas import (
     InterviewStageAttachmentRead,
 )
 from app.interviews.uploads import StoredUpload
+from app.notifications.models import NotificationKind
+from app.notifications.service import notify_interview_published, notify_student
 from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack
 from app.users.models import User
@@ -568,6 +570,7 @@ async def set_process_outcome(
             "interview_offer_requires_cancellation",
             "Cancel the offer to reopen this interview process",
         )
+    previous_status = process.status
     process.status = payload.status
     # Keep the latest rejection in the process history when it is reopened or
     # later results in an offer. A new closure replaces it with the new reason.
@@ -576,6 +579,20 @@ async def set_process_outcome(
         process.closed_at = datetime.now(UTC)
     elif payload.status is InterviewProcessStatus.OFFER:
         process.offer_received_at = process.offer_received_at or datetime.now(UTC)
+        if previous_status is not InterviewProcessStatus.OFFER:
+            await notify_student(
+                session,
+                student_id=process.user_id,
+                actor=user,
+                event_key=(
+                    f"interview-offer:{process.id}:"
+                    f"{process.offer_received_at.isoformat()}"
+                ),
+                kind=NotificationKind.OFFER,
+                title="Трек отмечен как оффер",
+                body=f"{user.first_name} отметил оффер от {process.company_name}.",
+                action_url=f"/interviews/journal/{process.id}",
+            )
     await session.commit()
     return await process_detail(session, user, process.id)
 
@@ -637,6 +654,14 @@ async def set_stage_media(
     stage.media_filename = upload.filename
     stage.media_content_type = upload.content_type
     stage.media_size = upload.size
+    process = await session.get(InterviewProcess, stage.process_id)
+    if process is not None:
+        await notify_interview_published(
+            session,
+            actor=user,
+            process=process,
+            stage=stage,
+        )
     await session.commit()
     return await process_detail(session, user, process_id), previous_key
 

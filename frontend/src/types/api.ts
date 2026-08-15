@@ -1129,3 +1129,31 @@ export interface IntelligenceInterviewDetail extends IntelligenceInterviewSummar
   overview: IntelligenceInterviewOverview | null;
   processing: IntelligenceProcessing;
 }
+
+export type NotificationKind =
+  | "interview_published"
+  | "mock_interview"
+  | "mock_feedback"
+  | "mentor_document"
+  | "offer"
+  | "status_changed"
+  | "mentor_feedback"
+  | "payment_due";
+
+export interface PlatformNotification {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  action_url: string;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationPage {
+  items: PlatformNotification[];
+  total: number;
+  unread_count: number;
+  limit: number;
+  offset: number;
+}

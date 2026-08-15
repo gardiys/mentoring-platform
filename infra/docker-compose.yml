@@ -95,6 +95,19 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mentoring}:${POSTGRES_PASSWORD:-mentoring}@postgres:5432/${POSTGRES_DB:-mentoring}
       CORS_ORIGINS: http://localhost:5173
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_PROXY_URL: ${TELEGRAM_BOT_PROXY_URL:-}
+      TELEGRAM_INTERVIEW_CHAT_ID: ${TELEGRAM_INTERVIEW_CHAT_ID:-}
+      TELEGRAM_GROUP_TOPIC_ID: ${TELEGRAM_GROUP_TOPIC_ID:-}
+      TELEGRAM_INTERVIEW_PYTHON_CHAT_ID: ${TELEGRAM_INTERVIEW_PYTHON_CHAT_ID:-}
+      TELEGRAM_INTERVIEW_PYTHON_TOPIC_ID: ${TELEGRAM_INTERVIEW_PYTHON_TOPIC_ID:-}
+      TELEGRAM_INTERVIEW_GO_CHAT_ID: ${TELEGRAM_INTERVIEW_GO_CHAT_ID:-}
+      TELEGRAM_INTERVIEW_GO_TOPIC_ID: ${TELEGRAM_INTERVIEW_GO_TOPIC_ID:-}
+      NOTIFICATION_REMINDER_TIMEZONE: ${NOTIFICATION_REMINDER_TIMEZONE:-Europe/Moscow}
+      NOTIFICATION_REMINDER_HOUR: ${NOTIFICATION_REMINDER_HOUR:-10}
+      TELEGRAM_GROUP_CALL_REMINDERS_ENABLED: ${TELEGRAM_GROUP_CALL_REMINDERS_ENABLED:-true}
+      TELEGRAM_GROUP_CALL_REMINDER_MINUTES: ${TELEGRAM_GROUP_CALL_REMINDER_MINUTES:-30}
+      TELEGRAM_DAILY_REMINDERS_ENABLED: ${TELEGRAM_DAILY_REMINDERS_ENABLED:-true}
+      TELEGRAM_DAILY_REMINDER_HOUR: ${TELEGRAM_DAILY_REMINDER_HOUR:-20}
       BOT_INTEGRATION_TOKEN: ${BOT_INTEGRATION_TOKEN:-}
       TOCHKA_CLIENT_ID: ${TOCHKA_CLIENT_ID:-}
       TOCHKA_JWT_TOKEN: ${TOCHKA_JWT_TOKEN:-}
@@ -343,6 +356,50 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+
+  notification-worker:
+    build: ../backend
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mentoring}:${POSTGRES_PASSWORD:-mentoring}@postgres:5432/${POSTGRES_DB:-mentoring}
+      REDIS_URL: redis://redis:6379/0
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_PROXY_URL: ${TELEGRAM_BOT_PROXY_URL:-}
+      TELEGRAM_INTERVIEW_CHAT_ID: ${TELEGRAM_INTERVIEW_CHAT_ID:-}
+      TELEGRAM_GROUP_TOPIC_ID: ${TELEGRAM_GROUP_TOPIC_ID:-}
+      TELEGRAM_INTERVIEW_PYTHON_CHAT_ID: ${TELEGRAM_INTERVIEW_PYTHON_CHAT_ID:-}
+      TELEGRAM_INTERVIEW_PYTHON_TOPIC_ID: ${TELEGRAM_INTERVIEW_PYTHON_TOPIC_ID:-}
+      TELEGRAM_INTERVIEW_GO_CHAT_ID: ${TELEGRAM_INTERVIEW_GO_CHAT_ID:-}
+      TELEGRAM_INTERVIEW_GO_TOPIC_ID: ${TELEGRAM_INTERVIEW_GO_TOPIC_ID:-}
+      WEB_FRONTEND_URL: http://localhost:5173
+      NOTIFICATION_REMINDER_TIMEZONE: ${NOTIFICATION_REMINDER_TIMEZONE:-Europe/Moscow}
+      NOTIFICATION_REMINDER_HOUR: ${NOTIFICATION_REMINDER_HOUR:-10}
+      TELEGRAM_GROUP_CALL_REMINDERS_ENABLED: ${TELEGRAM_GROUP_CALL_REMINDERS_ENABLED:-true}
+      TELEGRAM_GROUP_CALL_REMINDER_MINUTES: ${TELEGRAM_GROUP_CALL_REMINDER_MINUTES:-30}
+      TELEGRAM_DAILY_REMINDERS_ENABLED: ${TELEGRAM_DAILY_REMINDERS_ENABLED:-true}
+      TELEGRAM_DAILY_REMINDER_HOUR: ${TELEGRAM_DAILY_REMINDER_HOUR:-20}
+    volumes:
+      - ../backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    command: arq app.notifications.jobs.NotificationWorkerSettings
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "arq",
+          "app.notifications.jobs.NotificationWorkerSettings",
+          "--check",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # Keep the persistent dependency volume in sync with the bind-mounted
   # package files. This one-shot service also repairs volumes created by the

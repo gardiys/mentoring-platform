@@ -142,6 +142,55 @@ a {
   background: color-mix(in srgb, var(--brand-blue) 15%, transparent);
 }
 
+.notification-menu {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-body);
+}
+
+.notification-item {
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  transition: background-color 120ms ease;
+}
+
+.notification-item:hover,
+.notification-item:focus-visible {
+  background: var(--mantine-color-default-hover);
+  outline: none;
+}
+
+.notification-item.is-unread {
+  background: color-mix(in srgb, var(--mantine-primary-color-filled) 9%, transparent);
+}
+
+.notification-unread-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.notification-item.is-unread .notification-unread-dot {
+  background: var(--mantine-primary-color-filled);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--mantine-primary-color-filled) 14%, transparent);
+}
+
+.notification-item-copy {
+  min-width: 0;
+  flex: 1;
+}
+
 [data-mantine-color-scheme="dark"] .theme-toggle {
   color: var(--brand-yellow);
 }

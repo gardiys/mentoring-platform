@@ -145,11 +145,11 @@ prod-migrate: prod-preflight prod-volume-check prod-config
 	$(PROD_COMPOSE) run --rm --no-deps migrate
 
 prod-up: prod-preflight prod-volume-check prod-config
-	$(PROD_COMPOSE) build postgres migrate backend intelligence-worker intelligence-ai-worker content-media-worker frontend caddy
+	$(PROD_COMPOSE) build postgres migrate backend intelligence-worker intelligence-ai-worker content-media-worker notification-worker frontend caddy
 	$(PROD_COMPOSE) run --rm --no-deps postgres-permissions
 	$(PROD_COMPOSE) up -d --wait --wait-timeout 120 postgres redis
 	$(PROD_COMPOSE) run --rm migrate
-	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 180 backend intelligence-worker intelligence-ai-worker content-media-worker frontend
+	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 180 backend intelligence-worker intelligence-ai-worker content-media-worker notification-worker frontend
 	$(PROD_COMPOSE) run --rm --no-deps caddy-permissions
 	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 60 caddy
 	$(PROD_COMPOSE) ps

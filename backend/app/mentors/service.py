@@ -55,6 +55,8 @@ from app.mentors.schemas import (
     MockInterviewRead,
     StudentRoadmapSummary,
 )
+from app.notifications.models import NotificationKind
+from app.notifications.service import actor_name, notify_student
 from app.progress.models import ProgressStatus, TopicProgress
 from app.roadmaps.models import Roadmap, RoadmapEnrollment, RoadmapSection, Topic
 from app.roadmaps.queries import build_roadmap_detail, get_roadmap_model, list_roadmaps
@@ -920,7 +922,8 @@ async def update_student_state(
         )
         session.add(state)
         await session.flush()
-    if state.learning_status is not payload.learning_status:
+    status_changed = state.learning_status is not payload.learning_status
+    if status_changed:
         now = datetime.now(UTC)
         current_period = await session.scalar(
             select(MentorStudentStatusHistory)
@@ -957,6 +960,25 @@ async def update_student_state(
         relation.learning_status = state.learning_status
         relation.strength_level = state.strength_level
         relation.status_updated_at = state.status_updated_at
+    if status_changed:
+        status_labels = {
+            StudentLearningStatus.LEARNING: "учится",
+            StudentLearningStatus.INTERVIEWING: "ходит на собеседования",
+            StudentLearningStatus.PROBATION: "работает на испытательном сроке",
+            StudentLearningStatus.FINISHED: "закончил обучение",
+        }
+        await notify_student(
+            session,
+            student_id=student_id,
+            actor=mentor,
+            event_key=f"student-status:{student_id}:{state.status_updated_at.isoformat()}",
+            kind=NotificationKind.STATUS_CHANGED,
+            title="Изменён статус обучения",
+            body=(
+                f"{actor_name(mentor)} перевёл вас в статус "
+                f"«{status_labels[payload.learning_status]}»."
+            ),
+        )
     await session.commit()
     return await student_detail(session, mentor, student_id)
 
@@ -1077,6 +1099,18 @@ async def set_document_text(
             document.size = None
         if not document.text_content and not document.storage_key:
             api_error(422, "mentor_document_empty", "Add document text or upload a file")
+    await session.flush()
+    document_event_at = datetime.now(UTC)
+    document_label = "резюме" if kind is MentorDocumentKind.RESUME else "легенду"
+    await notify_student(
+        session,
+        student_id=student_id,
+        actor=mentor,
+        event_key=f"mentor-document:{document.id}:{document_event_at.isoformat()}",
+        kind=NotificationKind.MENTOR_DOCUMENT,
+        title="Обновлены материалы от ментора",
+        body=f"{actor_name(mentor)} добавил или обновил {document_label}.",
+    )
     await session.commit()
     await session.refresh(document)
     return _document_read(document), previous_key
@@ -1104,6 +1138,19 @@ async def set_document_file(
     document.content_type = upload.content_type
     document.size = upload.size
     try:
+        await session.flush()
+        await notify_student(
+            session,
+            student_id=student_id,
+            actor=mentor,
+            event_key=f"mentor-document-file:{document.id}:{datetime.now(UTC).isoformat()}",
+            kind=NotificationKind.MENTOR_DOCUMENT,
+            title="Обновлены материалы от ментора",
+            body=(
+                f"{actor_name(mentor)} загрузил файл: "
+                f"{'резюме' if kind is MentorDocumentKind.RESUME else 'легенда'}."
+            ),
+        )
         await session.commit()
     except IntegrityError:
         await session.rollback()
@@ -1133,6 +1180,19 @@ async def create_mock(
         description=payload.description,
     )
     session.add(mock)
+    await session.flush()
+    await notify_student(
+        session,
+        student_id=student_id,
+        actor=mentor,
+        event_key=f"mock-interview-created:{mock.id}",
+        kind=NotificationKind.MOCK_INTERVIEW,
+        title="Назначено мок-собеседование",
+        body=(
+            f"{actor_name(mentor)} назначил мок-собеседование на "
+            f"{mock.scheduled_at:%d.%m.%Y %H:%M}."
+        ),
+    )
     await session.commit()
     await session.refresh(mock)
     return _mock_read(mock, mentor)
@@ -1177,6 +1237,15 @@ async def complete_mock(
     mock.feedback = payload.feedback
     mock.conducted_at = payload.conducted_at or datetime.now(UTC)
     mock.status = MockInterviewStatus.COMPLETED
+    await notify_student(
+        session,
+        student_id=student_id,
+        actor=mentor,
+        event_key=f"mock-interview-feedback:{mock.id}",
+        kind=NotificationKind.MOCK_FEEDBACK,
+        title="Готов фидбек по мок-собеседованию",
+        body=f"{actor_name(mentor)} добавил обратную связь по мок-собеседованию.",
+    )
     await session.commit()
     await session.refresh(mock)
     return _mock_read(mock, mock_mentor)
@@ -1286,6 +1355,17 @@ async def add_interview_feedback(
         api_error(404, "interview_stage_not_found", "Interview stage was not found")
     comment = InterviewStageComment(stage_id=stage_id, user_id=mentor.id, body=body)
     session.add(comment)
+    await session.flush()
+    await notify_student(
+        session,
+        student_id=student_id,
+        actor=mentor,
+        event_key=f"mentor-interview-feedback:{comment.id}",
+        kind=NotificationKind.MENTOR_FEEDBACK,
+        title="Новый фидбек по собеседованию",
+        body=f"{actor_name(mentor)} оставил обратную связь по этапу собеседования.",
+        action_url=f"/interviews/journal/{process.id}",
+    )
     await session.commit()
     await session.refresh(comment)
     return InterviewCatalogCommentRead(

@@ -102,6 +102,18 @@ def _weekly_occurrences(
     return regular, effective, False
 
 
+def next_schedule_occurrence(
+    event: ScheduleEvent, *, now: datetime | None = None
+) -> datetime | None:
+    """Return the next effective occurrence, including a one-off reschedule."""
+    current = now or datetime.now(UTC)
+    if event.kind is ScheduleEventKind.MEETING:
+        if event.starts_at is None or event.starts_at <= current:
+            return None
+        return event.starts_at
+    return _weekly_occurrences(event, now=current)[1]
+
+
 def _reschedule_base_occurrence(event: ScheduleEvent, *, now: datetime) -> datetime | None:
     _, effective, pending = _weekly_occurrences(event, now=now)
     if pending:

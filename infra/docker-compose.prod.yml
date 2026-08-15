@@ -20,6 +20,19 @@ x-backend-environment: &backend-environment
   TELEGRAM_WEB_CLIENT_SECRET: ${TELEGRAM_WEB_CLIENT_SECRET:?Set TELEGRAM_WEB_CLIENT_SECRET in .env.production}
   TELEGRAM_WEB_REDIRECT_URI: https://${DOMAIN:?Set DOMAIN in .env.production}/api/v1/auth/web/telegram/callback
   TELEGRAM_OIDC_PROXY_URL: ${TELEGRAM_OIDC_PROXY_URL:-}
+  TELEGRAM_BOT_PROXY_URL: ${TELEGRAM_BOT_PROXY_URL:-}
+  TELEGRAM_INTERVIEW_CHAT_ID: ${TELEGRAM_INTERVIEW_CHAT_ID:-}
+  TELEGRAM_GROUP_TOPIC_ID: ${TELEGRAM_GROUP_TOPIC_ID:-}
+  TELEGRAM_INTERVIEW_PYTHON_CHAT_ID: ${TELEGRAM_INTERVIEW_PYTHON_CHAT_ID:-}
+  TELEGRAM_INTERVIEW_PYTHON_TOPIC_ID: ${TELEGRAM_INTERVIEW_PYTHON_TOPIC_ID:-}
+  TELEGRAM_INTERVIEW_GO_CHAT_ID: ${TELEGRAM_INTERVIEW_GO_CHAT_ID:-}
+  TELEGRAM_INTERVIEW_GO_TOPIC_ID: ${TELEGRAM_INTERVIEW_GO_TOPIC_ID:-}
+  NOTIFICATION_REMINDER_TIMEZONE: ${NOTIFICATION_REMINDER_TIMEZONE:-Europe/Moscow}
+  NOTIFICATION_REMINDER_HOUR: ${NOTIFICATION_REMINDER_HOUR:-10}
+  TELEGRAM_GROUP_CALL_REMINDERS_ENABLED: ${TELEGRAM_GROUP_CALL_REMINDERS_ENABLED:-true}
+  TELEGRAM_GROUP_CALL_REMINDER_MINUTES: ${TELEGRAM_GROUP_CALL_REMINDER_MINUTES:-30}
+  TELEGRAM_DAILY_REMINDERS_ENABLED: ${TELEGRAM_DAILY_REMINDERS_ENABLED:-true}
+  TELEGRAM_DAILY_REMINDER_HOUR: ${TELEGRAM_DAILY_REMINDER_HOUR:-20}
   WEB_FRONTEND_URL: https://${DOMAIN:?Set DOMAIN in .env.production}
   WEB_SESSION_SECRET: ${WEB_SESSION_SECRET:?Set WEB_SESSION_SECRET in .env.production}
   WEB_SESSION_TTL_SECONDS: ${WEB_SESSION_TTL_SECONDS:-2592000}
@@ -439,6 +452,60 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+    logging: *default-logging
+
+  notification-worker:
+    build:
+      context: ../backend
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    environment:
+      <<: *common-environment
+      CORS_ORIGINS: https://${DOMAIN:?Set DOMAIN in .env.production}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env.production}
+      TELEGRAM_BOT_PROXY_URL: ${TELEGRAM_BOT_PROXY_URL:-}
+      TELEGRAM_INTERVIEW_CHAT_ID: ${TELEGRAM_INTERVIEW_CHAT_ID:-}
+      TELEGRAM_GROUP_TOPIC_ID: ${TELEGRAM_GROUP_TOPIC_ID:-}
+      TELEGRAM_INTERVIEW_PYTHON_CHAT_ID: ${TELEGRAM_INTERVIEW_PYTHON_CHAT_ID:-}
+      TELEGRAM_INTERVIEW_PYTHON_TOPIC_ID: ${TELEGRAM_INTERVIEW_PYTHON_TOPIC_ID:-}
+      TELEGRAM_INTERVIEW_GO_CHAT_ID: ${TELEGRAM_INTERVIEW_GO_CHAT_ID:-}
+      TELEGRAM_INTERVIEW_GO_TOPIC_ID: ${TELEGRAM_INTERVIEW_GO_TOPIC_ID:-}
+      WEB_FRONTEND_URL: https://${DOMAIN:?Set DOMAIN in .env.production}
+      NOTIFICATION_REMINDER_TIMEZONE: ${NOTIFICATION_REMINDER_TIMEZONE:-Europe/Moscow}
+      NOTIFICATION_REMINDER_HOUR: ${NOTIFICATION_REMINDER_HOUR:-10}
+      TELEGRAM_GROUP_CALL_REMINDERS_ENABLED: ${TELEGRAM_GROUP_CALL_REMINDERS_ENABLED:-true}
+      TELEGRAM_GROUP_CALL_REMINDER_MINUTES: ${TELEGRAM_GROUP_CALL_REMINDER_MINUTES:-30}
+      TELEGRAM_DAILY_REMINDERS_ENABLED: ${TELEGRAM_DAILY_REMINDERS_ENABLED:-true}
+      TELEGRAM_DAILY_REMINDER_HOUR: ${TELEGRAM_DAILY_REMINDER_HOUR:-20}
+    networks: [data, egress]
+    command: arq app.notifications.jobs.NotificationWorkerSettings
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "arq",
+          "app.notifications.jobs.NotificationWorkerSettings",
+          "--check",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     logging: *default-logging
 
   frontend:

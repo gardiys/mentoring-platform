@@ -35,6 +35,19 @@ class Settings(BaseSettings):
     allowed_hosts: Annotated[list[str], NoDecode] = []
     log_level: str = "INFO"
     telegram_bot_token: SecretStr | None = None
+    telegram_bot_proxy_url: SecretStr | None = None
+    telegram_interview_chat_id: str | None = None
+    telegram_group_topic_id: int | None = Field(default=None, gt=0)
+    telegram_interview_python_chat_id: str | None = None
+    telegram_interview_python_topic_id: int | None = Field(default=None, gt=0)
+    telegram_interview_go_chat_id: str | None = None
+    telegram_interview_go_topic_id: int | None = Field(default=None, gt=0)
+    notification_reminder_timezone: str = "Europe/Moscow"
+    notification_reminder_hour: int = Field(default=10, ge=0, le=23)
+    telegram_group_call_reminders_enabled: bool = True
+    telegram_group_call_reminder_minutes: int = Field(default=30, ge=5, le=1_440)
+    telegram_daily_reminders_enabled: bool = True
+    telegram_daily_reminder_hour: int = Field(default=20, ge=0, le=23)
     bot_integration_token: SecretStr | None = None
     telegram_init_data_ttl_seconds: int = Field(default=86_400, gt=0, le=604_800)
     telegram_web_client_id: str | None = None
@@ -314,6 +327,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "telegram_bot_token",
+        "telegram_bot_proxy_url",
         "bot_integration_token",
         "telegram_web_client_secret",
         "telegram_oidc_proxy_url",
@@ -333,6 +347,16 @@ class Settings(BaseSettings):
     @field_validator("s3_endpoint_url", "s3_public_endpoint_url", mode="before")
     @classmethod
     def empty_s3_endpoint_is_none(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @field_validator(
+        "telegram_group_topic_id",
+        "telegram_interview_python_topic_id",
+        "telegram_interview_go_topic_id",
+        mode="before",
+    )
+    @classmethod
+    def empty_telegram_topic_is_none(cls, value: object) -> object:
         return None if value == "" else value
 
     @field_validator("bot_integration_token")
@@ -356,6 +380,17 @@ class Settings(BaseSettings):
             ZoneInfo(value)
         except ZoneInfoNotFoundError as error:
             raise ValueError("INTERVIEW_AI_QUOTA_TIMEZONE must be a valid IANA timezone") from error
+        return value
+
+    @field_validator("notification_reminder_timezone")
+    @classmethod
+    def validate_notification_reminder_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as error:
+            raise ValueError(
+                "NOTIFICATION_REMINDER_TIMEZONE must be a valid IANA timezone"
+            ) from error
         return value
 
     @field_validator("interview_legacy_transcode_directory")
@@ -487,6 +522,7 @@ class Settings(BaseSettings):
     def _validate_production_placeholders(self) -> None:
         secret_values = {
             "TELEGRAM_BOT_TOKEN": self.telegram_bot_token,
+            "TELEGRAM_BOT_PROXY_URL": self.telegram_bot_proxy_url,
             "BOT_INTEGRATION_TOKEN": self.bot_integration_token,
             "TELEGRAM_WEB_CLIENT_SECRET": self.telegram_web_client_secret,
             "TELEGRAM_OIDC_PROXY_URL": self.telegram_oidc_proxy_url,

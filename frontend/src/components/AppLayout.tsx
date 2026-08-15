@@ -27,6 +27,7 @@ import { clearDevUserId } from "../features/auth/devAuth";
 import { useLogout, useMe } from "../features/auth/queries";
 import { usePlatform } from "../platform/usePlatform";
 import { BrandLogo } from "./BrandLogo";
+import { NotificationBell } from "./NotificationBell";
 
 const roleLabels = {
   student: "Ученик",
@@ -126,6 +127,7 @@ export function AppLayout() {
                 </Text>
               </Stack>
             )}
+            {me.data && <NotificationBell />}
             <ActionIcon
               variant="light"
               size="lg"

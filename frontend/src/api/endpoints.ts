@@ -115,6 +115,7 @@ import type {
   RoadmapListItem,
   TopicDetail,
   User,
+  NotificationPage,
 } from "../types/api";
 import {
   ApiError,
@@ -226,6 +227,16 @@ function finalizeRetryDelay(milliseconds: number, signal?: AbortSignal) {
 }
 
 export const api = {
+  notifications: (limit = 20, offset = 0) =>
+    apiRequest<NotificationPage>(
+      `/api/v1/notifications?limit=${limit}&offset=${offset}`,
+    ),
+  markNotificationRead: (notificationId: string) =>
+    apiRequest<void>(`/api/v1/notifications/${notificationId}/read`, {
+      method: "PUT",
+    }),
+  markAllNotificationsRead: () =>
+    apiRequest<void>("/api/v1/notifications/read-all", { method: "PUT" }),
   me: () => apiRequest<User>("/api/v1/me"),
   updateMyEmail: (email: string) =>
     apiRequest<User>("/api/v1/me/email", {

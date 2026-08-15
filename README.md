@@ -10,7 +10,7 @@
 - `frontend/`: React, TypeScript strict, Vite, React Router, TanStack Query, Mantine, react-markdown;
 - `infra/`: development Compose и production-контур с PostgreSQL, автоматическими миграциями, Nginx и Caddy/HTTPS.
 
-Backend разделён по предметным модулям `auth`, `users`, `students`, `tracks`, `roadmaps`, `progress`, `mentors`, `knowledge`, `interviews`, `payments`. `LearningTrackEnrollment` определяет доступ к материалам и колодам направления, а `RoadmapEnrollment` хранит состояние прохождения. Условия выплат ученика фиксируются отдельно от снимка условий трудоустройства, поэтому уже созданный график воспроизводим. Frontend хранит серверное состояние только в TanStack Query. В Telegram исходный `initData` берётся непосредственно из SDK и не копируется в отдельное хранилище. Временный UUID хранится в `localStorage` только в development-сборке.
+Backend разделён по предметным модулям `auth`, `users`, `students`, `tracks`, `roadmaps`, `progress`, `mentors`, `knowledge`, `interviews`, `payments`, `notifications`. `LearningTrackEnrollment` определяет доступ к материалам и колодам направления, а `RoadmapEnrollment` хранит состояние прохождения. Условия выплат ученика фиксируются отдельно от снимка условий трудоустройства, поэтому уже созданный график воспроизводим. Frontend хранит серверное состояние только в TanStack Query. В Telegram исходный `initData` берётся непосредственно из SDK и не копируется в отдельное хранилище. Временный UUID хранится в `localStorage` только в development-сборке.
 
 Topic slug сделан глобально уникальным. Это намеренно более строгое ограничение, чем требуемая уникальность внутри roadmap, и позволяет не дублировать `roadmap_id` в `topics`.
 
@@ -65,7 +65,7 @@ curl https://platform.example.com/ready
 оставшихся `REPLACE_*`, development-провайдерах, слабых или совпадающих секретах и небезопасных
 production URL. `make prod-up` выполняет deployment последовательно: сначала собирает образы, затем поднимает
 PostgreSQL и Redis, запускает Alembic отдельным одноразовым контейнером и только после успешной
-миграции принудительно пересоздаёт backend, оба AI worker, frontend и Caddy. Поэтому одного запуска
+миграции принудительно пересоздаёт backend, оба AI worker, worker уведомлений, frontend и Caddy. Поэтому одного запуска
 достаточно и новые переменные окружения гарантированно попадают в контейнеры. Frontend собирается
 в production-режиме; HTML и SPA-маршруты отдаются с `Cache-Control: no-store`, а хешированные
 assets продолжают кэшироваться как immutable. `make seed` в production выполнять не нужно:
@@ -234,6 +234,46 @@ make migrate
 Mini App передаёт `Telegram.WebApp.initData` как `Authorization: tma <initData>`. Backend сверяет HMAC-SHA-256 с bot token и проверяет `auth_date`. Непроверенный `initDataUnsafe` не используется. Войти может только Telegram-пользователь, которому бот заранее выдал доступ после оплаты.
 
 Обычный браузер не загружает SDK с `telegram.org`: это исключает долгую блокировку страницы в сетях, где Telegram недоступен. При запуске внутри Mini App frontend распознаёт параметры `tgWebApp*` и асинхронно подключает закреплённую копию SDK со своего домена (`/vendor/telegram-web-app-2026-07-14.js`). Ожидание ограничено тремя секундами, а подписанный `tgWebAppData` остаётся доступен для авторизации даже при ошибке загрузки SDK. Происхождение и контрольная сумма локальной копии описаны в `frontend/public/vendor/README.md`.
+
+## Уведомления и Telegram
+
+Колокольчик показывает персональные события платформы. Telegram-сообщения сохраняются в outbox
+в той же транзакции, что и событие, а `notification-worker` отправляет их отдельно с повторными
+попытками и защитой от дублей. Для production добавьте:
+
+```dotenv
+# ID супергруппы/чата «Паровоз собеседований»; оставьте пустым, чтобы не публиковать в чат.
+TELEGRAM_INTERVIEW_CHAT_ID=-1001234567890
+# ID конкретного forum topic; оставьте пустым для общего чата.
+TELEGRAM_GROUP_TOPIC_ID=123
+# Маршрутизация по направлениям. Эти значения имеют приоритет над общими выше.
+TELEGRAM_INTERVIEW_PYTHON_CHAT_ID=-1001111111111
+TELEGRAM_INTERVIEW_PYTHON_TOPIC_ID=
+TELEGRAM_INTERVIEW_GO_CHAT_ID=-1002222222222
+TELEGRAM_INTERVIEW_GO_TOPIC_ID=
+# Оставьте пустым при прямом доступе. Допустимо использовать тот же HTTP(S)-proxy, что для OAuth.
+TELEGRAM_BOT_PROXY_URL=
+NOTIFICATION_REMINDER_TIMEZONE=Europe/Moscow
+NOTIFICATION_REMINDER_HOUR=10
+# Напоминать ученику о ближайшем групповом/разовом созвоне за 30 минут.
+TELEGRAM_GROUP_CALL_REMINDERS_ENABLED=true
+TELEGRAM_GROUP_CALL_REMINDER_MINUTES=30
+# Ежедневно напоминать активным ученикам о дейлике в 20:00.
+TELEGRAM_DAILY_REMINDERS_ENABLED=true
+TELEGRAM_DAILY_REMINDER_HOUR=20
+```
+
+Бот должен быть добавлен в чат и иметь право отправлять сообщения. Для личных напоминаний о
+платежах, созвонах и дейлике ученик должен хотя бы один раз открыть бота: Telegram не позволяет
+боту первым начать личный диалог. Напоминания о созвонах учитывают направление, назначенного
+ментора и разовый перенос времени. Ученикам со статусом «закончили обучение», исключённым и с
+закрытым доступом дейлики не отправляются. Ссылки из сообщений ведут на авторизованные страницы
+платформы или на HTTPS-встречу; private S3 URL в Telegram не публикуются.
+
+В локальной разработке `http://localhost:5173` нельзя использовать в Telegram inline-кнопке:
+этот адрес существует только на компьютере разработчика. Поэтому worker отправит локальное
+smoke-сообщение без кнопки. Для проверки перехода укажите публичный HTTPS URL туннеля в
+`WEB_FRONTEND_URL`; на production кнопка ведёт на `https://${DOMAIN}` автоматически.
 
 ## Вход через обычный браузер
 
