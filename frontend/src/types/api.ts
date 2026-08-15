@@ -294,6 +294,16 @@ export interface ScheduleTrackRead {
   title: string;
 }
 
+export interface MentorTrackCalendarMutation {
+  track_id: string;
+  calendar_url: string;
+}
+
+export interface MentorTrackCalendarRead {
+  track: ScheduleTrackRead;
+  calendar_url: string;
+}
+
 export interface ScheduleEventRead {
   id: string;
   track: ScheduleTrackRead;
@@ -320,7 +330,7 @@ export interface ScheduleEventRead {
 export interface MentorProfileRead {
   mentor_id: string;
   consultation_url: string | null;
-  group_calendar_url: string | null;
+  group_calendars: MentorTrackCalendarRead[];
   tracks: ScheduleTrackRead[];
   weekly_calls: ScheduleEventRead[];
   one_off_activities: ScheduleEventRead[];
@@ -374,7 +384,7 @@ export interface MyMentorPublicRead {
   last_name: string | null;
   telegram_username: string | null;
   consultation_url: string | null;
-  group_calendar_url: string | null;
+  group_calendars: MentorTrackCalendarRead[];
 }
 
 export interface PinnedResourceLinkMutation {

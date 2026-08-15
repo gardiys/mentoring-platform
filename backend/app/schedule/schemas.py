@@ -48,11 +48,23 @@ class ScheduleEventSource(StrEnum):
     PLATFORM = "platform"
 
 
+class MentorTrackCalendarMutation(BaseModel):
+    track_id: UUID
+    calendar_url: StudentFacingHttpsUrl = Field(max_length=2_048)
+
+
 class MentorProfileMutation(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     consultation_url: StudentFacingHttpsUrl | None = Field(default=None, max_length=2_048)
-    group_calendar_url: StudentFacingHttpsUrl | None = Field(default=None, max_length=2_048)
+    group_calendars: list[MentorTrackCalendarMutation] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def calendars_have_unique_tracks(self) -> "MentorProfileMutation":
+        track_ids = [calendar.track_id for calendar in self.group_calendars]
+        if len(track_ids) != len(set(track_ids)):
+            raise ValueError("A learning track can have only one group calendar")
+        return self
 
 
 class MentorWeeklyCallMutation(BaseModel):
@@ -113,6 +125,11 @@ class ScheduleTrackRead(BaseModel):
     title: str
 
 
+class MentorTrackCalendarRead(BaseModel):
+    track: ScheduleTrackRead
+    calendar_url: str
+
+
 class ScheduleEventRead(BaseModel):
     id: UUID
     track: ScheduleTrackRead
@@ -139,7 +156,7 @@ class ScheduleEventRead(BaseModel):
 class MentorProfileRead(BaseModel):
     mentor_id: UUID
     consultation_url: str | None
-    group_calendar_url: str | None
+    group_calendars: list[MentorTrackCalendarRead]
     tracks: list[ScheduleTrackRead]
     weekly_calls: list[ScheduleEventRead]
     one_off_activities: list[ScheduleEventRead]
@@ -196,7 +213,7 @@ class MyMentorPublicRead(BaseModel):
     last_name: str | None
     telegram_username: str | None
     consultation_url: str | None
-    group_calendar_url: str | None
+    group_calendars: list[MentorTrackCalendarRead]
 
 
 class PinnedResourceLinkMutation(BaseModel):

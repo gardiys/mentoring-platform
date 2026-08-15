@@ -88,7 +88,7 @@ function scheduleForm(event: ScheduleEventRead): ScheduleFormState {
 function validHttpUrl(value: string) {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    return url.protocol === "https:";
   } catch {
     return false;
   }
@@ -119,8 +119,15 @@ function MentorProfileContent({ profile }: { profile: MentorProfileRead }) {
   const [consultationUrl, setConsultationUrl] = useState(
     profile.consultation_url ?? "",
   );
-  const [groupCalendarUrl, setGroupCalendarUrl] = useState(
-    profile.group_calendar_url ?? "",
+  const [groupCalendarUrls, setGroupCalendarUrls] = useState<
+    Record<string, string>
+  >(() =>
+    Object.fromEntries(
+      profile.group_calendars.map((calendar) => [
+        calendar.track.id,
+        calendar.calendar_url,
+      ]),
+    ),
   );
   const [eventModalOpened, setEventModalOpened] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -178,17 +185,22 @@ function MentorProfileContent({ profile }: { profile: MentorProfileRead }) {
   const saveConsultation = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const consultation = consultationUrl.trim();
-    const calendar = groupCalendarUrl.trim();
+    const calendars = profile.tracks.flatMap((track) => {
+      const calendarUrl = (groupCalendarUrls[track.id] ?? "").trim();
+      return calendarUrl
+        ? [{ track_id: track.id, calendar_url: calendarUrl }]
+        : [];
+    });
     if (
       (consultation && !validHttpUrl(consultation)) ||
-      (calendar && !validHttpUrl(calendar))
+      calendars.some((calendar) => !validHttpUrl(calendar.calendar_url))
     ) {
       return;
     }
     updateProfile.mutate(
       {
         consultation_url: consultation || null,
-        group_calendar_url: calendar || null,
+        group_calendars: calendars,
       },
       {
         onSuccess: () =>
@@ -321,7 +333,7 @@ function MentorProfileContent({ profile }: { profile: MentorProfileRead }) {
       <PageHeader
         eyebrow="Ментор · Публичный профиль"
         title="Профиль ментора"
-        description="Добавьте запись на консультацию, регулярные созвоны и разовые встречи — ученики увидят их во вкладке «Мой ментор»."
+        description="Добавьте запись на консультацию, отдельные календари и расписание для каждого направления — ученики увидят только свои направления во вкладке «Мой ментор»."
       />
 
       <Card withBorder component="form" onSubmit={saveConsultation}>
@@ -338,24 +350,43 @@ function MentorProfileContent({ profile }: { profile: MentorProfileRead }) {
             value={consultationUrl}
             error={
               consultationUrl && !validHttpUrl(consultationUrl)
-                ? "Укажите полную ссылку с http:// или https://"
+                ? "Укажите полную ссылку с https://"
                 : undefined
             }
             onChange={(event) => setConsultationUrl(event.currentTarget.value)}
           />
-          <TextInput
-            label="Календарь общих созвонов группы"
-            description="Ссылка на Google Calendar, Яндекс Календарь или другой общий календарь"
-            type="url"
-            placeholder="https://calendar.google.com/..."
-            value={groupCalendarUrl}
-            error={
-              groupCalendarUrl && !validHttpUrl(groupCalendarUrl)
-                ? "Укажите полную ссылку с http:// или https://"
-                : undefined
-            }
-            onChange={(event) => setGroupCalendarUrl(event.currentTarget.value)}
-          />
+          {profile.tracks.length === 0 ? (
+            <Alert color="blue">
+              После назначения направления здесь появится отдельное поле для его
+              календаря.
+            </Alert>
+          ) : (
+            profile.tracks.map((track) => {
+              const calendarUrl = groupCalendarUrls[track.id] ?? "";
+              return (
+                <TextInput
+                  key={track.id}
+                  label={`Календарь общих созвонов · ${track.title}`}
+                  description={`Ссылка на календарь группы направления ${track.title}`}
+                  type="url"
+                  placeholder="https://calendar.google.com/..."
+                  value={calendarUrl}
+                  error={
+                    calendarUrl && !validHttpUrl(calendarUrl)
+                      ? "Укажите полную ссылку с https://"
+                      : undefined
+                  }
+                  onChange={(event) => {
+                    const nextCalendarUrl = event.currentTarget.value;
+                    setGroupCalendarUrls((current) => ({
+                      ...current,
+                      [track.id]: nextCalendarUrl,
+                    }));
+                  }}
+                />
+              );
+            })
+          )}
           <Group justify="flex-end">
             <Button type="submit" loading={updateProfile.isPending}>
               Сохранить ссылки
@@ -627,7 +658,7 @@ function MentorProfileContent({ profile }: { profile: MentorProfileRead }) {
                 ((form.kind === "weekly_call" && eventSubmitted) ||
                   form.meetingUrl) &&
                 !validHttpUrl(form.meetingUrl)
-                  ? "Укажите полную ссылку с http:// или https://"
+                  ? "Укажите полную ссылку с https://"
                   : undefined
               }
               onChange={(event) =>

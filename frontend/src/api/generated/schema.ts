@@ -444,7 +444,8 @@ export interface paths {
         /** Journal Update Track */
         put: operations["journal_update_track_api_v1_interviews_journal_tracks__process_id__put"];
         post?: never;
-        delete?: never;
+        /** Journal Delete Track */
+        delete: operations["journal_delete_track_api_v1_interviews_journal_tracks__process_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6368,6 +6369,11 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /**
+         * InterviewProcessDeleteLockReason
+         * @enum {string}
+         */
+        InterviewProcessDeleteLockReason: "window_expired" | "ai_analysis_requested";
         /** InterviewProcessDetail */
         InterviewProcessDetail: {
             /**
@@ -6519,11 +6525,6 @@ export interface components {
          * @enum {string}
          */
         InterviewProcessStatus: "active" | "closed" | "offer";
-        /**
-         * InterviewProcessDeleteLockReason
-         * @enum {string}
-         */
-        InterviewProcessDeleteLockReason: "window_expired" | "ai_analysis_requested";
         /** InterviewProcessSummary */
         InterviewProcessSummary: {
             /**
@@ -7188,8 +7189,8 @@ export interface components {
         MentorProfileMutation: {
             /** Consultation Url */
             consultation_url?: string | null;
-            /** Group Calendar Url */
-            group_calendar_url?: string | null;
+            /** Group Calendars */
+            group_calendars?: components["schemas"]["MentorTrackCalendarMutation"][];
         };
         /** MentorProfileRead */
         MentorProfileRead: {
@@ -7200,8 +7201,8 @@ export interface components {
             mentor_id: string;
             /** Consultation Url */
             consultation_url: string | null;
-            /** Group Calendar Url */
-            group_calendar_url: string | null;
+            /** Group Calendars */
+            group_calendars: components["schemas"]["MentorTrackCalendarRead"][];
             /** Tracks */
             tracks: components["schemas"]["ScheduleTrackRead"][];
             /** Weekly Calls */
@@ -7453,6 +7454,25 @@ export interface components {
             /** Days */
             days: number;
         };
+        /** MentorTrackCalendarMutation */
+        MentorTrackCalendarMutation: {
+            /**
+             * Track Id
+             * Format: uuid
+             */
+            track_id: string;
+            /**
+             * Calendar Url
+             * Format: uri
+             */
+            calendar_url: string;
+        };
+        /** MentorTrackCalendarRead */
+        MentorTrackCalendarRead: {
+            track: components["schemas"]["ScheduleTrackRead"];
+            /** Calendar Url */
+            calendar_url: string;
+        };
         /** MentorWeeklyCallMutation */
         MentorWeeklyCallMutation: {
             /**
@@ -7573,8 +7593,8 @@ export interface components {
             telegram_username: string | null;
             /** Consultation Url */
             consultation_url: string | null;
-            /** Group Calendar Url */
-            group_calendar_url: string | null;
+            /** Group Calendars */
+            group_calendars: components["schemas"]["MentorTrackCalendarRead"][];
         };
         /**
          * NotificationKind
@@ -9442,6 +9462,40 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InterviewProcessDetail"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_delete_track_api_v1_interviews_journal_tracks__process_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

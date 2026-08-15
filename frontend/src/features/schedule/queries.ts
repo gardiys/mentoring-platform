@@ -47,7 +47,7 @@ export function useUpdateMentorProfile() {
   return useMutation({
     mutationFn: (payload: {
       consultation_url: string | null;
-      group_calendar_url: string | null;
+      group_calendars: Array<{ track_id: string; calendar_url: string }>;
     }) => api.updateMentorProfile(payload),
     onSuccess: async () => {
       await Promise.all([

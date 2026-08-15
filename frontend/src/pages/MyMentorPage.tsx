@@ -79,17 +79,18 @@ export function MyMentorPage() {
                     Написать в Telegram
                   </Button>
                 )}
-                {mentor.group_calendar_url && (
+                {mentor.group_calendars.map((calendar) => (
                   <Button
+                    key={calendar.track.id}
                     component="a"
-                    href={mentor.group_calendar_url}
+                    href={calendar.calendar_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     variant="light"
                   >
-                    Календарь группы
+                    Календарь {calendar.track.title}
                   </Button>
-                )}
+                ))}
                 {mentor.consultation_url && (
                   <Button
                     component="a"

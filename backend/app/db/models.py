@@ -94,6 +94,7 @@ from app.progress.models import ProgressStatus, TopicProgress
 from app.roadmaps.models import Roadmap, RoadmapEnrollment, RoadmapSection, Topic
 from app.schedule.models import (
     MentorProfile,
+    MentorTrackCalendar,
     PinnedResourceLink,
     ScheduleEvent,
     ScheduleEventKind,
@@ -116,6 +117,7 @@ __all__ = [
     "MockInterview",
     "MockInterviewStatus",
     "MentorProfile",
+    "MentorTrackCalendar",
     "PinnedResourceLink",
     "ScheduleEvent",
     "ScheduleEventKind",

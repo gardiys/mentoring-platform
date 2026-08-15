@@ -17,6 +17,12 @@ const pythonTrack: ScheduleTrackRead = {
   title: "Python",
 };
 
+const goTrack: ScheduleTrackRead = {
+  id: "40000000-0000-4000-8000-000000000002",
+  slug: "go",
+  title: "Go",
+};
+
 function scheduleEvent(
   overrides: Partial<ScheduleEventRead> = {},
 ): ScheduleEventRead {
@@ -74,7 +80,16 @@ it("показывает контакты ментора, консультаци
       last_name: "Менторов",
       telegram_username: "codewaste_mentor",
       consultation_url: "https://calendar.example.com/anton",
-      group_calendar_url: "https://calendar.example.com/anton/group",
+      group_calendars: [
+        {
+          track: pythonTrack,
+          calendar_url: "https://calendar.example.com/anton/python",
+        },
+        {
+          track: goTrack,
+          calendar_url: "https://calendar.example.com/anton/go",
+        },
+      ],
     },
     schedule: [mentorCall, scheduleEvent()],
     useful_links: [
@@ -112,8 +127,12 @@ it("показывает контакты ментора, консультаци
     screen.getByRole("link", { name: "Записаться на консультацию" }),
   ).toHaveAttribute("href", "https://calendar.example.com/anton");
   expect(
-    screen.getByRole("link", { name: "Календарь группы" }),
-  ).toHaveAttribute("href", "https://calendar.example.com/anton/group");
+    screen.getByRole("link", { name: "Календарь Python" }),
+  ).toHaveAttribute("href", "https://calendar.example.com/anton/python");
+  expect(screen.getByRole("link", { name: "Календарь Go" })).toHaveAttribute(
+    "href",
+    "https://calendar.example.com/anton/go",
+  );
   expect(screen.getByText("Чат сообщества")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Открыть ссылку" })).toHaveAttribute(
     "href",
@@ -191,7 +210,7 @@ it("не показывает кнопку Telegram, если у ментора 
       last_name: "Менторов",
       telegram_username: null,
       consultation_url: null,
-      group_calendar_url: null,
+      group_calendars: [],
     },
     schedule: [],
     useful_links: [],

@@ -111,7 +111,12 @@ async def test_mentor_profile_get_put_url_validation_and_student_forbidden(
         headers=auth(seeded.mentor_id),
         json={
             "consultation_url": "https://cal.example.com/anton/python",
-            "group_calendar_url": "https://cal.example.com/anton/group",
+            "group_calendars": [
+                {
+                    "track_id": str(seeded.python_track_id),
+                    "calendar_url": "https://cal.example.com/anton/python-group",
+                }
+            ],
         },
     )
     loaded = await client.get(
@@ -123,7 +128,12 @@ async def test_mentor_profile_get_put_url_validation_and_student_forbidden(
         headers=auth(seeded.mentor_id),
         json={
             "consultation_url": "https://cal.example.com/anton/python",
-            "group_calendar_url": "javascript:alert(1)",
+            "group_calendars": [
+                {
+                    "track_id": str(seeded.python_track_id),
+                    "calendar_url": "javascript:alert(1)",
+                }
+            ],
         },
     )
     insecure = await client.put(
@@ -145,29 +155,159 @@ async def test_mentor_profile_get_put_url_validation_and_student_forbidden(
         headers=auth(seeded.student_id),
         json={
             "consultation_url": "https://cal.example.com/student",
-            "group_calendar_url": "https://cal.example.com/student/group",
+            "group_calendars": [],
         },
     )
 
     assert initial.status_code == 200, initial.text
     assert initial.json()["mentor_id"] == str(seeded.mentor_id)
     assert initial.json()["consultation_url"] is None
-    assert initial.json()["group_calendar_url"] is None
+    assert initial.json()["group_calendars"] == []
     assert [track["slug"] for track in initial.json()["tracks"]] == ["python"]
     assert initial.json()["weekly_calls"] == []
     assert initial.json()["one_off_activities"] == []
 
     assert updated.status_code == 200, updated.text
     assert updated.json()["consultation_url"] == "https://cal.example.com/anton/python"
-    assert updated.json()["group_calendar_url"] == "https://cal.example.com/anton/group"
+    assert updated.json()["group_calendars"] == [
+        {
+            "track": {
+                "id": str(seeded.python_track_id),
+                "slug": "python",
+                "title": "Python",
+            },
+            "calendar_url": "https://cal.example.com/anton/python-group",
+        }
+    ]
     assert loaded.status_code == 200, loaded.text
     assert loaded.json()["consultation_url"] == "https://cal.example.com/anton/python"
-    assert loaded.json()["group_calendar_url"] == "https://cal.example.com/anton/group"
+    assert loaded.json()["group_calendars"] == updated.json()["group_calendars"]
     assert invalid.status_code == 422
     assert insecure.status_code == 422
     assert credentials.status_code == 422
     assert student_get.status_code == 403
     assert student_put.status_code == 403
+
+
+async def test_mentor_profile_supports_separate_calendars_for_two_tracks(
+    client: AsyncClient,
+    seeded: SeededData,
+) -> None:
+    unassigned = await client.put(
+        "/api/v1/mentor/profile",
+        headers=auth(seeded.mentor_id),
+        json={
+            "group_calendars": [
+                {
+                    "track_id": str(seeded.go_track_id),
+                    "calendar_url": "https://cal.example.com/anton/go",
+                }
+            ]
+        },
+    )
+    duplicate = await client.put(
+        "/api/v1/mentor/profile",
+        headers=auth(seeded.mentor_id),
+        json={
+            "group_calendars": [
+                {
+                    "track_id": str(seeded.python_track_id),
+                    "calendar_url": "https://cal.example.com/anton/python-1",
+                },
+                {
+                    "track_id": str(seeded.python_track_id),
+                    "calendar_url": "https://cal.example.com/anton/python-2",
+                },
+            ]
+        },
+    )
+    async with TestSession() as session:
+        session.add(
+            MentorTrackAssignment(
+                mentor_id=seeded.mentor_id,
+                track_id=seeded.go_track_id,
+            )
+        )
+        await session.commit()
+
+    updated = await client.put(
+        "/api/v1/mentor/profile",
+        headers=auth(seeded.mentor_id),
+        json={
+            "consultation_url": "https://cal.example.com/anton/consultation",
+            "group_calendars": [
+                {
+                    "track_id": str(seeded.python_track_id),
+                    "calendar_url": "https://cal.example.com/anton/python",
+                },
+                {
+                    "track_id": str(seeded.go_track_id),
+                    "calendar_url": "https://cal.example.com/anton/go",
+                },
+            ],
+        },
+    )
+    python_call = await client.post(
+        "/api/v1/mentor/profile/weekly-calls",
+        headers=auth(seeded.mentor_id),
+        json=weekly_call_payload(
+            seeded.python_track_id,
+            title="Python-группа",
+        ),
+    )
+    go_call = await client.post(
+        "/api/v1/mentor/profile/weekly-calls",
+        headers=auth(seeded.mentor_id),
+        json=weekly_call_payload(
+            seeded.go_track_id,
+            title="Go-группа",
+            weekday=3,
+        ),
+    )
+    python_dashboard = await client.get(
+        "/api/v1/me/mentor",
+        headers=auth(seeded.student_id),
+    )
+
+    async with TestSession() as session:
+        session.add(
+            LearningTrackEnrollment(
+                user_id=seeded.student_id,
+                track_id=seeded.go_track_id,
+            )
+        )
+        await session.commit()
+
+    dual_dashboard = await client.get(
+        "/api/v1/me/mentor",
+        headers=auth(seeded.student_id),
+    )
+
+    assert unassigned.status_code == 422, unassigned.text
+    assert unassigned.json()["detail"]["code"] == "mentor_calendar_track_not_assigned"
+    assert duplicate.status_code == 422, duplicate.text
+    assert updated.status_code == 200, updated.text
+    assert python_call.status_code == 201, python_call.text
+    assert go_call.status_code == 201, go_call.text
+    assert [item["track"]["slug"] for item in updated.json()["group_calendars"]] == [
+        "python",
+        "go",
+    ]
+    assert [item["calendar_url"] for item in updated.json()["group_calendars"]] == [
+        "https://cal.example.com/anton/python",
+        "https://cal.example.com/anton/go",
+    ]
+    assert [
+        item["track"]["slug"] for item in python_dashboard.json()["mentor"]["group_calendars"]
+    ] == ["python"]
+    assert [item["title"] for item in python_dashboard.json()["schedule"]] == ["Python-группа"]
+    assert [
+        item["track"]["slug"] for item in dual_dashboard.json()["mentor"]["group_calendars"]
+    ] == ["python", "go"]
+    assert {item["title"] for item in dual_dashboard.json()["schedule"]} == {
+        "Python-группа",
+        "Go-группа",
+    }
 
 
 async def test_admin_useful_links_crud_order_validation_and_access(
@@ -836,7 +976,12 @@ async def test_my_mentor_dashboard_shows_only_relevant_schedule(
         headers=auth(seeded.mentor_id),
         json={
             "consultation_url": "https://cal.example.com/anton/consultation",
-            "group_calendar_url": "https://cal.example.com/anton/group",
+            "group_calendars": [
+                {
+                    "track_id": str(seeded.python_track_id),
+                    "calendar_url": "https://cal.example.com/anton/python-group",
+                }
+            ],
         },
     )
     own_call = await client.post(
@@ -923,7 +1068,16 @@ async def test_my_mentor_dashboard_shows_only_relevant_schedule(
     assert mentor["id"] == str(seeded.mentor_id)
     assert mentor["first_name"] == "Антон"
     assert mentor["consultation_url"] == "https://cal.example.com/anton/consultation"
-    assert mentor["group_calendar_url"] == "https://cal.example.com/anton/group"
+    assert mentor["group_calendars"] == [
+        {
+            "track": {
+                "id": str(seeded.python_track_id),
+                "slug": "python",
+                "title": "Python",
+            },
+            "calendar_url": "https://cal.example.com/anton/python-group",
+        }
+    ]
     assert dashboard.json()["useful_links"] == []
 
     schedule = {item["title"]: item for item in dashboard.json()["schedule"]}

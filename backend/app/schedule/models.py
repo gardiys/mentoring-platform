@@ -39,6 +39,23 @@ class MentorProfile(TimestampMixin, Base):
     group_calendar_url: Mapped[str | None] = mapped_column(String(2_048), nullable=True)
 
 
+class MentorTrackCalendar(TimestampMixin, Base):
+    __tablename__ = "mentor_track_calendars"
+    __table_args__ = (Index("ix_mentor_track_calendars_track", "track_id", "mentor_id"),)
+
+    mentor_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    track_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("learning_tracks.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    calendar_url: Mapped[str] = mapped_column(String(2_048), nullable=False)
+
+
 class PinnedResourceLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "pinned_resource_links"
     __table_args__ = (

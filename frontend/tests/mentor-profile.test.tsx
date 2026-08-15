@@ -75,7 +75,16 @@ function mentorProfile(
   return {
     mentor_id: "10000000-0000-4000-8000-000000000001",
     consultation_url: "https://calendar.example.com/old",
-    group_calendar_url: "https://calendar.example.com/group-old",
+    group_calendars: [
+      {
+        track: pythonTrack,
+        calendar_url: "https://calendar.example.com/python-old",
+      },
+      {
+        track: goTrack,
+        calendar_url: "https://calendar.example.com/go-old",
+      },
+    ],
     tracks: [pythonTrack, goTrack],
     weekly_calls: [],
     one_off_activities: [],
@@ -96,7 +105,7 @@ async function selectOption(input: HTMLElement, label: string) {
 
 afterEach(() => vi.restoreAllMocks());
 
-it("сохраняет ссылки на консультацию и общий календарь", async () => {
+it("сохраняет отдельные календари Python и Go", async () => {
   vi.spyOn(api, "mentorProfile").mockResolvedValue(mentorProfile());
   const update = vi
     .spyOn(api, "updateMentorProfile")
@@ -106,21 +115,33 @@ it("сохраняет ссылки на консультацию и общий 
   const input = await screen.findByLabelText("Ссылка для записи");
   await userEvent.clear(input);
   await userEvent.type(input, "https://calendar.example.com/anton");
-  const groupCalendar = screen.getByLabelText(
-    "Календарь общих созвонов группы",
+  const pythonCalendar = screen.getByLabelText(
+    "Календарь общих созвонов · Python",
   );
-  await userEvent.clear(groupCalendar);
+  await userEvent.clear(pythonCalendar);
   await userEvent.type(
-    groupCalendar,
-    "https://calendar.example.com/anton/group",
+    pythonCalendar,
+    "https://calendar.example.com/anton/python",
   );
+  const goCalendar = screen.getByLabelText("Календарь общих созвонов · Go");
+  await userEvent.clear(goCalendar);
+  await userEvent.type(goCalendar, "https://calendar.example.com/anton/go");
   await userEvent.click(
     screen.getByRole("button", { name: "Сохранить ссылки" }),
   );
 
   expect(update).toHaveBeenCalledWith({
     consultation_url: "https://calendar.example.com/anton",
-    group_calendar_url: "https://calendar.example.com/anton/group",
+    group_calendars: [
+      {
+        track_id: pythonTrack.id,
+        calendar_url: "https://calendar.example.com/anton/python",
+      },
+      {
+        track_id: goTrack.id,
+        calendar_url: "https://calendar.example.com/anton/go",
+      },
+    ],
   });
 });
 

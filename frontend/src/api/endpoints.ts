@@ -605,7 +605,7 @@ export const api = {
   mentorProfile: () => apiRequest<MentorProfileRead>("/api/v1/mentor/profile"),
   updateMentorProfile: (payload: {
     consultation_url: string | null;
-    group_calendar_url: string | null;
+    group_calendars: Array<{ track_id: string; calendar_url: string }>;
   }) =>
     apiRequest<MentorProfileRead>("/api/v1/mentor/profile", {
       method: "PUT",

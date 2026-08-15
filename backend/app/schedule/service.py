@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
@@ -11,6 +11,7 @@ from app.core.errors import api_error
 from app.mentors.models import MentorStudent, MentorTrackAssignment
 from app.schedule.models import (
     MentorProfile,
+    MentorTrackCalendar,
     PinnedResourceLink,
     ScheduleEvent,
     ScheduleEventKind,
@@ -21,6 +22,7 @@ from app.schedule.schemas import (
     MentorMeetingMutation,
     MentorProfileMutation,
     MentorProfileRead,
+    MentorTrackCalendarRead,
     MentorWeeklyCallMutation,
     MentorWeeklyCallRescheduleMutation,
     MyMentorDashboardRead,
@@ -216,12 +218,35 @@ async def _mentor_activity_rows(
 async def _profile_read(session: AsyncSession, mentor: User) -> MentorProfileRead:
     profile = await session.get(MentorProfile, mentor.id)
     tracks = await _mentor_tracks(session, mentor)
+    track_by_id = {track.id: track for track in tracks}
+    calendar_by_track = {
+        row.track_id: row
+        for row in await session.scalars(
+            select(MentorTrackCalendar).where(
+                MentorTrackCalendar.mentor_id == mentor.id,
+                MentorTrackCalendar.track_id.in_(list(track_by_id)),
+            )
+        )
+    }
+    legacy_calendar_url = profile.group_calendar_url if profile else None
+    calendars = [
+        MentorTrackCalendarRead(
+            track=ScheduleTrackRead(id=track.id, slug=track.slug, title=track.title),
+            calendar_url=(
+                calendar_by_track[track.id].calendar_url
+                if track.id in calendar_by_track
+                else legacy_calendar_url
+            ),
+        )
+        for track in tracks
+        if track.id in calendar_by_track or legacy_calendar_url is not None
+    ]
     calls = await _mentor_weekly_call_rows(session, mentor.id)
     activities = await _mentor_activity_rows(session, mentor.id)
     return MentorProfileRead(
         mentor_id=mentor.id,
         consultation_url=profile.consultation_url if profile else None,
-        group_calendar_url=profile.group_calendar_url if profile else None,
+        group_calendars=calendars,
         tracks=[
             ScheduleTrackRead(id=track.id, slug=track.slug, title=track.title) for track in tracks
         ],
@@ -241,26 +266,46 @@ async def update_mentor_profile(
     consultation_url = (
         str(payload.consultation_url) if payload.consultation_url is not None else None
     )
-    group_calendar_url = (
-        str(payload.group_calendar_url) if payload.group_calendar_url is not None else None
-    )
+    tracks = {track.id: track for track in await _mentor_tracks(session, mentor)}
+    for calendar in payload.group_calendars:
+        if calendar.track_id not in tracks:
+            api_error(
+                422,
+                "mentor_calendar_track_not_assigned",
+                "Mentor is not assigned to the selected calendar track",
+            )
     statement = (
         insert(MentorProfile)
         .values(
             mentor_id=mentor.id,
             consultation_url=consultation_url,
-            group_calendar_url=group_calendar_url,
+            group_calendar_url=None,
         )
         .on_conflict_do_update(
             index_elements=[MentorProfile.mentor_id],
             set_={
                 "consultation_url": consultation_url,
-                "group_calendar_url": group_calendar_url,
+                "group_calendar_url": None,
                 "updated_at": func.now(),
             },
         )
     )
     await session.execute(statement)
+    await session.execute(
+        delete(MentorTrackCalendar).where(MentorTrackCalendar.mentor_id == mentor.id)
+    )
+    if payload.group_calendars:
+        await session.execute(
+            insert(MentorTrackCalendar),
+            [
+                {
+                    "mentor_id": mentor.id,
+                    "track_id": calendar.track_id,
+                    "calendar_url": str(calendar.calendar_url),
+                }
+                for calendar in payload.group_calendars
+            ],
+        )
     await session.commit()
     return await _profile_read(session, mentor)
 
@@ -701,13 +746,49 @@ async def my_mentor_dashboard(session: AsyncSession, student: User) -> MyMentorD
     public_mentor: MyMentorPublicRead | None = None
     if mentor is not None:
         profile = await session.get(MentorProfile, mentor.id)
+        legacy_calendar_url = profile.group_calendar_url if profile else None
+        student_tracks = list(
+            await session.scalars(
+                select(LearningTrack)
+                .join(
+                    LearningTrackEnrollment,
+                    LearningTrackEnrollment.track_id == LearningTrack.id,
+                )
+                .where(
+                    LearningTrackEnrollment.user_id == student.id,
+                    LearningTrack.is_published.is_(True),
+                )
+                .order_by(LearningTrack.position, LearningTrack.title)
+            )
+        )
+        calendar_rows = {
+            row.track_id: row
+            for row in await session.scalars(
+                select(MentorTrackCalendar).where(
+                    MentorTrackCalendar.mentor_id == mentor.id,
+                    MentorTrackCalendar.track_id.in_([track.id for track in student_tracks]),
+                )
+            )
+        }
+        group_calendars = [
+            MentorTrackCalendarRead(
+                track=ScheduleTrackRead(id=track.id, slug=track.slug, title=track.title),
+                calendar_url=(
+                    calendar_rows[track.id].calendar_url
+                    if track.id in calendar_rows
+                    else legacy_calendar_url
+                ),
+            )
+            for track in student_tracks
+            if track.id in calendar_rows or legacy_calendar_url is not None
+        ]
         public_mentor = MyMentorPublicRead(
             id=mentor.id,
             first_name=mentor.first_name,
             last_name=mentor.last_name,
             telegram_username=mentor.telegram_username,
             consultation_url=profile.consultation_url if profile else None,
-            group_calendar_url=profile.group_calendar_url if profile else None,
+            group_calendars=group_calendars,
         )
     return MyMentorDashboardRead(
         mentor=public_mentor,
