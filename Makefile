@@ -4,8 +4,9 @@ PROD_ENV_EXAMPLE_FILE ?= .env.production.example
 PROD_COMPOSE = docker compose -f infra/docker-compose.prod.yml --env-file $(PROD_ENV_FILE)
 first_name ?= Администратор
 CARD_AUTOMATION_ARGS ?=
+CARD_TOPIC_REPROCESS_ARGS ?=
 
-.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings card-automation-backfill prod-card-automation-backfill card-automation-evaluate prod-card-automation-evaluate check-s3-multipart prod-check-s3-multipart tochka-webhook prod-tochka-webhook ensure-test-db prod-env-sync prod-preflight prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings card-automation-backfill prod-card-automation-backfill card-automation-reprocess-missing-topics prod-card-automation-reprocess-missing-topics card-automation-evaluate prod-card-automation-evaluate check-s3-multipart prod-check-s3-multipart tochka-webhook prod-tochka-webhook ensure-test-db prod-env-sync prod-preflight prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -52,6 +53,14 @@ card-automation-backfill: docker-migrate
 prod-card-automation-backfill: prod-migrate
 	$(PROD_COMPOSE) run --rm --build --no-deps backend \
 		python -m app.scripts.backfill_card_automation $(CARD_AUTOMATION_ARGS)
+
+card-automation-reprocess-missing-topics: docker-migrate
+	$(COMPOSE) run --rm --build --no-deps backend \
+		python -m app.scripts.reprocess_missing_card_topics $(CARD_TOPIC_REPROCESS_ARGS)
+
+prod-card-automation-reprocess-missing-topics: prod-migrate
+	$(PROD_COMPOSE) run --rm --build --no-deps backend \
+		python -m app.scripts.reprocess_missing_card_topics $(CARD_TOPIC_REPROCESS_ARGS)
 
 card-automation-evaluate: docker-migrate
 	$(COMPOSE) run --rm --build --no-deps backend \

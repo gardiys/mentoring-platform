@@ -4,21 +4,29 @@ import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 
-from app.interviews.card_automation_models import CardAutomationSettings
+from app.interviews.card_automation_models import (
+    AutomationDecision,
+    CardAutomationSettings,
+    QuestionCluster,
+)
 from app.interviews.card_automation_types import (
     AutomationDecisionSource,
     AutomationDecisionType,
+    LearningObjectType,
+    QuestionClusterStatus,
+    QuestionOccurrenceStatus,
 )
 from app.interviews.intelligence_models import (
     IntelligenceQuestion,
     IntelligenceQuestionKind,
     IntelligenceQuestionModerationStatus,
 )
-from app.scripts import backfill_card_automation
+from app.scripts import backfill_card_automation, reprocess_missing_card_topics
 from app.scripts.backfill_card_automation import BackfillOptions
 from app.scripts.evaluate_card_automation import (
     GroundTruthKind,
@@ -31,8 +39,12 @@ from app.scripts.evaluate_card_automation import (
     evaluate_dataset,
     predict_historical_outcome,
 )
+from app.scripts.reprocess_missing_card_topics import (
+    ClusterCandidate,
+    ReprocessMissingTopicsOptions,
+)
 from tests.conftest import SeededData, TestSession
-from tests.test_card_automation_pipeline import _create_source
+from tests.test_card_automation_pipeline import _create_card, _create_source
 
 
 @pytest.mark.parametrize(
@@ -40,6 +52,7 @@ from tests.test_card_automation_pipeline import _create_source
     (
         "app.scripts.backfill_card_automation",
         "app.scripts.evaluate_card_automation",
+        "app.scripts.reprocess_missing_card_topics",
     ),
 )
 def test_standalone_script_registers_all_foreign_key_metadata(module_name: str) -> None:
@@ -324,6 +337,215 @@ def test_temporal_evaluation_uses_historical_evidence_without_label_leakage() ->
     )
     assert failed_gate_prediction.kind is PredictionKind.ABSTAIN
     assert failed_gate_prediction.selected_card_id == wrong_id
+
+
+async def _cluster_source_with_topic(
+    seeded: SeededData,
+    topic_name: str | None,
+    *,
+    subtopic_name: str | None,
+    moderation_status: IntelligenceQuestionModerationStatus = (
+        IntelligenceQuestionModerationStatus.PENDING
+    ),
+) -> tuple[UUID, UUID]:
+    unique = uuid4().hex
+    source = await _create_source(seeded, f"Topic reprocess {topic_name or 'empty'}?")
+    cluster = QuestionCluster(
+        direction_id=seeded.python_track_id,
+        status=QuestionClusterStatus.NEEDS_REVIEW,
+        canonical_question=f"Cluster {topic_name or 'empty'} {unique}",
+        normalized_canonical_question=f"cluster {topic_name or 'empty'} {unique}".casefold(),
+        learning_object_type=LearningObjectType.OPEN_TECHNICAL_QUESTION,
+        topic_name=topic_name,
+        subtopic_name=subtopic_name,
+        membership_revision=1,
+        stats_revision=1,
+    )
+    async with TestSession() as session:
+        session.add(cluster)
+        await session.flush()
+        question = await session.get_one(IntelligenceQuestion, source.question_id)
+        question.cluster_id = cluster.id
+        question.automation_status = QuestionOccurrenceStatus.NEEDS_REVIEW
+        question.moderation_status = moderation_status
+        await session.commit()
+    return cluster.id, source.question_id
+
+
+@pytest.mark.asyncio
+async def test_missing_topic_reprocess_is_dry_run_safe_and_skips_human_work(
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _create_card(seeded, "Existing Python core topic?", category="Python core")
+    invalid_cluster_id, invalid_question_id = await _cluster_source_with_topic(
+        seeded,
+        "Invented legacy topic",
+        subtopic_name="Legacy detail",
+    )
+    empty_cluster_id, empty_question_id = await _cluster_source_with_topic(
+        seeded,
+        None,
+        subtopic_name=None,
+    )
+    subtopic_cluster_id, subtopic_question_id = await _cluster_source_with_topic(
+        seeded,
+        "Python core",
+        subtopic_name=None,
+    )
+    await _cluster_source_with_topic(
+        seeded,
+        "Python core",
+        subtopic_name="Descriptors",
+    )
+    _approved_cluster_id, approved_question_id = await _cluster_source_with_topic(
+        seeded,
+        "Another invented topic",
+        subtopic_name=None,
+        moderation_status=IntelligenceQuestionModerationStatus.APPROVED,
+    )
+    async with TestSession() as session:
+        session.add(
+            CardAutomationSettings(
+                direction_id=seeded.python_track_id,
+                enabled=True,
+                shadow_mode=True,
+                cluster_moderation_enabled=True,
+                legacy_queue_enabled=True,
+            )
+        )
+        await session.commit()
+
+    enqueued: list[tuple[str, str, int]] = []
+
+    async def record_enqueue(function: str, question_id: str, revision: int) -> str:
+        enqueued.append((function, question_id, revision))
+        return f"job:{question_id}:v{revision}"
+
+    monkeypatch.setattr(
+        reprocess_missing_card_topics,
+        "async_session_factory",
+        TestSession,
+    )
+    monkeypatch.setattr(
+        reprocess_missing_card_topics,
+        "enqueue_card_automation_job",
+        record_enqueue,
+    )
+
+    dry_result = await reprocess_missing_card_topics.run(
+        ReprocessMissingTopicsOptions(
+            direction="python",
+            batch_size=10,
+            execute=False,
+            include_missing_subtopics=False,
+            max_ai_requests=None,
+        )
+    )
+    assert dry_result == {
+        "examined_clusters": 2,
+        "examined_occurrences": 2,
+        "prepared_clusters": 2,
+        "prepared_occurrences": 2,
+        "enqueued": 0,
+        "budget_blocked_clusters": 0,
+        "reserved_ai_requests": 32,
+    }
+    assert enqueued == []
+
+    live_result = await reprocess_missing_card_topics.run(
+        ReprocessMissingTopicsOptions(
+            direction="python",
+            batch_size=2,
+            execute=True,
+            include_missing_subtopics=True,
+            max_ai_requests=48,
+        )
+    )
+    assert live_result == {
+        "examined_clusters": 3,
+        "examined_occurrences": 3,
+        "prepared_clusters": 3,
+        "prepared_occurrences": 3,
+        "enqueued": 3,
+        "budget_blocked_clusters": 0,
+        "reserved_ai_requests": 48,
+    }
+    assert {UUID(question_id) for _function, question_id, _revision in enqueued} == {
+        invalid_question_id,
+        empty_question_id,
+        subtopic_question_id,
+    }
+    assert all(function == "reprocess_question_occurrence" for function, *_rest in enqueued)
+
+    async with TestSession() as session:
+        decisions = list(
+            await session.scalars(
+                select(AutomationDecision).where(
+                    AutomationDecision.entity_id.in_(
+                        [invalid_question_id, empty_question_id, subtopic_question_id]
+                    ),
+                    AutomationDecision.decision_type
+                    == AutomationDecisionType.OCCURRENCE_REPROCESSED,
+                )
+            )
+        )
+        approved = await session.get_one(IntelligenceQuestion, approved_question_id)
+        assert len(decisions) == 3
+        assert {decision.selected_cluster_id for decision in decisions} == {
+            invalid_cluster_id,
+            empty_cluster_id,
+            subtopic_cluster_id,
+        }
+        assert approved.moderation_status is IntelligenceQuestionModerationStatus.APPROVED
+
+
+@pytest.mark.asyncio
+async def test_missing_topic_execute_requires_shadow_mode(
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _cluster_source_with_topic(seeded, None, subtopic_name=None)
+    async with TestSession() as session:
+        session.add(
+            CardAutomationSettings(
+                direction_id=seeded.python_track_id,
+                enabled=True,
+                shadow_mode=False,
+                cluster_moderation_enabled=True,
+                legacy_queue_enabled=True,
+            )
+        )
+        await session.commit()
+    monkeypatch.setattr(
+        reprocess_missing_card_topics,
+        "async_session_factory",
+        TestSession,
+    )
+
+    with pytest.raises(RuntimeError, match="shadow_mode=true"):
+        await reprocess_missing_card_topics.run(
+            ReprocessMissingTopicsOptions(
+                direction="python",
+                batch_size=10,
+                execute=True,
+                include_missing_subtopics=False,
+                max_ai_requests=16,
+            )
+        )
+
+
+def test_missing_topic_budget_never_splits_a_cluster() -> None:
+    large = ClusterCandidate(cluster_id=UUID(int=1), occurrence_count=3)
+    small = ClusterCandidate(cluster_id=UUID(int=2), occurrence_count=1)
+
+    selected, blocked = reprocess_missing_card_topics._select_complete_clusters(
+        [large, small],
+        max_occurrences=1,
+    )
+
+    assert selected == [small]
+    assert blocked == 1
 
 
 @pytest.mark.asyncio
