@@ -1,5 +1,6 @@
 import json
 import re
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
@@ -189,6 +190,10 @@ class Settings(BaseSettings):
     openai_extraction_max_output_tokens: int = Field(default=8_000, ge=256, le=32_000)
     openai_review_max_output_tokens: int = Field(default=4_000, ge=256, le=16_000)
     openai_summary_max_output_tokens: int = Field(default=4_000, ge=256, le=16_000)
+    openai_light_input_price_per_million_usd: Decimal = Field(default=Decimal("0"), ge=0)
+    openai_light_output_price_per_million_usd: Decimal = Field(default=Decimal("0"), ge=0)
+    openai_analysis_input_price_per_million_usd: Decimal = Field(default=Decimal("0"), ge=0)
+    openai_analysis_output_price_per_million_usd: Decimal = Field(default=Decimal("0"), ge=0)
     interview_ai_extraction_confidence_threshold: float = Field(default=0.65, ge=0, le=1)
     interview_card_frequent_min_occurrences: int = Field(default=3, ge=1, le=10_000)
     interview_ai_enabled: bool = True

@@ -150,7 +150,8 @@ def test_worker_keeps_deterministic_ids_reusable_and_runs_reconciliation() -> No
     assert AIWorkerSettings.queue_name == intelligence_queue.OPENAI_QUEUE_NAME
     assert AIWorkerSettings.max_jobs == intelligence_jobs.settings.openai_max_concurrency
     assert AIWorkerSettings.job_timeout == intelligence_jobs.settings.openai_job_timeout_seconds
-    assert AIWorkerSettings.cron_jobs == []
+    assert len(AIWorkerSettings.cron_jobs) == 1
+    assert AIWorkerSettings.cron_jobs[0].run_at_startup is True
     assert intelligence_jobs.refresh_interview_question_embeddings in AIWorkerSettings.functions
     assert (
         AIWorkerSettings.health_check_interval

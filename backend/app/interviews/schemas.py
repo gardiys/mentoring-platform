@@ -46,6 +46,7 @@ class InterviewCardStudy(BaseModel):
     id: UUID
     slug: str
     category: str
+    subcategory: str | None
     companies: str | None
     question_markdown: str
     answer_markdown: str
@@ -99,6 +100,7 @@ class AdminInterviewCardMutation(BaseModel):
     id: UUID | None = None
     slug: str = Field(min_length=1, max_length=180, pattern=SLUG_PATTERN)
     category: str = Field(default="Общее", min_length=1, max_length=240)
+    subcategory: str | None = Field(default=None, max_length=240)
     companies: str | None = None
     question_markdown: str = Field(min_length=1)
     answer_markdown: str = Field(min_length=1)
@@ -148,6 +150,7 @@ class AdminInterviewCardRead(BaseModel):
     id: UUID
     slug: str
     category: str
+    subcategory: str | None
     companies: str | None
     source_number: int | None
     source_occurrence: str | None
@@ -188,6 +191,7 @@ class AdminInterviewCardSummary(BaseModel):
     id: UUID
     slug: str
     category: str
+    subcategory: str | None
     question_preview: str
     frequency: InterviewCardFrequency
     frequency_override: InterviewCardFrequency | None

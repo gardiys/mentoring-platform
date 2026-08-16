@@ -1328,6 +1328,534 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/card-automation/clusters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Clusters */
+        get: operations["admin_clusters_api_v1_admin_card_automation_clusters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/clusters/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Bulk Clusters */
+        post: operations["admin_bulk_clusters_api_v1_admin_card_automation_clusters_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/clusters/{cluster_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Cluster */
+        get: operations["admin_cluster_api_v1_admin_card_automation_clusters__cluster_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/clusters/{cluster_id}/allowed-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Cluster Allowed Actions */
+        get: operations["admin_cluster_allowed_actions_api_v1_admin_card_automation_clusters__cluster_id__allowed_actions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/occurrences/{question_id}/reprocess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Reprocess Occurrence */
+        post: operations["admin_reprocess_occurrence_api_v1_admin_card_automation_occurrences__question_id__reprocess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/clusters/{cluster_id}/generate-answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Generate Cluster Answer */
+        post: operations["admin_generate_cluster_answer_api_v1_admin_card_automation_clusters__cluster_id__generate_answer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/clusters/{cluster_id}/link-card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Link Cluster Card */
+        post: operations["admin_link_cluster_card_api_v1_admin_card_automation_clusters__cluster_id__link_card_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/clusters/{cluster_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Update Cluster Draft */
+        patch: operations["admin_update_cluster_draft_api_v1_admin_card_automation_clusters__cluster_id__draft_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/clusters/{cluster_id}/create-card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Create Cluster Card */
+        post: operations["admin_create_cluster_card_api_v1_admin_card_automation_clusters__cluster_id__create_card_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/clusters/{cluster_id}/split": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Split Cluster */
+        post: operations["admin_split_cluster_api_v1_admin_card_automation_clusters__cluster_id__split_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/clusters/{cluster_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Merge Clusters */
+        post: operations["admin_merge_clusters_api_v1_admin_card_automation_clusters__cluster_id__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/clusters/{cluster_id}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Set Cluster State */
+        post: operations["admin_set_cluster_state_api_v1_admin_card_automation_clusters__cluster_id___action__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Decisions */
+        get: operations["admin_decisions_api_v1_admin_card_automation_decisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/decisions/{decision_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Review Decision */
+        post: operations["admin_review_decision_api_v1_admin_card_automation_decisions__decision_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/decisions/{decision_id}/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Override Decision */
+        post: operations["admin_override_decision_api_v1_admin_card_automation_decisions__decision_id__override_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Settings */
+        get: operations["admin_settings_api_v1_admin_card_automation_settings_get"];
+        /** Admin Update Settings */
+        put: operations["admin_update_settings_api_v1_admin_card_automation_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Metrics */
+        get: operations["admin_metrics_api_v1_admin_card_automation_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/students/{student_id}/personal-review-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Managed Personal Items */
+        get: operations["admin_managed_personal_items_api_v1_admin_card_automation_students__student_id__personal_review_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/students/{student_id}/personal-review-items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Correct Personal Item */
+        patch: operations["admin_correct_personal_item_api_v1_admin_card_automation_students__student_id__personal_review_items__item_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/clusters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Clusters */
+        get: operations["mentor_clusters_api_v1_mentor_card_automation_clusters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/clusters/{cluster_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Cluster */
+        get: operations["mentor_cluster_api_v1_mentor_card_automation_clusters__cluster_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/clusters/{cluster_id}/allowed-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Cluster Allowed Actions */
+        get: operations["mentor_cluster_allowed_actions_api_v1_mentor_card_automation_clusters__cluster_id__allowed_actions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/occurrences/{question_id}/reprocess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Reprocess Occurrence */
+        post: operations["mentor_reprocess_occurrence_api_v1_mentor_card_automation_occurrences__question_id__reprocess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/clusters/{cluster_id}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Set Cluster State */
+        post: operations["mentor_set_cluster_state_api_v1_mentor_card_automation_clusters__cluster_id___action__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Decisions */
+        get: operations["mentor_decisions_api_v1_mentor_card_automation_decisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/decisions/{decision_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Review Decision */
+        post: operations["mentor_review_decision_api_v1_mentor_card_automation_decisions__decision_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/decisions/{decision_id}/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mentor Override Decision */
+        post: operations["mentor_override_decision_api_v1_mentor_card_automation_decisions__decision_id__override_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/students/{student_id}/personal-review-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Managed Personal Items */
+        get: operations["mentor_managed_personal_items_api_v1_mentor_card_automation_students__student_id__personal_review_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/students/{student_id}/personal-review-items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mentor Correct Personal Item */
+        patch: operations["mentor_correct_personal_item_api_v1_mentor_card_automation_students__student_id__personal_review_items__item_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/students/me/personal-review-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Personal Review Items */
+        get: operations["personal_review_items_api_v1_students_me_personal_review_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/students/me/personal-review-items/{item_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Personal Item */
+        post: operations["review_personal_item_api_v1_students_me_personal_review_items__item_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge/topics": {
         parameters: {
             query?: never;
@@ -3542,6 +4070,8 @@ export interface components {
              * @default Общее
              */
             category: string;
+            /** Subcategory */
+            subcategory?: string | null;
             /** Companies */
             companies?: string | null;
             /** Question Markdown */
@@ -3585,6 +4115,8 @@ export interface components {
             slug: string;
             /** Category */
             category: string;
+            /** Subcategory */
+            subcategory: string | null;
             /** Companies */
             companies: string | null;
             /** Source Number */
@@ -3623,6 +4155,8 @@ export interface components {
             slug: string;
             /** Category */
             category: string;
+            /** Subcategory */
+            subcategory: string | null;
             /** Question Preview */
             question_preview: string;
             frequency: components["schemas"]["InterviewCardFrequency"];
@@ -5149,6 +5683,354 @@ export interface components {
             /** Telegram Id */
             telegram_id: number | null;
         };
+        /** AnswerContract */
+        AnswerContract: {
+            /** Short Answer */
+            short_answer: string;
+            /** Required Points */
+            required_points?: string[];
+            /** Optional Points */
+            optional_points?: string[];
+            /** Common Mistakes */
+            common_mistakes?: string[];
+            /** Unsupported Claims */
+            unsupported_claims?: string[];
+            /** Follow Up Questions */
+            follow_up_questions?: string[];
+            /**
+             * Difficulty
+             * @enum {string}
+             */
+            difficulty: "junior" | "middle" | "senior" | "mixed";
+            /** Version Scope */
+            version_scope?: string[];
+            /** Source References */
+            source_references?: string[];
+            /** Confidence */
+            confidence: number;
+        };
+        /**
+         * AnswerContractStatus
+         * @enum {string}
+         */
+        AnswerContractStatus: "generated_from_sources" | "needs_expert_source" | "needs_manual_review" | "approved" | "rejected";
+        /** AnswerValidationResult */
+        AnswerValidationResult: {
+            /** Supported */
+            supported: boolean;
+            /** Unsupported Claims */
+            unsupported_claims?: string[];
+            /** Contradictions */
+            contradictions?: string[];
+            /** Missing Required Points */
+            missing_required_points?: string[];
+            /** Version Sensitive Claims */
+            version_sensitive_claims?: string[];
+            /** Confidence */
+            confidence: number;
+        };
+        /** AutomationDecisionOverrideMutation */
+        AutomationDecisionOverrideMutation: {
+            /** Expected Entity Version */
+            expected_entity_version: number;
+            replacement_decision_type: components["schemas"]["AutomationDecisionType"];
+            /** Selected Card Id */
+            selected_card_id?: string | null;
+            /** Selected Cluster Id */
+            selected_cluster_id?: string | null;
+            /** Reason */
+            reason: string;
+        };
+        /** AutomationDecisionPage */
+        AutomationDecisionPage: {
+            /** Items */
+            items: components["schemas"]["AutomationDecisionRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** AutomationDecisionRead */
+        AutomationDecisionRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Entity Type */
+            entity_type: string;
+            /**
+             * Entity Id
+             * Format: uuid
+             */
+            entity_id: string;
+            /** Entity Version */
+            entity_version?: number | null;
+            /** Question Text */
+            question_text?: string | null;
+            decision_type: components["schemas"]["AutomationDecisionType"];
+            decision_source: components["schemas"]["AutomationDecisionSource"];
+            /** Selected Card Id */
+            selected_card_id?: string | null;
+            /** Selected Card Question */
+            selected_card_question?: string | null;
+            /** Selected Cluster Id */
+            selected_cluster_id?: string | null;
+            /** Selected Cluster Question */
+            selected_cluster_question?: string | null;
+            /** Candidate Card Ids */
+            candidate_card_ids?: string[];
+            /** Candidate Cluster Ids */
+            candidate_cluster_ids?: string[];
+            /** Retrieval Scores */
+            retrieval_scores?: {
+                [key: string]: unknown;
+            };
+            /** Judge Result */
+            judge_result?: {
+                [key: string]: unknown;
+            } | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Similarity Score */
+            similarity_score?: number | null;
+            /** Reason */
+            reason: string;
+            /** Model Provider */
+            model_provider?: string | null;
+            /** Model Name */
+            model_name?: string | null;
+            /** Prompt Version */
+            prompt_version?: string | null;
+            /** Schema Version */
+            schema_version?: string | null;
+            /** Input Tokens */
+            input_tokens?: number | null;
+            /** Output Tokens */
+            output_tokens?: number | null;
+            /** Cost */
+            cost?: string | null;
+            /** Latency Ms */
+            latency_ms?: number | null;
+            /** Is Audit Sample */
+            is_audit_sample: boolean;
+            review_result?: components["schemas"]["AutomationReviewResult"] | null;
+            /** Reviewed By User Id */
+            reviewed_by_user_id?: string | null;
+            /** Reviewed By Name */
+            reviewed_by_name?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Review Reason */
+            review_reason?: string | null;
+            /** Is Overridden */
+            is_overridden: boolean;
+            /** Overridden By User Id */
+            overridden_by_user_id?: string | null;
+            /** Overridden By Name */
+            overridden_by_name?: string | null;
+            /** Override Reason */
+            override_reason?: string | null;
+            /** Overridden At */
+            overridden_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** AutomationDecisionReviewMutation */
+        AutomationDecisionReviewMutation: {
+            result: components["schemas"]["AutomationReviewResult"];
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * AutomationDecisionSource
+         * @enum {string}
+         */
+        AutomationDecisionSource: "rule" | "ai_routing" | "exact" | "confirmed_alias" | "semantic_judge" | "clustering" | "human" | "backfill";
+        /**
+         * AutomationDecisionType
+         * @enum {string}
+         */
+        AutomationDecisionType: "question_routed" | "routed_as_noise" | "routed_as_non_flashcard" | "exact_card_match" | "alias_card_match" | "semantic_card_match" | "cluster_match" | "shadow_cluster_created" | "cluster_promoted" | "personal_review_created" | "personal_review_reviewed" | "personal_review_archived" | "answer_contract_generated" | "answer_contract_validated" | "answer_contract_needs_source" | "answer_contract_failed" | "answer_validation_failed" | "manual_override" | "cluster_linked" | "card_created" | "cluster_split" | "cluster_merged" | "cluster_ignored" | "cluster_deferred" | "cluster_reopened" | "cluster_marked_important" | "occurrence_reprocessed" | "occurrence_failed";
+        /**
+         * AutomationReviewResult
+         * @enum {string}
+         */
+        AutomationReviewResult: "correct" | "merge_error" | "classification_error" | "wrong_object_type" | "wrong_topic" | "other";
+        /** CardAutomationMetricsRead */
+        CardAutomationMetricsRead: {
+            /**
+             * Period From
+             * Format: date
+             */
+            period_from: string;
+            /**
+             * Period To
+             * Format: date
+             */
+            period_to: string;
+            /** Direction Id */
+            direction_id?: string | null;
+            /** Direction Slug */
+            direction_slug?: string | null;
+            /** Extracted Questions Total */
+            extracted_questions_total: number;
+            /** Routed As Noise Total */
+            routed_as_noise_total: number;
+            /** Routed As Non Flashcard Total */
+            routed_as_non_flashcard_total: number;
+            /** Auto Linked Exact Total */
+            auto_linked_exact_total: number;
+            /** Auto Linked Alias Total */
+            auto_linked_alias_total: number;
+            /** Auto Linked Semantic Total */
+            auto_linked_semantic_total: number;
+            /** Shadow Clusters Created Total */
+            shadow_clusters_created_total: number;
+            /** Clusters Promoted Total */
+            clusters_promoted_total: number;
+            /** Clusters Reviewed Total */
+            clusters_reviewed_total: number;
+            /** Personal Review Items Created Total */
+            personal_review_items_created_total: number;
+            /** Manual Tasks Per 100 Interviews */
+            manual_tasks_per_100_interviews: number;
+            /** Average Cluster Moderation Time */
+            average_cluster_moderation_time: number;
+            /** Oldest Moderation Task Age */
+            oldest_moderation_task_age: number;
+            /** Automatic Decision Override Rate */
+            automatic_decision_override_rate: number;
+            /** False Merge Rate */
+            false_merge_rate: number;
+            /** Noise False Positive Rate */
+            noise_false_positive_rate: number;
+            /** Average Ai Cost Per Interview */
+            average_ai_cost_per_interview: string;
+            /** Average Ai Cost Per Question */
+            average_ai_cost_per_question: string;
+            /** Average Ai Cost Per Promoted Cluster */
+            average_ai_cost_per_promoted_cluster: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+        };
+        /** CardAutomationSettingsList */
+        CardAutomationSettingsList: {
+            /** Items */
+            items: components["schemas"]["CardAutomationSettingsRead"][];
+        };
+        /** CardAutomationSettingsRead */
+        CardAutomationSettingsRead: {
+            /**
+             * Direction Id
+             * Format: uuid
+             */
+            direction_id: string;
+            /** Direction Slug */
+            direction_slug: string;
+            /** Direction Title */
+            direction_title: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Shadow Mode */
+            shadow_mode: boolean;
+            /** Auto Ignore Noise Enabled */
+            auto_ignore_noise_enabled: boolean;
+            /** Auto Link Exact Enabled */
+            auto_link_exact_enabled: boolean;
+            /** Auto Link Alias Enabled */
+            auto_link_alias_enabled: boolean;
+            /** Auto Link Semantic Enabled */
+            auto_link_semantic_enabled: boolean;
+            /** Semantic Similarity Threshold */
+            semantic_similarity_threshold: number;
+            /** Pairwise Judge Confidence Threshold */
+            pairwise_judge_confidence_threshold: number;
+            /** Candidate Score Gap Threshold */
+            candidate_score_gap_threshold: number;
+            /** Cluster Match Threshold */
+            cluster_match_threshold: number;
+            /** Min Distinct Interviews For Promotion */
+            min_distinct_interviews_for_promotion: number;
+            /** Min Distinct Companies For Promotion */
+            min_distinct_companies_for_promotion: number;
+            /** Min Failed Answers For Promotion */
+            min_failed_answers_for_promotion: number;
+            /** Audit Sample Percent */
+            audit_sample_percent: number;
+            /** Personal Review Enabled */
+            personal_review_enabled: boolean;
+            /** Global Auto Publish Enabled */
+            global_auto_publish_enabled: boolean;
+            /** Cluster Moderation Enabled */
+            cluster_moderation_enabled: boolean;
+            /** Legacy Queue Enabled */
+            legacy_queue_enabled: boolean;
+            /** Version */
+            version: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** CardAutomationSettingsUpdate */
+        CardAutomationSettingsUpdate: {
+            /**
+             * Direction Id
+             * Format: uuid
+             */
+            direction_id: string;
+            /** Expected Version */
+            expected_version: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Shadow Mode */
+            shadow_mode: boolean;
+            /** Auto Ignore Noise Enabled */
+            auto_ignore_noise_enabled: boolean;
+            /** Auto Link Exact Enabled */
+            auto_link_exact_enabled: boolean;
+            /** Auto Link Alias Enabled */
+            auto_link_alias_enabled: boolean;
+            /** Auto Link Semantic Enabled */
+            auto_link_semantic_enabled: boolean;
+            /** Semantic Similarity Threshold */
+            semantic_similarity_threshold: number;
+            /** Pairwise Judge Confidence Threshold */
+            pairwise_judge_confidence_threshold: number;
+            /** Candidate Score Gap Threshold */
+            candidate_score_gap_threshold: number;
+            /** Cluster Match Threshold */
+            cluster_match_threshold: number;
+            /** Min Distinct Interviews For Promotion */
+            min_distinct_interviews_for_promotion: number;
+            /** Min Distinct Companies For Promotion */
+            min_distinct_companies_for_promotion: number;
+            /** Min Failed Answers For Promotion */
+            min_failed_answers_for_promotion: number;
+            /** Audit Sample Percent */
+            audit_sample_percent: number;
+            /** Personal Review Enabled */
+            personal_review_enabled: boolean;
+            /**
+             * Global Auto Publish Enabled
+             * @constant
+             */
+            global_auto_publish_enabled: false;
+            /** Cluster Moderation Enabled */
+            cluster_moderation_enabled: boolean;
+            /** Legacy Queue Enabled */
+            legacy_queue_enabled: boolean;
+        };
         /**
          * CompanyAliasProposalStatus
          * @enum {string}
@@ -6015,6 +6897,8 @@ export interface components {
             slug: string;
             /** Category */
             category: string;
+            /** Subcategory */
+            subcategory: string | null;
             /** Companies */
             companies: string | null;
             /** Question Markdown */
@@ -6819,6 +7703,11 @@ export interface components {
             /** Question Count */
             question_count: number;
         };
+        /**
+         * LearningObjectType
+         * @enum {string}
+         */
+        LearningObjectType: "flashcard" | "open_technical_question" | "coding_task" | "system_design_case" | "behavioral_question" | "organizational_question" | "context_dependent" | "noise";
         /**
          * MentorAnalyticsPeriod
          * @enum {string}
@@ -7637,6 +8526,11 @@ export interface components {
             created_at: string;
         };
         /**
+         * PairwiseCardMatchDecision
+         * @enum {string}
+         */
+        PairwiseCardMatchDecision: "same_card" | "related_different_scope" | "not_related" | "uncertain";
+        /**
          * PaymentAttemptStatus
          * @enum {string}
          */
@@ -7743,6 +8637,115 @@ export interface components {
             /** Remaining Salary Percent */
             remaining_salary_percent: string;
         };
+        /** PersonalReviewItemCorrectionMutation */
+        PersonalReviewItemCorrectionMutation: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+            /** Question Text */
+            question_text?: string | null;
+            /** Answer Summary */
+            answer_summary?: string | null;
+            answer_contract?: components["schemas"]["AnswerContract"] | null;
+            /** Due At */
+            due_at?: string | null;
+            status?: components["schemas"]["PersonalReviewStatus"] | null;
+        };
+        /** PersonalReviewItemCorrectionResult */
+        PersonalReviewItemCorrectionResult: {
+            item: components["schemas"]["PersonalReviewItemRead"];
+            /**
+             * Decision Id
+             * Format: uuid
+             */
+            decision_id: string;
+        };
+        /** PersonalReviewItemPage */
+        PersonalReviewItemPage: {
+            /** Items */
+            items: components["schemas"]["PersonalReviewItemRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** PersonalReviewItemRead */
+        PersonalReviewItemRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Direction Id
+             * Format: uuid
+             */
+            direction_id: string;
+            /** Direction Slug */
+            direction_slug: string;
+            /** Direction Title */
+            direction_title: string;
+            /** Source Occurrence Id */
+            source_occurrence_id?: string | null;
+            /** Source Analysis Id */
+            source_analysis_id?: string | null;
+            /** Source Analysis Url */
+            source_analysis_url?: string | null;
+            /** Canonical Card Id */
+            canonical_card_id?: string | null;
+            /** Replaced By Card Id */
+            replaced_by_card_id?: string | null;
+            /** Question Text */
+            question_text: string;
+            /** Answer Summary */
+            answer_summary?: string | null;
+            answer_contract?: components["schemas"]["AnswerContract"] | null;
+            status: components["schemas"]["PersonalReviewStatus"];
+            /**
+             * Due At
+             * Format: date-time
+             */
+            due_at: string;
+            /** Last Reviewed At */
+            last_reviewed_at?: string | null;
+            /** Successful Reviews Count */
+            successful_reviews_count: number;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Version */
+            version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** PersonalReviewItemReviewMutation */
+        PersonalReviewItemReviewMutation: {
+            rating: components["schemas"]["InterviewReviewRating"];
+            /** Expected Version */
+            expected_version: number;
+        };
+        /** PersonalReviewItemReviewResult */
+        PersonalReviewItemReviewResult: {
+            item: components["schemas"]["PersonalReviewItemRead"];
+            rating: components["schemas"]["InterviewReviewRating"];
+            /** Became Mastered */
+            became_mastered: boolean;
+        };
+        /**
+         * PersonalReviewStatus
+         * @enum {string}
+         */
+        PersonalReviewStatus: "active" | "mastered" | "archived" | "replaced_by_canonical_card";
         /** PinnedResourceLinkMutation */
         PinnedResourceLinkMutation: {
             /** Title */
@@ -7889,6 +8892,574 @@ export interface components {
             /** Roadmaps */
             roadmaps: components["schemas"]["GrantedRoadmapRead"][];
         };
+        /**
+         * QuestionClusterAction
+         * @enum {string}
+         */
+        QuestionClusterAction: "update_draft" | "link_card" | "create_card" | "split" | "merge" | "ignore" | "defer" | "mark_important" | "reopen";
+        /** QuestionClusterActionMutation */
+        QuestionClusterActionMutation: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+        };
+        /** QuestionClusterAllowedActions */
+        QuestionClusterAllowedActions: {
+            /**
+             * Cluster Id
+             * Format: uuid
+             */
+            cluster_id: string;
+            /** Version */
+            version: number;
+            /** Actions */
+            actions?: components["schemas"]["QuestionClusterAction"][];
+        };
+        /** QuestionClusterAnswerGenerationMutation */
+        QuestionClusterAnswerGenerationMutation: {
+            /** Expected Version */
+            expected_version: number;
+        };
+        /** QuestionClusterAnswerGenerationResult */
+        QuestionClusterAnswerGenerationResult: {
+            /**
+             * Cluster Id
+             * Format: uuid
+             */
+            cluster_id: string;
+            /** Version */
+            version: number;
+            /** Job Id */
+            job_id: string;
+        };
+        /**
+         * QuestionClusterBulkAction
+         * @enum {string}
+         */
+        QuestionClusterBulkAction: "confirm_exact_matches" | "confirm_high_confidence_matches" | "ignore_noise" | "defer_singletons" | "link_card" | "apply_topic";
+        /** QuestionClusterBulkItemResult */
+        QuestionClusterBulkItemResult: {
+            /**
+             * Cluster Id
+             * Format: uuid
+             */
+            cluster_id: string;
+            /** Succeeded */
+            succeeded: boolean;
+            cluster?: components["schemas"]["QuestionClusterSummary"] | null;
+            /** Decision Id */
+            decision_id?: string | null;
+            /** Error Code */
+            error_code?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+        };
+        /** QuestionClusterBulkMutation */
+        QuestionClusterBulkMutation: {
+            action: components["schemas"]["QuestionClusterBulkAction"];
+            /** Cluster Ids */
+            cluster_ids: string[];
+            /** Expected Versions */
+            expected_versions: {
+                [key: string]: number;
+            };
+            /**
+             * Confirmation
+             * @constant
+             */
+            confirmation: true;
+            /** Reason */
+            reason: string;
+            /** Card Id */
+            card_id?: string | null;
+            /** Topic Name */
+            topic_name?: string | null;
+        };
+        /** QuestionClusterBulkResult */
+        QuestionClusterBulkResult: {
+            /** Requested Count */
+            requested_count: number;
+            /** Succeeded Count */
+            succeeded_count: number;
+            /** Failed Count */
+            failed_count: number;
+            /** Items */
+            items: components["schemas"]["QuestionClusterBulkItemResult"][];
+        };
+        /** QuestionClusterCardMatch */
+        QuestionClusterCardMatch: {
+            /**
+             * Card Id
+             * Format: uuid
+             */
+            card_id: string;
+            /** Question Markdown */
+            question_markdown: string;
+            /** Answer Markdown */
+            answer_markdown: string;
+            /** Category */
+            category: string;
+            /** Semantic Score */
+            semantic_score: number;
+            /** Combined Score */
+            combined_score?: number | null;
+            judge_decision?: components["schemas"]["PairwiseCardMatchDecision"] | null;
+            /** Judge Confidence */
+            judge_confidence?: number | null;
+            /** Judge Reason */
+            judge_reason?: string | null;
+            /**
+             * Is Confirmed Alias
+             * @default false
+             */
+            is_confirmed_alias: boolean;
+        };
+        /** QuestionClusterCompanyRead */
+        QuestionClusterCompanyRead: {
+            /** Company Id */
+            company_id?: string | null;
+            /** Company Name */
+            company_name: string;
+            /** Occurrences Count */
+            occurrences_count: number;
+        };
+        /** QuestionClusterCreateCardMutation */
+        QuestionClusterCreateCardMutation: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+            /**
+             * Deck Id
+             * Format: uuid
+             */
+            deck_id: string;
+            /** Category */
+            category: string;
+            /** Subcategory */
+            subcategory?: string | null;
+            /** Question Markdown */
+            question_markdown: string;
+            /** Answer Markdown */
+            answer_markdown: string;
+            /** @default occasional */
+            frequency: components["schemas"]["InterviewCardFrequency"];
+            /** @default manual */
+            frequency_mode: components["schemas"]["InterviewCardFrequencyMode"];
+        };
+        /** QuestionClusterDetail */
+        QuestionClusterDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Direction Id
+             * Format: uuid
+             */
+            direction_id: string;
+            /** Direction Slug */
+            direction_slug: string;
+            /** Direction Title */
+            direction_title: string;
+            status: components["schemas"]["QuestionClusterStatus"];
+            /** Canonical Question */
+            canonical_question: string;
+            learning_object_type: components["schemas"]["LearningObjectType"];
+            /** Deck Id */
+            deck_id?: string | null;
+            /** Topic Name */
+            topic_name?: string | null;
+            /** Subtopic Name */
+            subtopic_name?: string | null;
+            /** Topic Candidates */
+            topic_candidates?: string[];
+            /** Linked Card Id */
+            linked_card_id?: string | null;
+            best_match?: components["schemas"]["QuestionClusterCardMatch"] | null;
+            last_decision_source?: components["schemas"]["AutomationDecisionSource"] | null;
+            /** Occurrences Count */
+            occurrences_count: number;
+            /** Distinct Interviews Count */
+            distinct_interviews_count: number;
+            /** Distinct Companies Count */
+            distinct_companies_count: number;
+            /** Distinct Students Count */
+            distinct_students_count: number;
+            /** Failed Answers Count */
+            failed_answers_count: number;
+            /** Priority Score */
+            priority_score: number;
+            /** Quality Score */
+            quality_score: number;
+            /** Cluster Confidence */
+            cluster_confidence: number;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Manual Important */
+            manual_important: boolean;
+            /** Version */
+            version: number;
+            /** Allowed Actions */
+            allowed_actions?: components["schemas"]["QuestionClusterAction"][];
+            /** Normalized Canonical Question */
+            normalized_canonical_question: string;
+            /** Representative Occurrence Id */
+            representative_occurrence_id?: string | null;
+            /** Merged Into Cluster Id */
+            merged_into_cluster_id?: string | null;
+            /** Parent Cluster Id */
+            parent_cluster_id?: string | null;
+            /** Question Variants */
+            question_variants?: components["schemas"]["QuestionClusterVariantRead"][];
+            /** Companies */
+            companies?: components["schemas"]["QuestionClusterCompanyRead"][];
+            /** Interviews */
+            interviews?: components["schemas"]["QuestionClusterInterviewRead"][];
+            /** Occurrences */
+            occurrences?: components["schemas"]["QuestionClusterOccurrenceRead"][];
+            /** Top Card Matches */
+            top_card_matches?: components["schemas"]["QuestionClusterCardMatch"][];
+            answer_contract?: components["schemas"]["AnswerContract"] | null;
+            answer_validation?: components["schemas"]["AnswerValidationResult"] | null;
+            answer_status?: components["schemas"]["AnswerContractStatus"] | null;
+            /** Decisions */
+            decisions?: components["schemas"]["AutomationDecisionRead"][];
+            /** Manual History */
+            manual_history?: components["schemas"]["QuestionClusterManualHistoryRead"][];
+            /** Topic Options */
+            topic_options?: components["schemas"]["QuestionClusterTopicOption"][];
+            /** Promoted At */
+            promoted_at?: string | null;
+            /** Promotion Reason */
+            promotion_reason?: string | null;
+            /** Membership Revision */
+            membership_revision: number;
+            /** Stats Revision */
+            stats_revision: number;
+        };
+        /** QuestionClusterDraftMutation */
+        QuestionClusterDraftMutation: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+            /** Canonical Question */
+            canonical_question?: string | null;
+            /** Topic Name */
+            topic_name?: string | null;
+            /** Subtopic Name */
+            subtopic_name?: string | null;
+            answer_contract?: components["schemas"]["AnswerContract"] | null;
+            /**
+             * Preserve Answer Status
+             * @default false
+             */
+            preserve_answer_status: boolean;
+        };
+        /** QuestionClusterInterviewRead */
+        QuestionClusterInterviewRead: {
+            /**
+             * Interview Id
+             * Format: uuid
+             */
+            interview_id: string;
+            /** Company Id */
+            company_id?: string | null;
+            /** Company Name */
+            company_name: string;
+            /**
+             * Interviewed At
+             * Format: date-time
+             */
+            interviewed_at: string;
+            /** Occurrences Count */
+            occurrences_count: number;
+        };
+        /** QuestionClusterLinkCardMutation */
+        QuestionClusterLinkCardMutation: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+            /**
+             * Card Id
+             * Format: uuid
+             */
+            card_id: string;
+            /**
+             * Confirm Alias
+             * @default false
+             */
+            confirm_alias: boolean;
+        };
+        /** QuestionClusterManualHistoryRead */
+        QuestionClusterManualHistoryRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Action */
+            action: string;
+            /** Actor User Id */
+            actor_user_id?: string | null;
+            /** Actor Name */
+            actor_name?: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Changes */
+            changes?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** QuestionClusterMergeMutation */
+        QuestionClusterMergeMutation: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+            /**
+             * Target Cluster Id
+             * Format: uuid
+             */
+            target_cluster_id: string;
+            /** Target Expected Version */
+            target_expected_version: number;
+        };
+        /** QuestionClusterMutationResult */
+        QuestionClusterMutationResult: {
+            cluster: components["schemas"]["QuestionClusterSummary"];
+            /**
+             * Decision Id
+             * Format: uuid
+             */
+            decision_id: string;
+            /** Created Card Id */
+            created_card_id?: string | null;
+            /** Affected Cluster Ids */
+            affected_cluster_ids?: string[];
+        };
+        /** QuestionClusterOccurrenceRead */
+        QuestionClusterOccurrenceRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Interview Id
+             * Format: uuid
+             */
+            interview_id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Company Id */
+            company_id?: string | null;
+            /** Company Name */
+            company_name: string;
+            /**
+             * Interviewed At
+             * Format: date-time
+             */
+            interviewed_at: string;
+            /** Question Text */
+            question_text: string;
+            /** Canonical Question Candidate */
+            canonical_question_candidate?: string | null;
+            /** Source Context */
+            source_context?: string | null;
+            /** Answer Text */
+            answer_text?: string | null;
+            /** Answer Assessment */
+            answer_assessment?: string | null;
+            learning_object_type: components["schemas"]["LearningObjectType"];
+            /** Routing Confidence */
+            routing_confidence?: number | null;
+            /** Quality Flags */
+            quality_flags?: string[];
+            automation_status: components["schemas"]["QuestionOccurrenceStatus"];
+            /** Automation Revision */
+            automation_revision: number;
+            /** Automation Error */
+            automation_error?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** QuestionClusterPage */
+        QuestionClusterPage: {
+            /** Items */
+            items: components["schemas"]["QuestionClusterSummary"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** QuestionClusterSplitMutation */
+        QuestionClusterSplitMutation: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+            /** Occurrence Ids */
+            occurrence_ids: string[];
+            /** New Canonical Question */
+            new_canonical_question: string;
+            /** New Topic Name */
+            new_topic_name?: string | null;
+            /** New Subtopic Name */
+            new_subtopic_name?: string | null;
+        };
+        /**
+         * QuestionClusterStatus
+         * @enum {string}
+         */
+        QuestionClusterStatus: "shadow" | "candidate" | "needs_review" | "linked" | "card_created" | "deferred" | "ignored" | "split" | "merged";
+        /** QuestionClusterSummary */
+        QuestionClusterSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Direction Id
+             * Format: uuid
+             */
+            direction_id: string;
+            /** Direction Slug */
+            direction_slug: string;
+            /** Direction Title */
+            direction_title: string;
+            status: components["schemas"]["QuestionClusterStatus"];
+            /** Canonical Question */
+            canonical_question: string;
+            learning_object_type: components["schemas"]["LearningObjectType"];
+            /** Deck Id */
+            deck_id?: string | null;
+            /** Topic Name */
+            topic_name?: string | null;
+            /** Subtopic Name */
+            subtopic_name?: string | null;
+            /** Topic Candidates */
+            topic_candidates?: string[];
+            /** Linked Card Id */
+            linked_card_id?: string | null;
+            best_match?: components["schemas"]["QuestionClusterCardMatch"] | null;
+            last_decision_source?: components["schemas"]["AutomationDecisionSource"] | null;
+            /** Occurrences Count */
+            occurrences_count: number;
+            /** Distinct Interviews Count */
+            distinct_interviews_count: number;
+            /** Distinct Companies Count */
+            distinct_companies_count: number;
+            /** Distinct Students Count */
+            distinct_students_count: number;
+            /** Failed Answers Count */
+            failed_answers_count: number;
+            /** Priority Score */
+            priority_score: number;
+            /** Quality Score */
+            quality_score: number;
+            /** Cluster Confidence */
+            cluster_confidence: number;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Manual Important */
+            manual_important: boolean;
+            /** Version */
+            version: number;
+            /** Allowed Actions */
+            allowed_actions?: components["schemas"]["QuestionClusterAction"][];
+        };
+        /** QuestionClusterTopicOption */
+        QuestionClusterTopicOption: {
+            /**
+             * Deck Id
+             * Format: uuid
+             */
+            deck_id: string;
+            /** Deck Title */
+            deck_title: string;
+            /** Topics */
+            topics?: string[];
+        };
+        /** QuestionClusterVariantRead */
+        QuestionClusterVariantRead: {
+            /** Question Text */
+            question_text: string;
+            /** Normalized Question Text */
+            normalized_question_text: string;
+            /** Occurrences Count */
+            occurrences_count: number;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+        };
+        /** QuestionOccurrenceReprocessMutation */
+        QuestionOccurrenceReprocessMutation: {
+            /** Expected Revision */
+            expected_revision: number;
+            /** Reason */
+            reason: string;
+        };
+        /** QuestionOccurrenceReprocessResult */
+        QuestionOccurrenceReprocessResult: {
+            /**
+             * Question Id
+             * Format: uuid
+             */
+            question_id: string;
+            /** Revision */
+            revision: number;
+            /** Job Id */
+            job_id: string;
+        };
+        /**
+         * QuestionOccurrenceStatus
+         * @enum {string}
+         */
+        QuestionOccurrenceStatus: "created" | "routing" | "routed" | "auto_ignored" | "searching_card" | "auto_linked" | "searching_cluster" | "clustered" | "needs_review" | "personal_only" | "failed";
         /** RecruiterCompanyGroupRead */
         RecruiterCompanyGroupRead: {
             company: components["schemas"]["RecruiterContactCompanyRead"];
@@ -11803,6 +13374,1331 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntelligenceInterviewDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_clusters_api_v1_admin_card_automation_clusters_get: {
+        parameters: {
+            query?: {
+                direction_id?: string | null;
+                statuses?: components["schemas"]["QuestionClusterStatus"][] | null;
+                topic_name?: string | null;
+                learning_object_types?: components["schemas"]["LearningObjectType"][] | null;
+                min_distinct_interviews?: number | null;
+                min_distinct_companies?: number | null;
+                has_failed_answers?: boolean | null;
+                min_confidence?: number | null;
+                max_confidence?: number | null;
+                has_possible_duplicate?: boolean | null;
+                decision_source?: components["schemas"]["AutomationDecisionSource"] | null;
+                seen_from?: string | null;
+                seen_to?: string | null;
+                needs_action_only?: boolean;
+                sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
+                sort_order?: "asc" | "desc";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_bulk_clusters_api_v1_admin_card_automation_clusters_bulk_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionClusterBulkMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterBulkResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_cluster_api_v1_admin_card_automation_clusters__cluster_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_cluster_allowed_actions_api_v1_admin_card_automation_clusters__cluster_id__allowed_actions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterAllowedActions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_reprocess_occurrence_api_v1_admin_card_automation_occurrences__question_id__reprocess_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                question_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionOccurrenceReprocessMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionOccurrenceReprocessResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_generate_cluster_answer_api_v1_admin_card_automation_clusters__cluster_id__generate_answer_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionClusterAnswerGenerationMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterAnswerGenerationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_link_cluster_card_api_v1_admin_card_automation_clusters__cluster_id__link_card_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionClusterLinkCardMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_cluster_draft_api_v1_admin_card_automation_clusters__cluster_id__draft_patch: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionClusterDraftMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_cluster_card_api_v1_admin_card_automation_clusters__cluster_id__create_card_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionClusterCreateCardMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_split_cluster_api_v1_admin_card_automation_clusters__cluster_id__split_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionClusterSplitMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_merge_clusters_api_v1_admin_card_automation_clusters__cluster_id__merge_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionClusterMergeMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_set_cluster_state_api_v1_admin_card_automation_clusters__cluster_id___action__post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+                action: "ignore" | "defer" | "mark-important" | "reopen";
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionClusterActionMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_decisions_api_v1_admin_card_automation_decisions_get: {
+        parameters: {
+            query?: {
+                direction_id?: string | null;
+                entity_type?: string | null;
+                decision_types?: components["schemas"]["AutomationDecisionType"][] | null;
+                decision_sources?: components["schemas"]["AutomationDecisionSource"][] | null;
+                is_audit_sample?: boolean | null;
+                is_reviewed?: boolean | null;
+                is_overridden?: boolean | null;
+                created_from?: string | null;
+                created_to?: string | null;
+                sort_order?: "asc" | "desc";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDecisionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_review_decision_api_v1_admin_card_automation_decisions__decision_id__review_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                decision_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationDecisionReviewMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDecisionRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_override_decision_api_v1_admin_card_automation_decisions__decision_id__override_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                decision_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationDecisionOverrideMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDecisionRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_settings_api_v1_admin_card_automation_settings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardAutomationSettingsList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_settings_api_v1_admin_card_automation_settings_put: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardAutomationSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardAutomationSettingsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_metrics_api_v1_admin_card_automation_metrics_get: {
+        parameters: {
+            query: {
+                period_from: string;
+                period_to: string;
+                direction_id?: string | null;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardAutomationMetricsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_managed_personal_items_api_v1_admin_card_automation_students__student_id__personal_review_items_get: {
+        parameters: {
+            query?: {
+                direction_id?: string | null;
+                statuses?: components["schemas"]["PersonalReviewStatus"][] | null;
+                due_only?: boolean;
+                due_before?: string | null;
+                sort_order?: "asc" | "desc";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalReviewItemPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_correct_personal_item_api_v1_admin_card_automation_students__student_id__personal_review_items__item_id__patch: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                item_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonalReviewItemCorrectionMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalReviewItemCorrectionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_clusters_api_v1_mentor_card_automation_clusters_get: {
+        parameters: {
+            query?: {
+                direction_id?: string | null;
+                statuses?: components["schemas"]["QuestionClusterStatus"][] | null;
+                topic_name?: string | null;
+                learning_object_types?: components["schemas"]["LearningObjectType"][] | null;
+                min_distinct_interviews?: number | null;
+                min_distinct_companies?: number | null;
+                has_failed_answers?: boolean | null;
+                min_confidence?: number | null;
+                max_confidence?: number | null;
+                has_possible_duplicate?: boolean | null;
+                decision_source?: components["schemas"]["AutomationDecisionSource"] | null;
+                seen_from?: string | null;
+                seen_to?: string | null;
+                needs_action_only?: boolean;
+                sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
+                sort_order?: "asc" | "desc";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_cluster_api_v1_mentor_card_automation_clusters__cluster_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_cluster_allowed_actions_api_v1_mentor_card_automation_clusters__cluster_id__allowed_actions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterAllowedActions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_reprocess_occurrence_api_v1_mentor_card_automation_occurrences__question_id__reprocess_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                question_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionOccurrenceReprocessMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionOccurrenceReprocessResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_set_cluster_state_api_v1_mentor_card_automation_clusters__cluster_id___action__post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+                action: "ignore" | "defer" | "mark-important" | "reopen";
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionClusterActionMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterMutationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_decisions_api_v1_mentor_card_automation_decisions_get: {
+        parameters: {
+            query?: {
+                direction_id?: string | null;
+                entity_type?: string | null;
+                decision_types?: components["schemas"]["AutomationDecisionType"][] | null;
+                decision_sources?: components["schemas"]["AutomationDecisionSource"][] | null;
+                is_audit_sample?: boolean | null;
+                is_reviewed?: boolean | null;
+                is_overridden?: boolean | null;
+                created_from?: string | null;
+                created_to?: string | null;
+                sort_order?: "asc" | "desc";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDecisionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_review_decision_api_v1_mentor_card_automation_decisions__decision_id__review_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                decision_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationDecisionReviewMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDecisionRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_override_decision_api_v1_mentor_card_automation_decisions__decision_id__override_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                decision_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationDecisionOverrideMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationDecisionRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_managed_personal_items_api_v1_mentor_card_automation_students__student_id__personal_review_items_get: {
+        parameters: {
+            query?: {
+                direction_id?: string | null;
+                statuses?: components["schemas"]["PersonalReviewStatus"][] | null;
+                due_only?: boolean;
+                due_before?: string | null;
+                sort_order?: "asc" | "desc";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalReviewItemPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_correct_personal_item_api_v1_mentor_card_automation_students__student_id__personal_review_items__item_id__patch: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                item_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonalReviewItemCorrectionMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalReviewItemCorrectionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    personal_review_items_api_v1_students_me_personal_review_items_get: {
+        parameters: {
+            query?: {
+                direction_id?: string | null;
+                statuses?: components["schemas"]["PersonalReviewStatus"][] | null;
+                due_only?: boolean;
+                due_before?: string | null;
+                sort_order?: "asc" | "desc";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalReviewItemPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_personal_item_api_v1_students_me_personal_review_items__item_id__review_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonalReviewItemReviewMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonalReviewItemReviewResult"];
                 };
             };
             /** @description Validation Error */

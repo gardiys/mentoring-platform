@@ -250,6 +250,7 @@ async def get_study_session(
             id=card.id,
             slug=card.slug,
             category=card.category,
+            subcategory=card.subcategory,
             companies=card.companies,
             question_markdown=card.question_markdown,
             answer_markdown=card.answer_markdown,
@@ -442,6 +443,7 @@ def _admin_card_read(card: InterviewCard) -> AdminInterviewCardRead:
         id=card.id,
         slug=card.slug,
         category=card.category,
+        subcategory=card.subcategory,
         companies=card.companies,
         source_number=card.source_number,
         source_occurrence=card.source_occurrence,
@@ -604,6 +606,7 @@ async def list_admin_interview_cards(
                 id=card.id,
                 slug=card.slug,
                 category=card.category,
+                subcategory=card.subcategory,
                 question_preview=card.question_markdown[:180],
                 frequency=effective_card_frequency(card),
                 frequency_override=card.frequency_override,
@@ -710,6 +713,7 @@ def _apply_card(card: InterviewCard, payload: AdminInterviewCardMutation) -> Non
         card.question_embedding_source_hash = None
     card.slug = payload.slug
     card.category = payload.category
+    card.subcategory = payload.subcategory
     card.companies = payload.companies
     card.question_markdown = payload.question_markdown
     card.answer_markdown = payload.answer_markdown

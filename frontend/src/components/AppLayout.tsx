@@ -71,13 +71,20 @@ export function AppLayout() {
       location.pathname === "/roadmaps" ||
       location.pathname === "/knowledge" ||
       location.pathname === "/interviews" ||
+      location.pathname === "/interviews/personal-review" ||
       location.pathname === "/my-mentor" ||
       location.pathname === "/payments" ||
       location.pathname === "/mentor/profile" ||
       location.pathname === "/mentor/rewards" ||
+      location.pathname === "/mentor/card-automation/clusters" ||
+      location.pathname === "/mentor/card-automation/decisions" ||
       location.pathname === "/admin/payments" ||
       location.pathname === "/admin/schedule" ||
-      location.pathname === "/admin/useful-links";
+      location.pathname === "/admin/useful-links" ||
+      location.pathname === "/admin/card-automation/clusters" ||
+      location.pathname === "/admin/card-automation/decisions" ||
+      location.pathname === "/admin/card-automation/metrics" ||
+      location.pathname === "/admin/card-automation/settings";
     if (rootRoute) {
       platform.hideBackButton();
       return;
@@ -198,11 +205,24 @@ export function AppLayout() {
             description="Дневник, каталог и карточки"
             leftSection={<span className="nav-index">03</span>}
             className="brand-nav-link"
-            active={location.pathname.startsWith("/interviews")}
+            active={
+              location.pathname.startsWith("/interviews") &&
+              location.pathname !== "/interviews/personal-review"
+            }
             onClick={close}
           />
           {student && (
             <>
+              <NavLink
+                component={Link}
+                to="/interviews/personal-review"
+                label="Личные вопросы"
+                description="Повторение после разборов"
+                leftSection={<span className="nav-index">PR</span>}
+                className="brand-nav-link"
+                active={location.pathname === "/interviews/personal-review"}
+                onClick={close}
+              />
               <NavLink
                 component={Link}
                 to="/my-mentor"
@@ -267,6 +287,24 @@ export function AppLayout() {
                 active={location.pathname.startsWith(
                   "/mentor/interview-reviews",
                 )}
+                onClick={close}
+              />
+              <NavLink
+                component={Link}
+                to={
+                  admin
+                    ? "/admin/card-automation/clusters"
+                    : "/mentor/card-automation/clusters"
+                }
+                label="Модерация карточек"
+                description={
+                  admin
+                    ? "Проверить тему, вопрос и ответ"
+                    : "Карточки своих направлений"
+                }
+                leftSection={<span className="nav-index">CA</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/mentor/card-automation")}
                 onClick={close}
               />
             </>
@@ -361,6 +399,16 @@ export function AppLayout() {
                 leftSection={<span className="nav-index">10</span>}
                 className="brand-nav-link"
                 active={location.pathname.startsWith("/admin/interviews")}
+                onClick={close}
+              />
+              <NavLink
+                component={Link}
+                to="/admin/card-automation/clusters"
+                label="Модерация AI-карточек"
+                description="Проверить тему, вопрос и ответ"
+                leftSection={<span className="nav-index">CA</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/admin/card-automation")}
                 onClick={close}
               />
               <NavLink

@@ -45,6 +45,7 @@ function CardForm({
     id: card?.id,
     slug: card?.slug ?? "",
     category: card?.category ?? "Общее",
+    subcategory: card?.subcategory ?? null,
     companies: card?.companies ?? null,
     question_markdown: card?.question_markdown ?? "## Вопрос",
     answer_markdown:
@@ -137,6 +138,18 @@ function CardForm({
                 }
               />
             </Group>
+            <TextInput
+              label="Подтема"
+              description="Необязательно. Не влияет на группировку карточек по широкой теме."
+              value={form.subcategory ?? ""}
+              onChange={(event) => {
+                const subcategory = event.currentTarget.value || null;
+                setForm((current) => ({
+                  ...current,
+                  subcategory,
+                }));
+              }}
+            />
             <Textarea
               label="Вопрос (Markdown)"
               required

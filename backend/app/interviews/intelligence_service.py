@@ -13,6 +13,15 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import get_settings
 from app.core.errors import api_error
+from app.interviews.card_automation_cleanup import (
+    finalize_automation_deletion,
+    prepare_automation_deletion,
+)
+from app.interviews.card_automation_models import CardAutomationSettings
+from app.interviews.card_automation_types import (
+    AutomationDecisionSource,
+    QuestionOccurrenceStatus,
+)
 from app.interviews.card_frequency import effective_card_frequency, refresh_card_frequency
 from app.interviews.companies import resolve_company
 from app.interviews.intelligence_models import (
@@ -1120,7 +1129,10 @@ async def delete_intelligence_interview(
     if user.role is not UserRole.ADMIN and interview.student_id != user.id:
         api_error(404, "intelligence_interview_not_found", "Interview was not found")
     keys = [interview.normalized_audio_key] if interview.normalized_audio_key else []
+    impact = await prepare_automation_deletion(session, [interview.id])
     await session.delete(interview)
+    await session.flush()
+    await finalize_automation_deletion(session, impact)
     await session.commit()
     return keys
 
@@ -1148,8 +1160,21 @@ async def moderate_intelligence_question(
         question.moderation_status = IntelligenceQuestionModerationStatus.MENTOR_APPROVED
         question.mentor_reviewed_by_user_id = reviewer.id
         question.mentor_reviewed_at = now
+        question.automation_status = QuestionOccurrenceStatus.NEEDS_REVIEW
+        question.automation_decision_source = AutomationDecisionSource.HUMAN
+        question.automation_decision_reason = "Mentor recommended the occurrence for moderation"
+        question.automation_error = None
+        question.processed_at = now
+        question.automation_revision += 1
     elif payload.action == "reject":
         question.moderation_status = IntelligenceQuestionModerationStatus.REJECTED
+        question.automation_status = QuestionOccurrenceStatus.AUTO_IGNORED
+        question.automation_decision_source = AutomationDecisionSource.HUMAN
+        question.automation_decision_reason = "Reviewer rejected the occurrence"
+        question.automation_error = None
+        question.processed_at = now
+        question.alias_human_confirmed = False
+        question.automation_revision += 1
         if reviewer.role is UserRole.ADMIN:
             question.admin_reviewed_by_user_id = reviewer.id
             question.admin_reviewed_at = now
@@ -1388,6 +1413,16 @@ async def moderate_intelligence_question(
         question.admin_reviewed_by_user_id = reviewer.id
         question.admin_reviewed_at = now
         question.published_card_id = card.id
+        # Only an explicit admin approval can turn a wording into a trusted
+        # alias. Automated links deliberately keep this false to avoid a
+        # self-reinforcing semantic matching feedback loop.
+        question.alias_human_confirmed = True
+        question.automation_status = QuestionOccurrenceStatus.AUTO_LINKED
+        question.automation_decision_source = AutomationDecisionSource.HUMAN
+        question.automation_decision_reason = "Administrator approved the occurrence"
+        question.automation_error = None
+        question.processed_at = now
+        question.automation_revision += 1
 
         candidate_answer = await session.scalar(
             select(IntelligenceAnswer).where(IntelligenceAnswer.question_id == question.id)
@@ -1448,6 +1483,37 @@ async def list_admin_question_moderation(
                 ]
             )
         )
+        # Once a direction is switched to cluster moderation, occurrences
+        # owned by that workflow must not create duplicate tasks in the legacy
+        # queue. Shadow exact/semantic proposals stay visible as ROUTED until
+        # their corresponding live mode is enabled.
+        filters.extend(
+            [
+                func.coalesce(
+                    CardAutomationSettings.legacy_queue_enabled,
+                    True,
+                ).is_(True),
+                IntelligenceQuestion.automation_status.notin_(
+                    {
+                        QuestionOccurrenceStatus.AUTO_LINKED,
+                        QuestionOccurrenceStatus.AUTO_IGNORED,
+                    }
+                ),
+                or_(
+                    func.coalesce(
+                        CardAutomationSettings.cluster_moderation_enabled,
+                        False,
+                    ).is_(False),
+                    IntelligenceQuestion.automation_status.notin_(
+                        {
+                            QuestionOccurrenceStatus.CLUSTERED,
+                            QuestionOccurrenceStatus.NEEDS_REVIEW,
+                            QuestionOccurrenceStatus.PERSONAL_ONLY,
+                        }
+                    ),
+                ),
+            ]
+        )
     elif status == "mentor_approved":
         filters.append(
             IntelligenceQuestion.moderation_status
@@ -1483,6 +1549,10 @@ async def list_admin_question_moderation(
     count_statement = select(func.count(IntelligenceQuestion.id))
     for model, condition in joins:
         count_statement = count_statement.join(model, condition)
+    count_statement = count_statement.outerjoin(
+        CardAutomationSettings,
+        CardAutomationSettings.direction_id == InterviewProcess.track_id,
+    )
     total = int(await session.scalar(count_statement.where(*filters)) or 0)
 
     statement = select(
@@ -1495,6 +1565,10 @@ async def list_admin_question_moderation(
     )
     for model, condition in joins:
         statement = statement.join(model, condition)
+    statement = statement.outerjoin(
+        CardAutomationSettings,
+        CardAutomationSettings.direction_id == InterviewProcess.track_id,
+    )
     rows = (
         await session.execute(
             statement.where(*filters)
@@ -1667,6 +1741,7 @@ async def _approved_question_aliases(
                 IntelligenceQuestion.published_card_id.in_(card_ids),
                 IntelligenceQuestion.moderation_status
                 == IntelligenceQuestionModerationStatus.APPROVED,
+                IntelligenceQuestion.alias_human_confirmed.is_(True),
             )
             .order_by(IntelligenceQuestion.created_at, IntelligenceQuestion.id)
         )

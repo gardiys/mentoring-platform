@@ -193,8 +193,12 @@ export const adminTrackKeys = {
   options: ["admin", "tracks", "options"] as const,
 };
 
-export function useAdminTracks() {
-  return useQuery({ queryKey: adminTrackKeys.all, queryFn: api.adminTracks });
+export function useAdminTracks(enabled = true) {
+  return useQuery({
+    queryKey: adminTrackKeys.all,
+    queryFn: api.adminTracks,
+    enabled,
+  });
 }
 
 export function useAdminTrack(id: string) {

@@ -18,10 +18,11 @@ export const adminInterviewKeys = {
 
 const PROCESS_PAGE_SIZE = 12;
 
-export function useAdminInterviewDecks() {
+export function useAdminInterviewDecks(enabled = true) {
   return useQuery({
     queryKey: adminInterviewKeys.all,
     queryFn: api.adminInterviewDeckSummaries,
+    enabled,
   });
 }
 

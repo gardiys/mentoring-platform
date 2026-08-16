@@ -1,6 +1,16 @@
 import type {
   AdminQuestionModerationDetail,
   AdminQuestionModerationPage,
+  AutomationDecisionFilters,
+  AutomationDecisionOverrideMutation,
+  AutomationDecisionPage,
+  AutomationDecisionRead,
+  AutomationDecisionReviewMutation,
+  CardAutomationSettingsMutation,
+  CardAutomationSettingsPage,
+  CardAutomationSettingsRead,
+  CardAutomationMetricsFilters,
+  CardAutomationMetricsRead,
   AdminKnowledgeTopicMutation,
   AdminKnowledgeEntryMutation,
   AdminKnowledgeEntryRead,
@@ -105,6 +115,8 @@ import type {
   MentorStudentSort,
   MentorWeeklyCallMutation,
   MentorWeeklyCallRescheduleMutation,
+  ManagedPersonalReviewMutation,
+  ManagedPersonalReviewResult,
   MockInterviewRead,
   MyMentorDashboardRead,
   PinnedResourceLinkMutation,
@@ -121,6 +133,26 @@ import type {
   TopicDetail,
   User,
   NotificationPage,
+  PersonalReviewFilters,
+  PersonalReviewItemPage,
+  PersonalReviewMutation,
+  PersonalReviewResult,
+  QuestionClusterCreateCardMutation,
+  QuestionClusterDraftMutation,
+  QuestionClusterDetail,
+  QuestionClusterFilters,
+  QuestionClusterLinkCardMutation,
+  QuestionClusterMergeMutation,
+  QuestionOccurrenceReprocessMutation,
+  QuestionOccurrenceReprocessResult,
+  QuestionClusterPage,
+  QuestionClusterSplitMutation,
+  QuestionClusterActionResult,
+  QuestionClusterAnswerGenerationMutation,
+  QuestionClusterAnswerGenerationResult,
+  QuestionClusterBulkMutation,
+  QuestionClusterBulkResult,
+  QuestionClusterVersionMutation,
 } from "../types/api";
 import {
   ApiError,
@@ -229,6 +261,89 @@ function finalizeRetryDelay(milliseconds: number, signal?: AbortSignal) {
     }
     signal?.addEventListener("abort", abort, { once: true });
   });
+}
+
+function questionClusterSearchParams(
+  filters: QuestionClusterFilters,
+  options: { limit?: number; offset?: number },
+) {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? 20),
+    offset: String(options.offset ?? 0),
+    needs_action_only: String(filters.needsActionOnly),
+    sort_by: filters.sortBy,
+    sort_order: filters.sortOrder,
+  });
+  if (filters.directionId) params.set("direction_id", filters.directionId);
+  filters.statuses.forEach((status) => params.append("statuses", status));
+  if (filters.topicName) params.set("topic_name", filters.topicName);
+  filters.learningObjectTypes.forEach((objectType) =>
+    params.append("learning_object_types", objectType),
+  );
+  if (filters.minDistinctInterviews !== null)
+    params.set(
+      "min_distinct_interviews",
+      String(filters.minDistinctInterviews),
+    );
+  if (filters.minDistinctCompanies !== null)
+    params.set("min_distinct_companies", String(filters.minDistinctCompanies));
+  if (filters.hasFailedAnswers !== null)
+    params.set("has_failed_answers", String(filters.hasFailedAnswers));
+  if (filters.minConfidence !== null)
+    params.set("min_confidence", String(filters.minConfidence));
+  if (filters.maxConfidence !== null)
+    params.set("max_confidence", String(filters.maxConfidence));
+  if (filters.hasPossibleDuplicate !== null)
+    params.set("has_possible_duplicate", String(filters.hasPossibleDuplicate));
+  if (filters.decisionSource)
+    params.set("decision_source", filters.decisionSource);
+  if (filters.seenFrom) params.set("seen_from", filters.seenFrom);
+  if (filters.seenTo) params.set("seen_to", filters.seenTo);
+  return params;
+}
+
+function automationDecisionSearchParams(
+  filters: AutomationDecisionFilters,
+  options: { limit?: number; offset?: number },
+) {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? 20),
+    offset: String(options.offset ?? 0),
+    sort_order: filters.sortOrder,
+  });
+  if (filters.directionId) params.set("direction_id", filters.directionId);
+  if (filters.entityType) params.set("entity_type", filters.entityType);
+  filters.decisionTypes.forEach((decisionType) =>
+    params.append("decision_types", decisionType),
+  );
+  filters.decisionSources.forEach((decisionSource) =>
+    params.append("decision_sources", decisionSource),
+  );
+  if (filters.isAuditSample !== null)
+    params.set("is_audit_sample", String(filters.isAuditSample));
+  if (filters.isReviewed !== null)
+    params.set("is_reviewed", String(filters.isReviewed));
+  if (filters.isOverridden !== null)
+    params.set("is_overridden", String(filters.isOverridden));
+  if (filters.createdFrom) params.set("created_from", filters.createdFrom);
+  if (filters.createdTo) params.set("created_to", filters.createdTo);
+  return params;
+}
+
+function personalReviewSearchParams(
+  filters: PersonalReviewFilters,
+  options: { limit?: number; offset?: number } = {},
+) {
+  const params = new URLSearchParams({
+    limit: String(options.limit ?? 20),
+    offset: String(options.offset ?? 0),
+    due_only: String(filters.dueOnly),
+    sort_order: filters.sortOrder,
+  });
+  if (filters.directionId) params.set("direction_id", filters.directionId);
+  filters.statuses.forEach((status) => params.append("statuses", status));
+  if (filters.dueBefore) params.set("due_before", filters.dueBefore);
+  return params;
 }
 
 export const api = {
@@ -462,6 +577,355 @@ export const api = {
   adminQuestionModerationDetail: (questionId: string) =>
     apiRequest<AdminQuestionModerationDetail>(
       `/api/v1/admin/interviews/question-moderation/${questionId}`,
+    ),
+  adminCardAutomationClusters: (
+    filters: QuestionClusterFilters,
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = questionClusterSearchParams(filters, options);
+    return apiRequest<QuestionClusterPage>(
+      `/api/v1/admin/card-automation/clusters?${params.toString()}`,
+    );
+  },
+  mentorCardAutomationClusters: (
+    filters: QuestionClusterFilters,
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = questionClusterSearchParams(filters, options);
+    return apiRequest<QuestionClusterPage>(
+      `/api/v1/mentor/card-automation/clusters?${params.toString()}`,
+    );
+  },
+  adminCardAutomationCluster: (clusterId: string) =>
+    apiRequest<QuestionClusterDetail>(
+      `/api/v1/admin/card-automation/clusters/${clusterId}`,
+    ),
+  mentorCardAutomationCluster: (clusterId: string) =>
+    apiRequest<QuestionClusterDetail>(
+      `/api/v1/mentor/card-automation/clusters/${clusterId}`,
+    ),
+  generateAdminCardAutomationClusterAnswer: (
+    clusterId: string,
+    payload: QuestionClusterAnswerGenerationMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterAnswerGenerationResult>(
+      `/api/v1/admin/card-automation/clusters/${clusterId}/generate-answer`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  linkAdminCardAutomationCluster: (
+    clusterId: string,
+    payload: QuestionClusterLinkCardMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterActionResult>(
+      `/api/v1/admin/card-automation/clusters/${clusterId}/link-card`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  createCardFromAdminCardAutomationCluster: (
+    clusterId: string,
+    payload: QuestionClusterCreateCardMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterActionResult>(
+      `/api/v1/admin/card-automation/clusters/${clusterId}/create-card`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  updateAdminCardAutomationClusterDraft: (
+    clusterId: string,
+    payload: QuestionClusterDraftMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterActionResult>(
+      `/api/v1/admin/card-automation/clusters/${clusterId}/draft`,
+      {
+        method: "PATCH",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  updateMentorCardAutomationClusterDraft: (
+    clusterId: string,
+    payload: QuestionClusterDraftMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterActionResult>(
+      `/api/v1/mentor/card-automation/clusters/${clusterId}/draft`,
+      {
+        method: "PATCH",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  splitAdminCardAutomationCluster: (
+    clusterId: string,
+    payload: QuestionClusterSplitMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterActionResult>(
+      `/api/v1/admin/card-automation/clusters/${clusterId}/split`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  mergeAdminCardAutomationCluster: (
+    clusterId: string,
+    payload: QuestionClusterMergeMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterActionResult>(
+      `/api/v1/admin/card-automation/clusters/${clusterId}/merge`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  setAdminCardAutomationClusterState: (
+    clusterId: string,
+    action: "ignore" | "defer" | "mark-important" | "reopen",
+    payload: QuestionClusterVersionMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterActionResult>(
+      `/api/v1/admin/card-automation/clusters/${clusterId}/${action}`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  setMentorCardAutomationClusterState: (
+    clusterId: string,
+    action: "ignore" | "defer" | "mark-important" | "reopen",
+    payload: QuestionClusterVersionMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterActionResult>(
+      `/api/v1/mentor/card-automation/clusters/${clusterId}/${action}`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  reprocessAdminCardAutomationOccurrence: (
+    occurrenceId: string,
+    payload: QuestionOccurrenceReprocessMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionOccurrenceReprocessResult>(
+      `/api/v1/admin/card-automation/occurrences/${occurrenceId}/reprocess`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  reprocessMentorCardAutomationOccurrence: (
+    occurrenceId: string,
+    payload: QuestionOccurrenceReprocessMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionOccurrenceReprocessResult>(
+      `/api/v1/mentor/card-automation/occurrences/${occurrenceId}/reprocess`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  bulkAdminCardAutomationClusters: (
+    payload: QuestionClusterBulkMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterBulkResult>(
+      "/api/v1/admin/card-automation/clusters/bulk",
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  adminCardAutomationDecisions: (
+    filters: AutomationDecisionFilters,
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = automationDecisionSearchParams(filters, options);
+    return apiRequest<AutomationDecisionPage>(
+      `/api/v1/admin/card-automation/decisions?${params.toString()}`,
+    );
+  },
+  mentorCardAutomationDecisions: (
+    filters: AutomationDecisionFilters,
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = automationDecisionSearchParams(filters, options);
+    return apiRequest<AutomationDecisionPage>(
+      `/api/v1/mentor/card-automation/decisions?${params.toString()}`,
+    );
+  },
+  reviewAdminCardAutomationDecision: (
+    decisionId: string,
+    payload: AutomationDecisionReviewMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<AutomationDecisionRead>(
+      `/api/v1/admin/card-automation/decisions/${decisionId}/review`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  reviewMentorCardAutomationDecision: (
+    decisionId: string,
+    payload: AutomationDecisionReviewMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<AutomationDecisionRead>(
+      `/api/v1/mentor/card-automation/decisions/${decisionId}/review`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  overrideAdminCardAutomationDecision: (
+    decisionId: string,
+    payload: AutomationDecisionOverrideMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<AutomationDecisionRead>(
+      `/api/v1/admin/card-automation/decisions/${decisionId}/override`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  overrideMentorCardAutomationDecision: (
+    decisionId: string,
+    payload: AutomationDecisionOverrideMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<AutomationDecisionRead>(
+      `/api/v1/mentor/card-automation/decisions/${decisionId}/override`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  adminCardAutomationMetrics: (filters: CardAutomationMetricsFilters) => {
+    const params = new URLSearchParams({
+      period_from: filters.periodFrom,
+      period_to: filters.periodTo,
+    });
+    if (filters.directionId) params.set("direction_id", filters.directionId);
+    return apiRequest<CardAutomationMetricsRead>(
+      `/api/v1/admin/card-automation/metrics?${params.toString()}`,
+    );
+  },
+  adminCardAutomationSettings: () =>
+    apiRequest<CardAutomationSettingsPage>(
+      "/api/v1/admin/card-automation/settings",
+    ),
+  updateAdminCardAutomationSettings: (
+    payload: CardAutomationSettingsMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<CardAutomationSettingsRead>(
+      "/api/v1/admin/card-automation/settings",
+      {
+        method: "PUT",
+        body: JSON.stringify(payload),
+        headers: { "Idempotency-Key": idempotencyKey },
+      },
+    ),
+  personalReviewItems: (
+    filters: PersonalReviewFilters,
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = personalReviewSearchParams(filters, options);
+    return apiRequest<PersonalReviewItemPage>(
+      `/api/v1/students/me/personal-review-items?${params.toString()}`,
+    );
+  },
+  adminManagedPersonalReviewItems: (
+    studentId: string,
+    filters: PersonalReviewFilters,
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = personalReviewSearchParams(filters, options);
+    return apiRequest<PersonalReviewItemPage>(
+      `/api/v1/admin/card-automation/students/${studentId}/personal-review-items?${params.toString()}`,
+    );
+  },
+  mentorManagedPersonalReviewItems: (
+    studentId: string,
+    filters: PersonalReviewFilters,
+    options: { limit?: number; offset?: number } = {},
+  ) => {
+    const params = personalReviewSearchParams(filters, options);
+    return apiRequest<PersonalReviewItemPage>(
+      `/api/v1/mentor/card-automation/students/${studentId}/personal-review-items?${params.toString()}`,
+    );
+  },
+  updateAdminManagedPersonalReviewItem: (
+    studentId: string,
+    itemId: string,
+    payload: ManagedPersonalReviewMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<ManagedPersonalReviewResult>(
+      `/api/v1/admin/card-automation/students/${studentId}/personal-review-items/${itemId}`,
+      {
+        method: "PATCH",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  updateMentorManagedPersonalReviewItem: (
+    studentId: string,
+    itemId: string,
+    payload: ManagedPersonalReviewMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<ManagedPersonalReviewResult>(
+      `/api/v1/mentor/card-automation/students/${studentId}/personal-review-items/${itemId}`,
+      {
+        method: "PATCH",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  reviewPersonalReviewItem: (
+    itemId: string,
+    payload: PersonalReviewMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<PersonalReviewResult>(
+      `/api/v1/students/me/personal-review-items/${itemId}/review`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
     ),
   adminCompanyAliasProposals: (
     options: {

@@ -1021,6 +1021,594 @@ export interface AdminQuestionModerationPage {
   offset: number;
 }
 
+export type LearningObjectType =
+  | "flashcard"
+  | "open_technical_question"
+  | "coding_task"
+  | "system_design_case"
+  | "behavioral_question"
+  | "organizational_question"
+  | "context_dependent"
+  | "noise";
+
+export type QuestionClusterStatus =
+  | "shadow"
+  | "candidate"
+  | "needs_review"
+  | "linked"
+  | "card_created"
+  | "deferred"
+  | "ignored"
+  | "split"
+  | "merged";
+
+export type QuestionOccurrenceStatus =
+  | "created"
+  | "routing"
+  | "routed"
+  | "auto_ignored"
+  | "searching_card"
+  | "auto_linked"
+  | "searching_cluster"
+  | "clustered"
+  | "needs_review"
+  | "personal_only"
+  | "failed";
+
+export type AnswerContractStatus =
+  | "generated_from_sources"
+  | "needs_expert_source"
+  | "needs_manual_review"
+  | "approved"
+  | "rejected";
+
+export type AutomationDecisionType =
+  | "question_routed"
+  | "routed_as_noise"
+  | "routed_as_non_flashcard"
+  | "exact_card_match"
+  | "alias_card_match"
+  | "semantic_card_match"
+  | "cluster_match"
+  | "shadow_cluster_created"
+  | "cluster_promoted"
+  | "personal_review_created"
+  | "personal_review_reviewed"
+  | "personal_review_archived"
+  | "answer_contract_generated"
+  | "answer_contract_validated"
+  | "answer_contract_needs_source"
+  | "answer_contract_failed"
+  | "answer_validation_failed"
+  | "manual_override"
+  | "cluster_linked"
+  | "card_created"
+  | "cluster_split"
+  | "cluster_merged"
+  | "cluster_ignored"
+  | "cluster_deferred"
+  | "cluster_reopened"
+  | "cluster_marked_important"
+  | "occurrence_failed"
+  | "occurrence_reprocessed";
+
+export type AutomationDecisionSource =
+  | "rule"
+  | "ai_routing"
+  | "exact"
+  | "confirmed_alias"
+  | "semantic_judge"
+  | "clustering"
+  | "human"
+  | "backfill";
+
+export type AutomationReviewResult =
+  | "correct"
+  | "merge_error"
+  | "classification_error"
+  | "wrong_object_type"
+  | "wrong_topic"
+  | "other";
+
+export type PairwiseCardMatchDecision =
+  "same_card" | "related_different_scope" | "not_related" | "uncertain";
+
+export type QuestionClusterAction =
+  | "link_card"
+  | "create_card"
+  | "update_draft"
+  | "split"
+  | "merge"
+  | "ignore"
+  | "defer"
+  | "mark_important"
+  | "reopen";
+
+export interface CardAutomationAnswerContract {
+  short_answer: string;
+  required_points: string[];
+  optional_points: string[];
+  common_mistakes: string[];
+  unsupported_claims: string[];
+  follow_up_questions: string[];
+  difficulty: "junior" | "middle" | "senior" | "mixed";
+  version_scope: string[];
+  source_references: string[];
+  confidence: number;
+}
+
+export interface CardAutomationAnswerValidation {
+  supported: boolean;
+  unsupported_claims: string[];
+  contradictions: string[];
+  missing_required_points: string[];
+  version_sensitive_claims: string[];
+  confidence: number;
+}
+
+export interface CardAutomationCardCandidate {
+  card_id: string;
+  question_markdown: string;
+  answer_markdown: string;
+  category: string;
+  semantic_score: number;
+  combined_score: number | null;
+  judge_decision: PairwiseCardMatchDecision | null;
+  judge_confidence: number | null;
+  judge_reason: string | null;
+  is_confirmed_alias: boolean;
+}
+
+export interface QuestionClusterSummary {
+  id: string;
+  direction_id: string;
+  direction_title: string;
+  direction_slug: string;
+  status: QuestionClusterStatus;
+  canonical_question: string;
+  learning_object_type: LearningObjectType;
+  deck_id: string | null;
+  topic_name: string | null;
+  subtopic_name: string | null;
+  topic_candidates: string[];
+  linked_card_id: string | null;
+  last_decision_source: AutomationDecisionSource | null;
+  occurrences_count: number;
+  distinct_interviews_count: number;
+  distinct_companies_count: number;
+  distinct_students_count: number;
+  failed_answers_count: number;
+  priority_score: number;
+  quality_score: number;
+  cluster_confidence: number;
+  best_match: CardAutomationCardCandidate | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  manual_important: boolean;
+  version: number;
+  allowed_actions: QuestionClusterAction[];
+}
+
+export interface QuestionClusterTopicOption {
+  deck_id: string;
+  deck_title: string;
+  topics: string[];
+}
+
+export interface QuestionClusterOccurrence {
+  id: string;
+  interview_id: string;
+  student_id: string;
+  student_name: string;
+  company_id: string | null;
+  company_name: string;
+  interviewed_at: string;
+  question_text: string;
+  canonical_question_candidate: string | null;
+  source_context: string | null;
+  answer_text: string | null;
+  answer_assessment: string | null;
+  learning_object_type: LearningObjectType;
+  routing_confidence: number | null;
+  quality_flags: string[];
+  automation_status: QuestionOccurrenceStatus;
+  automation_revision: number;
+  automation_error: string | null;
+  created_at: string;
+}
+
+export interface QuestionOccurrenceReprocessMutation {
+  expected_revision: number;
+  reason: string;
+}
+
+export interface QuestionOccurrenceReprocessResult {
+  question_id: string;
+  revision: number;
+  job_id: string;
+}
+
+export interface QuestionClusterAnswerGenerationMutation {
+  expected_version: number;
+}
+
+export interface QuestionClusterAnswerGenerationResult {
+  cluster_id: string;
+  version: number;
+  job_id: string;
+}
+
+export interface QuestionClusterDetail extends QuestionClusterSummary {
+  normalized_canonical_question: string;
+  representative_occurrence_id: string | null;
+  merged_into_cluster_id: string | null;
+  parent_cluster_id: string | null;
+  question_variants: Array<{
+    question_text: string;
+    normalized_question_text: string;
+    occurrences_count: number;
+    first_seen_at: string;
+    last_seen_at: string;
+  }>;
+  companies: Array<{
+    company_id: string | null;
+    company_name: string;
+    occurrences_count: number;
+  }>;
+  interviews: Array<{
+    interview_id: string;
+    company_id: string | null;
+    company_name: string;
+    interviewed_at: string;
+    occurrences_count: number;
+  }>;
+  answer_contract: CardAutomationAnswerContract | null;
+  answer_validation: CardAutomationAnswerValidation | null;
+  answer_status: AnswerContractStatus | null;
+  occurrences: QuestionClusterOccurrence[];
+  top_card_matches: CardAutomationCardCandidate[];
+  decisions: AutomationDecisionRead[];
+  topic_options: QuestionClusterTopicOption[];
+  manual_history: Array<{
+    id: string;
+    action: string;
+    actor_user_id: string | null;
+    actor_name: string | null;
+    reason: string | null;
+    changes: Record<string, unknown>;
+    created_at: string;
+  }>;
+  promoted_at: string | null;
+  promotion_reason: string | null;
+  membership_revision: number;
+  stats_revision: number;
+}
+
+export interface QuestionClusterPage {
+  items: QuestionClusterSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface QuestionClusterFilters {
+  directionId: string | null;
+  statuses: QuestionClusterStatus[];
+  topicName: string | null;
+  learningObjectTypes: LearningObjectType[];
+  minDistinctInterviews: number | null;
+  minDistinctCompanies: number | null;
+  hasFailedAnswers: boolean | null;
+  minConfidence: number | null;
+  maxConfidence: number | null;
+  hasPossibleDuplicate: boolean | null;
+  decisionSource: AutomationDecisionSource | null;
+  seenFrom: string | null;
+  seenTo: string | null;
+  needsActionOnly: boolean;
+  sortBy:
+    | "priority_score"
+    | "last_seen_at"
+    | "first_seen_at"
+    | "occurrences_count"
+    | "cluster_confidence";
+  sortOrder: "asc" | "desc";
+}
+
+export interface AutomationDecisionRead {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  entity_version: number | null;
+  question_text: string | null;
+  decision_type: AutomationDecisionType;
+  decision_source: AutomationDecisionSource;
+  selected_card_id: string | null;
+  selected_card_question: string | null;
+  selected_cluster_id: string | null;
+  selected_cluster_question: string | null;
+  candidate_card_ids: string[];
+  candidate_cluster_ids: string[];
+  retrieval_scores: Record<string, unknown>;
+  judge_result: Record<string, unknown> | null;
+  confidence: number | null;
+  similarity_score: number | null;
+  reason: string;
+  model_provider: string | null;
+  model_name: string | null;
+  prompt_version: string | null;
+  schema_version: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cost: string | null;
+  latency_ms: number | null;
+  is_audit_sample: boolean;
+  review_result: AutomationReviewResult | null;
+  reviewed_by_user_id: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  review_reason: string | null;
+  is_overridden: boolean;
+  overridden_by_user_id: string | null;
+  overridden_by_name: string | null;
+  override_reason: string | null;
+  overridden_at: string | null;
+  created_at: string;
+}
+
+export interface AutomationDecisionPage {
+  items: AutomationDecisionRead[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AutomationDecisionFilters {
+  directionId: string | null;
+  entityType: string | null;
+  decisionTypes: AutomationDecisionType[];
+  decisionSources: AutomationDecisionSource[];
+  isAuditSample: boolean | null;
+  isReviewed: boolean | null;
+  isOverridden: boolean | null;
+  createdFrom: string | null;
+  createdTo: string | null;
+  sortOrder: "asc" | "desc";
+}
+
+export interface AutomationDecisionReviewMutation {
+  result: AutomationReviewResult;
+  reason: string | null;
+}
+
+export interface AutomationDecisionOverrideMutation {
+  expected_entity_version: number;
+  replacement_decision_type: AutomationDecisionType;
+  selected_card_id: string | null;
+  selected_cluster_id: string | null;
+  reason: string;
+}
+
+export interface CardAutomationSettingsRead {
+  direction_id: string;
+  direction_title: string;
+  direction_slug: string;
+  enabled: boolean;
+  shadow_mode: boolean;
+  auto_ignore_noise_enabled: boolean;
+  auto_link_exact_enabled: boolean;
+  auto_link_alias_enabled: boolean;
+  auto_link_semantic_enabled: boolean;
+  semantic_similarity_threshold: number;
+  pairwise_judge_confidence_threshold: number;
+  candidate_score_gap_threshold: number;
+  cluster_match_threshold: number;
+  min_distinct_interviews_for_promotion: number;
+  min_distinct_companies_for_promotion: number;
+  min_failed_answers_for_promotion: number;
+  audit_sample_percent: number;
+  personal_review_enabled: boolean;
+  global_auto_publish_enabled: boolean;
+  cluster_moderation_enabled: boolean;
+  legacy_queue_enabled: boolean;
+  version: number;
+  updated_at: string;
+}
+
+export interface CardAutomationSettingsPage {
+  items: CardAutomationSettingsRead[];
+}
+
+export type CardAutomationSettingsMutation = Omit<
+  CardAutomationSettingsRead,
+  | "direction_title"
+  | "direction_slug"
+  | "updated_at"
+  | "version"
+  | "global_auto_publish_enabled"
+> & { expected_version: number; global_auto_publish_enabled: false };
+
+export interface QuestionClusterVersionMutation {
+  expected_version: number;
+  reason: string;
+}
+
+export interface QuestionClusterLinkCardMutation extends QuestionClusterVersionMutation {
+  card_id: string;
+  confirm_alias: boolean;
+}
+
+export interface QuestionClusterCreateCardMutation extends QuestionClusterVersionMutation {
+  deck_id: string;
+  category: string;
+  subcategory?: string | null;
+  question_markdown: string;
+  answer_markdown: string;
+  frequency: "frequent" | "occasional";
+  frequency_mode: "automatic" | "manual";
+}
+
+export interface QuestionClusterDraftMutation extends QuestionClusterVersionMutation {
+  canonical_question?: string;
+  topic_name?: string | null;
+  subtopic_name?: string | null;
+  answer_contract?: CardAutomationAnswerContract;
+  preserve_answer_status?: boolean;
+}
+
+export interface QuestionClusterSplitMutation extends QuestionClusterVersionMutation {
+  occurrence_ids: string[];
+  new_canonical_question: string;
+  new_topic_name?: string | null;
+  new_subtopic_name?: string | null;
+}
+
+export interface QuestionClusterMergeMutation extends QuestionClusterVersionMutation {
+  target_cluster_id: string;
+  target_expected_version: number;
+}
+
+export interface QuestionClusterActionResult {
+  cluster: QuestionClusterSummary;
+  decision_id: string;
+  created_card_id?: string | null;
+  affected_cluster_ids: string[];
+}
+
+export type QuestionClusterBulkAction =
+  | "confirm_exact_matches"
+  | "confirm_high_confidence_matches"
+  | "ignore_noise"
+  | "defer_singletons"
+  | "link_card"
+  | "apply_topic";
+
+export interface QuestionClusterBulkMutation {
+  action: QuestionClusterBulkAction;
+  cluster_ids: string[];
+  expected_versions: Record<string, number>;
+  confirmation: true;
+  reason: string;
+  card_id: string | null;
+  topic_name: string | null;
+}
+
+export interface QuestionClusterBulkItemResult {
+  cluster_id: string;
+  succeeded: boolean;
+  cluster: QuestionClusterSummary | null;
+  decision_id: string | null;
+  error_code: string | null;
+  error_message: string | null;
+}
+
+export interface QuestionClusterBulkResult {
+  requested_count: number;
+  succeeded_count: number;
+  failed_count: number;
+  items: QuestionClusterBulkItemResult[];
+}
+
+export interface CardAutomationMetricsFilters {
+  periodFrom: string;
+  periodTo: string;
+  directionId: string | null;
+}
+
+export interface CardAutomationMetricsRead {
+  period_from: string;
+  period_to: string;
+  direction_id: string | null;
+  direction_slug: string | null;
+  extracted_questions_total: number;
+  routed_as_noise_total: number;
+  routed_as_non_flashcard_total: number;
+  auto_linked_exact_total: number;
+  auto_linked_alias_total: number;
+  auto_linked_semantic_total: number;
+  shadow_clusters_created_total: number;
+  clusters_promoted_total: number;
+  clusters_reviewed_total: number;
+  personal_review_items_created_total: number;
+  manual_tasks_per_100_interviews: number;
+  average_cluster_moderation_time: number;
+  oldest_moderation_task_age: number;
+  automatic_decision_override_rate: number;
+  false_merge_rate: number;
+  noise_false_positive_rate: number;
+  average_ai_cost_per_interview: string;
+  average_ai_cost_per_question: string;
+  average_ai_cost_per_promoted_cluster: string;
+  generated_at: string;
+}
+
+export type PersonalReviewStatus =
+  "active" | "mastered" | "archived" | "replaced_by_canonical_card";
+
+export interface PersonalReviewItemRead {
+  id: string;
+  direction_id: string;
+  direction_title: string;
+  direction_slug: string;
+  source_occurrence_id: string | null;
+  source_analysis_id: string | null;
+  source_analysis_url: string | null;
+  canonical_card_id: string | null;
+  question_text: string;
+  answer_summary: string | null;
+  answer_contract: CardAutomationAnswerContract | null;
+  status: PersonalReviewStatus;
+  due_at: string;
+  last_reviewed_at: string | null;
+  successful_reviews_count: number;
+  expires_at: string | null;
+  replaced_by_card_id: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonalReviewItemPage {
+  items: PersonalReviewItemRead[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PersonalReviewFilters {
+  directionId: string | null;
+  statuses: PersonalReviewStatus[];
+  dueOnly: boolean;
+  dueBefore: string | null;
+  sortOrder: "asc" | "desc";
+}
+
+export interface PersonalReviewMutation {
+  rating: InterviewReviewRating;
+  expected_version: number;
+}
+
+export interface PersonalReviewResult {
+  item: PersonalReviewItemRead;
+  rating: InterviewReviewRating;
+  became_mastered: boolean;
+}
+
+export interface ManagedPersonalReviewMutation {
+  expected_version: number;
+  reason: string;
+  question_text?: string | null;
+  answer_summary?: string | null;
+  answer_contract?: CardAutomationAnswerContract | null;
+  due_at?: string | null;
+  status?: PersonalReviewStatus | null;
+}
+
+export interface ManagedPersonalReviewResult {
+  item: PersonalReviewItemRead;
+  decision_id: string;
+}
+
 export interface IntelligenceUtterance {
   id: string;
   speaker_id: string;

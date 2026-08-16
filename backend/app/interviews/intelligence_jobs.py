@@ -17,6 +17,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.db import models as _db_models  # noqa: F401
 from app.db.session import async_session_factory
+from app.interviews.card_automation_jobs import (
+    assign_question_cluster,
+    backfill_existing_questions,
+    create_personal_review_item,
+    find_existing_card_match,
+    generate_cluster_candidate,
+    promote_question_cluster,
+    recalculate_cluster_stats,
+    reconcile_card_automation_jobs,
+    reprocess_question_occurrence,
+    route_question_occurrence,
+    validate_cluster_answer,
+)
 from app.interviews.intelligence_ai import (
     LIGHT_REVIEW_PROMPT_VERSION,
     SUMMARY_PROMPT_VERSION,
@@ -56,6 +69,7 @@ from app.interviews.intelligence_providers import (
 from app.interviews.intelligence_queue import (
     OPENAI_QUEUE_NAME,
     TRANSCRIPTION_QUEUE_NAME,
+    enqueue_card_automation_job,
     enqueue_intelligence_job,
 )
 from app.interviews.intelligence_recovery import (
@@ -76,6 +90,7 @@ from app.interviews.models import (
     InterviewStageComment,
 )
 from app.interviews.question_embeddings import refresh_track_question_embeddings
+from app.interviews.question_matching import normalize_question
 from app.interviews.uploads import (
     InterviewStorageReadError,
     InterviewUploadStore,
@@ -173,6 +188,8 @@ async def reconcile_intelligence_jobs(ctx: dict[str, Any]) -> None:
             continue
         if function == "generate_answer_reviews":
             await _enqueue(ctx, "refresh_interview_question_embeddings", str(interview_id))
+            scheduled += 1
+            continue
         await _enqueue(ctx, function, str(interview_id))
         scheduled += 1
     if scheduled:
@@ -475,6 +492,16 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
             return
         if interview.candidate_speaker_id is None:
             return
+        stage = await session.get(InterviewProcessStage, interview.stage_id)
+        process = await session.get(InterviewProcess, stage.process_id) if stage else None
+        if process is None:
+            await _fail(
+                session,
+                interview,
+                IntelligenceAttemptStage.AI_EXTRACT,
+                "INTERVIEW_PROCESS_MISSING",
+            )
+            return
         existing_questions = await session.scalar(
             select(func.count(IntelligenceQuestion.id)).where(
                 IntelligenceQuestion.interview_id == interview.id
@@ -482,7 +509,6 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
         )
         if existing_questions:
             await _enqueue(ctx, "refresh_interview_question_embeddings", interview_id)
-            await _enqueue(ctx, "generate_answer_reviews", interview_id)
             return
         attempt = await _start_attempt(
             session,
@@ -549,8 +575,10 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
             seen_ranges.add(range_key)
             question = IntelligenceQuestion(
                 interview_id=interview.id,
+                direction_id=process.track_id,
                 sequence_number=sequence,
                 question_text=item.question,
+                normalized_question_text=normalize_question(item.question),
                 question_start_ms=min(row.start_ms for row in question_utterances),
                 question_end_ms=max(row.end_ms for row in question_utterances),
                 answer_start_ms=(
@@ -594,13 +622,13 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
         _complete_attempt(attempt)
         await session.commit()
     await _enqueue(ctx, "refresh_interview_question_embeddings", interview_id)
-    await _enqueue(ctx, "generate_answer_reviews", interview_id)
 
 
 async def refresh_interview_question_embeddings(ctx: dict[str, Any], interview_id: str) -> None:
     """Refresh cached question vectors without affecting the main AI pipeline state."""
 
     parsed_id = UUID(interview_id)
+    should_enqueue_reviews = False
     async with async_session_factory() as session:
         interview = await session.get(IntelligenceInterview, parsed_id)
         if interview is None:
@@ -621,39 +649,44 @@ async def refresh_interview_question_embeddings(ctx: dict[str, Any], interview_i
             )
         )
         if not questions:
-            return
-        try:
-            refresh = await refresh_track_question_embeddings(
-                session,
-                _ai(ctx),
-                process.track_id,
-                questions,
-            )
-        except InterviewAIError as error:
-            await session.rollback()
-            will_retry = _will_retry(ctx, error.retryable)
-            logger.warning(
-                "Question embedding refresh failed interview_id=%s code=%s retryable=%s",
-                parsed_id,
-                error.code,
-                will_retry,
-            )
-            if will_retry:
-                raise Retry(defer=_retry_delay(ctx, 60)) from error
-            return
-        for usage in refresh.usages:
-            session.add(
-                IntelligenceAIUsage(
-                    interview_id=interview.id,
-                    provider=_ai(ctx).name,
-                    model=usage.model,
-                    operation="embedding",
-                    input_tokens=usage.input_tokens,
-                    output_tokens=usage.output_tokens,
-                    provider_request_id=usage.provider_request_id,
+            should_enqueue_reviews = True
+        else:
+            try:
+                refresh = await refresh_track_question_embeddings(
+                    session,
+                    _ai(ctx),
+                    process.track_id,
+                    questions,
                 )
-            )
-        await session.commit()
+            except InterviewAIError as error:
+                await session.rollback()
+                will_retry = _will_retry(ctx, error.retryable)
+                logger.warning(
+                    "Question embedding refresh failed interview_id=%s code=%s retryable=%s",
+                    parsed_id,
+                    error.code,
+                    will_retry,
+                )
+                if will_retry:
+                    raise Retry(defer=_retry_delay(ctx, 60)) from error
+                should_enqueue_reviews = True
+            else:
+                for usage in refresh.usages:
+                    session.add(
+                        IntelligenceAIUsage(
+                            interview_id=interview.id,
+                            provider=_ai(ctx).name,
+                            model=usage.model,
+                            operation="embedding",
+                            input_tokens=usage.input_tokens,
+                            output_tokens=usage.output_tokens,
+                            provider_request_id=usage.provider_request_id,
+                        )
+                    )
+                await session.commit()
+                should_enqueue_reviews = True
+    if should_enqueue_reviews:
+        await _enqueue(ctx, "generate_answer_reviews", interview_id)
 
 
 async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> None:
@@ -807,6 +840,16 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
         await _upsert_ai_stage_comment(session, interview)
         _complete_attempt(attempt)
         await session.commit()
+        automation_revisions = [
+            (str(question.id), question.automation_revision) for question, _answer in rows
+        ]
+    for question_id, revision in automation_revisions:
+        await enqueue_card_automation_job(
+            "route_question_occurrence",
+            question_id,
+            revision,
+            redis=ctx["redis"],
+        )
 
 
 def _neighbor_context(
@@ -1263,6 +1306,16 @@ class WorkerSettings:
         extract_interview_structure,
         refresh_interview_question_embeddings,
         generate_answer_reviews,
+        route_question_occurrence,
+        find_existing_card_match,
+        assign_question_cluster,
+        recalculate_cluster_stats,
+        promote_question_cluster,
+        generate_cluster_candidate,
+        validate_cluster_answer,
+        create_personal_review_item,
+        backfill_existing_questions,
+        reprocess_question_occurrence,
     ]
     cron_jobs = [
         cron(
@@ -1308,8 +1361,26 @@ class AIWorkerSettings:
         extract_interview_structure,
         refresh_interview_question_embeddings,
         generate_answer_reviews,
+        route_question_occurrence,
+        find_existing_card_match,
+        assign_question_cluster,
+        recalculate_cluster_stats,
+        promote_question_cluster,
+        generate_cluster_candidate,
+        validate_cluster_answer,
+        create_personal_review_item,
+        backfill_existing_questions,
+        reprocess_question_occurrence,
     ]
-    cron_jobs: list[Any] = []
+    cron_jobs = [
+        cron(
+            reconcile_card_automation_jobs,
+            minute=RECONCILIATION_MINUTES,
+            run_at_startup=True,
+            max_tries=1,
+            keep_result=0,
+        )
+    ]
     on_startup = ai_startup
     on_shutdown = ai_shutdown
     redis_settings = RedisSettings.from_dsn(settings.redis_url)

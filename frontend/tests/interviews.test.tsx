@@ -59,6 +59,7 @@ const session: InterviewStudySession = {
       id: "61000000-0000-4000-8000-000000000001",
       slug: "python-gil",
       category: "Конкурентность в Python",
+      subcategory: null,
       companies: "Яндекс, VK",
       question_markdown: "## Что такое GIL?",
       answer_markdown:
@@ -98,6 +99,7 @@ const automaticCard: AdminInterviewCardRead = {
   id: "61000000-0000-4000-8000-000000000002",
   slug: "python-asyncio",
   category: "Асинхронность",
+  subcategory: null,
   companies: null,
   source_number: null,
   source_occurrence: null,

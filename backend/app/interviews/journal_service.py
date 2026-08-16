@@ -5,6 +5,10 @@ from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
+from app.interviews.card_automation_cleanup import (
+    finalize_automation_deletion,
+    prepare_automation_deletion,
+)
 from app.interviews.companies import resolve_company
 from app.interviews.intelligence_models import IntelligenceInterview
 from app.interviews.models import (
@@ -487,6 +491,7 @@ async def _delete_process(session: AsyncSession, process: InterviewProcess) -> l
     ).all()
     stage_ids = [stage_id for stage_id, _media_key in stage_rows]
     attachment_keys: list[str] = []
+    interview_ids: list[UUID] = []
     normalized_audio_keys: list[str] = []
     if stage_ids:
         attachment_keys = list(
@@ -496,14 +501,18 @@ async def _delete_process(session: AsyncSession, process: InterviewProcess) -> l
                 )
             )
         )
-        normalized_audio_keys = list(
-            await session.scalars(
-                select(IntelligenceInterview.normalized_audio_key).where(
-                    IntelligenceInterview.stage_id.in_(stage_ids),
-                    IntelligenceInterview.normalized_audio_key.is_not(None),
-                )
+        interview_rows = (
+            await session.execute(
+                select(
+                    IntelligenceInterview.id,
+                    IntelligenceInterview.normalized_audio_key,
+                ).where(IntelligenceInterview.stage_id.in_(stage_ids))
             )
-        )
+        ).all()
+        interview_ids = [interview_id for interview_id, _audio_key in interview_rows]
+        normalized_audio_keys = [
+            audio_key for _interview_id, audio_key in interview_rows if audio_key is not None
+        ]
 
     storage_keys = [
         process.offer_storage_key,
@@ -511,7 +520,10 @@ async def _delete_process(session: AsyncSession, process: InterviewProcess) -> l
         *attachment_keys,
         *normalized_audio_keys,
     ]
+    impact = await prepare_automation_deletion(session, interview_ids)
     await session.delete(process)
+    await session.flush()
+    await finalize_automation_deletion(session, impact)
     await session.commit()
     return list(dict.fromkeys(key for key in storage_keys if key))
 

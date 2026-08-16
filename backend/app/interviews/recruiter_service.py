@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import delete, distinct, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.errors import api_error
 from app.interviews.companies import suggest_companies
@@ -89,7 +90,7 @@ async def _track_ids(session: AsyncSession, user: User, track_id: UUID | None) -
     return allowed
 
 
-def _accessible_contact_filter(track_ids: set[UUID]):
+def _accessible_contact_filter(track_ids: set[UUID]) -> ColumnElement[bool]:
     return exists(
         select(1)
         .select_from(RecruiterContactProcess)

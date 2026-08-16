@@ -34,7 +34,7 @@ export function renderPage(
       initialEntries: [path],
     },
   );
-  return render(
+  const result = render(
     <MantineProvider>
       <QueryClientProvider client={queryClient}>
         <PlatformProvider>
@@ -43,4 +43,5 @@ export function renderPage(
       </QueryClientProvider>
     </MantineProvider>,
   );
+  return { ...result, router };
 }

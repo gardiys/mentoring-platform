@@ -302,6 +302,7 @@ async def test_processing_poll_is_authorized_lightweight_and_returns_progress(
         await session.flush()
         question = IntelligenceQuestion(
             interview_id=interview.id,
+            direction_id=seeded.python_track_id,
             sequence_number=0,
             question_text="A question body that the poll endpoint must not load",
             question_start_ms=0,
@@ -855,8 +856,9 @@ async def test_fake_processing_pipeline_reaches_ready(
         "refresh_interview_question_embeddings",
         (str(interview_id),),
     ) in queue.jobs
-    assert ("generate_answer_reviews", (str(interview_id),)) in queue.jobs
+    assert ("generate_answer_reviews", (str(interview_id),)) not in queue.jobs
     await intelligence_jobs.refresh_interview_question_embeddings(context, str(interview_id))
+    assert ("generate_answer_reviews", (str(interview_id),)) in queue.jobs
     # Duplicate delivery is a no-op: current vectors are reused and usage is
     # not counted twice.
     await intelligence_jobs.refresh_interview_question_embeddings(context, str(interview_id))
@@ -1210,6 +1212,7 @@ async def test_question_embedding_job_retries_without_failing_interview(
         session.add(
             IntelligenceQuestion(
                 interview_id=interview_id,
+                direction_id=seeded.python_track_id,
                 sequence_number=1,
                 question_text="Чем Kafka отличается от RabbitMQ?",
                 question_start_ms=1_000,
@@ -1237,7 +1240,9 @@ async def test_question_embedding_job_retries_without_failing_interview(
         )
 
     monkeypatch.setattr(provider, "embed", unavailable)
+    queue = RecordingRedis()
     context: dict[str, Any] = {
+        "redis": queue,
         "ai_provider": provider,
         "job_try": 2,
         "job_id": f"embedding:{interview_id}",
@@ -1269,6 +1274,7 @@ async def test_question_embedding_job_retries_without_failing_interview(
 
     context["job_try"] = intelligence_jobs.MAX_JOB_TRIES
     await intelligence_jobs.refresh_interview_question_embeddings(context, str(interview_id))
+    assert ("generate_answer_reviews", (str(interview_id),)) in queue.jobs
 
 
 @pytest.mark.asyncio

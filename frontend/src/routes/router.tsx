@@ -105,6 +105,34 @@ const studentRoutes = [
 
 const mentorRoutes = [
   {
+    path: "/mentor/card-automation/clusters",
+    lazy: lazyPage(
+      () => import("../pages/MentorCardAutomationClustersPage"),
+      "MentorCardAutomationClustersPage",
+    ),
+  },
+  {
+    path: "/mentor/card-automation/clusters/:clusterId",
+    lazy: lazyPage(
+      () => import("../pages/MentorCardAutomationClusterDetailPage"),
+      "MentorCardAutomationClusterDetailPage",
+    ),
+  },
+  {
+    path: "/mentor/card-automation/decisions",
+    lazy: lazyPage(
+      () => import("../pages/MentorCardAutomationDecisionsPage"),
+      "MentorCardAutomationDecisionsPage",
+    ),
+  },
+  {
+    path: "/mentor/card-automation/students/:studentId/personal-review",
+    lazy: lazyPage(
+      () => import("../pages/ManagedPersonalReviewPage"),
+      "MentorManagedPersonalReviewPage",
+    ),
+  },
+  {
     path: "/mentor/rewards",
     lazy: lazyPage(
       () => import("../pages/MentorRewardsPage"),
@@ -156,6 +184,48 @@ const mentorRoutes = [
 ];
 
 const adminRoutes = [
+  {
+    path: "/admin/card-automation/clusters",
+    lazy: lazyPage(
+      () => import("../pages/AdminCardAutomationClustersPage"),
+      "AdminCardAutomationClustersPage",
+    ),
+  },
+  {
+    path: "/admin/card-automation/clusters/:clusterId",
+    lazy: lazyPage(
+      () => import("../pages/AdminCardAutomationClusterDetailPage"),
+      "AdminCardAutomationClusterDetailPage",
+    ),
+  },
+  {
+    path: "/admin/card-automation/decisions",
+    lazy: lazyPage(
+      () => import("../pages/AdminCardAutomationDecisionsPage"),
+      "AdminCardAutomationDecisionsPage",
+    ),
+  },
+  {
+    path: "/admin/card-automation/metrics",
+    lazy: lazyPage(
+      () => import("../pages/AdminCardAutomationMetricsPage"),
+      "AdminCardAutomationMetricsPage",
+    ),
+  },
+  {
+    path: "/admin/card-automation/settings",
+    lazy: lazyPage(
+      () => import("../pages/AdminCardAutomationSettingsPage"),
+      "AdminCardAutomationSettingsPage",
+    ),
+  },
+  {
+    path: "/admin/card-automation/students/:studentId/personal-review",
+    lazy: lazyPage(
+      () => import("../pages/ManagedPersonalReviewPage"),
+      "AdminManagedPersonalReviewPage",
+    ),
+  },
   {
     path: "/admin/payments",
     lazy: lazyPage(
@@ -438,6 +508,13 @@ export const router = createBrowserRouter([
               {
                 element: <RoleGuard roles={["student"]} />,
                 children: [
+                  {
+                    path: "/interviews/personal-review",
+                    lazy: lazyPage(
+                      () => import("../pages/PersonalReviewPage"),
+                      "PersonalReviewPage",
+                    ),
+                  },
                   {
                     path: "/payments",
                     lazy: lazyPage(

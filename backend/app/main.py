@@ -15,6 +15,15 @@ from app.core.middleware import (
 from app.integrations.router import router as integrations_router
 from app.interviews.admin_process_router import router as admin_interview_processes_router
 from app.interviews.admin_router import router as admin_interviews_router
+from app.interviews.card_automation_router import (
+    admin_router as admin_card_automation_router,
+)
+from app.interviews.card_automation_router import (
+    mentor_router as mentor_card_automation_router,
+)
+from app.interviews.card_automation_router import (
+    student_router as student_card_automation_router,
+)
 from app.interviews.catalog_router import router as interview_catalog_router
 from app.interviews.company_admin_router import router as company_alias_admin_router
 from app.interviews.intelligence_operations_router import router as intelligence_operations_router
@@ -108,6 +117,9 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     application.include_router(mentor_intelligence_router, prefix="/api/v1")
     application.include_router(admin_intelligence_router, prefix="/api/v1")
     application.include_router(intelligence_operations_router, prefix="/api/v1")
+    application.include_router(admin_card_automation_router, prefix="/api/v1")
+    application.include_router(mentor_card_automation_router, prefix="/api/v1")
+    application.include_router(student_card_automation_router, prefix="/api/v1")
     application.include_router(knowledge_router, prefix="/api/v1")
     application.include_router(admin_knowledge_router, prefix="/api/v1")
     application.include_router(knowledge_media_router, prefix="/api/v1")

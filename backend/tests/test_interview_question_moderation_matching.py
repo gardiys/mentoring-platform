@@ -115,6 +115,7 @@ async def seed_moderation_scenario(
             await session.flush()
             question = IntelligenceQuestion(
                 interview_id=interview.id,
+                direction_id=seeded.python_track_id,
                 sequence_number=0,
                 question_text=question_text,
                 question_start_ms=1_000,
@@ -159,6 +160,7 @@ async def test_semantic_candidate_requires_confirmation_and_counts_one_interview
         assert interview is not None
         second_question = IntelligenceQuestion(
             interview_id=interview.id,
+            direction_id=seeded.python_track_id,
             sequence_number=1,
             question_text="Сравни Apache Kafka и RabbitMQ",
             question_start_ms=3_000,

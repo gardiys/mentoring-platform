@@ -388,17 +388,26 @@ export function MentorStudentPage() {
 
   return (
     <Stack gap="xl">
-      <PageHeader
-        eyebrow={
-          student.is_overdue
-            ? "Карточка ученика · есть просрочки"
-            : "Карточка ученика"
-        }
-        title={[student.first_name, student.last_name]
-          .filter(Boolean)
-          .join(" ")}
-        description={student.email ?? "Email не указан"}
-      />
+      <Group justify="space-between" align="flex-start">
+        <PageHeader
+          eyebrow={
+            student.is_overdue
+              ? "Карточка ученика · есть просрочки"
+              : "Карточка ученика"
+          }
+          title={[student.first_name, student.last_name]
+            .filter(Boolean)
+            .join(" ")}
+          description={student.email ?? "Email не указан"}
+        />
+        <Button
+          component={Link}
+          to={`/mentor/card-automation/students/${studentId}/personal-review`}
+          variant="light"
+        >
+          Личные вопросы
+        </Button>
+      </Group>
 
       <Card
         withBorder

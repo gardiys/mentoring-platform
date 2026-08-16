@@ -3,8 +3,9 @@ PROD_ENV_FILE ?= .env.production
 PROD_ENV_EXAMPLE_FILE ?= .env.production.example
 PROD_COMPOSE = docker compose -f infra/docker-compose.prod.yml --env-file $(PROD_ENV_FILE)
 first_name ?= Администратор
+CARD_AUTOMATION_ARGS ?=
 
-.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings check-s3-multipart prod-check-s3-multipart tochka-webhook prod-tochka-webhook ensure-test-db prod-env-sync prod-preflight prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings card-automation-backfill prod-card-automation-backfill card-automation-evaluate prod-card-automation-evaluate check-s3-multipart prod-check-s3-multipart tochka-webhook prod-tochka-webhook ensure-test-db prod-env-sync prod-preflight prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -43,6 +44,22 @@ backfill-question-embeddings: docker-migrate
 prod-backfill-question-embeddings: prod-migrate
 	$(PROD_COMPOSE) build intelligence-ai-worker
 	$(PROD_COMPOSE) run --rm --no-deps intelligence-ai-worker python -m app.backfill_question_embeddings
+
+card-automation-backfill: docker-migrate
+	$(COMPOSE) run --rm --build --no-deps backend \
+		python -m app.scripts.backfill_card_automation $(CARD_AUTOMATION_ARGS)
+
+prod-card-automation-backfill: prod-migrate
+	$(PROD_COMPOSE) run --rm --build --no-deps backend \
+		python -m app.scripts.backfill_card_automation $(CARD_AUTOMATION_ARGS)
+
+card-automation-evaluate: docker-migrate
+	$(COMPOSE) run --rm --build --no-deps backend \
+		python -m app.scripts.evaluate_card_automation $(CARD_AUTOMATION_ARGS)
+
+prod-card-automation-evaluate: prod-migrate
+	$(PROD_COMPOSE) run --rm --build --no-deps backend \
+		python -m app.scripts.evaluate_card_automation $(CARD_AUTOMATION_ARGS)
 
 check-s3-multipart:
 	$(COMPOSE) up -d --wait minio

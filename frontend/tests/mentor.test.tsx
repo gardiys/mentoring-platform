@@ -431,6 +431,10 @@ it("показывает Telegram-чат в детальной карточке 
   expect(telegramLink).toHaveAttribute("rel", "noopener noreferrer");
   expect(screen.getByText("История статусов")).toBeInTheDocument();
   expect(screen.getAllByText("45 дн.")).toHaveLength(2);
+  expect(screen.getByRole("link", { name: "Личные вопросы" })).toHaveAttribute(
+    "href",
+    "/mentor/card-automation/students/student-1/personal-review",
+  );
 });
 
 it.each([

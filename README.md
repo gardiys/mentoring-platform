@@ -12,6 +12,8 @@
 
 Backend разделён по предметным модулям `auth`, `users`, `students`, `tracks`, `roadmaps`, `progress`, `mentors`, `knowledge`, `interviews`, `payments`, `notifications`. `LearningTrackEnrollment` определяет доступ к материалам и колодам направления, а `RoadmapEnrollment` хранит состояние прохождения. Условия выплат ученика фиксируются отдельно от снимка условий трудоустройства, поэтому уже созданный график воспроизводим. Frontend хранит серверное состояние только в TanStack Query. В Telegram исходный `initData` берётся непосредственно из SDK и не копируется в отдельное хранилище. Временный UUID хранится в `localStorage` только в development-сборке.
 
+Архитектура, безопасный rollout, backfill и эксплуатация автоматизации карточек из AI-разборов описаны в [`docs/card-automation.md`](docs/card-automation.md).
+
 Topic slug сделан глобально уникальным. Это намеренно более строгое ограничение, чем требуемая уникальность внутри roadmap, и позволяет не дублировать `roadmap_id` в `topics`.
 
 ## Требования

@@ -114,6 +114,7 @@ class InterviewCard(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     slug: Mapped[str] = mapped_column(String(180), unique=True, nullable=False)
     category: Mapped[str] = mapped_column(String(240), nullable=False)
+    subcategory: Mapped[str | None] = mapped_column(String(240), nullable=True)
     companies: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_occurrence: Mapped[str | None] = mapped_column(String(40), nullable=True)

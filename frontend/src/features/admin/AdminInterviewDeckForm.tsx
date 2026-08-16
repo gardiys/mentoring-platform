@@ -49,6 +49,7 @@ function emptyCard(position: number): AdminInterviewCardMutation {
   return {
     slug: "",
     category: "Общее",
+    subcategory: null,
     question_markdown: "## Вопрос",
     answer_markdown: "Краткий, но содержательный ответ.",
     frequency: "frequent",
@@ -70,6 +71,7 @@ function toMutation(deck: AdminInterviewDeckRead): AdminInterviewDeckMutation {
       id: card.id,
       slug: card.slug,
       category: card.category,
+      subcategory: card.subcategory,
       companies: card.companies,
       question_markdown: card.question_markdown,
       answer_markdown: card.answer_markdown,
@@ -337,6 +339,16 @@ export function AdminInterviewDeckForm({ deck }: Props) {
                 onChange={(event) =>
                   updateCard(index, {
                     category: event.currentTarget.value || undefined,
+                  })
+                }
+              />
+              <TextInput
+                label="Подтема"
+                description="Необязательно; широкая тема остаётся основной группой."
+                value={card.subcategory ?? ""}
+                onChange={(event) =>
+                  updateCard(index, {
+                    subcategory: event.currentTarget.value || null,
                   })
                 }
               />

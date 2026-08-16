@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -24,6 +25,20 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.interviews.card_automation_types import (
+    AutomationDecisionSource,
+    LearningObjectType,
+    QuestionOccurrenceStatus,
+)
+
+
+def _normalized_question_default(context: object) -> str:
+    # Imported lazily to keep the ORM module free of a module-level dependency
+    # on the matching service while preserving backwards-compatible builders.
+    from app.interviews.question_matching import normalize_question
+
+    parameters = context.get_current_parameters()  # type: ignore[attr-defined]
+    return normalize_question(str(parameters.get("question_text", "")))
 
 
 class IntelligenceInterviewType(StrEnum):
@@ -284,6 +299,15 @@ class IntelligenceQuestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             postgresql_where=text("published_card_id IS NOT NULL"),
         ),
         CheckConstraint("confidence >= 0 AND confidence <= 1", name="confidence_range"),
+        CheckConstraint(
+            "routing_confidence IS NULL OR (routing_confidence >= 0 AND routing_confidence <= 1)",
+            name="routing_confidence_range",
+        ),
+        CheckConstraint("automation_revision >= 1", name="automation_revision_positive"),
+        CheckConstraint("automation_attempts >= 0", name="automation_attempts_non_negative"),
+        Index("ix_intelligence_questions_direction_status", "direction_id", "automation_status"),
+        Index("ix_intelligence_questions_direction_created", "direction_id", "created_at"),
+        Index("ix_intelligence_questions_cluster", "cluster_id"),
     )
 
     interview_id: Mapped[UUID] = mapped_column(
@@ -291,8 +315,18 @@ class IntelligenceQuestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("intelligence_interviews.id", ondelete="CASCADE"),
         nullable=False,
     )
+    direction_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("learning_tracks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_question_text: Mapped[str] = mapped_column(
+        Text, default=_normalized_question_default, nullable=False
+    )
+    canonical_question_candidate: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_context: Mapped[str | None] = mapped_column(Text, nullable=True)
     question_embedding: Mapped[list[float] | None] = mapped_column(ARRAY(Float), nullable=True)
     question_embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
     question_embedding_dimensions: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -327,6 +361,66 @@ class IntelligenceQuestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
     )
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    learning_object_type: Mapped[LearningObjectType] = mapped_column(
+        Enum(
+            LearningObjectType,
+            name="learning_object_type",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        default=LearningObjectType.CONTEXT_DEPENDENT,
+        nullable=False,
+    )
+    is_real_interviewer_question: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    is_standalone: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    routing_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    answer_scope: Mapped[list[str]] = mapped_column(
+        ARRAY(String(240)), default=list, server_default="{}", nullable=False
+    )
+    topic_candidates: Mapped[list[str]] = mapped_column(
+        ARRAY(String(240)), default=list, server_default="{}", nullable=False
+    )
+    quality_flags: Mapped[list[str]] = mapped_column(
+        ARRAY(String(80)), default=list, server_default="{}", nullable=False
+    )
+    automation_status: Mapped[QuestionOccurrenceStatus] = mapped_column(
+        Enum(
+            QuestionOccurrenceStatus,
+            name="question_occurrence_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        default=QuestionOccurrenceStatus.CREATED,
+        nullable=False,
+    )
+    cluster_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "question_clusters.id",
+            name="fk_intelligence_questions_cluster_id_question_clusters",
+            ondelete="SET NULL",
+            use_alter=True,
+        ),
+        nullable=True,
+    )
+    automation_decision_source: Mapped[AutomationDecisionSource | None] = mapped_column(
+        Enum(
+            AutomationDecisionSource,
+            name="automation_decision_source",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=True,
+    )
+    automation_decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    automation_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    automation_revision: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
+    automation_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    alias_human_confirmed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     moderation_status: Mapped[IntelligenceQuestionModerationStatus] = mapped_column(
         Enum(
             IntelligenceQuestionModerationStatus,

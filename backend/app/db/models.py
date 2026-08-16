@@ -1,5 +1,11 @@
 """Import all models so SQLAlchemy and Alembic discover their metadata."""
 
+from app.interviews.card_automation_models import (
+    AutomationDecision,
+    CardAutomationSettings,
+    PersonalReviewItem,
+    QuestionCluster,
+)
 from app.interviews.intelligence_models import (
     IntelligenceAIAdmission,
     IntelligenceAIUsage,
@@ -103,6 +109,8 @@ from app.tracks.models import LearningTrack, LearningTrackEnrollment, LearningTr
 from app.users.models import User, UserRole
 
 __all__ = [
+    "AutomationDecision",
+    "CardAutomationSettings",
     "Company",
     "CompanyAlias",
     "CompanyAliasProposal",
@@ -150,6 +158,8 @@ __all__ = [
     "InterviewStageType",
     "InterviewStageComment",
     "InterviewTopicSelection",
+    "PersonalReviewItem",
+    "QuestionCluster",
     "IntelligenceAIUsage",
     "IntelligenceAIAdmission",
     "IntelligenceAnswer",

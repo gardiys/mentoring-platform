@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
+from app.interviews.card_automation_models import CardAutomationSettings
 from app.roadmaps.models import Roadmap, RoadmapEnrollment
 from app.tracks.models import LearningTrack, LearningTrackEnrollment, LearningTrackRoadmap
 from app.tracks.schemas import (
@@ -231,6 +232,7 @@ async def create_track(session: AsyncSession, payload: AdminTrackMutation) -> Ad
     session.add(track)
     try:
         await session.flush()
+        session.add(CardAutomationSettings(direction_id=track.id))
         await _sync_track_roadmaps(session, track.id, payload.roadmap_ids)
         await session.commit()
     except IntegrityError:

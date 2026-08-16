@@ -175,6 +175,9 @@ export function InterviewStudyPage() {
                   : "Редкий вопрос"}
               </Badge>
               {card.category && <Badge variant="light">{card.category}</Badge>}
+              {card.subcategory && (
+                <Badge variant="outline">{card.subcategory}</Badge>
+              )}
               {card.is_new && <Badge variant="outline">Новая</Badge>}
             </Group>
             <Text className="technical-label">В сессии: {cards.length}</Text>
