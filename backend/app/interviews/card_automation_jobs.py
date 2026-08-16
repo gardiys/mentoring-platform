@@ -21,6 +21,8 @@ from app.interviews.card_automation_models import (
     QuestionCluster,
 )
 from app.interviews.card_automation_pipeline import (
+    analysis_answer_draft_for_cluster,
+    answer_contract_from_analysis_draft,
     ensure_personal_review_for_occurrence,
     process_question_occurrence,
     record_automation_decision,
@@ -51,11 +53,8 @@ from app.interviews.intelligence_ai import (
     InterviewAIProvider,
 )
 from app.interviews.intelligence_models import (
-    IntelligenceAnswer,
-    IntelligenceAnswerReview,
     IntelligenceQuestion,
     IntelligenceQuestionModerationStatus,
-    IntelligenceReviewStatus,
 )
 from app.interviews.intelligence_queue import enqueue_card_automation_job
 from app.interviews.models import InterviewCard, InterviewCardOccurrence
@@ -321,7 +320,7 @@ async def generate_cluster_candidate(
         version = cluster.version
         question = redact_untrusted_text(cluster.canonical_question)
         sources = await _trusted_sources(session, cluster)
-        analysis_draft = await _analysis_answer_draft(session, cluster)
+        analysis_draft = await analysis_answer_draft_for_cluster(session, cluster.id)
         provider = _ai(ctx)
         generation_input_hash = _answer_input_hash(
             question,
@@ -359,22 +358,8 @@ async def generate_cluster_candidate(
         reason = "Answer contract reused from an identical validated AI input"
         latency_ms = None
     elif analysis_draft is not None:
-        transferred_contract = AnswerContract(
-            short_answer=analysis_draft,
-            required_points=[],
-            optional_points=[],
-            common_mistakes=[],
-            unsupported_claims=[
-                "Ответ перенесён из AI-разбора собеседования и требует проверки."
-            ],
-            follow_up_questions=[],
-            difficulty="mixed",
-            version_scope=[],
-            source_references=[],
-            confidence=0.5,
-        )
-        contract_payload = transferred_contract.model_dump(mode="json")
-        confidence = transferred_contract.confidence
+        contract_payload = answer_contract_from_analysis_draft(analysis_draft)
+        confidence = 0.5
         usage = None
         prompt_version = ANSWER_CONTRACT_PROMPT_VERSION
         schema_version = ANSWER_CONTRACT_SCHEMA_VERSION
@@ -1088,46 +1073,6 @@ async def _trusted_sources(session: Any, cluster: QuestionCluster) -> list[dict[
         }
         for _score, source_id, title, content in ranked[:8]
     ]
-
-
-async def _analysis_answer_draft(session: Any, cluster: QuestionCluster) -> str | None:
-    """Return the latest reusable answer draft produced by interview AI review.
-
-    This text is intentionally not included in ``_trusted_sources``: it is a
-    useful moderation draft, but it has not been verified by a human or an
-    approved internal source yet.
-    """
-
-    candidates = list(
-        await session.scalars(
-            select(IntelligenceAnswerReview.suggested_better_answer)
-            .join(
-                IntelligenceAnswer,
-                IntelligenceAnswer.id == IntelligenceAnswerReview.answer_id,
-            )
-            .join(
-                IntelligenceQuestion,
-                IntelligenceQuestion.id == IntelligenceAnswer.question_id,
-            )
-            .where(
-                IntelligenceQuestion.cluster_id == cluster.id,
-                IntelligenceAnswerReview.status != IntelligenceReviewStatus.REJECTED,
-                IntelligenceAnswerReview.suggested_better_answer.is_not(None),
-            )
-            .order_by(
-                IntelligenceAnswerReview.created_at.desc(),
-                IntelligenceAnswerReview.id.desc(),
-            )
-            .limit(20)
-        )
-    )
-    for candidate in candidates:
-        if candidate is None:
-            continue
-        sanitized = redact_untrusted_text(candidate).strip()
-        if sanitized:
-            return sanitized[:12_000]
-    return None
 
 
 def _ai(ctx: dict[str, Any]) -> InterviewAIProvider:

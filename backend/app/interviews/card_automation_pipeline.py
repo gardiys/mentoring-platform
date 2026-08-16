@@ -29,6 +29,7 @@ from app.interviews.card_automation_models import (
     QuestionCluster,
 )
 from app.interviews.card_automation_privacy import redact_untrusted_text
+from app.interviews.card_automation_schemas import AnswerContract
 from app.interviews.card_automation_types import (
     ALLOWED_QUALITY_FLAGS,
     CARD_ELIGIBLE_TYPES,
@@ -101,6 +102,7 @@ class OccurrenceSnapshot:
     question_kind: Any
     extraction_confidence: float
     sensitive_values: tuple[str, ...]
+    available_broad_topics: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +112,8 @@ class RoutingData:
     is_standalone: bool
     canonical_text: str | None
     answer_scope: tuple[str, ...]
+    broad_topic: str | None
+    detailed_subtopic: str | None
     topic_candidates: tuple[str, ...]
     quality_flags: tuple[str, ...]
     confidence: float
@@ -140,6 +144,23 @@ class JudgedMatch:
     result: Any
     input_hash: str
     latency_ms: int | None
+
+
+def answer_contract_from_analysis_draft(answer: str) -> dict[str, object]:
+    """Build an explicitly unverified moderation draft from interview AI feedback."""
+
+    return AnswerContract(
+        short_answer=answer,
+        required_points=[],
+        optional_points=[],
+        common_mistakes=[],
+        unsupported_claims=["Ответ перенесён из AI-разбора собеседования и требует проверки."],
+        follow_up_questions=[],
+        difficulty="mixed",
+        version_scope=[],
+        source_references=[],
+        confidence=0.5,
+    ).model_dump(mode="json")
 
 
 async def process_question_occurrence(
@@ -339,6 +360,20 @@ async def _claim_occurrence(
         student = await session.get(User, interview.student_id)
         sensitive_values = _student_sensitive_values(student)
         context = await _minimal_context(session, question)
+        available_broad_topics = tuple(
+            dict.fromkeys(
+                await session.scalars(
+                    select(InterviewCard.category)
+                    .join(InterviewDeck, InterviewDeck.id == InterviewCard.deck_id)
+                    .where(
+                        InterviewDeck.track_id == process.track_id,
+                        InterviewDeck.is_published.is_(True),
+                        InterviewCard.is_published.is_(True),
+                    )
+                    .order_by(InterviewCard.category)
+                )
+            )
+        )
         question.direction_id = process.track_id
         question.normalized_question_text = normalize_question(question.question_text)
         question.source_context = context
@@ -358,6 +393,7 @@ async def _claim_occurrence(
             question_kind=question.question_kind,
             extraction_confidence=question.confidence,
             sensitive_values=sensitive_values,
+            available_broad_topics=available_broad_topics,
         )
 
 
@@ -382,6 +418,7 @@ async def _route(
         safe_question,
         safe_answer,
         safe_context,
+        "\n".join(snapshot.available_broad_topics),
         QUESTION_ROUTING_PROMPT_VERSION,
         QUESTION_ROUTING_SCHEMA_VERSION,
         _provider_model_name(ai, "light"),
@@ -400,6 +437,8 @@ async def _route(
             fallback.is_standalone,
             None,
             (),
+            None,
+            None,
             (),
             fallback.quality_flags,
             fallback.confidence,
@@ -438,6 +477,8 @@ async def _route(
                 bool(payload["is_standalone"]),
                 str(payload["canonical_text"]) if payload.get("canonical_text") else None,
                 _string_tuple(payload.get("answer_scope")),
+                (str(payload["broad_topic"]) if payload.get("broad_topic") else None),
+                (str(payload["detailed_subtopic"]) if payload.get("detailed_subtopic") else None),
                 _string_tuple(payload.get("topic_candidates")),
                 tuple(
                     item
@@ -463,17 +504,39 @@ async def _route(
         question=safe_question[:4_000],
         candidate_answer=safe_answer[:6_000],
         context=safe_context[:6_000],
+        available_broad_topics=list(snapshot.available_broad_topics),
     )
     latency_ms = _elapsed_ms(started_at)
     output = result.output
     flags = tuple(flag for flag in output.quality_flags if flag in ALLOWED_QUALITY_FLAGS)
+    available_by_normalized = {
+        _normalized_topic(item): item for item in snapshot.available_broad_topics
+    }
+    broad_topic = (
+        available_by_normalized.get(_normalized_topic(output.broad_topic))
+        if output.broad_topic
+        else None
+    )
+    detailed_subtopic = output.detailed_subtopic.strip() if output.detailed_subtopic else None
+    if (
+        detailed_subtopic
+        and broad_topic
+        and _normalized_topic(detailed_subtopic) == _normalized_topic(broad_topic)
+    ):
+        detailed_subtopic = None
+    topic_candidates = _unique_topic_labels(
+        ([broad_topic] if broad_topic else [])
+        + (list(output.topic_candidates) if broad_topic else [])
+    )
     return RoutingData(
         output.learning_object_type,
         output.is_real_interviewer_question,
         output.is_standalone,
         output.canonical_text,
         tuple(output.answer_scope),
-        tuple(output.topic_candidates),
+        broad_topic,
+        detailed_subtopic,
+        topic_candidates,
         flags,
         output.confidence,
         output.reasoning_summary,
@@ -502,6 +565,9 @@ async def _store_routing(
         question.canonical_question_candidate = routing.canonical_text
         question.answer_scope = list(routing.answer_scope)
         question.topic_candidates = list(routing.topic_candidates)
+        if routing.broad_topic is not None:
+            question.category = routing.broad_topic
+        question.subcategory = routing.detailed_subtopic
         question.quality_flags = list(routing.quality_flags)
         question.routing_confidence = routing.confidence
         question.automation_decision_source = routing.decision_source
@@ -547,6 +613,8 @@ async def _store_routing(
                 "is_standalone": routing.is_standalone,
                 "canonical_text": routing.canonical_text,
                 "answer_scope": list(routing.answer_scope),
+                "broad_topic": routing.broad_topic,
+                "detailed_subtopic": routing.detailed_subtopic,
                 "topic_candidates": list(routing.topic_candidates),
                 "quality_flags": list(routing.quality_flags),
             },
@@ -898,6 +966,10 @@ async def _cluster_occurrence(
         question = await _locked_current(session, snapshot)
         if question is None:
             return
+        analysis_answer_contract = await _analysis_answer_contract_for_occurrence(
+            session,
+            question.id,
+        )
         current_settings = await session.get(CardAutomationSettings, snapshot.direction_id)
         if current_settings is None or not current_settings.enabled:
             _set_occurrence_status(question, QuestionOccurrenceStatus.ROUTED)
@@ -1006,7 +1078,9 @@ async def _cluster_occurrence(
                 normalized_canonical_question=normalized,
                 learning_object_type=question.learning_object_type,
                 topic_name=(question.topic_candidates[0] if question.topic_candidates else None),
+                subtopic_name=question.subcategory,
                 topic_candidates=question.topic_candidates,
+                answer_contract=analysis_answer_contract,
                 representative_occurrence_id=question.id,
                 embedding=question.question_embedding,
                 embedding_model=question.question_embedding_model,
@@ -1027,6 +1101,12 @@ async def _cluster_occurrence(
             if locked_cluster is None:
                 raise RuntimeError("Selected question cluster disappeared")
             selected = locked_cluster
+            if selected.topic_name is None and question.topic_candidates:
+                selected.topic_name = question.topic_candidates[0]
+            if selected.subtopic_name is None and question.subcategory:
+                selected.subtopic_name = question.subcategory
+            if selected.answer_contract is None and analysis_answer_contract is not None:
+                selected.answer_contract = analysis_answer_contract
         if question.cluster_id != selected.id:
             question.cluster_id = selected.id
             selected.membership_revision += 1
@@ -1080,6 +1160,74 @@ async def _cluster_occurrence(
             _set_occurrence_status(question, QuestionOccurrenceStatus.NEEDS_REVIEW)
         await ensure_personal_review_for_occurrence(session, question, settings, None)
         await session.commit()
+
+
+async def _analysis_answer_contract_for_occurrence(
+    session: AsyncSession,
+    question_id: UUID,
+) -> dict[str, object] | None:
+    suggested_answer = await session.scalar(
+        select(IntelligenceAnswerReview.suggested_better_answer)
+        .join(
+            IntelligenceAnswer,
+            IntelligenceAnswer.id == IntelligenceAnswerReview.answer_id,
+        )
+        .where(
+            IntelligenceAnswer.question_id == question_id,
+            IntelligenceAnswerReview.status != IntelligenceReviewStatus.REJECTED,
+            IntelligenceAnswerReview.suggested_better_answer.is_not(None),
+        )
+        .order_by(
+            (IntelligenceAnswerReview.source == IntelligenceReviewSource.MENTOR).desc(),
+            IntelligenceAnswerReview.created_at.desc(),
+            IntelligenceAnswerReview.id.desc(),
+        )
+    )
+    if suggested_answer is None:
+        return None
+    sanitized = redact_untrusted_text(suggested_answer).strip()
+    if not sanitized:
+        return None
+    return answer_contract_from_analysis_draft(sanitized[:12_000])
+
+
+async def analysis_answer_draft_for_cluster(
+    session: AsyncSession,
+    cluster_id: UUID,
+) -> str | None:
+    """Return the latest reusable, privacy-filtered answer from interview analysis."""
+
+    candidates = list(
+        await session.scalars(
+            select(IntelligenceAnswerReview.suggested_better_answer)
+            .join(
+                IntelligenceAnswer,
+                IntelligenceAnswer.id == IntelligenceAnswerReview.answer_id,
+            )
+            .join(
+                IntelligenceQuestion,
+                IntelligenceQuestion.id == IntelligenceAnswer.question_id,
+            )
+            .where(
+                IntelligenceQuestion.cluster_id == cluster_id,
+                IntelligenceAnswerReview.status != IntelligenceReviewStatus.REJECTED,
+                IntelligenceAnswerReview.suggested_better_answer.is_not(None),
+            )
+            .order_by(
+                (IntelligenceAnswerReview.source == IntelligenceReviewSource.MENTOR).desc(),
+                IntelligenceAnswerReview.created_at.desc(),
+                IntelligenceAnswerReview.id.desc(),
+            )
+            .limit(20)
+        )
+    )
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        sanitized = redact_untrusted_text(candidate).strip()
+        if sanitized:
+            return sanitized[:12_000]
+    return None
 
 
 async def recalculate_cluster_stats(
@@ -1666,6 +1814,20 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
     return tuple(str(item) for item in value)
+
+
+def _normalized_topic(value: str) -> str:
+    return " ".join(value.casefold().split())
+
+
+def _unique_topic_labels(values: list[str]) -> tuple[str, ...]:
+    unique: dict[str, str] = {}
+    for value in values:
+        label = value.strip()
+        normalized = _normalized_topic(label)
+        if normalized and normalized not in unique:
+            unique[normalized] = label
+    return tuple(unique.values())
 
 
 def _provider_model_name(

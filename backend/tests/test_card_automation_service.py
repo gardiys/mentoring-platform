@@ -554,6 +554,58 @@ async def test_admin_can_request_missing_cluster_answer_generation(
 
 
 @pytest.mark.asyncio
+async def test_admin_answer_generation_immediately_reuses_interview_ai_draft(
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cluster = _cluster(
+        seeded.python_track_id,
+        100,
+        status=QuestionClusterStatus.NEEDS_REVIEW,
+    )
+    queued: list[tuple[str, str, int]] = []
+
+    async def fake_analysis_draft(_session: object, _cluster_id: UUID) -> str:
+        return "AI-рекомендация из разбора собеседования."
+
+    async def fake_enqueue(function: str, entity_id: str, revision: int) -> str:
+        queued.append((function, entity_id, revision))
+        return "unexpected-job"
+
+    monkeypatch.setattr(
+        card_automation_service,
+        "analysis_answer_draft_for_cluster",
+        fake_analysis_draft,
+    )
+    monkeypatch.setattr(
+        card_automation_service,
+        "enqueue_card_automation_job",
+        fake_enqueue,
+    )
+    async with TestSession() as session:
+        admin = await session.get_one(User, seeded.admin_id)
+        session.add(cluster)
+        await session.commit()
+
+        result = await card_automation_service.request_question_cluster_answer_generation(
+            session,
+            admin,
+            cluster.id,
+            QuestionClusterAnswerGenerationMutation(expected_version=1),
+        )
+
+        refreshed = await session.get_one(QuestionCluster, cluster.id)
+        assert result.version == 2
+        assert result.job_id.startswith("analysis-draft:")
+        assert refreshed.answer_contract is not None
+        assert (
+            refreshed.answer_contract["short_answer"] == "AI-рекомендация из разбора собеседования."
+        )
+        assert refreshed.answer_status is None
+        assert queued == []
+
+
+@pytest.mark.asyncio
 async def test_managed_personal_review_is_assignment_scoped_and_audited(
     seeded: SeededData,
 ) -> None:

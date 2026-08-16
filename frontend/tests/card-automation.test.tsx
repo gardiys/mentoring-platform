@@ -485,6 +485,29 @@ it("показывает ментору тему, вопрос и ответ и 
   expect(adminUpdate).not.toHaveBeenCalled();
 });
 
+it("не подставляет первую широкую тему, если AI выбрал неизвестное значение", async () => {
+  vi.spyOn(api, "adminCardAutomationCluster").mockResolvedValue({
+    ...clusterDetail,
+    topic_name: "Выдуманная AI тема",
+    topic_candidates: ["Выдуманная AI тема"],
+  });
+  vi.spyOn(api, "adminInterviewDeckSummaries").mockResolvedValue([]);
+
+  renderPage(
+    <AdminCardAutomationClusterDetailPage />,
+    `/admin/card-automation/clusters/${cluster.id}`,
+    "/admin/card-automation/clusters/:clusterId",
+  );
+
+  expect(
+    await screen.findByText("AI не выбрал широкую тему"),
+  ).toBeInTheDocument();
+  const broadTopicFields = await screen.findAllByLabelText(/1\. Широкая тема/);
+  expect(
+    broadTopicFields.find((element) => element.tagName === "INPUT"),
+  ).toHaveValue("");
+});
+
 it("версионированно сохраняет проверенный черновик и синхронизирует создание карточки", async () => {
   const user = userEvent.setup();
   const updatedQuestion = "Как GIL ограничивает CPU-bound потоки в CPython?";

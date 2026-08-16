@@ -173,8 +173,9 @@ class AlwaysRetryableRoutingProvider(FakeInterviewAIProvider):
         question: str,
         candidate_answer: str,
         context: str,
+        available_broad_topics: list[str],
     ) -> AIQuestionRoutingResult:
-        del question, candidate_answer, context
+        del question, candidate_answer, context, available_broad_topics
         self.routing_attempts += 1
         raise InterviewAIError(
             "ROUTING_TIMEOUT",

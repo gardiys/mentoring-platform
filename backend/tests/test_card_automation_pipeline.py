@@ -91,11 +91,13 @@ class ScopedRoutingProvider(FakeInterviewAIProvider):
         question: str,
         candidate_answer: str,
         context: str,
+        available_broad_topics: list[str],
     ) -> AIQuestionRoutingResult:
         result = await super().route_question(
             question=question,
             candidate_answer=candidate_answer,
             context=context,
+            available_broad_topics=available_broad_topics,
         )
         scope = (
             ["определение GIL"]
@@ -107,6 +109,34 @@ class ScopedRoutingProvider(FakeInterviewAIProvider):
                 update={
                     "answer_scope": scope,
                     "topic_candidates": ["GIL"],
+                }
+            ),
+            usage=result.usage,
+        )
+
+
+class ExistingTopicRoutingProvider(FakeInterviewAIProvider):
+    async def route_question(
+        self,
+        *,
+        question: str,
+        candidate_answer: str,
+        context: str,
+        available_broad_topics: list[str],
+    ) -> AIQuestionRoutingResult:
+        result = await super().route_question(
+            question=question,
+            candidate_answer=candidate_answer,
+            context=context,
+            available_broad_topics=available_broad_topics,
+        )
+        assert available_broad_topics == ["Python core", "Python ООП"]
+        return AIQuestionRoutingResult(
+            output=result.output.model_copy(
+                update={
+                    "broad_topic": "Python ООП",
+                    "detailed_subtopic": "Дескрипторы и протокол атрибутов",
+                    "topic_candidates": ["дескрипторы", "__get__"],
                 }
             ),
             usage=result.usage,
@@ -181,11 +211,13 @@ class RoutingFinalizationRaceProvider(FakeInterviewAIProvider):
         question: str,
         candidate_answer: str,
         context: str,
+        available_broad_topics: list[str],
     ) -> AIQuestionRoutingResult:
         result = await super().route_question(
             question=question,
             candidate_answer=candidate_answer,
             context=context,
+            available_broad_topics=available_broad_topics,
         )
         await self.mutation()
         return result
@@ -205,7 +237,9 @@ class SequencedRoutingFailureProvider(FakeInterviewAIProvider):
         question: str,
         candidate_answer: str,
         context: str,
+        available_broad_topics: list[str],
     ) -> AIQuestionRoutingResult:
+        del available_broad_topics
         self.routing_calls.append(
             {
                 "question": question,
@@ -396,6 +430,7 @@ async def _create_card(
     question: str,
     *,
     embedding: list[float] | None = None,
+    category: str = "Python",
 ) -> CardFixture:
     unique = uuid4().hex
     deck = InterviewDeck(
@@ -410,7 +445,7 @@ async def _create_card(
         id=uuid4(),
         deck_id=deck.id,
         slug=f"pipeline-card-{unique}",
-        category="Python",
+        category=category,
         question_markdown=question,
         answer_markdown="Проверенный ответ карточки.",
         frequency=InterviewCardFrequency.OCCASIONAL,
@@ -741,6 +776,36 @@ async def test_singleton_stays_in_one_shadow_cluster_on_retry(
         assert len(decisions) == 2
         assert len({item.idempotency_key for item in decisions}) == 2
     assert len(ai.routing_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_routing_uses_existing_broad_topic_and_persists_detailed_subtopic(
+    seeded: SeededData,
+) -> None:
+    await _configure(seeded)
+    await _create_card(seeded, "Что такое контекстный менеджер?", category="Python core")
+    await _create_card(seeded, "Что такое наследование?", category="Python ООП")
+    source = await _create_source(
+        seeded,
+        "Как работают дескрипторы в Python?",
+        assessment=IntelligenceAssessment.INCORRECT,
+    )
+    ai = ExistingTopicRoutingProvider()
+
+    await _process(ai, source.question_id)
+
+    async with TestSession() as session:
+        question = await session.get_one(IntelligenceQuestion, source.question_id)
+        cluster = await session.get_one(QuestionCluster, question.cluster_id)
+
+        assert question.category == "Python ООП"
+        assert question.subcategory == "Дескрипторы и протокол атрибутов"
+        assert question.topic_candidates == ["Python ООП", "дескрипторы", "__get__"]
+        assert cluster.topic_name == "Python ООП"
+        assert cluster.subtopic_name == "Дескрипторы и протокол атрибутов"
+        assert cluster.answer_contract is not None
+        assert cluster.answer_contract["short_answer"] == "Краткий корректный ответ."
+        assert "требует проверки" in str(cluster.answer_contract["unsupported_claims"])
 
 
 @pytest.mark.asyncio

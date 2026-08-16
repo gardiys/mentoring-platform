@@ -217,7 +217,17 @@ function ClusterDetail({
     [availableDecks, clusterDeck],
   );
   const [initialDraft] = useState(() => ({
-    deckId: cluster.deck_id ?? availableDecks[0]?.deck_id ?? null,
+    deckId:
+      cluster.deck_id ??
+      availableDecks.find((deck) =>
+        deck.topics.some(
+          (topic) =>
+            normalizedTopic(topic) ===
+            normalizedTopic(cluster.topic_name ?? ""),
+        ),
+      )?.deck_id ??
+      availableDecks[0]?.deck_id ??
+      null,
     category: cluster.topic_name ?? cluster.topic_candidates[0] ?? "",
     subcategory: cluster.subtopic_name ?? "",
     question: cluster.canonical_question,
@@ -298,7 +308,6 @@ function ClusterDetail({
     const nextTopic =
       existingTopic(options, category) ??
       existingTopic(options, cluster.topic_name ?? "") ??
-      options[0] ??
       "";
     if (nextTopic !== category) setCategory(nextTopic);
   }, [availableDecks, category, cluster.topic_name, deckId]);
@@ -1335,6 +1344,12 @@ function ClusterDetail({
                     onChange={(value) => value && setCategory(value)}
                     nothingFoundMessage="В выбранной колоде пока нет тем"
                   />
+                  {!selectedCreateTopic && availableDecks.length > 0 && (
+                    <Alert color="yellow" title="AI не выбрал широкую тему">
+                      Выберите подходящую существующую тему вручную. Платформа
+                      больше не подставляет первую тему колоды автоматически.
+                    </Alert>
+                  )}
                   <TextInput
                     label="Детальная подтема (необязательно)"
                     description="Необязательно. Не влияет на широкую группировку карточек."

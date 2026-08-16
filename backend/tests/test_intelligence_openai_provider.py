@@ -191,11 +191,13 @@ async def test_fake_automation_methods_are_deterministic_and_versioned() -> None
         question="Как работает GIL?",
         candidate_answer="Он ограничивает выполнение байткода.",
         context="Короткий контекст.",
+        available_broad_topics=["Python core", "Алгоритмы и структуры данных"],
     )
     noise = await provider.route_question(
         question="Меня слышно?",
         candidate_answer="Да.",
         context="",
+        available_broad_topics=["Python core"],
     )
     matched = await provider.judge_card_match(
         question="Что такое GIL?",
@@ -254,6 +256,8 @@ async def test_openai_question_routing_uses_cheap_model_and_isolates_untrusted_t
         is_standalone=True,
         canonical_text="Как работает GIL?",
         answer_scope=["назначение GIL"],
+        broad_topic="Python core",
+        detailed_subtopic="GIL и потоки CPython",
         topic_candidates=["Python"],
         quality_flags=[],
         confidence=0.97,
@@ -276,6 +280,7 @@ async def test_openai_question_routing_uses_cheap_model_and_isolates_untrusted_t
         question=attack,
         candidate_answer="Ответ кандидата",
         context="Соседняя реплика",
+        available_broad_topics=["Python core", "Алгоритмы и структуры данных"],
     )
 
     request = parse.await_args.kwargs
@@ -287,7 +292,12 @@ async def test_openai_question_routing_uses_cheap_model_and_isolates_untrusted_t
     assert attack not in developer_content
     assert "TRUSTED PLATFORM DATA" in developer_content
     assert user_content.startswith("UNTRUSTED USER CONTENT\n")
-    assert json.loads(user_content.split("\n", 1)[1])["question"] == attack
+    user_payload = json.loads(user_content.split("\n", 1)[1])
+    assert user_payload["question"] == attack
+    assert user_payload["available_broad_topics"] == [
+        "Python core",
+        "Алгоритмы и структуры данных",
+    ]
     assert result.output is output
     assert result.usage.provider_request_id == "route-123"
     assert result.prompt_version == QUESTION_ROUTING_PROMPT_VERSION

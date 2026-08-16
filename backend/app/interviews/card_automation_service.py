@@ -28,6 +28,8 @@ from app.interviews.card_automation_models import (
     QuestionCluster,
 )
 from app.interviews.card_automation_pipeline import (
+    analysis_answer_draft_for_cluster,
+    answer_contract_from_analysis_draft,
     ensure_personal_review_for_occurrence,
     link_occurrence_to_card,
     recalculate_cluster_stats,
@@ -1301,6 +1303,15 @@ async def request_question_cluster_answer_generation(
 
     _require_admin(viewer)
     cluster, _track = await _cluster_row(session, viewer, cluster_id)
+    locked_cluster = await session.scalar(
+        select(QuestionCluster)
+        .where(QuestionCluster.id == cluster.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if locked_cluster is None:
+        api_error(404, "question_cluster_not_found", "Кластер вопросов не найден")
+    cluster = locked_cluster
     if cluster.version != payload.expected_version:
         api_error(
             409,
@@ -1333,6 +1344,37 @@ async def request_question_cluster_answer_generation(
             "Предыдущая генерация завершилась ошибкой — проверьте технические детали",
         )
     settings = await _settings_model(session, cluster.direction_id)
+    analysis_draft = await analysis_answer_draft_for_cluster(session, cluster.id)
+    if analysis_draft is not None:
+        contract = answer_contract_from_analysis_draft(analysis_draft)
+        cluster.answer_contract = contract
+        cluster.answer_validation = None
+        cluster.answer_status = None
+        cluster.version += 1
+        await record_automation_decision(
+            session,
+            entity_type="cluster",
+            entity_id=cluster.id,
+            idempotency_key=(
+                f"cluster:{cluster.id}:analysis-answer-transfer:{cluster.membership_revision}"
+            ),
+            decision_type=AutomationDecisionType.ANSWER_CONTRACT_GENERATED,
+            decision_source=AutomationDecisionSource.RULE,
+            reason=(
+                "Answer draft transferred from the latest non-rejected AI interview review; "
+                "human verification is required"
+            ),
+            confidence=0.5,
+            settings=settings,
+            selected_cluster_id=cluster.id,
+            judge_result=contract,
+        )
+        await session.commit()
+        return QuestionClusterAnswerGenerationResult(
+            cluster_id=cluster.id,
+            version=cluster.version,
+            job_id=f"analysis-draft:{cluster.id}:v{cluster.version}",
+        )
     if not settings.enabled or not settings.cluster_moderation_enabled:
         api_error(
             409,

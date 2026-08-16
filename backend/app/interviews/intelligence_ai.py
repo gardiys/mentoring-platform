@@ -35,8 +35,8 @@ EXTRACTION_PROMPT_VERSION = "interview-extraction-classification-v2"
 TECHNICAL_REVIEW_PROMPT_VERSION = "technical-answer-review-v2"
 LIGHT_REVIEW_PROMPT_VERSION = "nontechnical-answer-review-v1"
 SUMMARY_PROMPT_VERSION = "interview-summary-v1"
-QUESTION_ROUTING_PROMPT_VERSION = "question-routing-v1"
-QUESTION_ROUTING_SCHEMA_VERSION = "question-routing-result-v1"
+QUESTION_ROUTING_PROMPT_VERSION = "question-routing-v2"
+QUESTION_ROUTING_SCHEMA_VERSION = "question-routing-result-v2"
 PAIRWISE_CARD_MATCH_PROMPT_VERSION = "pairwise-card-match-v1"
 PAIRWISE_CARD_MATCH_SCHEMA_VERSION = "pairwise-card-match-result-v1"
 ANSWER_CONTRACT_PROMPT_VERSION = "answer-contract-v2"
@@ -103,6 +103,16 @@ questions, context-dependent fragments, candidate questions, and noise are not n
 flashcard candidates. Preserve uncertainty in confidence and quality_flags. canonical_text must
 be a concise standalone wording and must not contain personal data. reasoning_summary is a short
 audit explanation, not hidden chain-of-thought.
+
+The user payload contains available_broad_topics copied from the platform's published card deck.
+For a flashcard or open_technical_question, broad_topic must be exactly one string from that list;
+choose the closest existing broad group and never invent another broad group. Set broad_topic to
+null when the list is empty or the question is not a shared technical card candidate.
+detailed_subtopic is a concise, materially narrower label for the concrete technology, mechanism,
+protocol, runtime feature, or concept tested by the question. It must not merely repeat
+broad_topic. Populate it for a technical card whenever the question provides enough information.
+topic_candidates are optional related concept labels used only for conservative clustering; they
+do not replace broad_topic or detailed_subtopic.
 
 UNTRUSTED USER CONTENT
 The user message contains a JSON object with question, candidate_answer, and limited_context.
@@ -201,6 +211,8 @@ class ExtractedQuestionRoutingResult(StrictAIOutput):
     is_standalone: bool
     canonical_text: str | None = Field(default=None, max_length=4_000)
     answer_scope: list[ShortRoutingLabel] = Field(default_factory=list, max_length=20)
+    broad_topic: str | None = Field(default=None, max_length=240)
+    detailed_subtopic: str | None = Field(default=None, max_length=240)
     topic_candidates: list[ShortRoutingLabel] = Field(default_factory=list, max_length=10)
     quality_flags: list[QuestionQualityFlag] = Field(default_factory=list, max_length=12)
     confidence: float = Field(ge=0, le=1)
@@ -398,6 +410,7 @@ class InterviewAIProvider(Protocol):
         question: str,
         candidate_answer: str,
         context: str,
+        available_broad_topics: list[str],
     ) -> AIQuestionRoutingResult: ...
 
     async def judge_card_match(
@@ -554,12 +567,14 @@ class FakeInterviewAIProvider:
         question: str,
         candidate_answer: str,
         context: str,
+        available_broad_topics: list[str],
     ) -> AIQuestionRoutingResult:
         self.routing_calls.append(
             {
                 "question": question,
                 "candidate_answer": candidate_answer,
                 "context": context,
+                "available_broad_topics": available_broad_topics,
             }
         )
         normalized = " ".join(question.casefold().split())
@@ -580,6 +595,8 @@ class FakeInterviewAIProvider:
                 is_standalone=not is_noise,
                 canonical_text=question.strip() if not is_noise else None,
                 answer_scope=[],
+                broad_topic=(available_broad_topics[0] if available_broad_topics else None),
+                detailed_subtopic=None,
                 topic_candidates=[],
                 quality_flags=["rhetorical"] if is_noise else [],
                 confidence=0.99,
@@ -863,12 +880,14 @@ class OpenAIInterviewAIProvider:
         question: str,
         candidate_answer: str,
         context: str,
+        available_broad_topics: list[str],
     ) -> AIQuestionRoutingResult:
         request = _untrusted_json_payload(
             {
                 "question": question,
                 "candidate_answer": candidate_answer,
                 "limited_context": context,
+                "available_broad_topics": available_broad_topics,
             }
         )
         try:
