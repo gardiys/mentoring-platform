@@ -50,6 +50,8 @@ const STATUS_LABELS: Record<string, string> = {
   APPROVED_AFTER_CALL: "Одобрен после созвона",
   REJECTED_AFTER_CALL: "Отказ после созвона",
   FOLLOW_UP_REQUIRED: "Нужно уточнение",
+  CONTACT_LOST: "Не вышел на связь",
+  DEFERRED: "Готовы взять позже",
   APPLICATION_FORM_SENT: "Подробная анкета отправлена",
   APPLICATION_FORM_STARTED: "Заполняет подробную анкету",
   APPLICATION_FORM_SUBMITTED: "Подробная анкета получена",
@@ -109,6 +111,11 @@ const STAGES = [
     ],
   },
   {
+    value: "paused",
+    label: "Отложенные и пропавшие",
+    statuses: ["CONTACT_LOST", "DEFERRED"],
+  },
+  {
     value: "closed",
     label: "Завершённые",
     statuses: [
@@ -146,6 +153,18 @@ const ACTIONS: Record<
   complete_onboarding: { label: "Завершить онбординг", color: "green" },
   confirm_access: { label: "Доступы получены", color: "green" },
   access_missing: { label: "Письмо не найдено", color: "orange" },
+  mark_contact_lost: {
+    label: "Не вышел на связь",
+    color: "orange",
+    confirmation:
+      "Отметить кандидата как потерявшегося? Уведомление не отправляется.",
+  },
+  defer_candidate: {
+    label: "Готовы взять позже",
+    color: "violet",
+    confirmation: "Перенести кандидата в список тех, кого готовы взять позже?",
+  },
+  rollback_status: { label: "Вернуть предыдущий статус", color: "gray" },
 };
 
 const FORM_LABELS: Record<string, string> = {
@@ -165,6 +184,8 @@ function statusLabel(status: string) {
 
 function statusColor(status: string) {
   if (status.includes("REJECTED") || status === "PAYMENT_FAILED") return "red";
+  if (status === "CONTACT_LOST") return "orange";
+  if (status === "DEFERRED") return "violet";
   if (status === "ACTIVE_STUDENT" || status.includes("APPROVED"))
     return "green";
   if (status.includes("REVIEW") || status.includes("REQUIRED")) return "yellow";
@@ -393,7 +414,11 @@ export function AdminApplicationsPage() {
   const runAction = (action: OnboardingApplicationAction) => {
     if (!selectedId) return;
     const metadata = ACTIONS[action];
-    if (metadata.confirmation && !window.confirm(metadata.confirmation)) return;
+    const confirmation =
+      action === "rollback_status" && detail.data?.rollback_status
+        ? `Вернуть статус «${statusLabel(detail.data.rollback_status)}»? Изменится только статус заявки: уже отправленные сообщения и созданные доступы не отменятся.`
+        : metadata.confirmation;
+    if (confirmation && !window.confirm(confirmation)) return;
     if (action === "request_follow_up" && !comment.trim()) {
       notifications.show({
         color: "red",
@@ -447,6 +472,11 @@ export function AdminApplicationsPage() {
       value: counts.ONBOARDING_STARTED ?? 0,
       color: "green",
     },
+    {
+      label: "Отложены / пропали",
+      value: (counts.CONTACT_LOST ?? 0) + (counts.DEFERRED ?? 0),
+      color: "violet",
+    },
   ];
 
   return (
@@ -457,7 +487,7 @@ export function AdminApplicationsPage() {
         description="Управляйте кандидатом от короткой анкеты до выдачи доступа — бот сам отправит нужное сообщение и сохранит действие в истории."
       />
 
-      <SimpleGrid cols={{ base: 2, md: 4 }}>
+      <SimpleGrid cols={{ base: 2, md: 5 }}>
         {kpis.map((item) => (
           <Card key={item.label} withBorder className="application-kpi">
             <Badge color={item.color} variant="dot">
@@ -606,11 +636,16 @@ export function AdminApplicationsPage() {
                       Доступны только корректные переходы для текущего статуса.
                     </Text>
                   </div>
-                  {detail.data.available_actions.includes(
-                    "request_follow_up",
+                  {detail.data.available_actions.some((action) =>
+                    [
+                      "request_follow_up",
+                      "mark_contact_lost",
+                      "defer_candidate",
+                    ].includes(action),
                   ) && (
                     <Textarea
-                      label="Комментарий для уточнения"
+                      label="Комментарий к действию"
+                      description="Для уточнения комментарий обязателен, для остальных действий — по желанию."
                       value={comment}
                       onChange={(event) =>
                         setComment(event.currentTarget.value)
@@ -624,11 +659,19 @@ export function AdminApplicationsPage() {
                       <Button
                         key={action}
                         color={ACTIONS[action].color}
-                        variant={action.includes("reject") ? "light" : "filled"}
+                        variant={
+                          action.includes("reject") ||
+                          action === "rollback_status"
+                            ? "light"
+                            : "filled"
+                        }
                         loading={actionMutation.isPending}
                         onClick={() => runAction(action)}
                       >
-                        {ACTIONS[action].label}
+                        {action === "rollback_status" &&
+                        detail.data.rollback_status
+                          ? `Вернуть: ${statusLabel(detail.data.rollback_status)}`
+                          : ACTIONS[action].label}
                       </Button>
                     ))}
                   </Group>

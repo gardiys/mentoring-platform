@@ -64,6 +64,7 @@ import type {
   InterviewCardDuplicateMergeMutation,
   InterviewCardDuplicateMutation,
   InterviewCardDuplicatePage,
+  InterviewCardDuplicateRefreshRead,
   InterviewCardDuplicateReviewResult,
   InterviewStudySession,
   InterviewTopicOption,
@@ -604,6 +605,11 @@ export const api = {
       `/api/v1/admin/card-automation/duplicates?${params.toString()}`,
     );
   },
+  refreshAdminInterviewCardDuplicates: () =>
+    apiRequest<InterviewCardDuplicateRefreshRead>(
+      "/api/v1/admin/card-automation/duplicates/refresh",
+      { method: "POST" },
+    ),
   dismissAdminInterviewCardDuplicate: (
     payload: InterviewCardDuplicateMutation,
     idempotencyKey: string,

@@ -24,7 +24,13 @@ const application: OnboardingApplicationDetail = {
   payment_status: null,
   created_at: "2026-08-18T10:00:00Z",
   updated_at: "2026-08-18T11:00:00Z",
-  available_actions: ["approve_qualification", "reject_qualification"],
+  available_actions: [
+    "approve_qualification",
+    "reject_qualification",
+    "defer_candidate",
+    "rollback_status",
+  ],
+  rollback_status: "QUALIFICATION_COMPLETED",
   age: "25",
   initial_knowledge: "Проходил курс по Python",
   life_difficulties: "Нет",
@@ -102,5 +108,37 @@ it("показывает воронку, карточку и выполняет 
       "approve_qualification",
       null,
     ),
+  );
+});
+
+it("возвращает заявку на предыдущий статус с подтверждением", async () => {
+  vi.spyOn(api, "adminApplications").mockResolvedValue(page);
+  vi.spyOn(api, "adminApplication").mockResolvedValue(application);
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const execute = vi
+    .spyOn(api, "executeAdminApplicationAction")
+    .mockResolvedValue({
+      message: "Статус возвращён",
+      delivered: null,
+      application: {
+        ...application,
+        status: "QUALIFICATION_COMPLETED",
+        rollback_status: "QUALIFICATION_STARTED",
+      },
+    });
+
+  renderPage(<AdminApplicationsPage />);
+  await userEvent.click(await screen.findByRole("button", { name: "Открыть" }));
+  await userEvent.click(
+    await screen.findByRole("button", {
+      name: "Вернуть: Квалификация заполнена",
+    }),
+  );
+
+  expect(window.confirm).toHaveBeenCalledWith(
+    expect.stringContaining("уже отправленные сообщения"),
+  );
+  await waitFor(() =>
+    expect(execute).toHaveBeenCalledWith("app_123", "rollback_status", null),
   );
 });

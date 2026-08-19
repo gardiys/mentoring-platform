@@ -233,6 +233,13 @@ class InterviewCardDuplicatePage(StrictAPIModel):
     total: int = Field(ge=0)
     limit: int = Field(ge=1)
     offset: int = Field(ge=0)
+    cache_status: Literal["ready", "building"] = "ready"
+    cache_generated_at: datetime | None = None
+    cache_refreshing: bool = False
+
+
+class InterviewCardDuplicateRefreshRead(StrictAPIModel):
+    status: Literal["queued", "already_running"]
 
 
 class InterviewCardDuplicateMutation(StrictAPIModel):

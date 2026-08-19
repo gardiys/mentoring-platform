@@ -1345,6 +1345,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/card-automation/duplicates/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Refresh Card Duplicates */
+        post: operations["admin_refresh_card_duplicates_api_v1_admin_card_automation_duplicates_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/card-automation/duplicates/dismiss": {
         parameters: {
             query?: never;
@@ -3828,6 +3845,57 @@ export interface paths {
         head?: never;
         /** Admin Set Student Access */
         patch: operations["admin_set_student_access_api_v1_admin_students__student_id__access_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Applications */
+        get: operations["admin_applications_api_v1_admin_applications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/applications/{applicant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Application */
+        get: operations["admin_application_api_v1_admin_applications__applicant_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/applications/{applicant_id}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Application Action */
+        post: operations["admin_application_action_api_v1_admin_applications__applicant_id__actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/mentor/profile": {
@@ -7064,6 +7132,27 @@ export interface components {
             limit: number;
             /** Offset */
             offset: number;
+            /**
+             * Cache Status
+             * @default ready
+             * @enum {string}
+             */
+            cache_status: "ready" | "building";
+            /** Cache Generated At */
+            cache_generated_at?: string | null;
+            /**
+             * Cache Refreshing
+             * @default false
+             */
+            cache_refreshing: boolean;
+        };
+        /** InterviewCardDuplicateRefreshRead */
+        InterviewCardDuplicateRefreshRead: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "already_running";
         };
         /** InterviewCardDuplicateReviewResult */
         InterviewCardDuplicateReviewResult: {
@@ -8744,6 +8833,168 @@ export interface components {
              * Created At
              * Format: date-time
              */
+            created_at: string;
+        };
+        /** OnboardingApplicationActionRequest */
+        OnboardingApplicationActionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "approve_qualification" | "reject_qualification" | "approve_after_call" | "reject_after_call" | "request_follow_up" | "confirm_payment" | "resend_payment" | "complete_onboarding" | "confirm_access" | "access_missing";
+            /** Comment */
+            comment?: string | null;
+        };
+        /** OnboardingApplicationActionResponse */
+        OnboardingApplicationActionResponse: {
+            /** Message */
+            message: string;
+            /** Delivered */
+            delivered: boolean | null;
+            application: components["schemas"]["OnboardingApplicationDetail"];
+        };
+        /** OnboardingApplicationDetail */
+        OnboardingApplicationDetail: {
+            /** Applicant Id */
+            applicant_id: string;
+            /** Status */
+            status: string;
+            /** Name */
+            name: string | null;
+            /** Telegram User Id */
+            telegram_user_id: number;
+            /** Telegram Username */
+            telegram_username: string | null;
+            /** Email */
+            email: string | null;
+            /** Direction */
+            direction: string | null;
+            /** City */
+            city: string | null;
+            /** Admin Comment */
+            admin_comment: string | null;
+            /** Booking Start Time */
+            booking_start_time: string | null;
+            /** Payment Status */
+            payment_status: string | null;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Available Actions */
+            available_actions: ("approve_qualification" | "reject_qualification" | "approve_after_call" | "reject_after_call" | "request_follow_up" | "confirm_payment" | "resend_payment" | "complete_onboarding" | "confirm_access" | "access_missing")[];
+            /** Age */
+            age: string | null;
+            /** Initial Knowledge */
+            initial_knowledge: string | null;
+            /** Life Difficulties */
+            life_difficulties: string | null;
+            /** Study Time Per Day */
+            study_time_per_day: string | null;
+            /** Military Document Status */
+            military_document_status: string | null;
+            /** Referral Source */
+            referral_source: string | null;
+            /** Form Answers */
+            form_answers: {
+                [key: string]: unknown;
+            };
+            /** Bookings */
+            bookings: components["schemas"]["OnboardingBooking"][];
+            /** Payments */
+            payments: components["schemas"]["OnboardingPayment"][];
+            /** Events */
+            events: components["schemas"]["OnboardingApplicationEvent"][];
+        };
+        /** OnboardingApplicationEvent */
+        OnboardingApplicationEvent: {
+            /** Event Type */
+            event_type: string;
+            /** Old Status */
+            old_status: string | null;
+            /** New Status */
+            new_status: string | null;
+            /** Source */
+            source: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            } | null;
+            /** Created At */
+            created_at: string;
+        };
+        /** OnboardingApplicationListItem */
+        OnboardingApplicationListItem: {
+            /** Applicant Id */
+            applicant_id: string;
+            /** Status */
+            status: string;
+            /** Name */
+            name: string | null;
+            /** Telegram User Id */
+            telegram_user_id: number;
+            /** Telegram Username */
+            telegram_username: string | null;
+            /** Email */
+            email: string | null;
+            /** Direction */
+            direction: string | null;
+            /** City */
+            city: string | null;
+            /** Admin Comment */
+            admin_comment: string | null;
+            /** Booking Start Time */
+            booking_start_time: string | null;
+            /** Payment Status */
+            payment_status: string | null;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Available Actions */
+            available_actions: ("approve_qualification" | "reject_qualification" | "approve_after_call" | "reject_after_call" | "request_follow_up" | "confirm_payment" | "resend_payment" | "complete_onboarding" | "confirm_access" | "access_missing")[];
+        };
+        /** OnboardingApplicationPage */
+        OnboardingApplicationPage: {
+            /** Items */
+            items: components["schemas"]["OnboardingApplicationListItem"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Status Counts */
+            status_counts: {
+                [key: string]: number;
+            };
+        };
+        /** OnboardingBooking */
+        OnboardingBooking: {
+            /** Status */
+            status: string;
+            /** Start Time */
+            start_time: string | null;
+            /** End Time */
+            end_time: string | null;
+            /** Meeting Url */
+            meeting_url: string | null;
+            /** Created At */
+            created_at: string;
+        };
+        /** OnboardingPayment */
+        OnboardingPayment: {
+            /** Status */
+            status: string;
+            /** Amount */
+            amount: string;
+            /** Currency */
+            currency: string;
+            /** Payment Url */
+            payment_url: string | null;
+            /** Approved At */
+            approved_at: string | null;
+            /** Created At */
             created_at: string;
         };
         /**
@@ -13634,6 +13885,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InterviewCardDuplicatePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_refresh_card_duplicates_api_v1_admin_card_automation_duplicates_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCardDuplicateRefreshRead"];
                 };
             };
             /** @description Validation Error */
@@ -19954,6 +20239,121 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminStudentDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_applications_api_v1_admin_applications_get: {
+        parameters: {
+            query?: {
+                status?: string[] | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingApplicationPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_application_api_v1_admin_applications__applicant_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                applicant_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingApplicationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_application_action_api_v1_admin_applications__applicant_id__actions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                applicant_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingApplicationActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingApplicationActionResponse"];
                 };
             };
             /** @description Validation Error */

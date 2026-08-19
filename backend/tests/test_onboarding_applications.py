@@ -75,6 +75,7 @@ async def test_action_forwards_admin_identity() -> None:
             **APPLICATION,
             "status": "REJECTED_BEFORE_CALL",
             "available_actions": [],
+            "rollback_status": "QUALIFICATION_REVIEW_REQUIRED",
             "age": "25",
             "initial_knowledge": None,
             "life_difficulties": None,
@@ -107,3 +108,43 @@ async def test_action_forwards_admin_identity() -> None:
         "actor_telegram_id": 777,
     }
     assert result.application.status == "REJECTED_BEFORE_CALL"
+
+
+@pytest.mark.asyncio
+async def test_rollback_action_is_forwarded_to_onboarding_bot() -> None:
+    captured_payload: dict[str, object] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured_payload.update(json.loads(request.content))
+        detail = {
+            **APPLICATION,
+            "status": "QUALIFICATION_COMPLETED",
+            "available_actions": ["rollback_status"],
+            "rollback_status": "QUALIFICATION_STARTED",
+            "age": None,
+            "initial_knowledge": None,
+            "life_difficulties": None,
+            "study_time_per_day": None,
+            "military_document_status": None,
+            "referral_source": None,
+            "form_answers": {},
+            "bookings": [],
+            "payments": [],
+            "events": [],
+        }
+        return httpx.Response(
+            200,
+            json={"message": "Статус возвращён", "delivered": None, "application": detail},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        result = await OnboardingBotClient(settings(), http_client).execute_action(
+            "app_123",
+            "rollback_status",
+            comment=None,
+            actor_id="admin-uuid",
+            actor_telegram_id=777,
+        )
+
+    assert captured_payload["action"] == "rollback_status"
+    assert result.application.rollback_status == "QUALIFICATION_STARTED"

@@ -26,6 +26,7 @@ OPENAI_FUNCTIONS = frozenset(
         "create_personal_review_item",
         "backfill_existing_questions",
         "reprocess_question_occurrence",
+        "refresh_interview_card_duplicate_cache",
     }
 )
 
@@ -122,6 +123,25 @@ async def enqueue_card_automation_job(
         if defer_seconds is not None:
             options["_defer_by"] = defer_seconds
         job = await redis.enqueue_job(function, entity_id, revision, **options)
+        return job.job_id if job is not None else job_id
+    finally:
+        if owned_pool:
+            await redis.aclose()
+
+
+async def enqueue_duplicate_cache_refresh(*, redis: ArqRedis | None = None) -> str:
+    function = "refresh_interview_card_duplicate_cache"
+    owned_pool = redis is None
+    if redis is None:
+        redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    job_id = "card-automation:duplicate-cache:refresh:v2"
+    try:
+        job = await redis.enqueue_job(
+            function,
+            _expires=_job_expires_seconds(),
+            _job_id=job_id,
+            _queue_name=OPENAI_QUEUE_NAME,
+        )
         return job.job_id if job is not None else job_id
     finally:
         if owned_pool:

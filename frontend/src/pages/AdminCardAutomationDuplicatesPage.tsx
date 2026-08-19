@@ -46,6 +46,14 @@ function percentage(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 
+function formatCacheDate(value: string | null) {
+  if (!value) return "Результат ещё не сформирован";
+  return `Рассчитано ${new Intl.DateTimeFormat("ru-RU", {
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(new Date(value))}`;
+}
+
 function CardComparison({
   card,
   selected,
@@ -143,6 +151,24 @@ export function AdminCardAutomationDuplicatesPage() {
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
       }),
+    refetchInterval: (query) =>
+      query.state.data?.cache_status === "building" ? 3_000 : false,
+  });
+
+  const refreshMutation = useMutation({
+    mutationFn: api.refreshAdminInterviewCardDuplicates,
+    onSuccess: async (result) => {
+      notifications.show({
+        color: "blue",
+        message:
+          result.status === "queued"
+            ? "Пересчёт дублей запущен в фоне. Текущий список останется доступен."
+            : "Пересчёт дублей уже выполняется.",
+      });
+      await duplicates.refetch();
+    },
+    onError: (error: Error) =>
+      notifications.show({ color: "red", message: error.message }),
   });
 
   const closeComparison = () => {
@@ -218,6 +244,47 @@ export function AdminCardAutomationDuplicatesPage() {
       <CardAutomationNavigation />
 
       <Card withBorder radius="lg" padding="lg">
+        <Group justify="space-between" align="center" wrap="wrap">
+          <Stack gap={4}>
+            <Group gap="xs">
+              <Text fw={700}>Подготовленный список дублей</Text>
+              <Badge
+                color={
+                  duplicates.data?.cache_status === "building"
+                    ? "yellow"
+                    : duplicates.data?.cache_refreshing
+                      ? "blue"
+                      : "green"
+                }
+                variant="light"
+              >
+                {duplicates.data?.cache_status === "building"
+                  ? "формируется"
+                  : duplicates.data?.cache_refreshing
+                    ? "обновляется"
+                    : "готов"}
+              </Badge>
+            </Group>
+            <Text size="sm" c="dimmed">
+              {formatCacheDate(duplicates.data?.cache_generated_at ?? null)}.
+              Перезагрузка страницы использует сохранённый результат без нового
+              тяжёлого расчёта.
+            </Text>
+          </Stack>
+          <Button
+            variant="light"
+            loading={refreshMutation.isPending}
+            disabled={
+              refreshMutation.isPending || duplicates.data?.cache_refreshing
+            }
+            onClick={() => refreshMutation.mutate()}
+          >
+            Пересчитать в фоне
+          </Button>
+        </Group>
+      </Card>
+
+      <Card withBorder radius="lg" padding="lg">
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <Select
             label="Направление"
@@ -254,86 +321,100 @@ export function AdminCardAutomationDuplicatesPage() {
           retry={() => void duplicates.refetch()}
         />
       )}
-      {duplicates.data && duplicates.data.items.length === 0 && (
-        <Alert color="brandBlue" title="Непроверенных дублей не найдено">
-          Попробуйте снизить порог сходства или выбрать другое направление.
+      {duplicates.data?.cache_status === "building" && (
+        <Alert color="brandBlue" title="Формируем список дублей">
+          Первый расчёт выполняется в фоне. Страницу можно закрыть: результат
+          сохранится в Redis и появится здесь автоматически.
         </Alert>
       )}
-      {duplicates.data && duplicates.data.items.length > 0 && (
-        <Card withBorder radius="lg" padding={0}>
-          <Table.ScrollContainer minWidth={980}>
-            <Table verticalSpacing="md" horizontalSpacing="lg" highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Сходство</Table.Th>
-                  <Table.Th>Первая карточка</Table.Th>
-                  <Table.Th>Вторая карточка</Table.Th>
-                  <Table.Th>Статистика</Table.Th>
-                  <Table.Th />
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {duplicates.data.items.map((item) => (
-                  <Table.Tr
-                    key={item.pair_key}
-                    tabIndex={0}
-                    onClick={() => openComparison(item)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        openComparison(item);
-                      }
-                    }}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <Table.Td>
-                      <Badge color={item.similarity >= 0.72 ? "green" : "blue"}>
-                        {percentage(item.similarity)}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td maw={340}>
-                      <Text fw={700} lineClamp={3}>
-                        {item.left.question_markdown}
-                      </Text>
-                      <Text size="xs" c="dimmed" mt={4}>
-                        {item.left.category}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td maw={340}>
-                      <Text fw={700} lineClamp={3}>
-                        {item.right.question_markdown}
-                      </Text>
-                      <Text size="xs" c="dimmed" mt={4}>
-                        {item.right.category}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm">
-                        {item.left.asked_count} + {item.right.asked_count}{" "}
-                        появлений
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {item.left.direction_title}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Button
-                        variant="light"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openComparison(item);
-                        }}
-                      >
-                        Сравнить
-                      </Button>
-                    </Table.Td>
+      {duplicates.data?.cache_status === "ready" &&
+        duplicates.data.items.length === 0 && (
+          <Alert color="brandBlue" title="Непроверенных дублей не найдено">
+            Попробуйте снизить порог сходства или выбрать другое направление.
+          </Alert>
+        )}
+      {duplicates.data?.cache_status === "ready" &&
+        duplicates.data.items.length > 0 && (
+          <Card withBorder radius="lg" padding={0}>
+            <Table.ScrollContainer minWidth={980}>
+              <Table
+                verticalSpacing="md"
+                horizontalSpacing="lg"
+                highlightOnHover
+              >
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Сходство</Table.Th>
+                    <Table.Th>Первая карточка</Table.Th>
+                    <Table.Th>Вторая карточка</Table.Th>
+                    <Table.Th>Статистика</Table.Th>
+                    <Table.Th />
                   </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
-        </Card>
-      )}
+                </Table.Thead>
+                <Table.Tbody>
+                  {duplicates.data.items.map((item) => (
+                    <Table.Tr
+                      key={item.pair_key}
+                      tabIndex={0}
+                      onClick={() => openComparison(item)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openComparison(item);
+                        }
+                      }}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <Table.Td>
+                        <Badge
+                          color={item.similarity >= 0.72 ? "green" : "blue"}
+                        >
+                          {percentage(item.similarity)}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td maw={340}>
+                        <Text fw={700} lineClamp={3}>
+                          {item.left.question_markdown}
+                        </Text>
+                        <Text size="xs" c="dimmed" mt={4}>
+                          {item.left.category}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td maw={340}>
+                        <Text fw={700} lineClamp={3}>
+                          {item.right.question_markdown}
+                        </Text>
+                        <Text size="xs" c="dimmed" mt={4}>
+                          {item.right.category}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">
+                          {item.left.asked_count} + {item.right.asked_count}{" "}
+                          появлений
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {item.left.direction_title}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Button
+                          variant="light"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openComparison(item);
+                          }}
+                        >
+                          Сравнить
+                        </Button>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          </Card>
+        )}
 
       {(duplicates.data?.total ?? 0) > PAGE_SIZE && (
         <Pagination

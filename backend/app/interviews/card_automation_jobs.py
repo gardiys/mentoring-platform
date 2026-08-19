@@ -6,7 +6,7 @@ import logging
 import time
 from datetime import UTC, datetime
 from typing import Any, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from arq import Retry
 from sqlalchemy import and_, or_, select
@@ -44,6 +44,13 @@ from app.interviews.card_automation_types import (
     QuestionClusterStatus,
     QuestionOccurrenceStatus,
 )
+from app.interviews.card_duplicate_cache import (
+    acquire_duplicate_refresh_lock,
+    clear_duplicate_refresh_status,
+    mark_duplicate_refresh_running,
+    release_duplicate_refresh_lock,
+    write_duplicate_snapshot,
+)
 from app.interviews.intelligence_ai import (
     ANSWER_CONTRACT_PROMPT_VERSION,
     ANSWER_CONTRACT_SCHEMA_VERSION,
@@ -69,6 +76,37 @@ _ANSWER_DRAFT_CLUSTER_STATUSES = frozenset(
         QuestionClusterStatus.NEEDS_REVIEW,
     }
 )
+
+
+async def refresh_interview_card_duplicate_cache(ctx: dict[str, Any]) -> None:
+    """Rebuild the shared moderation snapshot outside the API processes."""
+
+    owner = f"{ctx.get('job_id', 'cron')}:{uuid4()}"
+    if not await acquire_duplicate_refresh_lock(owner):
+        return
+    try:
+        await mark_duplicate_refresh_running()
+        # Local import avoids loading the large moderation service in workers
+        # that never execute this optional maintenance job.
+        from app.interviews.card_automation_service import (
+            calculate_interview_card_duplicates,
+        )
+
+        async with async_session_factory() as session:
+            items = await calculate_interview_card_duplicates(
+                session,
+                direction_id=None,
+                minimum_similarity=0.35,
+            )
+        snapshot = await write_duplicate_snapshot(items)
+        logger.info(
+            "Refreshed interview-card duplicate cache candidates=%s generated_at=%s",
+            len(items),
+            snapshot.generated_at.isoformat(),
+        )
+    finally:
+        await clear_duplicate_refresh_status()
+        await release_duplicate_refresh_lock(owner)
 
 
 async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:

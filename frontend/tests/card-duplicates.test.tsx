@@ -70,6 +70,9 @@ it("сравнивает ответы и объединяет карточки �
     total: 1,
     limit: 20,
     offset: 0,
+    cache_status: "ready",
+    cache_generated_at: "2026-08-19T09:00:00Z",
+    cache_refreshing: false,
   });
   const merge = vi
     .spyOn(api, "mergeAdminInterviewCardDuplicate")
@@ -124,4 +127,37 @@ it("сравнивает ответы и объединяет карточки �
     reason: "Одинаковый объём знаний",
   });
   expect(merge.mock.calls[0]?.[1]).toEqual(expect.any(String));
+});
+
+it("запускает пересчёт в фоне и продолжает показывать кешированный список", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(api, "adminTracks").mockResolvedValue([]);
+  vi.spyOn(api, "adminInterviewCardDuplicates").mockResolvedValue({
+    items: [candidate],
+    total: 1,
+    limit: 20,
+    offset: 0,
+    cache_status: "ready",
+    cache_generated_at: "2026-08-19T09:00:00Z",
+    cache_refreshing: false,
+  });
+  const refresh = vi
+    .spyOn(api, "refreshAdminInterviewCardDuplicates")
+    .mockResolvedValue({ status: "queued" });
+
+  renderPage(
+    <AdminCardAutomationDuplicatesPage />,
+    "/admin/card-automation/duplicates",
+    "/admin/card-automation/duplicates",
+  );
+
+  expect(
+    await screen.findByText(candidate.left.question_markdown),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Пересчитать в фоне" }));
+
+  await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  expect(
+    screen.getByText(candidate.left.question_markdown),
+  ).toBeInTheDocument();
 });

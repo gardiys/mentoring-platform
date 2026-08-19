@@ -1322,6 +1322,13 @@ export interface InterviewCardDuplicatePage {
   total: number;
   limit: number;
   offset: number;
+  cache_status: "ready" | "building";
+  cache_generated_at: string | null;
+  cache_refreshing: boolean;
+}
+
+export interface InterviewCardDuplicateRefreshRead {
+  status: "queued" | "already_running";
 }
 
 export interface InterviewCardDuplicateMutation {
@@ -1833,7 +1840,10 @@ export type OnboardingApplicationAction =
   | "resend_payment"
   | "complete_onboarding"
   | "confirm_access"
-  | "access_missing";
+  | "access_missing"
+  | "mark_contact_lost"
+  | "defer_candidate"
+  | "rollback_status";
 
 export interface OnboardingApplicationListItem {
   applicant_id: string;
@@ -1887,6 +1897,7 @@ export interface OnboardingApplicationPayment {
 }
 
 export interface OnboardingApplicationDetail extends OnboardingApplicationListItem {
+  rollback_status: string | null;
   age: string | null;
   initial_knowledge: string | null;
   life_difficulties: string | null;

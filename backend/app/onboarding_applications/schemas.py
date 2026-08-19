@@ -13,6 +13,9 @@ ApplicationAction = Literal[
     "complete_onboarding",
     "confirm_access",
     "access_missing",
+    "mark_contact_lost",
+    "defer_candidate",
+    "rollback_status",
 ]
 
 
@@ -68,6 +71,7 @@ class OnboardingPayment(BaseModel):
 
 
 class OnboardingApplicationDetail(OnboardingApplicationListItem):
+    rollback_status: str | None = None
     age: str | None
     initial_knowledge: str | None
     life_difficulties: str | None

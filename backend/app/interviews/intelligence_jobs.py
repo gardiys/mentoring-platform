@@ -26,6 +26,7 @@ from app.interviews.card_automation_jobs import (
     promote_question_cluster,
     recalculate_cluster_stats,
     reconcile_card_automation_jobs,
+    refresh_interview_card_duplicate_cache,
     reprocess_question_occurrence,
     route_question_occurrence,
     validate_cluster_answer,
@@ -1316,6 +1317,7 @@ class WorkerSettings:
         create_personal_review_item,
         backfill_existing_questions,
         reprocess_question_occurrence,
+        refresh_interview_card_duplicate_cache,
     ]
     cron_jobs = [
         cron(
@@ -1371,6 +1373,7 @@ class AIWorkerSettings:
         create_personal_review_item,
         backfill_existing_questions,
         reprocess_question_occurrence,
+        refresh_interview_card_duplicate_cache,
     ]
     cron_jobs = [
         cron(
@@ -1379,7 +1382,14 @@ class AIWorkerSettings:
             run_at_startup=True,
             max_tries=1,
             keep_result=0,
-        )
+        ),
+        cron(
+            refresh_interview_card_duplicate_cache,
+            minute={5, 35},
+            run_at_startup=True,
+            max_tries=1,
+            keep_result=0,
+        ),
     ]
     on_startup = ai_startup
     on_shutdown = ai_shutdown

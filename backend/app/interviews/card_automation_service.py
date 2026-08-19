@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -103,6 +104,14 @@ from app.interviews.card_automation_types import (
     QuestionClusterStatus,
     QuestionOccurrenceStatus,
 )
+from app.interviews.card_duplicate_cache import (
+    CACHE_STALE_SECONDS,
+    DuplicateCacheUnavailable,
+    clear_duplicate_refresh_status,
+    duplicate_refresh_in_progress,
+    mark_duplicate_refresh_queued,
+    read_duplicate_snapshot,
+)
 from app.interviews.card_frequency import refresh_card_frequency
 from app.interviews.intelligence_models import (
     IntelligenceAnswer,
@@ -113,7 +122,10 @@ from app.interviews.intelligence_models import (
     IntelligenceReviewSource,
     IntelligenceReviewStatus,
 )
-from app.interviews.intelligence_queue import enqueue_card_automation_job
+from app.interviews.intelligence_queue import (
+    enqueue_card_automation_job,
+    enqueue_duplicate_cache_refresh,
+)
 from app.interviews.models import (
     InterviewCard,
     InterviewCardFrequencyMode,
@@ -136,6 +148,8 @@ from app.mentors.models import MentorStudent
 from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack
 from app.users.models import MENTOR_CAPABLE_ROLES, User, UserRole
+
+logger = logging.getLogger(__name__)
 
 _HUMAN_CLUSTER_OUTCOMES = frozenset(
     {
@@ -2210,16 +2224,10 @@ def _duplicate_card_read(context: _DuplicateCardContext) -> InterviewCardDuplica
     )
 
 
-async def list_interview_card_duplicates(
+async def _reviewed_duplicate_pairs(
     session: AsyncSession,
-    *,
-    direction_id: UUID | None,
-    minimum_similarity: float,
-    limit: int,
-    offset: int,
-) -> InterviewCardDuplicatePage:
-    contexts = await _load_duplicate_card_contexts(session, direction_id=direction_id)
-    reviewed_pairs = set(
+) -> set[tuple[UUID, UUID]]:
+    return set(
         (
             await session.execute(
                 select(
@@ -2229,13 +2237,38 @@ async def list_interview_card_duplicates(
             )
         ).tuples()
     )
+
+
+async def calculate_interview_card_duplicates(
+    session: AsyncSession,
+    *,
+    direction_id: UUID | None,
+    minimum_similarity: float,
+) -> list[InterviewCardDuplicateCandidateRead]:
+    contexts = await _load_duplicate_card_contexts(session, direction_id=direction_id)
+    reviewed_pairs = await _reviewed_duplicate_pairs(session)
     # Matching is CPU-bound. Keep it off the asyncio event loop so unrelated
     # requests such as /api/v1/me remain responsive while the queue is built.
-    candidates = await asyncio.to_thread(
+    return await asyncio.to_thread(
         _rank_duplicate_pairs,
         contexts,
         reviewed_pairs,
         minimum_similarity,
+    )
+
+
+async def list_interview_card_duplicates(
+    session: AsyncSession,
+    *,
+    direction_id: UUID | None,
+    minimum_similarity: float,
+    limit: int,
+    offset: int,
+) -> InterviewCardDuplicatePage:
+    candidates = await calculate_interview_card_duplicates(
+        session,
+        direction_id=direction_id,
+        minimum_similarity=minimum_similarity,
     )
     total = len(candidates)
     return InterviewCardDuplicatePage(
@@ -2243,6 +2276,90 @@ async def list_interview_card_duplicates(
         total=total,
         limit=limit,
         offset=offset,
+    )
+
+
+async def request_interview_card_duplicate_refresh(*, required: bool = True) -> bool:
+    try:
+        queued = await mark_duplicate_refresh_queued()
+        if not queued:
+            return False
+        try:
+            await enqueue_duplicate_cache_refresh()
+        except Exception:
+            await clear_duplicate_refresh_status()
+            raise
+        return True
+    except Exception:
+        logger.exception("Could not enqueue duplicate-card refresh")
+        if not required:
+            return False
+        api_error(
+            503,
+            "duplicate_cache_unavailable",
+            "Duplicate-card cache is temporarily unavailable",
+        )
+
+
+async def list_cached_interview_card_duplicates(
+    session: AsyncSession,
+    *,
+    direction_id: UUID | None,
+    minimum_similarity: float,
+    limit: int,
+    offset: int,
+) -> InterviewCardDuplicatePage:
+    try:
+        snapshot = await read_duplicate_snapshot()
+        if snapshot is None:
+            await request_interview_card_duplicate_refresh()
+            return InterviewCardDuplicatePage(
+                items=[],
+                total=0,
+                limit=limit,
+                offset=offset,
+                cache_status="building",
+                cache_refreshing=True,
+            )
+
+        age_seconds = (datetime.now(UTC) - snapshot.generated_at).total_seconds()
+        if age_seconds >= CACHE_STALE_SECONDS:
+            await request_interview_card_duplicate_refresh()
+        refreshing = await duplicate_refresh_in_progress()
+    except DuplicateCacheUnavailable:
+        api_error(
+            503,
+            "duplicate_cache_unavailable",
+            "Duplicate-card cache is temporarily unavailable",
+        )
+
+    reviewed_pairs = await _reviewed_duplicate_pairs(session)
+    card_ids = {card_id for item in snapshot.items for card_id in (item.left.id, item.right.id)}
+    published_ids = set(
+        await session.scalars(
+            select(InterviewCard.id).where(
+                InterviewCard.id.in_(card_ids),
+                InterviewCard.is_published.is_(True),
+            )
+        )
+    )
+    candidates = [
+        item
+        for item in snapshot.items
+        if item.similarity >= minimum_similarity
+        and (direction_id is None or item.left.direction_id == direction_id)
+        and item.left.id in published_ids
+        and item.right.id in published_ids
+        and _ordered_card_ids(item.left.id, item.right.id) not in reviewed_pairs
+    ]
+    return InterviewCardDuplicatePage(
+        items=candidates[offset : offset + limit],
+        total=len(candidates),
+        limit=limit,
+        offset=offset,
+        cache_status="ready",
+        cache_generated_at=snapshot.generated_at,
+        cache_refreshing=refreshing,
     )
 
 
