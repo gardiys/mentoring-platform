@@ -235,6 +235,25 @@ make migrate
 
 Mini App передаёт `Telegram.WebApp.initData` как `Authorization: tma <initData>`. Backend сверяет HMAC-SHA-256 с bot token и проверяет `auth_date`. Непроверенный `initDataUnsafe` не используется. Войти может только Telegram-пользователь, которому бот заранее выдал доступ после оплаты.
 
+## Заявки из onboarding-бота
+
+Администратор управляет всей воронкой кандидатов на странице `/admin/applications`: видит
+короткую и безопасную часть подробной анкеты, историю статусов, созвоны и платежи, а также
+выполняет доступные для текущего этапа действия. Backend платформы проксирует команды в
+`codewaste-onboarding`; интеграционный токен никогда не передаётся браузеру.
+
+Для локальной разработки запустите API onboarding-бота на порту `8001` и добавьте:
+
+```dotenv
+ONBOARDING_BOT_API_BASE_URL=http://host.docker.internal:8001
+ONBOARDING_BOT_INTEGRATION_TOKEN=replace-with-random-secret
+ONBOARDING_BOT_TIMEOUT_SECONDS=15
+```
+
+Значение `ONBOARDING_BOT_INTEGRATION_TOKEN` должно совпадать с
+`MENTORING_PLATFORM_INTEGRATION_TOKEN` в `codewaste-onboarding`. Для обратного создания
+оплаченного ученика тот же секрет задаётся в `BOT_INTEGRATION_TOKEN` платформы.
+
 Обычный браузер не загружает SDK с `telegram.org`: это исключает долгую блокировку страницы в сетях, где Telegram недоступен. При запуске внутри Mini App frontend распознаёт параметры `tgWebApp*` и асинхронно подключает закреплённую копию SDK со своего домена (`/vendor/telegram-web-app-2026-07-14.js`). Ожидание ограничено тремя секундами, а подписанный `tgWebAppData` остаётся доступен для авторизации даже при ошибке загрузки SDK. Происхождение и контрольная сумма локальной копии описаны в `frontend/public/vendor/README.md`.
 
 ## Уведомления и Telegram

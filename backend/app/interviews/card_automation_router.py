@@ -20,6 +20,10 @@ from app.interviews.card_automation_schemas import (
     CardAutomationSettingsList,
     CardAutomationSettingsRead,
     CardAutomationSettingsUpdate,
+    InterviewCardDuplicateMergeMutation,
+    InterviewCardDuplicateMutation,
+    InterviewCardDuplicatePage,
+    InterviewCardDuplicateReviewResult,
     PersonalReviewItemCorrectionMutation,
     PersonalReviewItemCorrectionResult,
     PersonalReviewItemListFilters,
@@ -49,6 +53,7 @@ from app.interviews.card_automation_service import (
     correct_personal_review_item,
     create_question_cluster_card,
     defer_question_cluster,
+    dismiss_interview_card_duplicate,
     get_card_automation_metrics,
     get_question_cluster_allowed_actions,
     get_question_cluster_detail,
@@ -56,10 +61,12 @@ from app.interviews.card_automation_service import (
     link_question_cluster_card,
     list_automation_decisions,
     list_card_automation_settings,
+    list_interview_card_duplicates,
     list_managed_personal_review_items,
     list_personal_review_items,
     list_question_clusters,
     mark_question_cluster_important,
+    merge_interview_card_duplicate,
     merge_question_clusters,
     override_automation_decision,
     reopen_question_cluster,
@@ -97,6 +104,50 @@ student_router = APIRouter(
     prefix="/students/me/personal-review-items",
     tags=["personal-interview-review"],
 )
+
+
+@admin_router.get("/duplicates", response_model=InterviewCardDuplicatePage)
+async def admin_card_duplicates(
+    session: Session,
+    _admin: AdminUser,
+    direction_id: UUID | None = None,
+    minimum_similarity: float = Query(default=0.35, ge=0.35, le=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> InterviewCardDuplicatePage:
+    return await list_interview_card_duplicates(
+        session,
+        direction_id=direction_id,
+        minimum_similarity=minimum_similarity,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@admin_router.post(
+    "/duplicates/dismiss",
+    response_model=InterviewCardDuplicateReviewResult,
+)
+async def admin_dismiss_card_duplicate(
+    payload: InterviewCardDuplicateMutation,
+    session: Session,
+    admin: AdminUser,
+    _idempotency_key: IdempotencyKey,
+) -> InterviewCardDuplicateReviewResult:
+    return await dismiss_interview_card_duplicate(session, admin, payload)
+
+
+@admin_router.post(
+    "/duplicates/merge",
+    response_model=InterviewCardDuplicateReviewResult,
+)
+async def admin_merge_card_duplicate(
+    payload: InterviewCardDuplicateMergeMutation,
+    session: Session,
+    admin: AdminUser,
+    _idempotency_key: IdempotencyKey,
+) -> InterviewCardDuplicateReviewResult:
+    return await merge_interview_card_duplicate(session, admin, payload)
 
 
 def _cluster_filters(

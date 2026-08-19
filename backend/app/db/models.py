@@ -3,6 +3,7 @@
 from app.interviews.card_automation_models import (
     AutomationDecision,
     CardAutomationSettings,
+    InterviewCardDuplicateReview,
     PersonalReviewItem,
     QuestionCluster,
 )
@@ -111,6 +112,7 @@ from app.users.models import User, UserRole
 __all__ = [
     "AutomationDecision",
     "CardAutomationSettings",
+    "InterviewCardDuplicateReview",
     "Company",
     "CompanyAlias",
     "CompanyAliasProposal",

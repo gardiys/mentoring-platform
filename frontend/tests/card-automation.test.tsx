@@ -958,6 +958,32 @@ it("без ошибки выбирает и снимает выбор отдел
   expect(checkbox).not.toBeChecked();
 });
 
+it("открывает детальную модерацию по клику на строку", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(api, "adminTracks").mockResolvedValue([]);
+  vi.spyOn(api, "adminCardAutomationClusters").mockResolvedValue({
+    items: [cluster],
+    total: 1,
+    limit: 20,
+    offset: 0,
+  });
+
+  const view = renderPage(
+    <AdminCardAutomationClustersPage />,
+    "/admin/card-automation/clusters?status=needs_review",
+    "/admin/card-automation/clusters",
+  );
+
+  await user.click(await screen.findByText(cluster.canonical_question));
+
+  await waitFor(() =>
+    expect(view.router.state.location.pathname).toBe(
+      `/admin/card-automation/clusters/${cluster.id}`,
+    ),
+  );
+  expect(view.router.state.location.search).toBe("?status=needs_review");
+});
+
 it("поддерживает J/K/Enter и не перехватывает Enter в поле ввода", async () => {
   const user = userEvent.setup();
   vi.spyOn(api, "adminTracks").mockResolvedValue([]);

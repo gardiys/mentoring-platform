@@ -61,6 +61,10 @@ import type {
   InterviewDirectionOption,
   InterviewReviewRating,
   InterviewReviewResult,
+  InterviewCardDuplicateMergeMutation,
+  InterviewCardDuplicateMutation,
+  InterviewCardDuplicatePage,
+  InterviewCardDuplicateReviewResult,
   InterviewStudySession,
   InterviewTopicOption,
   InterviewProcessDetail,
@@ -133,6 +137,10 @@ import type {
   TopicDetail,
   User,
   NotificationPage,
+  OnboardingApplicationAction,
+  OnboardingApplicationActionResponse,
+  OnboardingApplicationDetail,
+  OnboardingApplicationPage,
   PersonalReviewFilters,
   PersonalReviewItemPage,
   PersonalReviewMutation,
@@ -577,6 +585,48 @@ export const api = {
   adminQuestionModerationDetail: (questionId: string) =>
     apiRequest<AdminQuestionModerationDetail>(
       `/api/v1/admin/interviews/question-moderation/${questionId}`,
+    ),
+  adminInterviewCardDuplicates: (
+    options: {
+      directionId?: string | null;
+      minimumSimilarity?: number;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
+    const params = new URLSearchParams({
+      minimum_similarity: String(options.minimumSimilarity ?? 0.35),
+      limit: String(options.limit ?? 20),
+      offset: String(options.offset ?? 0),
+    });
+    if (options.directionId) params.set("direction_id", options.directionId);
+    return apiRequest<InterviewCardDuplicatePage>(
+      `/api/v1/admin/card-automation/duplicates?${params.toString()}`,
+    );
+  },
+  dismissAdminInterviewCardDuplicate: (
+    payload: InterviewCardDuplicateMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<InterviewCardDuplicateReviewResult>(
+      "/api/v1/admin/card-automation/duplicates/dismiss",
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
+  mergeAdminInterviewCardDuplicate: (
+    payload: InterviewCardDuplicateMergeMutation,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<InterviewCardDuplicateReviewResult>(
+      "/api/v1/admin/card-automation/duplicates/merge",
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
     ),
   adminCardAutomationClusters: (
     filters: QuestionClusterFilters,
@@ -1321,6 +1371,40 @@ export const api = {
     apiRequest<InterviewDownloadUrl>(
       `/api/v1/mentor/me/documents/${documentId}/file`,
     ).then((result) => result.url),
+  adminApplications: (
+    options: {
+      query?: string;
+      statuses?: string[];
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) => {
+    const params = new URLSearchParams({
+      limit: String(options.limit ?? 50),
+      offset: String(options.offset ?? 0),
+    });
+    if (options.query) params.set("q", options.query);
+    options.statuses?.forEach((status) => params.append("status", status));
+    return apiRequest<OnboardingApplicationPage>(
+      `/api/v1/admin/applications?${params}`,
+    );
+  },
+  adminApplication: (applicantId: string) =>
+    apiRequest<OnboardingApplicationDetail>(
+      `/api/v1/admin/applications/${applicantId}`,
+    ),
+  executeAdminApplicationAction: (
+    applicantId: string,
+    action: OnboardingApplicationAction,
+    comment?: string | null,
+  ) =>
+    apiRequest<OnboardingApplicationActionResponse>(
+      `/api/v1/admin/applications/${applicantId}/actions`,
+      {
+        method: "POST",
+        body: JSON.stringify({ action, comment: comment ?? null }),
+      },
+    ),
   adminStudents: (
     options: {
       query?: string;

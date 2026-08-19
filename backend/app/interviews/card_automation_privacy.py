@@ -6,7 +6,14 @@ from typing import Any
 
 _EMAIL_RE = re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")
 _TELEGRAM_URL_RE = re.compile(r"(?i)\b(?:https?://)?(?:www\.)?t\.me/[A-Z0-9_]+\b")
-_TELEGRAM_USERNAME_RE = re.compile(r"(?<![\w@])@[A-Z][A-Z0-9_]{4,}\b", re.IGNORECASE)
+# A qualified Python decorator such as ``@functools.wraps`` or
+# ``@pytest.mark`` is code, not a Telegram username.  Keep the member-access
+# suffix intact while still redacting handles followed by whitespace or
+# punctuation (including a sentence-ending dot).
+_TELEGRAM_USERNAME_RE = re.compile(
+    r"(?<![\w@])@[A-Z][A-Z0-9_]{4,}\b(?!\.[A-Z_])",
+    re.IGNORECASE,
+)
 _FINANCIAL_RE = re.compile(
     r"(?i)\b(?:salary|compensation|зарплат(?:а|ы|е|у)?|оклад|доход)\b"
     r"\s*[:=\-]?\s*(?:[$€₽]\s*)?\d[\d\s.,]*"

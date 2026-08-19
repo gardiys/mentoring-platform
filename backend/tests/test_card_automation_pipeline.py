@@ -1306,6 +1306,13 @@ async def test_routing_provider_receives_redacted_untrusted_text(
     assert "[PROFILE_IDENTIFIER]" in combined
     assert "[PERSON_NAME]" in combined
     assert redact_untrusted_text("https://t.me/private_user") == "[TELEGRAM]"
+    assert redact_untrusted_text("Напишите @private_user.") == "Напишите [TELEGRAM]."
+    assert redact_untrusted_text("Используйте @functools.wraps(original_function)") == (
+        "Используйте @functools.wraps(original_function)"
+    )
+    assert redact_untrusted_text("Декоратор @pytest.mark.asyncio") == (
+        "Декоратор @pytest.mark.asyncio"
+    )
     assert redact_untrusted_text("Apache Kafka и Spring Boot") == ("Apache Kafka и Spring Boot")
 
 

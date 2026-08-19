@@ -4,6 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 import type { CardAutomationScope } from "./queries";
 
 function currentTab(pathname: string) {
+  if (pathname.includes("/card-automation/duplicates")) return "duplicates";
   if (pathname.includes("/card-automation/decisions")) return "decisions";
   if (pathname.includes("/card-automation/metrics")) return "metrics";
   if (pathname.includes("/card-automation/settings")) return "settings";
@@ -36,6 +37,14 @@ export function CardAutomationNavigation({
         </Tabs.Tab>
         {scope === "admin" && (
           <>
+            <Tabs.Tab
+              value="duplicates"
+              renderRoot={(props) => (
+                <Link {...props} to={`${base}/duplicates`} />
+              )}
+            >
+              Дубли карточек
+            </Tabs.Tab>
             <Tabs.Tab
               value="metrics"
               renderRoot={(props) => <Link {...props} to={`${base}/metrics`} />}

@@ -304,6 +304,51 @@ class PersonalReviewItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
 
+class InterviewCardDuplicateReview(UUIDPrimaryKeyMixin, Base):
+    """Immutable audit entry for a reviewed pair of canonical cards."""
+
+    __tablename__ = "interview_card_duplicate_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('merged', 'not_duplicate')",
+            name="decision_supported",
+        ),
+        CheckConstraint("left_card_id <> right_card_id", name="different_cards"),
+        CheckConstraint(
+            "similarity >= 0 AND similarity <= 1",
+            name="similarity_range",
+        ),
+        UniqueConstraint(
+            "left_card_id",
+            "right_card_id",
+            name="uq_interview_card_duplicate_reviews_reviewed_pair",
+        ),
+        Index("ix_interview_card_duplicate_reviews_created", "created_at"),
+    )
+
+    left_card_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("interview_cards.id", ondelete="RESTRICT"), nullable=False
+    )
+    right_card_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("interview_cards.id", ondelete="RESTRICT"), nullable=False
+    )
+    primary_card_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("interview_cards.id", ondelete="RESTRICT"), nullable=True
+    )
+    decision: Mapped[str] = mapped_column(String(24), nullable=False)
+    similarity: Mapped[float] = mapped_column(Float, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    left_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    right_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    merge_summary: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    reviewed_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class CardAutomationSettings(TimestampMixin, Base):
     __tablename__ = "card_automation_settings"
     __table_args__ = (

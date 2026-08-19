@@ -202,6 +202,73 @@ class QuestionClusterPage(StrictAPIModel):
     offset: int = Field(ge=0)
 
 
+class InterviewCardDuplicateCardRead(StrictAPIModel):
+    id: UUID
+    deck_id: UUID
+    deck_title: str
+    direction_id: UUID
+    direction_slug: str
+    direction_title: str
+    category: str
+    subcategory: str | None = None
+    question_markdown: str
+    answer_markdown: str
+    companies: str | None = None
+    asked_count: int = Field(ge=0)
+    frequency: InterviewCardFrequency
+    updated_at: datetime
+
+
+class InterviewCardDuplicateCandidateRead(StrictAPIModel):
+    pair_key: str
+    similarity: float = Field(ge=0, le=1)
+    matched_source: str
+    matched_text: str
+    left: InterviewCardDuplicateCardRead
+    right: InterviewCardDuplicateCardRead
+
+
+class InterviewCardDuplicatePage(StrictAPIModel):
+    items: list[InterviewCardDuplicateCandidateRead]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1)
+    offset: int = Field(ge=0)
+
+
+class InterviewCardDuplicateMutation(StrictAPIModel):
+    left_card_id: UUID
+    right_card_id: UUID
+    expected_left_updated_at: datetime
+    expected_right_updated_at: datetime
+    reason: str = Field(min_length=3, max_length=2_000)
+
+    @model_validator(mode="after")
+    def require_different_cards(self) -> InterviewCardDuplicateMutation:
+        if self.left_card_id == self.right_card_id:
+            raise ValueError("duplicate review requires two different cards")
+        return self
+
+
+class InterviewCardDuplicateMergeMutation(InterviewCardDuplicateMutation):
+    primary_card_id: UUID
+
+    @model_validator(mode="after")
+    def require_primary_from_pair(self) -> InterviewCardDuplicateMergeMutation:
+        if self.primary_card_id not in {self.left_card_id, self.right_card_id}:
+            raise ValueError("primary_card_id must identify one of the reviewed cards")
+        return self
+
+
+class InterviewCardDuplicateReviewResult(StrictAPIModel):
+    review_id: UUID
+    decision: Literal["merged", "not_duplicate"]
+    primary_card_id: UUID | None = None
+    archived_card_id: UUID | None = None
+    moved_occurrences: int = Field(default=0, ge=0)
+    deduplicated_occurrences: int = Field(default=0, ge=0)
+    merged_progress_records: int = Field(default=0, ge=0)
+
+
 class QuestionClusterVariantRead(StrictAPIModel):
     question_text: str
     normalized_question_text: str

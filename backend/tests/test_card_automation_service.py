@@ -10,6 +10,7 @@ from app.interviews import card_automation_service
 from app.interviews.card_automation_models import (
     AutomationDecision,
     CardAutomationSettings,
+    InterviewCardDuplicateReview,
     PersonalReviewItem,
     QuestionCluster,
 )
@@ -18,6 +19,7 @@ from app.interviews.card_automation_schemas import (
     AutomationDecisionOverrideMutation,
     CardAutomationMetricsFilters,
     CardAutomationSettingsUpdate,
+    InterviewCardDuplicateMergeMutation,
     PersonalReviewItemCorrectionMutation,
     PersonalReviewItemListFilters,
     PersonalReviewItemReviewMutation,
@@ -37,10 +39,12 @@ from app.interviews.card_automation_service import (
     create_question_cluster_card,
     get_card_automation_metrics,
     link_question_cluster_card,
+    list_interview_card_duplicates,
     list_managed_personal_review_items,
     list_personal_review_items,
     list_question_clusters,
     mark_question_cluster_important,
+    merge_interview_card_duplicate,
     merge_question_clusters,
     reopen_question_cluster,
     review_personal_review_item,
@@ -71,12 +75,15 @@ from app.interviews.models import (
     Company,
     InterviewCard,
     InterviewCardFrequency,
+    InterviewCardOccurrence,
+    InterviewCardProgress,
     InterviewDeck,
     InterviewProcess,
     InterviewProcessStage,
     InterviewProcessStatus,
     InterviewReviewRating,
     InterviewStageType,
+    InterviewTopicSelection,
 )
 from app.interviews.question_matching import normalize_question
 from app.users.models import User
@@ -745,6 +752,64 @@ async def test_create_card_approves_answer_contract_and_audits_content_hashes(
         assert decision.retrieval_scores["subcategory"] == "Descriptors"
         assert len(str(decision.retrieval_scores["question_sha256"])) == 64
         assert len(str(decision.retrieval_scores["answer_sha256"])) == 64
+
+
+@pytest.mark.asyncio
+async def test_cluster_detail_candidates_are_current_and_exclude_own_card(
+    seeded: SeededData,
+) -> None:
+    cluster = _cluster(
+        seeded.python_track_id,
+        100,
+        status=QuestionClusterStatus.NEEDS_REVIEW,
+    )
+    cluster.canonical_question = "Расскажи про то, какие ты индексы знаешь?"
+    cluster.normalized_canonical_question = normalize_question(cluster.canonical_question)
+    deck = InterviewDeck(
+        id=uuid4(),
+        track_id=seeded.python_track_id,
+        slug=f"duplicate-search-{uuid4().hex}",
+        title="Database questions",
+        position=0,
+        is_published=True,
+    )
+    similar = InterviewCard(
+        id=uuid4(),
+        deck_id=deck.id,
+        slug=f"database-indexes-{uuid4().hex}",
+        category="Базы данных",
+        question_markdown=(
+            "Расскажите, зачем нужны индексы в базах данных, какие виды индексов "
+            "существуют и когда их следует использовать."
+        ),
+        answer_markdown="Индексы ускоряют чтение ценой места и стоимости записи.",
+        frequency=InterviewCardFrequency.OCCASIONAL,
+        position=0,
+        is_published=True,
+    )
+    own = InterviewCard(
+        id=uuid4(),
+        deck_id=deck.id,
+        slug=f"cluster-{cluster.id}",
+        category="Базы данных",
+        question_markdown=cluster.canonical_question,
+        answer_markdown="Own card",
+        frequency=InterviewCardFrequency.OCCASIONAL,
+        position=1,
+        is_published=True,
+    )
+    cluster.linked_card_id = own.id
+
+    async with TestSession() as session:
+        session.add_all([deck, similar, own])
+        await session.flush()
+        session.add(cluster)
+        await session.commit()
+
+        matches = await card_automation_service._top_card_matches(session, cluster, [])
+
+    assert [match.card_id for match in matches] == [similar.id]
+    assert matches[0].semantic_score >= 0.35
 
 
 @pytest.mark.asyncio
@@ -1539,3 +1604,173 @@ async def test_split_merge_and_reopen_preserve_representatives_and_aggregates(
         assert reopened_source.embedding == pytest.approx([0.9, 0.1])
         assert reopened_target.embedding == pytest.approx([0.2, 0.8])
         assert moved.automation_revision == 6
+
+
+@pytest.mark.asyncio
+async def test_card_duplicate_merge_preserves_learning_and_repoints_relations(
+    seeded: SeededData,
+) -> None:
+    deck = InterviewDeck(
+        id=uuid4(),
+        track_id=seeded.python_track_id,
+        slug=f"duplicate-merge-{uuid4().hex}",
+        title="Python questions",
+        position=0,
+        is_published=True,
+    )
+    primary = InterviewCard(
+        id=uuid4(),
+        deck_id=deck.id,
+        slug=f"indexes-short-{uuid4().hex}",
+        category="Базы данных",
+        question_markdown="Расскажи про то какие ты индексы знаешь?",
+        answer_markdown="Индексы ускоряют поиск ценой памяти и записи.",
+        frequency=InterviewCardFrequency.OCCASIONAL,
+        position=0,
+        is_published=True,
+    )
+    duplicate = InterviewCard(
+        id=uuid4(),
+        deck_id=deck.id,
+        slug=f"indexes-long-{uuid4().hex}",
+        category="SQL",
+        question_markdown=(
+            "Расскажите, зачем нужны индексы в базах данных, какие виды индексов "
+            "существуют и когда их следует использовать."
+        ),
+        answer_markdown="Нужно учитывать B-tree, hash и стоимость обновлений.",
+        frequency=InterviewCardFrequency.OCCASIONAL,
+        position=1,
+        is_published=True,
+    )
+    cluster = _cluster(
+        seeded.python_track_id,
+        901,
+        status=QuestionClusterStatus.LINKED,
+    )
+    cluster.linked_card_id = duplicate.id
+    decision = AutomationDecision(
+        id=uuid4(),
+        entity_type="cluster",
+        entity_id=cluster.id,
+        idempotency_key=f"duplicate-test:{uuid4()}",
+        decision_type=AutomationDecisionType.CLUSTER_LINKED,
+        decision_source=AutomationDecisionSource.HUMAN,
+        selected_card_id=duplicate.id,
+        candidate_card_ids=[str(duplicate.id), str(primary.id)],
+        retrieval_scores={str(duplicate.id): 0.9, str(primary.id): 0.8},
+        reason="Existing moderation decision",
+    )
+    personal_item = PersonalReviewItem(
+        id=uuid4(),
+        student_id=seeded.student_id,
+        direction_id=seeded.python_track_id,
+        canonical_card_id=duplicate.id,
+        replaced_by_card_id=duplicate.id,
+        question_text=duplicate.question_markdown,
+        status=PersonalReviewStatus.REPLACED_BY_CANONICAL_CARD,
+    )
+    now = datetime.now(UTC)
+    async with TestSession() as session:
+        session.add_all([deck, primary, duplicate])
+        await session.flush()
+        session.add_all(
+            [
+                cluster,
+                decision,
+                personal_item,
+                InterviewCardOccurrence(
+                    card_id=duplicate.id,
+                    company_name="Index Corp",
+                    asked_at=now,
+                ),
+                InterviewCardProgress(
+                    user_id=seeded.student_id,
+                    card_id=primary.id,
+                    repetitions=1,
+                    interval_days=2,
+                    ease_factor=2.0,
+                    lapses=0,
+                    due_at=now + timedelta(days=2),
+                    last_reviewed_at=now - timedelta(days=2),
+                    last_rating=InterviewReviewRating.HARD,
+                ),
+                InterviewCardProgress(
+                    user_id=seeded.student_id,
+                    card_id=duplicate.id,
+                    repetitions=4,
+                    interval_days=10,
+                    ease_factor=2.7,
+                    lapses=1,
+                    due_at=now + timedelta(days=10),
+                    first_learned_at=now - timedelta(days=30),
+                    last_reviewed_at=now - timedelta(days=1),
+                    last_rating=InterviewReviewRating.GOOD,
+                ),
+                InterviewTopicSelection(
+                    user_id=seeded.student_id,
+                    deck_id=deck.id,
+                    category=duplicate.category,
+                ),
+            ]
+        )
+        await session.commit()
+
+    async with TestSession() as session:
+        page = await list_interview_card_duplicates(
+            session,
+            direction_id=seeded.python_track_id,
+            minimum_similarity=0.35,
+            limit=20,
+            offset=0,
+        )
+        candidate = next(
+            item
+            for item in page.items
+            if {item.left.id, item.right.id} == {primary.id, duplicate.id}
+        )
+        admin = await session.get_one(User, seeded.admin_id)
+        context_by_id = {candidate.left.id: candidate.left, candidate.right.id: candidate.right}
+        result = await merge_interview_card_duplicate(
+            session,
+            admin,
+            InterviewCardDuplicateMergeMutation(
+                left_card_id=candidate.left.id,
+                right_card_id=candidate.right.id,
+                primary_card_id=primary.id,
+                expected_left_updated_at=context_by_id[candidate.left.id].updated_at,
+                expected_right_updated_at=context_by_id[candidate.right.id].updated_at,
+                reason="These cards test the same knowledge",
+            ),
+        )
+
+        assert result.primary_card_id == primary.id
+        assert result.archived_card_id == duplicate.id
+        assert result.moved_occurrences == 1
+        assert result.merged_progress_records == 1
+        assert (await session.get_one(InterviewCard, duplicate.id)).is_published is False
+        assert (await session.get_one(InterviewCard, primary.id)).asked_count == 1
+        progress = await session.get_one(
+            InterviewCardProgress,
+            {"user_id": seeded.student_id, "card_id": primary.id},
+        )
+        assert progress.repetitions == 4
+        assert progress.interval_days == 10
+        assert progress.last_rating is InterviewReviewRating.GOOD
+        assert (await session.get_one(QuestionCluster, cluster.id)).linked_card_id == primary.id
+        saved_decision = await session.get_one(AutomationDecision, decision.id)
+        assert saved_decision.selected_card_id == primary.id
+        assert (
+            await session.get_one(PersonalReviewItem, personal_item.id)
+        ).canonical_card_id == primary.id
+        assert await session.get(
+            InterviewTopicSelection,
+            {
+                "user_id": seeded.student_id,
+                "deck_id": deck.id,
+                "category": primary.category,
+            },
+        ) is not None
+        review = await session.get_one(InterviewCardDuplicateReview, result.review_id)
+        assert review.decision == "merged"
+        assert review.merge_summary is not None

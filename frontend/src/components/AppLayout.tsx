@@ -313,6 +313,16 @@ export function AppLayout() {
             <>
               <NavLink
                 component={Link}
+                to="/admin/applications"
+                label="Заявки"
+                description="Воронка от анкеты до доступа"
+                leftSection={<span className="nav-index">APP</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/admin/applications")}
+                onClick={close}
+              />
+              <NavLink
+                component={Link}
                 to="/admin/payments"
                 label="Платежи"
                 description="Ученики, просрочки, менторы"

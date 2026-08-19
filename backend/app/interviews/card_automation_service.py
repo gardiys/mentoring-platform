@@ -24,6 +24,7 @@ from app.interviews.card_automation_domain import cluster_allowed_actions, next_
 from app.interviews.card_automation_models import (
     AutomationDecision,
     CardAutomationSettings,
+    InterviewCardDuplicateReview,
     PersonalReviewItem,
     QuestionCluster,
 )
@@ -48,6 +49,12 @@ from app.interviews.card_automation_schemas import (
     CardAutomationSettingsList,
     CardAutomationSettingsRead,
     CardAutomationSettingsUpdate,
+    InterviewCardDuplicateCandidateRead,
+    InterviewCardDuplicateCardRead,
+    InterviewCardDuplicateMergeMutation,
+    InterviewCardDuplicateMutation,
+    InterviewCardDuplicatePage,
+    InterviewCardDuplicateReviewResult,
     PersonalReviewItemCorrectionMutation,
     PersonalReviewItemCorrectionResult,
     PersonalReviewItemListFilters,
@@ -110,11 +117,19 @@ from app.interviews.models import (
     InterviewCard,
     InterviewCardFrequencyMode,
     InterviewCardOccurrence,
+    InterviewCardProgress,
     InterviewDeck,
     InterviewProcess,
     InterviewProcessStage,
+    InterviewTopicSelection,
 )
-from app.interviews.question_matching import normalize_question
+from app.interviews.question_matching import (
+    QuestionCandidate,
+    QuestionVariant,
+    RankedQuestionCandidate,
+    normalize_question,
+    rank_question_candidates,
+)
 from app.mentors.models import MentorStudent
 from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack
@@ -873,13 +888,13 @@ async def _decision_reads(
 
 async def _top_card_matches(
     session: AsyncSession,
-    cluster_id: UUID,
+    cluster: QuestionCluster,
     occurrence_ids: Sequence[UUID],
 ) -> list[QuestionClusterCardMatch]:
     conditions = [
         and_(
             AutomationDecision.entity_type == "cluster",
-            AutomationDecision.entity_id == cluster_id,
+            AutomationDecision.entity_id == cluster.id,
         )
     ]
     if occurrence_ids:
@@ -902,20 +917,107 @@ async def _top_card_matches(
     )
     score_by_card: dict[UUID, float] = {}
     decision_by_card: dict[UUID, AutomationDecision] = {}
+    excluded_card_ids = {cluster.linked_card_id} if cluster.linked_card_id is not None else set()
     for decision in decisions:
         candidate_ids = _uuid_list(decision.candidate_card_ids)
         if decision.selected_card_id is not None:
             candidate_ids.insert(0, decision.selected_card_id)
         for card_id in candidate_ids:
+            if card_id in excluded_card_ids:
+                continue
             score = _score_for_card(decision, card_id)
             if card_id not in score_by_card or score > score_by_card[card_id]:
                 score_by_card[card_id] = score
                 decision_by_card[card_id] = decision
+
+    cards = list(
+        await session.scalars(
+            select(InterviewCard)
+            .join(InterviewDeck, InterviewDeck.id == InterviewCard.deck_id)
+            .where(
+                InterviewDeck.track_id == cluster.direction_id,
+                InterviewDeck.is_published.is_(True),
+                InterviewCard.is_published.is_(True),
+                InterviewCard.slug != f"cluster-{cluster.id}",
+            )
+            .order_by(InterviewDeck.position, InterviewCard.position, InterviewCard.id)
+        )
+    )
+    if not cards:
+        return []
+
+    aliases = list(
+        await session.scalars(
+            select(IntelligenceQuestion)
+            .where(
+                IntelligenceQuestion.published_card_id.in_([card.id for card in cards]),
+                IntelligenceQuestion.moderation_status
+                == IntelligenceQuestionModerationStatus.APPROVED,
+                IntelligenceQuestion.alias_human_confirmed.is_(True),
+            )
+            .order_by(IntelligenceQuestion.created_at, IntelligenceQuestion.id)
+        )
+    )
+    aliases_by_card: dict[UUID, list[IntelligenceQuestion]] = defaultdict(list)
+    for alias in aliases:
+        if alias.published_card_id is not None:
+            aliases_by_card[alias.published_card_id].append(alias)
+
+    cluster_embedding = tuple(cluster.embedding) if cluster.embedding else None
+    dynamic_matches = rank_question_candidates(
+        cluster.canonical_question,
+        cluster_embedding,
+        [
+            QuestionCandidate(
+                card_id=card.id,
+                asked_count=card.asked_count,
+                variants=(
+                    QuestionVariant(
+                        text=card.question_markdown,
+                        embedding=(
+                            tuple(card.question_embedding)
+                            if cluster_embedding is not None
+                            and card.question_embedding is not None
+                            and card.question_embedding_model == cluster.embedding_model
+                            and card.question_embedding_dimensions == cluster.embedding_dimensions
+                            else None
+                        ),
+                        source="card",
+                    ),
+                    *(
+                        QuestionVariant(
+                            text=alias.question_text,
+                            embedding=(
+                                tuple(alias.question_embedding)
+                                if cluster_embedding is not None
+                                and alias.question_embedding is not None
+                                and alias.question_embedding_model == cluster.embedding_model
+                                and alias.question_embedding_dimensions
+                                == cluster.embedding_dimensions
+                                else None
+                            ),
+                            source="approved_alias",
+                        )
+                        for alias in aliases_by_card[card.id]
+                    ),
+                ),
+            )
+            for card in cards
+            if card.id not in excluded_card_ids
+        ],
+        limit=10,
+    )
+    dynamic_by_card: dict[UUID, RankedQuestionCandidate] = {
+        item.card_id: item for item in dynamic_matches
+    }
+    for match in dynamic_matches:
+        score_by_card[match.card_id] = max(
+            score_by_card.get(match.card_id, 0.0),
+            match.similarity,
+        )
     if not score_by_card:
         return []
-    cards = list(
-        await session.scalars(select(InterviewCard).where(InterviewCard.id.in_(score_by_card)))
-    )
+
     card_by_id = {item.id: item for item in cards}
     result: list[QuestionClusterCardMatch] = []
     ranked_cards = sorted(score_by_card.items(), key=lambda item: item[1], reverse=True)[:10]
@@ -923,8 +1025,11 @@ async def _top_card_matches(
         card = card_by_id.get(card_id)
         if card is None:
             continue
-        decision = decision_by_card[card_id]
-        judge_decision, judge_confidence, judge_reason = _judge_values(decision.judge_result)
+        selected_decision = decision_by_card.get(card_id)
+        judge_decision, judge_confidence, judge_reason = _judge_values(
+            selected_decision.judge_result if selected_decision is not None else None
+        )
+        dynamic_match = dynamic_by_card.get(card_id)
         result.append(
             QuestionClusterCardMatch(
                 card_id=card.id,
@@ -937,7 +1042,15 @@ async def _top_card_matches(
                 judge_confidence=judge_confidence,
                 judge_reason=judge_reason,
                 is_confirmed_alias=(
-                    decision.decision_source is AutomationDecisionSource.CONFIRMED_ALIAS
+                    (
+                        selected_decision is not None
+                        and selected_decision.decision_source
+                        is AutomationDecisionSource.CONFIRMED_ALIAS
+                    )
+                    or (
+                        dynamic_match is not None
+                        and dynamic_match.matched_source == "approved_alias"
+                    )
                 ),
             )
         )
@@ -1142,7 +1255,7 @@ async def get_question_cluster_detail(
         ],
         occurrences=occurrences,
         top_card_matches=await _top_card_matches(
-            session, cluster.id, [item.id for item in occurrences]
+            session, cluster, [item.id for item in occurrences]
         ),
         answer_contract=_answer_contract(cluster.answer_contract),
         answer_validation=_answer_validation(cluster.answer_validation),
@@ -1777,6 +1890,583 @@ async def _refresh_card_stats(session: AsyncSession, card_ids: Iterable[UUID]) -
         )
         card.companies = ", ".join(company_names) or None
         refresh_card_frequency(card)
+
+
+@dataclass(frozen=True, slots=True)
+class _DuplicateCardContext:
+    card: InterviewCard
+    deck: InterviewDeck
+    track: LearningTrack
+    aliases: tuple[IntelligenceQuestion, ...] = ()
+
+
+def _ordered_card_ids(left_card_id: UUID, right_card_id: UUID) -> tuple[UUID, UUID]:
+    left, right = sorted((left_card_id, right_card_id), key=str)
+    return left, right
+
+
+def _duplicate_pair_key(left_card_id: UUID, right_card_id: UUID) -> str:
+    left, right = _ordered_card_ids(left_card_id, right_card_id)
+    return f"{left}:{right}"
+
+
+def _compatible_embedding(
+    query: InterviewCard,
+    embedding: Sequence[float] | None,
+    model: str | None,
+    dimensions: int | None,
+) -> tuple[float, ...] | None:
+    if (
+        query.question_embedding is None
+        or query.question_embedding_model is None
+        or query.question_embedding_dimensions is None
+        or embedding is None
+        or model != query.question_embedding_model
+        or dimensions != query.question_embedding_dimensions
+    ):
+        return None
+    return tuple(embedding)
+
+
+def _candidate_for_duplicate(
+    query: InterviewCard, target: _DuplicateCardContext
+) -> QuestionCandidate:
+    variants = [
+        QuestionVariant(
+            text=target.card.question_markdown,
+            embedding=_compatible_embedding(
+                query,
+                target.card.question_embedding,
+                target.card.question_embedding_model,
+                target.card.question_embedding_dimensions,
+            ),
+            source="card",
+        )
+    ]
+    variants.extend(
+        QuestionVariant(
+            text=alias.question_text,
+            embedding=_compatible_embedding(
+                query,
+                alias.question_embedding,
+                alias.question_embedding_model,
+                alias.question_embedding_dimensions,
+            ),
+            source="approved_alias",
+        )
+        for alias in target.aliases
+    )
+    return QuestionCandidate(
+        card_id=target.card.id,
+        asked_count=target.card.asked_count,
+        variants=tuple(variants),
+    )
+
+
+def _duplicate_pair_match(
+    left: _DuplicateCardContext, right: _DuplicateCardContext
+) -> RankedQuestionCandidate | None:
+    matches = rank_question_candidates(
+        left.card.question_markdown,
+        tuple(left.card.question_embedding) if left.card.question_embedding else None,
+        [_candidate_for_duplicate(left.card, right)],
+        limit=1,
+    )
+    reverse_matches = rank_question_candidates(
+        right.card.question_markdown,
+        tuple(right.card.question_embedding) if right.card.question_embedding else None,
+        [_candidate_for_duplicate(right.card, left)],
+        limit=1,
+    )
+    candidates = [*matches, *reverse_matches]
+    return max(candidates, key=lambda item: item.similarity, default=None)
+
+
+async def _load_duplicate_card_contexts(
+    session: AsyncSession,
+    *,
+    card_ids: Sequence[UUID] | None = None,
+    direction_id: UUID | None = None,
+    lock: bool = False,
+) -> list[_DuplicateCardContext]:
+    statement = (
+        select(InterviewCard, InterviewDeck, LearningTrack)
+        .join(InterviewDeck, InterviewDeck.id == InterviewCard.deck_id)
+        .join(LearningTrack, LearningTrack.id == InterviewDeck.track_id)
+        .where(InterviewCard.is_published.is_(True))
+        .order_by(LearningTrack.position, InterviewCard.id)
+    )
+    if card_ids is not None:
+        statement = statement.where(InterviewCard.id.in_(card_ids))
+    if direction_id is not None:
+        statement = statement.where(LearningTrack.id == direction_id)
+    if lock:
+        statement = statement.with_for_update(of=InterviewCard)
+    rows = list((await session.execute(statement)).tuples())
+    loaded_ids = [card.id for card, _, _ in rows]
+    aliases_by_card: defaultdict[UUID, list[IntelligenceQuestion]] = defaultdict(list)
+    if loaded_ids:
+        aliases = list(
+            await session.scalars(
+                select(IntelligenceQuestion).where(
+                    IntelligenceQuestion.published_card_id.in_(loaded_ids),
+                    IntelligenceQuestion.alias_human_confirmed.is_(True),
+                )
+            )
+        )
+        for alias in aliases:
+            if alias.published_card_id is not None:
+                aliases_by_card[alias.published_card_id].append(alias)
+    return [
+        _DuplicateCardContext(
+            card=card,
+            deck=deck,
+            track=track,
+            aliases=tuple(aliases_by_card[card.id]),
+        )
+        for card, deck, track in rows
+    ]
+
+
+def _duplicate_card_read(context: _DuplicateCardContext) -> InterviewCardDuplicateCardRead:
+    card = context.card
+    return InterviewCardDuplicateCardRead(
+        id=card.id,
+        deck_id=context.deck.id,
+        deck_title=context.deck.title,
+        direction_id=context.track.id,
+        direction_slug=context.track.slug,
+        direction_title=context.track.title,
+        category=card.category,
+        subcategory=card.subcategory,
+        question_markdown=card.question_markdown,
+        answer_markdown=card.answer_markdown,
+        companies=card.companies,
+        asked_count=card.asked_count,
+        frequency=card.frequency,
+        updated_at=card.updated_at,
+    )
+
+
+async def list_interview_card_duplicates(
+    session: AsyncSession,
+    *,
+    direction_id: UUID | None,
+    minimum_similarity: float,
+    limit: int,
+    offset: int,
+) -> InterviewCardDuplicatePage:
+    contexts = await _load_duplicate_card_contexts(session, direction_id=direction_id)
+    reviewed_pairs = set(
+        (
+            await session.execute(
+                select(
+                    InterviewCardDuplicateReview.left_card_id,
+                    InterviewCardDuplicateReview.right_card_id,
+                )
+            )
+        ).tuples()
+    )
+    candidates: list[InterviewCardDuplicateCandidateRead] = []
+    for left_index, left in enumerate(contexts):
+        for right in contexts[left_index + 1 :]:
+            if left.track.id != right.track.id:
+                continue
+            pair_ids = _ordered_card_ids(left.card.id, right.card.id)
+            if pair_ids in reviewed_pairs:
+                continue
+            match = _duplicate_pair_match(left, right)
+            if match is None or match.similarity < minimum_similarity:
+                continue
+            ordered_contexts = (
+                (left, right) if left.card.id == pair_ids[0] else (right, left)
+            )
+            candidates.append(
+                InterviewCardDuplicateCandidateRead(
+                    pair_key=_duplicate_pair_key(*pair_ids),
+                    similarity=match.similarity,
+                    matched_source=match.matched_source,
+                    matched_text=match.matched_text,
+                    left=_duplicate_card_read(ordered_contexts[0]),
+                    right=_duplicate_card_read(ordered_contexts[1]),
+                )
+            )
+    candidates.sort(
+        key=lambda item: (
+            -item.similarity,
+            -(item.left.asked_count + item.right.asked_count),
+            item.pair_key,
+        )
+    )
+    total = len(candidates)
+    return InterviewCardDuplicatePage(
+        items=candidates[offset : offset + limit],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _card_snapshot(context: _DuplicateCardContext) -> dict[str, object]:
+    card = context.card
+    return {
+        "id": str(card.id),
+        "deck_id": str(card.deck_id),
+        "deck_title": context.deck.title,
+        "direction_id": str(context.track.id),
+        "direction_slug": context.track.slug,
+        "slug": card.slug,
+        "category": card.category,
+        "subcategory": card.subcategory,
+        "question_markdown": card.question_markdown,
+        "answer_markdown": card.answer_markdown,
+        "companies": card.companies,
+        "asked_count": card.asked_count,
+        "frequency": card.frequency.value,
+        "updated_at": card.updated_at.isoformat(),
+    }
+
+
+def _assert_duplicate_payload_is_current(
+    payload: InterviewCardDuplicateMutation,
+    contexts: dict[UUID, _DuplicateCardContext],
+) -> None:
+    left = contexts.get(payload.left_card_id)
+    right = contexts.get(payload.right_card_id)
+    if left is None or right is None:
+        api_error(404, "interview_card_not_found", "One of the cards was not found")
+    if left.track.id != right.track.id:
+        api_error(422, "different_card_directions", "Cards from different directions cannot merge")
+    if (
+        left.card.updated_at != payload.expected_left_updated_at
+        or right.card.updated_at != payload.expected_right_updated_at
+    ):
+        api_error(
+            409,
+            "interview_card_changed",
+            "One of the cards changed; reload the duplicate list and review it again",
+        )
+
+
+async def _reviewed_duplicate_pair(
+    session: AsyncSession, left_card_id: UUID, right_card_id: UUID
+) -> InterviewCardDuplicateReview | None:
+    left, right = _ordered_card_ids(left_card_id, right_card_id)
+    return cast(
+        InterviewCardDuplicateReview | None,
+        await session.scalar(
+            select(InterviewCardDuplicateReview).where(
+                InterviewCardDuplicateReview.left_card_id == left,
+                InterviewCardDuplicateReview.right_card_id == right,
+            )
+        )
+    )
+
+
+async def dismiss_interview_card_duplicate(
+    session: AsyncSession,
+    admin: User,
+    payload: InterviewCardDuplicateMutation,
+) -> InterviewCardDuplicateReviewResult:
+    _require_admin(admin)
+    contexts_list = await _load_duplicate_card_contexts(
+        session,
+        card_ids=[payload.left_card_id, payload.right_card_id],
+        lock=True,
+    )
+    contexts = {item.card.id: item for item in contexts_list}
+    _assert_duplicate_payload_is_current(payload, contexts)
+    existing = await _reviewed_duplicate_pair(session, payload.left_card_id, payload.right_card_id)
+    if existing is not None:
+        api_error(409, "duplicate_pair_reviewed", "This pair has already been reviewed")
+    left_id, right_id = _ordered_card_ids(payload.left_card_id, payload.right_card_id)
+    left = contexts[left_id]
+    right = contexts[right_id]
+    match = _duplicate_pair_match(left, right)
+    review = InterviewCardDuplicateReview(
+        left_card_id=left_id,
+        right_card_id=right_id,
+        primary_card_id=None,
+        decision="not_duplicate",
+        similarity=match.similarity if match is not None else 0.0,
+        reason=payload.reason,
+        left_snapshot=_card_snapshot(left),
+        right_snapshot=_card_snapshot(right),
+        merge_summary=None,
+        reviewed_by_user_id=admin.id,
+    )
+    session.add(review)
+    await session.commit()
+    return InterviewCardDuplicateReviewResult(
+        review_id=review.id,
+        decision="not_duplicate",
+    )
+
+
+def _max_datetime(*values: datetime | None) -> datetime | None:
+    present = [value for value in values if value is not None]
+    return max(present, default=None)
+
+
+def _min_datetime(*values: datetime | None) -> datetime | None:
+    present = [value for value in values if value is not None]
+    return min(present, default=None)
+
+
+async def _merge_card_progress(
+    session: AsyncSession, source: InterviewCard, target: InterviewCard
+) -> int:
+    source_progress = list(
+        await session.scalars(
+            select(InterviewCardProgress)
+            .where(InterviewCardProgress.card_id == source.id)
+            .with_for_update()
+        )
+    )
+    for progress in source_progress:
+        target_progress = await session.get(
+            InterviewCardProgress,
+            {"user_id": progress.user_id, "card_id": target.id},
+            with_for_update=True,
+        )
+        if target_progress is None:
+            session.add(
+                InterviewCardProgress(
+                    user_id=progress.user_id,
+                    card_id=target.id,
+                    repetitions=progress.repetitions,
+                    interval_days=progress.interval_days,
+                    ease_factor=progress.ease_factor,
+                    lapses=progress.lapses,
+                    due_at=progress.due_at,
+                    first_learned_at=progress.first_learned_at,
+                    last_reviewed_at=progress.last_reviewed_at,
+                    last_rating=progress.last_rating,
+                )
+            )
+        else:
+            source_is_latest = (
+                progress.last_reviewed_at is not None
+                and (
+                    target_progress.last_reviewed_at is None
+                    or progress.last_reviewed_at > target_progress.last_reviewed_at
+                )
+            )
+            if source_is_latest:
+                target_progress.last_rating = progress.last_rating
+            target_progress.repetitions = max(
+                target_progress.repetitions, progress.repetitions
+            )
+            target_progress.interval_days = max(
+                target_progress.interval_days, progress.interval_days
+            )
+            target_progress.ease_factor = max(
+                target_progress.ease_factor, progress.ease_factor
+            )
+            target_progress.lapses = max(target_progress.lapses, progress.lapses)
+            target_progress.due_at = max(target_progress.due_at, progress.due_at)
+            target_progress.first_learned_at = _min_datetime(
+                target_progress.first_learned_at, progress.first_learned_at
+            )
+            target_progress.last_reviewed_at = _max_datetime(
+                target_progress.last_reviewed_at, progress.last_reviewed_at
+            )
+        await session.delete(progress)
+    return len(source_progress)
+
+
+async def _preserve_topic_access(
+    session: AsyncSession, source: InterviewCard, target: InterviewCard
+) -> int:
+    if source.deck_id == target.deck_id and source.category == target.category:
+        return 0
+    selections = list(
+        await session.scalars(
+            select(InterviewTopicSelection).where(
+                InterviewTopicSelection.deck_id == source.deck_id,
+                InterviewTopicSelection.category == source.category,
+            )
+        )
+    )
+    created = 0
+    for selection in selections:
+        target_key = {
+            "user_id": selection.user_id,
+            "deck_id": target.deck_id,
+            "category": target.category,
+        }
+        if await session.get(InterviewTopicSelection, target_key) is None:
+            session.add(InterviewTopicSelection(**target_key))
+            created += 1
+    return created
+
+
+async def merge_interview_card_duplicate(
+    session: AsyncSession,
+    admin: User,
+    payload: InterviewCardDuplicateMergeMutation,
+) -> InterviewCardDuplicateReviewResult:
+    _require_admin(admin)
+    contexts_list = await _load_duplicate_card_contexts(
+        session,
+        card_ids=[payload.left_card_id, payload.right_card_id],
+        lock=True,
+    )
+    contexts = {item.card.id: item for item in contexts_list}
+    _assert_duplicate_payload_is_current(payload, contexts)
+    existing = await _reviewed_duplicate_pair(session, payload.left_card_id, payload.right_card_id)
+    if existing is not None:
+        api_error(409, "duplicate_pair_reviewed", "This pair has already been reviewed")
+
+    primary = contexts[payload.primary_card_id]
+    source_id = (
+        payload.right_card_id
+        if payload.primary_card_id == payload.left_card_id
+        else payload.left_card_id
+    )
+    source = contexts[source_id]
+    left_id, right_id = _ordered_card_ids(payload.left_card_id, payload.right_card_id)
+    left_snapshot = _card_snapshot(contexts[left_id])
+    right_snapshot = _card_snapshot(contexts[right_id])
+    match = _duplicate_pair_match(contexts[left_id], contexts[right_id])
+
+    target_interview_ids = set(
+        await session.scalars(
+            select(InterviewCardOccurrence.interview_id).where(
+                InterviewCardOccurrence.card_id == primary.card.id,
+                InterviewCardOccurrence.interview_id.is_not(None),
+            )
+        )
+    )
+    source_occurrences = list(
+        await session.scalars(
+            select(InterviewCardOccurrence)
+            .where(InterviewCardOccurrence.card_id == source.card.id)
+            .with_for_update()
+        )
+    )
+    moved_occurrences = 0
+    deduplicated_occurrences = 0
+    for occurrence in source_occurrences:
+        if occurrence.interview_id is not None and occurrence.interview_id in target_interview_ids:
+            await session.delete(occurrence)
+            deduplicated_occurrences += 1
+        else:
+            occurrence.card_id = primary.card.id
+            moved_occurrences += 1
+
+    questions = list(
+        await session.scalars(
+            select(IntelligenceQuestion)
+            .where(IntelligenceQuestion.published_card_id == source.card.id)
+            .with_for_update()
+        )
+    )
+    for question in questions:
+        question.published_card_id = primary.card.id
+
+    clusters = list(
+        await session.scalars(
+            select(QuestionCluster)
+            .where(QuestionCluster.linked_card_id == source.card.id)
+            .with_for_update()
+        )
+    )
+    for cluster in clusters:
+        cluster.linked_card_id = primary.card.id
+        cluster.version += 1
+
+    decisions = list(
+        await session.scalars(
+            select(AutomationDecision)
+            .where(
+                or_(
+                    AutomationDecision.selected_card_id == source.card.id,
+                    AutomationDecision.candidate_card_ids.contains([str(source.card.id)]),
+                )
+            )
+            .with_for_update()
+        )
+    )
+    source_key = str(source.card.id)
+    target_key = str(primary.card.id)
+    for decision in decisions:
+        if decision.selected_card_id == source.card.id:
+            decision.selected_card_id = primary.card.id
+        replaced_ids = [
+            target_key if str(card_id) == source_key else str(card_id)
+            for card_id in decision.candidate_card_ids
+        ]
+        decision.candidate_card_ids = list(dict.fromkeys(replaced_ids))
+        retrieval_scores = dict(decision.retrieval_scores)
+        source_score = retrieval_scores.pop(source_key, None)
+        if source_score is not None and target_key not in retrieval_scores:
+            retrieval_scores[target_key] = source_score
+        decision.retrieval_scores = retrieval_scores
+
+    personal_items = list(
+        await session.scalars(
+            select(PersonalReviewItem)
+            .where(
+                or_(
+                    PersonalReviewItem.canonical_card_id == source.card.id,
+                    PersonalReviewItem.replaced_by_card_id == source.card.id,
+                )
+            )
+            .with_for_update()
+        )
+    )
+    for item in personal_items:
+        if item.canonical_card_id == source.card.id:
+            item.canonical_card_id = primary.card.id
+        if item.replaced_by_card_id == source.card.id:
+            item.replaced_by_card_id = primary.card.id
+        item.version += 1
+
+    merged_progress_records = await _merge_card_progress(
+        session, source.card, primary.card
+    )
+    preserved_topic_selections = await _preserve_topic_access(
+        session, source.card, primary.card
+    )
+    source.card.is_published = False
+    await session.flush()
+    await _refresh_card_stats(session, [source.card.id, primary.card.id])
+
+    merge_summary: dict[str, object] = {
+        "archived_card_id": str(source.card.id),
+        "moved_occurrences": moved_occurrences,
+        "deduplicated_occurrences": deduplicated_occurrences,
+        "updated_questions": len(questions),
+        "updated_clusters": len(clusters),
+        "updated_decisions": len(decisions),
+        "updated_personal_review_items": len(personal_items),
+        "merged_progress_records": merged_progress_records,
+        "preserved_topic_selections": preserved_topic_selections,
+    }
+    review = InterviewCardDuplicateReview(
+        left_card_id=left_id,
+        right_card_id=right_id,
+        primary_card_id=primary.card.id,
+        decision="merged",
+        similarity=match.similarity if match is not None else 0.0,
+        reason=payload.reason,
+        left_snapshot=left_snapshot,
+        right_snapshot=right_snapshot,
+        merge_summary=merge_summary,
+        reviewed_by_user_id=admin.id,
+    )
+    session.add(review)
+    await session.commit()
+    return InterviewCardDuplicateReviewResult(
+        review_id=review.id,
+        decision="merged",
+        primary_card_id=primary.card.id,
+        archived_card_id=source.card.id,
+        moved_occurrences=moved_occurrences,
+        deduplicated_occurrences=deduplicated_occurrences,
+        merged_progress_records=merged_progress_records,
+    )
 
 
 async def _card_in_direction(

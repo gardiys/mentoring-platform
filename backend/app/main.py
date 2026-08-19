@@ -46,6 +46,7 @@ from app.media.router import (
 from app.mentors.admin_router import router as admin_mentors_router
 from app.mentors.router import router as mentors_router
 from app.notifications.router import router as notifications_router
+from app.onboarding_applications.router import router as onboarding_applications_router
 from app.payments.router import (
     admin_router as admin_payments_router,
 )
@@ -138,6 +139,7 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     application.include_router(admin_roadmap_media_router, prefix="/api/v1")
     application.include_router(admin_tracks_router, prefix="/api/v1")
     application.include_router(admin_students_router, prefix="/api/v1")
+    application.include_router(onboarding_applications_router, prefix="/api/v1")
     application.include_router(mentor_profile_router, prefix="/api/v1")
     application.include_router(my_mentor_router, prefix="/api/v1")
     application.include_router(admin_schedule_router, prefix="/api/v1")

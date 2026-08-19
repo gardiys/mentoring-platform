@@ -67,6 +67,27 @@ def test_one_shared_technology_does_not_make_unrelated_question_a_candidate() ->
     assert result == []
 
 
+def test_short_index_question_retrieves_detailed_canonical_card() -> None:
+    card = candidate(
+        1,
+        (
+            "Расскажите, зачем нужны индексы в базах данных, какие виды индексов "
+            "существуют и когда их следует использовать."
+        ),
+    )
+
+    result = rank_question_candidates(
+        "Расскажи про то, какие ты индексы знаешь?",
+        None,
+        [card],
+    )
+
+    assert len(result) == 1
+    assert result[0].card_id == card.card_id
+    assert 0.35 <= result[0].similarity < 0.90
+    assert result[0].match_type == "similar"
+
+
 def test_matching_uses_confirmed_alias_variant_and_reports_its_source() -> None:
     alias = QuestionVariant(
         text="Kafka vs RabbitMQ: в чем разница?",

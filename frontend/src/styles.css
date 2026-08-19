@@ -240,6 +240,46 @@ a {
   margin-top: 1rem;
 }
 
+.application-kpi {
+  display: grid;
+  min-height: 8rem;
+  align-content: space-between;
+  background: color-mix(
+    in srgb,
+    var(--mantine-color-body) 90%,
+    var(--brand-blue)
+  );
+}
+
+.application-actions {
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 2;
+  box-shadow: 0 16px 40px rgb(25 53 95 / 14%);
+}
+
+.application-timeline {
+  padding-left: 0.45rem;
+  border-left: 2px solid var(--brand-border);
+}
+
+.application-timeline-item {
+  position: relative;
+  padding: 0.15rem 0 0.85rem 1rem;
+}
+
+.application-timeline-item::before {
+  position: absolute;
+  top: 0.35rem;
+  left: -0.78rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  content: "";
+  background: var(--brand-blue);
+  border: 2px solid var(--mantine-color-body);
+  border-radius: 50%;
+}
+
 .mentor-note {
   padding: 0.75rem;
   background: color-mix(in srgb, var(--brand-warm) 65%, transparent);

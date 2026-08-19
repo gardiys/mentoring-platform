@@ -1328,6 +1328,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/card-automation/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Card Duplicates */
+        get: operations["admin_card_duplicates_api_v1_admin_card_automation_duplicates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/duplicates/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Dismiss Card Duplicate */
+        post: operations["admin_dismiss_card_duplicate_api_v1_admin_card_automation_duplicates_dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/duplicates/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Merge Card Duplicate */
+        post: operations["admin_merge_card_duplicate_api_v1_admin_card_automation_duplicates_merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/card-automation/clusters": {
         parameters: {
             query?: never;
@@ -1718,6 +1769,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/clusters/{cluster_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mentor Update Cluster Draft */
+        patch: operations["mentor_update_cluster_draft_api_v1_mentor_card_automation_clusters__cluster_id__draft_patch"];
         trace?: never;
     };
     "/api/v1/mentor/card-automation/clusters/{cluster_id}/{action}": {
@@ -6875,6 +6943,159 @@ export interface components {
             content_type: string;
             /** Size */
             size: number;
+        };
+        /** InterviewCardDuplicateCandidateRead */
+        InterviewCardDuplicateCandidateRead: {
+            /** Pair Key */
+            pair_key: string;
+            /** Similarity */
+            similarity: number;
+            /** Matched Source */
+            matched_source: string;
+            /** Matched Text */
+            matched_text: string;
+            left: components["schemas"]["InterviewCardDuplicateCardRead"];
+            right: components["schemas"]["InterviewCardDuplicateCardRead"];
+        };
+        /** InterviewCardDuplicateCardRead */
+        InterviewCardDuplicateCardRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Deck Id
+             * Format: uuid
+             */
+            deck_id: string;
+            /** Deck Title */
+            deck_title: string;
+            /**
+             * Direction Id
+             * Format: uuid
+             */
+            direction_id: string;
+            /** Direction Slug */
+            direction_slug: string;
+            /** Direction Title */
+            direction_title: string;
+            /** Category */
+            category: string;
+            /** Subcategory */
+            subcategory?: string | null;
+            /** Question Markdown */
+            question_markdown: string;
+            /** Answer Markdown */
+            answer_markdown: string;
+            /** Companies */
+            companies?: string | null;
+            /** Asked Count */
+            asked_count: number;
+            frequency: components["schemas"]["InterviewCardFrequency"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** InterviewCardDuplicateMergeMutation */
+        InterviewCardDuplicateMergeMutation: {
+            /**
+             * Left Card Id
+             * Format: uuid
+             */
+            left_card_id: string;
+            /**
+             * Right Card Id
+             * Format: uuid
+             */
+            right_card_id: string;
+            /**
+             * Expected Left Updated At
+             * Format: date-time
+             */
+            expected_left_updated_at: string;
+            /**
+             * Expected Right Updated At
+             * Format: date-time
+             */
+            expected_right_updated_at: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Primary Card Id
+             * Format: uuid
+             */
+            primary_card_id: string;
+        };
+        /** InterviewCardDuplicateMutation */
+        InterviewCardDuplicateMutation: {
+            /**
+             * Left Card Id
+             * Format: uuid
+             */
+            left_card_id: string;
+            /**
+             * Right Card Id
+             * Format: uuid
+             */
+            right_card_id: string;
+            /**
+             * Expected Left Updated At
+             * Format: date-time
+             */
+            expected_left_updated_at: string;
+            /**
+             * Expected Right Updated At
+             * Format: date-time
+             */
+            expected_right_updated_at: string;
+            /** Reason */
+            reason: string;
+        };
+        /** InterviewCardDuplicatePage */
+        InterviewCardDuplicatePage: {
+            /** Items */
+            items: components["schemas"]["InterviewCardDuplicateCandidateRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** InterviewCardDuplicateReviewResult */
+        InterviewCardDuplicateReviewResult: {
+            /**
+             * Review Id
+             * Format: uuid
+             */
+            review_id: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "merged" | "not_duplicate";
+            /** Primary Card Id */
+            primary_card_id?: string | null;
+            /** Archived Card Id */
+            archived_card_id?: string | null;
+            /**
+             * Moved Occurrences
+             * @default 0
+             */
+            moved_occurrences: number;
+            /**
+             * Deduplicated Occurrences
+             * @default 0
+             */
+            deduplicated_occurrences: number;
+            /**
+             * Merged Progress Records
+             * @default 0
+             */
+            merged_progress_records: number;
         };
         /**
          * InterviewCardFrequency
@@ -13387,6 +13608,123 @@ export interface operations {
             };
         };
     };
+    admin_card_duplicates_api_v1_admin_card_automation_duplicates_get: {
+        parameters: {
+            query?: {
+                direction_id?: string | null;
+                minimum_similarity?: number;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCardDuplicatePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_dismiss_card_duplicate_api_v1_admin_card_automation_duplicates_dismiss_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewCardDuplicateMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCardDuplicateReviewResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_merge_card_duplicate_api_v1_admin_card_automation_duplicates_merge_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewCardDuplicateMergeMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCardDuplicateReviewResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_clusters_api_v1_admin_card_automation_clusters_get: {
         parameters: {
             query?: {
@@ -14359,6 +14697,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuestionOccurrenceReprocessResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_update_cluster_draft_api_v1_mentor_card_automation_clusters__cluster_id__draft_patch: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionClusterDraftMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterMutationResult"];
                 };
             };
             /** @description Validation Error */

@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     telegram_daily_reminders_enabled: bool = True
     telegram_daily_reminder_hour: int = Field(default=20, ge=0, le=23)
     bot_integration_token: SecretStr | None = None
+    onboarding_bot_api_base_url: str | None = None
+    onboarding_bot_integration_token: SecretStr | None = None
+    onboarding_bot_timeout_seconds: float = Field(default=15, gt=0, le=60)
     telegram_init_data_ttl_seconds: int = Field(default=86_400, gt=0, le=604_800)
     telegram_web_client_id: str | None = None
     telegram_web_client_secret: SecretStr | None = None
@@ -287,6 +290,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "web_frontend_url",
+        "onboarding_bot_api_base_url",
         "telegram_web_redirect_uri",
         "s3_endpoint_url",
         "s3_public_endpoint_url",
@@ -334,6 +338,7 @@ class Settings(BaseSettings):
         "telegram_bot_token",
         "telegram_bot_proxy_url",
         "bot_integration_token",
+        "onboarding_bot_integration_token",
         "telegram_web_client_secret",
         "telegram_oidc_proxy_url",
         "web_session_secret",
@@ -347,6 +352,11 @@ class Settings(BaseSettings):
     )
     @classmethod
     def empty_secret_is_none(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @field_validator("onboarding_bot_api_base_url", mode="before")
+    @classmethod
+    def empty_onboarding_bot_url_is_none(cls, value: object) -> object:
         return None if value == "" else value
 
     @field_validator("s3_endpoint_url", "s3_public_endpoint_url", mode="before")
@@ -364,11 +374,11 @@ class Settings(BaseSettings):
     def empty_telegram_topic_is_none(cls, value: object) -> object:
         return None if value == "" else value
 
-    @field_validator("bot_integration_token")
+    @field_validator("bot_integration_token", "onboarding_bot_integration_token")
     @classmethod
     def validate_bot_integration_token(cls, value: SecretStr | None) -> SecretStr | None:
         if value is not None and len(value.get_secret_value()) < 32:
-            raise ValueError("BOT_INTEGRATION_TOKEN must contain at least 32 characters")
+            raise ValueError("Integration tokens must contain at least 32 characters")
         return value
 
     @field_validator("web_session_secret")
@@ -414,6 +424,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_intelligence_job_lifetimes(self) -> "Settings":
+        if (self.onboarding_bot_api_base_url is None) != (
+            self.onboarding_bot_integration_token is None
+        ):
+            raise ValueError(
+                "ONBOARDING_BOT_API_BASE_URL and ONBOARDING_BOT_INTEGRATION_TOKEN "
+                "must be configured together"
+            )
         if self.app_env == "production":
             if self.app_debug:
                 raise ValueError("APP_DEBUG must be false in production")
@@ -490,6 +507,7 @@ class Settings(BaseSettings):
 
         for name, value in (
             ("TELEGRAM_WEB_REDIRECT_URI", self.telegram_web_redirect_uri),
+            ("ONBOARDING_BOT_API_BASE_URL", self.onboarding_bot_api_base_url),
             ("NEXARA_BASE_URL", self.nexara_base_url),
             ("TOCHKA_API_BASE_URL", self.tochka_api_base_url),
             ("TOCHKA_REDIRECT_URL", self.tochka_redirect_url),
@@ -529,6 +547,7 @@ class Settings(BaseSettings):
             "TELEGRAM_BOT_TOKEN": self.telegram_bot_token,
             "TELEGRAM_BOT_PROXY_URL": self.telegram_bot_proxy_url,
             "BOT_INTEGRATION_TOKEN": self.bot_integration_token,
+            "ONBOARDING_BOT_INTEGRATION_TOKEN": self.onboarding_bot_integration_token,
             "TELEGRAM_WEB_CLIENT_SECRET": self.telegram_web_client_secret,
             "TELEGRAM_OIDC_PROXY_URL": self.telegram_oidc_proxy_url,
             "WEB_SESSION_SECRET": self.web_session_secret,

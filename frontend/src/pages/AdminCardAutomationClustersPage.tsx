@@ -530,9 +530,25 @@ export function CardAutomationClustersPage({
                     key={cluster.id}
                     data-active={activeIndex === index || undefined}
                     aria-selected={activeIndex === index}
+                    tabIndex={0}
+                    onClick={(event) => {
+                      const target = event.target;
+                      if (
+                        target instanceof HTMLElement &&
+                        target.closest(
+                          "a, button, input, label, [role='checkbox'], [data-no-row-navigation]",
+                        )
+                      )
+                        return;
+                      void navigate({
+                        pathname: `${detailBase}/${cluster.id}`,
+                        search: filterSearch,
+                      });
+                    }}
                     onMouseEnter={() => setActiveIndex(index)}
                     onFocus={() => setActiveIndex(index)}
                     style={{
+                      cursor: "pointer",
                       background:
                         scope === "admin" && selectedIds.has(cluster.id)
                           ? "var(--mantine-color-blue-light)"

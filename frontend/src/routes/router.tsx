@@ -185,6 +185,20 @@ const mentorRoutes = [
 
 const adminRoutes = [
   {
+    path: "/admin/applications",
+    lazy: lazyPage(
+      () => import("../pages/AdminApplicationsPage"),
+      "AdminApplicationsPage",
+    ),
+  },
+  {
+    path: "/admin/card-automation/duplicates",
+    lazy: lazyPage(
+      () => import("../pages/AdminCardAutomationDuplicatesPage"),
+      "AdminCardAutomationDuplicatesPage",
+    ),
+  },
+  {
     path: "/admin/card-automation/clusters",
     lazy: lazyPage(
       () => import("../pages/AdminCardAutomationClustersPage"),

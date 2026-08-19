@@ -1291,6 +1291,61 @@ export interface QuestionClusterPage {
   offset: number;
 }
 
+export interface InterviewCardDuplicateCard {
+  id: string;
+  deck_id: string;
+  deck_title: string;
+  direction_id: string;
+  direction_slug: string;
+  direction_title: string;
+  category: string;
+  subcategory: string | null;
+  question_markdown: string;
+  answer_markdown: string;
+  companies: string | null;
+  asked_count: number;
+  frequency: "frequent" | "occasional";
+  updated_at: string;
+}
+
+export interface InterviewCardDuplicateCandidate {
+  pair_key: string;
+  similarity: number;
+  matched_source: string;
+  matched_text: string;
+  left: InterviewCardDuplicateCard;
+  right: InterviewCardDuplicateCard;
+}
+
+export interface InterviewCardDuplicatePage {
+  items: InterviewCardDuplicateCandidate[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface InterviewCardDuplicateMutation {
+  left_card_id: string;
+  right_card_id: string;
+  expected_left_updated_at: string;
+  expected_right_updated_at: string;
+  reason: string;
+}
+
+export interface InterviewCardDuplicateMergeMutation extends InterviewCardDuplicateMutation {
+  primary_card_id: string;
+}
+
+export interface InterviewCardDuplicateReviewResult {
+  review_id: string;
+  decision: "merged" | "not_duplicate";
+  primary_card_id: string | null;
+  archived_card_id: string | null;
+  moved_occurrences: number;
+  deduplicated_occurrences: number;
+  merged_progress_records: number;
+}
+
 export interface QuestionClusterFilters {
   directionId: string | null;
   statuses: QuestionClusterStatus[];
@@ -1766,4 +1821,86 @@ export interface NotificationPage {
   unread_count: number;
   limit: number;
   offset: number;
+}
+
+export type OnboardingApplicationAction =
+  | "approve_qualification"
+  | "reject_qualification"
+  | "approve_after_call"
+  | "reject_after_call"
+  | "request_follow_up"
+  | "confirm_payment"
+  | "resend_payment"
+  | "complete_onboarding"
+  | "confirm_access"
+  | "access_missing";
+
+export interface OnboardingApplicationListItem {
+  applicant_id: string;
+  status: string;
+  name: string | null;
+  telegram_user_id: number;
+  telegram_username: string | null;
+  email: string | null;
+  direction: string | null;
+  city: string | null;
+  admin_comment: string | null;
+  booking_start_time: string | null;
+  payment_status: string | null;
+  created_at: string;
+  updated_at: string;
+  available_actions: OnboardingApplicationAction[];
+}
+
+export interface OnboardingApplicationPage {
+  items: OnboardingApplicationListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  status_counts: Record<string, number>;
+}
+
+export interface OnboardingApplicationEvent {
+  event_type: string;
+  old_status: string | null;
+  new_status: string | null;
+  source: string;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface OnboardingApplicationBooking {
+  status: string;
+  start_time: string | null;
+  end_time: string | null;
+  meeting_url: string | null;
+  created_at: string;
+}
+
+export interface OnboardingApplicationPayment {
+  status: string;
+  amount: string;
+  currency: string;
+  payment_url: string | null;
+  approved_at: string | null;
+  created_at: string;
+}
+
+export interface OnboardingApplicationDetail extends OnboardingApplicationListItem {
+  age: string | null;
+  initial_knowledge: string | null;
+  life_difficulties: string | null;
+  study_time_per_day: string | null;
+  military_document_status: string | null;
+  referral_source: string | null;
+  form_answers: Record<string, unknown>;
+  bookings: OnboardingApplicationBooking[];
+  payments: OnboardingApplicationPayment[];
+  events: OnboardingApplicationEvent[];
+}
+
+export interface OnboardingApplicationActionResponse {
+  message: string;
+  delivered: boolean | null;
+  application: OnboardingApplicationDetail;
 }

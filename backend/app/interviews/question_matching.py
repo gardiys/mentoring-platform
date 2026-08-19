@@ -306,6 +306,19 @@ def _local_similarity(left: _QuestionFingerprint, right: _QuestionFingerprint) -
         )
     else:
         score = 0.75 * token_score + 0.25 * sequence_score
+
+    # Jaccard alone heavily penalizes a short interview wording when the
+    # canonical card expands the same subject into several explicit clauses.
+    # Use containment as a retrieval-only boost so e.g. "какие индексы
+    # знаешь" remains a moderation candidate for a detailed card about index
+    # types.  The cap stays well below the automatic semantic-link threshold;
+    # a human or the independent pairwise judge still decides equivalence.
+    shorter_token_count = min(len(left.tokens), len(right.tokens))
+    containment = len(shared_tokens) / shorter_token_count if shorter_token_count else 0.0
+    retrieval_score = 0.45 * containment + 0.30 * token_score + 0.25 * sequence_score
+    if len(shared_tokens) == 1:
+        retrieval_score = min(retrieval_score + 0.15, 0.69)
+    score = max(score, retrieval_score)
     if common_intention:
         score += 0.08
 
