@@ -281,6 +281,20 @@ def _fingerprint(value: str) -> _QuestionFingerprint:
     )
 
 
+def question_retrieval_terms(value: str) -> frozenset[str]:
+    """Return stable terms suitable for bounded duplicate-candidate retrieval.
+
+    Full question matching remains the responsibility of ``rank_question_candidates``.
+    This smaller representation is only used to avoid comparing every card with every
+    other card before the real matcher runs.
+    """
+
+    fingerprint = _fingerprint(value)
+    return frozenset(
+        (*fingerprint.tokens, *fingerprint.technical_concepts, *fingerprint.intentions)
+    )
+
+
 def _jaccard(left: frozenset[str], right: frozenset[str]) -> float:
     union = left | right
     if not union:

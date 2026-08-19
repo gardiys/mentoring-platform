@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from collections import defaultdict
@@ -128,6 +129,7 @@ from app.interviews.question_matching import (
     QuestionVariant,
     RankedQuestionCandidate,
     normalize_question,
+    question_retrieval_terms,
     rank_question_candidates,
 )
 from app.mentors.models import MentorStudent
@@ -1900,6 +1902,16 @@ class _DuplicateCardContext:
     aliases: tuple[IntelligenceQuestion, ...] = ()
 
 
+# The duplicate queue is an interactive moderation tool, so candidate retrieval
+# must remain bounded.  The former implementation ran the expensive matcher for
+# every possible pair (N²) before applying pagination and could monopolise the
+# only ASGI event loop on production.
+_DUPLICATE_RETRIEVAL_TERMS_PER_CARD = 12
+_DUPLICATE_RETRIEVAL_CANDIDATES_PER_CARD = 64
+_DUPLICATE_RETRIEVAL_POSTING_SCAN = 192
+_DUPLICATE_RETRIEVAL_POSTING_NEIGHBOURS = 24
+
+
 def _ordered_card_ids(left_card_id: UUID, right_card_id: UUID) -> tuple[UUID, UUID]:
     left, right = sorted((left_card_id, right_card_id), key=str)
     return left, right
@@ -1980,6 +1992,156 @@ def _duplicate_pair_match(
     )
     candidates = [*matches, *reverse_matches]
     return max(candidates, key=lambda item: item.similarity, default=None)
+
+
+def _duplicate_context_variants(context: _DuplicateCardContext) -> tuple[str, ...]:
+    return (context.card.question_markdown, *(alias.question_text for alias in context.aliases))
+
+
+def _bounded_posting_candidates(
+    posting: Sequence[UUID],
+    *,
+    card_id: UUID,
+    position_by_id: dict[UUID, int],
+    popular_ids: Sequence[UUID],
+) -> set[UUID]:
+    if len(posting) <= _DUPLICATE_RETRIEVAL_POSTING_SCAN:
+        return set(posting)
+
+    position = position_by_id[card_id]
+    radius = _DUPLICATE_RETRIEVAL_POSTING_NEIGHBOURS
+    start = max(0, position - radius)
+    end = min(len(posting), position + radius + 1)
+    return {*posting[start:end], *popular_ids}
+
+
+def _duplicate_candidate_pairs(
+    contexts: Sequence[_DuplicateCardContext],
+) -> set[tuple[UUID, UUID]]:
+    """Build a bounded lexical shortlist before running the expensive matcher."""
+
+    contexts_by_id = {context.card.id: context for context in contexts}
+    terms_by_id: dict[UUID, frozenset[str]] = {}
+    normalized_variants: defaultdict[tuple[UUID, str], list[UUID]] = defaultdict(list)
+    postings: defaultdict[tuple[UUID, str], list[UUID]] = defaultdict(list)
+
+    for context in contexts:
+        variants = _duplicate_context_variants(context)
+        terms = frozenset(
+            term for variant in variants for term in question_retrieval_terms(variant)
+        )
+        terms_by_id[context.card.id] = terms
+        for variant in variants:
+            normalized = normalize_question(variant)
+            if normalized:
+                normalized_variants[(context.track.id, normalized)].append(context.card.id)
+        for term in terms:
+            postings[(context.track.id, term)].append(context.card.id)
+
+    posting_positions: dict[tuple[UUID, str], dict[UUID, int]] = {}
+    posting_popular: dict[tuple[UUID, str], tuple[UUID, ...]] = {}
+    for key, card_ids in postings.items():
+        card_ids.sort(
+            key=lambda card_id: (
+                normalize_question(contexts_by_id[card_id].card.question_markdown),
+                str(card_id),
+            )
+        )
+        posting_positions[key] = {
+            posting_card_id: index for index, posting_card_id in enumerate(card_ids)
+        }
+        posting_popular[key] = tuple(
+            sorted(
+                card_ids,
+                key=lambda candidate_id: (
+                    -contexts_by_id[candidate_id].card.asked_count,
+                    str(candidate_id),
+                ),
+            )[:_DUPLICATE_RETRIEVAL_POSTING_NEIGHBOURS]
+        )
+
+    pairs: set[tuple[UUID, UUID]] = set()
+    # Never lose exact matches, even when their wording has no useful terms.
+    for card_ids in normalized_variants.values():
+        unique_ids = set(card_ids)
+        if len(unique_ids) < 2:
+            continue
+        anchor_id = min(
+            unique_ids,
+            key=lambda candidate_id: (
+                -contexts_by_id[candidate_id].card.asked_count,
+                str(candidate_id),
+            ),
+        )
+        pairs.update(
+            _ordered_card_ids(anchor_id, candidate_id)
+            for candidate_id in unique_ids
+            if candidate_id != anchor_id
+        )
+
+    for context in contexts:
+        card_id = context.card.id
+        ranked_terms = sorted(
+            terms_by_id[card_id],
+            key=lambda term: (len(postings[(context.track.id, term)]), term),
+        )[:_DUPLICATE_RETRIEVAL_TERMS_PER_CARD]
+        shared_term_counts: defaultdict[UUID, int] = defaultdict(int)
+        for term in ranked_terms:
+            key = (context.track.id, term)
+            for candidate_id in _bounded_posting_candidates(
+                postings[key],
+                card_id=card_id,
+                position_by_id=posting_positions[key],
+                popular_ids=posting_popular[key],
+            ):
+                if candidate_id != card_id:
+                    shared_term_counts[candidate_id] += 1
+
+        candidates = sorted(
+            shared_term_counts,
+            key=lambda candidate_id: (
+                -shared_term_counts[candidate_id],
+                -contexts_by_id[candidate_id].card.asked_count,
+                str(candidate_id),
+            ),
+        )[:_DUPLICATE_RETRIEVAL_CANDIDATES_PER_CARD]
+        pairs.update(_ordered_card_ids(card_id, candidate_id) for candidate_id in candidates)
+    return pairs
+
+
+def _rank_duplicate_pairs(
+    contexts: Sequence[_DuplicateCardContext],
+    reviewed_pairs: set[tuple[UUID, UUID]],
+    minimum_similarity: float,
+) -> list[InterviewCardDuplicateCandidateRead]:
+    contexts_by_id = {context.card.id: context for context in contexts}
+    candidates: list[InterviewCardDuplicateCandidateRead] = []
+    for pair_ids in _duplicate_candidate_pairs(contexts):
+        if pair_ids in reviewed_pairs:
+            continue
+        left = contexts_by_id[pair_ids[0]]
+        right = contexts_by_id[pair_ids[1]]
+        match = _duplicate_pair_match(left, right)
+        if match is None or match.similarity < minimum_similarity:
+            continue
+        candidates.append(
+            InterviewCardDuplicateCandidateRead(
+                pair_key=_duplicate_pair_key(*pair_ids),
+                similarity=match.similarity,
+                matched_source=match.matched_source,
+                matched_text=match.matched_text,
+                left=_duplicate_card_read(left),
+                right=_duplicate_card_read(right),
+            )
+        )
+    candidates.sort(
+        key=lambda item: (
+            -item.similarity,
+            -(item.left.asked_count + item.right.asked_count),
+            item.pair_key,
+        )
+    )
+    return candidates
 
 
 async def _load_duplicate_card_contexts(
@@ -2067,36 +2229,13 @@ async def list_interview_card_duplicates(
             )
         ).tuples()
     )
-    candidates: list[InterviewCardDuplicateCandidateRead] = []
-    for left_index, left in enumerate(contexts):
-        for right in contexts[left_index + 1 :]:
-            if left.track.id != right.track.id:
-                continue
-            pair_ids = _ordered_card_ids(left.card.id, right.card.id)
-            if pair_ids in reviewed_pairs:
-                continue
-            match = _duplicate_pair_match(left, right)
-            if match is None or match.similarity < minimum_similarity:
-                continue
-            ordered_contexts = (
-                (left, right) if left.card.id == pair_ids[0] else (right, left)
-            )
-            candidates.append(
-                InterviewCardDuplicateCandidateRead(
-                    pair_key=_duplicate_pair_key(*pair_ids),
-                    similarity=match.similarity,
-                    matched_source=match.matched_source,
-                    matched_text=match.matched_text,
-                    left=_duplicate_card_read(ordered_contexts[0]),
-                    right=_duplicate_card_read(ordered_contexts[1]),
-                )
-            )
-    candidates.sort(
-        key=lambda item: (
-            -item.similarity,
-            -(item.left.asked_count + item.right.asked_count),
-            item.pair_key,
-        )
+    # Matching is CPU-bound. Keep it off the asyncio event loop so unrelated
+    # requests such as /api/v1/me remain responsive while the queue is built.
+    candidates = await asyncio.to_thread(
+        _rank_duplicate_pairs,
+        contexts,
+        reviewed_pairs,
+        minimum_similarity,
     )
     total = len(candidates)
     return InterviewCardDuplicatePage(
