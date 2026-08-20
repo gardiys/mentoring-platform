@@ -121,6 +121,17 @@ async def test_session_prioritizes_frequent_cards_and_tracks_learning(
         "progress_percent": 0,
     }
 
+    response = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/session",
+        params={"frequent_only": True},
+        headers=auth(seeded.student_id),
+    )
+    assert response.status_code == 200
+    frequent_session = response.json()
+    assert [card["slug"] for card in frequent_session["cards"]] == ["python-gil"]
+    assert frequent_session["deck"]["stats"]["total_cards"] == 1
+    assert frequent_session["deck"]["stats"]["remaining_cards"] == 1
+
     frequent_card = next(card for card in deck["cards"] if card["slug"] == "python-gil")
     response = await client.post(
         f"/api/v1/interviews/cards/{frequent_card['id']}/reviews",
@@ -139,11 +150,45 @@ async def test_session_prioritizes_frequent_cards_and_tracks_learning(
     assert response.json()["learned"] is True
     assert response.json()["interval_days"] == 2
 
+    response = await client.post(
+        f"/api/v1/interviews/cards/{frequent_card['id']}/reviews",
+        headers=auth(seeded.student_id),
+        json={"rating": "known"},
+    )
+    assert response.status_code == 200
+    assert response.json()["rating"] == "known"
+    assert response.json()["interval_days"] == 30
+
     response = await client.get("/api/v1/interviews/decks", headers=auth(seeded.student_id))
     stats = response.json()[0]["stats"]
     assert stats["learned_cards"] == 1
     assert stats["remaining_cards"] == 1
     assert stats["progress_percent"] == 50
+
+
+async def test_student_searches_all_selected_cards(client: AsyncClient, seeded: SeededData) -> None:
+    await create_deck(client, seeded)
+    await client.put(
+        "/api/v1/interviews/decks/python-core-interview/topics",
+        headers=auth(seeded.student_id),
+        json={"categories": ["Основы Python", "Продвинутый Python"]},
+    )
+
+    response = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/cards/search",
+        params={"query": "создаёт классы"},
+        headers=auth(seeded.student_id),
+    )
+    assert response.status_code == 200
+    assert [card["slug"] for card in response.json()] == ["python-metaclass"]
+
+    response = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/cards/search",
+        params={"query": "что такое", "frequent_only": True},
+        headers=auth(seeded.student_id),
+    )
+    assert response.status_code == 200
+    assert [card["slug"] for card in response.json()] == ["python-gil"]
 
 
 async def test_student_selects_topics_before_study(client: AsyncClient, seeded: SeededData) -> None:

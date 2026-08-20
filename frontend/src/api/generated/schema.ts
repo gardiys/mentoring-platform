@@ -140,6 +140,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/interviews/decks/{deck_slug}/cards/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Interview Card Search */
+        get: operations["interview_card_search_api_v1_interviews_decks__deck_slug__cards_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/interviews/decks/{deck_slug}/topics": {
         parameters: {
             query?: never;
@@ -7775,7 +7792,7 @@ export interface components {
          * InterviewReviewRating
          * @enum {string}
          */
-        InterviewReviewRating: "again" | "hard" | "good" | "easy";
+        InterviewReviewRating: "again" | "hard" | "good" | "easy" | "known";
         /** InterviewReviewResult */
         InterviewReviewResult: {
             /**
@@ -8841,7 +8858,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "approve_qualification" | "reject_qualification" | "approve_after_call" | "reject_after_call" | "request_follow_up" | "confirm_payment" | "resend_payment" | "complete_onboarding" | "confirm_access" | "access_missing";
+            action: "approve_qualification" | "reject_qualification" | "approve_after_call" | "reject_after_call" | "request_follow_up" | "confirm_payment" | "resend_payment" | "complete_onboarding" | "confirm_access" | "access_missing" | "mark_contact_lost" | "defer_candidate" | "rollback_status";
             /** Comment */
             comment?: string | null;
         };
@@ -8882,7 +8899,9 @@ export interface components {
             /** Updated At */
             updated_at: string;
             /** Available Actions */
-            available_actions: ("approve_qualification" | "reject_qualification" | "approve_after_call" | "reject_after_call" | "request_follow_up" | "confirm_payment" | "resend_payment" | "complete_onboarding" | "confirm_access" | "access_missing")[];
+            available_actions: ("approve_qualification" | "reject_qualification" | "approve_after_call" | "reject_after_call" | "request_follow_up" | "confirm_payment" | "resend_payment" | "complete_onboarding" | "confirm_access" | "access_missing" | "mark_contact_lost" | "defer_candidate" | "rollback_status")[];
+            /** Rollback Status */
+            rollback_status?: string | null;
             /** Age */
             age: string | null;
             /** Initial Knowledge */
@@ -8952,7 +8971,7 @@ export interface components {
             /** Updated At */
             updated_at: string;
             /** Available Actions */
-            available_actions: ("approve_qualification" | "reject_qualification" | "approve_after_call" | "reject_after_call" | "request_follow_up" | "confirm_payment" | "resend_payment" | "complete_onboarding" | "confirm_access" | "access_missing")[];
+            available_actions: ("approve_qualification" | "reject_qualification" | "approve_after_call" | "reject_after_call" | "request_follow_up" | "confirm_payment" | "resend_payment" | "complete_onboarding" | "confirm_access" | "access_missing" | "mark_contact_lost" | "defer_candidate" | "rollback_status")[];
         };
         /** OnboardingApplicationPage */
         OnboardingApplicationPage: {
@@ -10668,6 +10687,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
+                frequent_only?: boolean;
             };
             header?: {
                 authorization?: string | null;
@@ -10689,6 +10709,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InterviewStudySession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    interview_card_search_api_v1_interviews_decks__deck_slug__cards_search_get: {
+        parameters: {
+            query: {
+                query: string;
+                limit?: number;
+                frequent_only?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                deck_slug: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCardStudy"][];
                 };
             };
             /** @description Validation Error */

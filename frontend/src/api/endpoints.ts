@@ -1775,10 +1775,25 @@ export const api = {
     ),
   interviewDecks: () =>
     apiRequest<InterviewDeckListItem[]>("/api/v1/interviews/decks"),
-  interviewSession: (deckSlug: string) =>
-    apiRequest<InterviewStudySession>(
-      `/api/v1/interviews/decks/${deckSlug}/session`,
-    ),
+  interviewSession: (deckSlug: string, frequentOnly = false) => {
+    const params = new URLSearchParams();
+    if (frequentOnly) params.set("frequent_only", "true");
+    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    return apiRequest<InterviewStudySession>(
+      `/api/v1/interviews/decks/${deckSlug}/session${suffix}`,
+    );
+  },
+  searchInterviewCards: (
+    deckSlug: string,
+    query: string,
+    frequentOnly = false,
+  ) => {
+    const params = new URLSearchParams({ query });
+    if (frequentOnly) params.set("frequent_only", "true");
+    return apiRequest<InterviewStudySession["cards"]>(
+      `/api/v1/interviews/decks/${deckSlug}/cards/search?${params.toString()}`,
+    );
+  },
   interviewTopics: (deckSlug: string) =>
     apiRequest<InterviewTopicOption[]>(
       `/api/v1/interviews/decks/${deckSlug}/topics`,

@@ -9,6 +9,7 @@ import {
 } from "@mantine/core";
 import { Link } from "react-router-dom";
 
+import roadmapMascotUrl from "../assets/avatar-onboarding-roadmaps.jpg";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { ProgressBar } from "../components/ProgressBar";
@@ -38,9 +39,12 @@ export function RoadmapsPage() {
           </Text>
         </div>
         <img
-          src="/brand/avatar-onboarding.png"
+          src={roadmapMascotUrl}
           alt="Геральт"
           className="brand-hero-mascot"
+          width={540}
+          height={540}
+          fetchPriority="high"
           decoding="async"
         />
       </Card>

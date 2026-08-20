@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -234,6 +234,60 @@ it("сохраняет самооценку ученика", async () => {
   await userEvent.click(screen.getByRole("button", { name: /Помню/ }));
 
   expect(review).toHaveBeenCalledWith(session.cards[0]!.id, "good");
+});
+
+it("откладывает отлично знакомую карточку на месяц", async () => {
+  vi.spyOn(api, "interviewSession").mockResolvedValue(session);
+  vi.spyOn(api, "interviewTopics").mockResolvedValue(topics);
+  const review = vi
+    .spyOn(api, "reviewInterviewCard")
+    .mockReturnValue(new Promise(() => undefined));
+  renderPage(
+    <InterviewStudyPage />,
+    "/interviews/python-interview",
+    "/interviews/:deckSlug",
+  );
+
+  await screen.findByRole("heading", { name: "Что такое GIL?" });
+  await userEvent.click(screen.getByRole("button", { name: "Показать ответ" }));
+  await userEvent.click(screen.getByRole("button", { name: /Знаю отлично/ }));
+
+  expect(review).toHaveBeenCalledWith(session.cards[0]!.id, "known");
+});
+
+it("фильтрует частые карточки и ищет по всей выбранной колоде", async () => {
+  const sessionRequest = vi
+    .spyOn(api, "interviewSession")
+    .mockResolvedValue(session);
+  vi.spyOn(api, "interviewTopics").mockResolvedValue(topics);
+  const searchRequest = vi
+    .spyOn(api, "searchInterviewCards")
+    .mockResolvedValue(session.cards);
+  renderPage(
+    <InterviewStudyPage />,
+    "/interviews/python-interview",
+    "/interviews/:deckSlug",
+  );
+
+  await screen.findByRole("heading", { name: "Что такое GIL?" });
+  await userEvent.click(
+    screen.getByRole("switch", { name: /Только частые вопросы/ }),
+  );
+  await waitFor(() =>
+    expect(sessionRequest).toHaveBeenLastCalledWith("python-interview", true),
+  );
+
+  await userEvent.type(screen.getByLabelText("Поиск по карточкам"), "GIL");
+  await waitFor(() =>
+    expect(searchRequest).toHaveBeenCalledWith("python-interview", "GIL", true),
+  );
+  expect(
+    await screen.findByRole("heading", { name: "Результаты поиска" }),
+  ).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: /Что такое GIL/ }),
+  );
+  expect(screen.getByText(/блокирует параллельное/)).toBeInTheDocument();
 });
 
 it("не выдаёт карточки до выбора пройденной темы", async () => {

@@ -8,6 +8,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     Enum,
     Float,
@@ -20,11 +21,22 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+
+INTERVIEW_CARD_SEARCH_VECTOR_SQL = """
+setweight(to_tsvector('russian'::regconfig, coalesce(question_markdown, '')), 'A') ||
+setweight(to_tsvector('russian'::regconfig, coalesce(category, '')), 'B') ||
+setweight(to_tsvector('russian'::regconfig, coalesce(subcategory, '')), 'B') ||
+setweight(to_tsvector('russian'::regconfig, coalesce(answer_markdown, '')), 'C') ||
+setweight(to_tsvector('simple'::regconfig, coalesce(question_markdown, '')), 'A') ||
+setweight(to_tsvector('simple'::regconfig, coalesce(category, '')), 'B') ||
+setweight(to_tsvector('simple'::regconfig, coalesce(subcategory, '')), 'B') ||
+setweight(to_tsvector('simple'::regconfig, coalesce(answer_markdown, '')), 'C')
+"""
 
 
 class InterviewCardFrequency(StrEnum):
@@ -42,6 +54,7 @@ class InterviewReviewRating(StrEnum):
     HARD = "hard"
     GOOD = "good"
     EASY = "easy"
+    KNOWN = "known"
 
 
 class InterviewProcessStatus(StrEnum):
@@ -105,6 +118,11 @@ class InterviewCard(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint("position >= 0", name="position_non_negative"),
         CheckConstraint("asked_count >= 0", name="asked_count_non_negative"),
         Index("ix_interview_cards_deck_position", "deck_id", "position"),
+        Index(
+            "ix_interview_cards_search_vector",
+            "search_vector",
+            postgresql_using="gin",
+        ),
     )
 
     deck_id: Mapped[UUID] = mapped_column(
@@ -143,6 +161,11 @@ class InterviewCard(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     asked_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed(INTERVIEW_CARD_SEARCH_VECTOR_SQL, persisted=True),
+        nullable=False,
+    )
 
     deck = relationship("InterviewDeck", back_populates="cards")
     occurrences = relationship(

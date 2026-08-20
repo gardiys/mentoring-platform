@@ -82,22 +82,23 @@ async def _selected_categories(session: AsyncSession, user_id: UUID, deck_id: UU
     )
 
 
-async def _deck_stats(session: AsyncSession, user_id: UUID, deck_id: UUID) -> InterviewDeckStats:
-    available = (
-        await session.scalar(
-            select(func.count(InterviewCard.id)).where(
-                InterviewCard.deck_id == deck_id,
-                InterviewCard.is_published.is_(True),
-            )
-        )
-        or 0
-    )
+async def _deck_stats(
+    session: AsyncSession,
+    user_id: UUID,
+    deck_id: UUID,
+    *,
+    frequent_only: bool = False,
+) -> InterviewDeckStats:
+    card_filters = [
+        InterviewCard.deck_id == deck_id,
+        InterviewCard.is_published.is_(True),
+    ]
+    if frequent_only:
+        card_filters.append(effective_frequent_predicate())
+    available = await session.scalar(select(func.count(InterviewCard.id)).where(*card_filters)) or 0
     total_categories = (
         await session.scalar(
-            select(func.count(func.distinct(InterviewCard.category))).where(
-                InterviewCard.deck_id == deck_id,
-                InterviewCard.is_published.is_(True),
-            )
+            select(func.count(func.distinct(InterviewCard.category))).where(*card_filters)
         )
         or 0
     )
@@ -116,8 +117,7 @@ async def _deck_stats(session: AsyncSession, user_id: UUID, deck_id: UUID) -> In
     total = (
         await session.scalar(
             select(func.count(InterviewCard.id)).where(
-                InterviewCard.deck_id == deck_id,
-                InterviewCard.is_published.is_(True),
+                *card_filters,
                 InterviewCard.category.in_(selected_categories),
             )
         )
@@ -128,8 +128,7 @@ async def _deck_stats(session: AsyncSession, user_id: UUID, deck_id: UUID) -> In
             select(func.count(InterviewCardProgress.card_id))
             .join(InterviewCard, InterviewCard.id == InterviewCardProgress.card_id)
             .where(
-                InterviewCard.deck_id == deck_id,
-                InterviewCard.is_published.is_(True),
+                *card_filters,
                 InterviewCard.category.in_(selected_categories),
                 InterviewCardProgress.user_id == user_id,
                 InterviewCardProgress.first_learned_at.is_not(None),
@@ -142,8 +141,7 @@ async def _deck_stats(session: AsyncSession, user_id: UUID, deck_id: UUID) -> In
             select(func.count(InterviewCardProgress.card_id))
             .join(InterviewCard, InterviewCard.id == InterviewCardProgress.card_id)
             .where(
-                InterviewCard.deck_id == deck_id,
-                InterviewCard.is_published.is_(True),
+                *card_filters,
                 InterviewCard.category.in_(selected_categories),
                 InterviewCardProgress.user_id == user_id,
                 InterviewCardProgress.due_at <= datetime.now(UTC),
@@ -168,6 +166,8 @@ async def _deck_list_item(
     user_id: UUID,
     deck: InterviewDeck,
     track: LearningTrack,
+    *,
+    frequent_only: bool = False,
 ) -> InterviewDeckListItem:
     return InterviewDeckListItem(
         id=deck.id,
@@ -177,7 +177,12 @@ async def _deck_list_item(
         track_id=track.id,
         track_slug=track.slug,
         track_title=track.title,
-        stats=await _deck_stats(session, user_id, deck.id),
+        stats=await _deck_stats(
+            session,
+            user_id,
+            deck.id,
+            frequent_only=frequent_only,
+        ),
     )
 
 
@@ -203,15 +208,30 @@ async def get_study_session(
     user: User,
     deck_slug: str,
     limit: int,
+    *,
+    frequent_only: bool = False,
 ) -> InterviewStudySession:
     deck, track = await _public_deck_model(session, deck_slug, user)
     now = datetime.now(UTC)
     selected_categories = await _selected_categories(session, user.id, deck.id)
     if not selected_categories:
         return InterviewStudySession(
-            deck=await _deck_list_item(session, user.id, deck, track),
+            deck=await _deck_list_item(
+                session,
+                user.id,
+                deck,
+                track,
+                frequent_only=frequent_only,
+            ),
             cards=[],
         )
+    card_filters = [
+        InterviewCard.deck_id == deck.id,
+        InterviewCard.is_published.is_(True),
+        InterviewCard.category.in_(selected_categories),
+    ]
+    if frequent_only:
+        card_filters.append(effective_frequent_predicate())
     rows = list(
         (
             await session.execute(
@@ -222,9 +242,7 @@ async def get_study_session(
                     & (InterviewCardProgress.user_id == user.id),
                 )
                 .where(
-                    InterviewCard.deck_id == deck.id,
-                    InterviewCard.is_published.is_(True),
-                    InterviewCard.category.in_(selected_categories),
+                    *card_filters,
                     or_(
                         InterviewCardProgress.card_id.is_(None),
                         InterviewCardProgress.due_at <= now,
@@ -261,9 +279,83 @@ async def get_study_session(
         for card, progress in rows[:limit]
     ]
     return InterviewStudySession(
-        deck=await _deck_list_item(session, user.id, deck, track),
+        deck=await _deck_list_item(
+            session,
+            user.id,
+            deck,
+            track,
+            frequent_only=frequent_only,
+        ),
         cards=cards,
     )
+
+
+async def search_interview_cards(
+    session: AsyncSession,
+    user: User,
+    deck_slug: str,
+    query: str,
+    limit: int,
+    *,
+    frequent_only: bool = False,
+) -> list[InterviewCardStudy]:
+    deck, _track = await _public_deck_model(session, deck_slug, user)
+    selected_categories = await _selected_categories(session, user.id, deck.id)
+    if not selected_categories:
+        return []
+
+    normalized_query = query.strip()
+    if not normalized_query:
+        return []
+    search_query = func.websearch_to_tsquery(
+        "russian",
+        normalized_query,
+    ).op("||")(
+        func.websearch_to_tsquery("simple", normalized_query),
+    )
+    card_filters = [
+        InterviewCard.deck_id == deck.id,
+        InterviewCard.is_published.is_(True),
+        InterviewCard.category.in_(selected_categories),
+    ]
+    if frequent_only:
+        card_filters.append(effective_frequent_predicate())
+    card_filters.append(InterviewCard.search_vector.op("@@")(search_query))
+    rank = func.ts_rank_cd(InterviewCard.search_vector, search_query)
+
+    rows = (
+        await session.execute(
+            select(InterviewCard, InterviewCardProgress)
+            .outerjoin(
+                InterviewCardProgress,
+                (InterviewCardProgress.card_id == InterviewCard.id)
+                & (InterviewCardProgress.user_id == user.id),
+            )
+            .where(*card_filters)
+            .order_by(
+                rank.desc(),
+                effective_frequent_predicate().desc(),
+                InterviewCard.category,
+                InterviewCard.position,
+            )
+            .limit(limit)
+        )
+    ).all()
+    return [
+        InterviewCardStudy(
+            id=card.id,
+            slug=card.slug,
+            category=card.category,
+            subcategory=card.subcategory,
+            companies=card.companies,
+            question_markdown=card.question_markdown,
+            answer_markdown=card.answer_markdown,
+            frequency=effective_card_frequency(card),
+            is_new=progress is None,
+            repetitions=progress.repetitions if progress is not None else 0,
+        )
+        for card, progress in rows
+    ]
 
 
 async def get_interview_topics(
@@ -345,6 +437,8 @@ def _next_interval(
     if rating is InterviewReviewRating.GOOD:
         interval = 2 if progress.interval_days == 0 else round(progress.interval_days * ease)
         return min(365, max(2, interval)), ease
+    if rating is InterviewReviewRating.KNOWN:
+        return 30, max(2.65, ease)
     interval = 4 if progress.interval_days == 0 else round(progress.interval_days * ease * 1.3)
     return min(365, max(4, interval)), ease + 0.15
 

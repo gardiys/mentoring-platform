@@ -6,7 +6,11 @@ import type { InterviewReviewRating } from "../../types/api";
 export const interviewKeys = {
   all: ["interviews"] as const,
   decks: ["interviews", "decks"] as const,
-  session: (slug: string) => ["interviews", "session", slug] as const,
+  sessionRoot: (slug: string) => ["interviews", "session", slug] as const,
+  session: (slug: string, frequentOnly: boolean) =>
+    [...interviewKeys.sessionRoot(slug), { frequentOnly }] as const,
+  cardSearch: (slug: string, query: string, frequentOnly: boolean) =>
+    ["interviews", "card-search", slug, query, { frequentOnly }] as const,
   topics: (slug: string) => ["interviews", "topics", slug] as const,
 };
 
@@ -17,10 +21,22 @@ export function useInterviewDecks() {
   });
 }
 
-export function useInterviewSession(slug: string) {
+export function useInterviewSession(slug: string, frequentOnly = false) {
   return useQuery({
-    queryKey: interviewKeys.session(slug),
-    queryFn: () => api.interviewSession(slug),
+    queryKey: interviewKeys.session(slug, frequentOnly),
+    queryFn: () => api.interviewSession(slug, frequentOnly),
+  });
+}
+
+export function useInterviewCardSearch(
+  slug: string,
+  query: string,
+  frequentOnly = false,
+) {
+  return useQuery({
+    queryKey: interviewKeys.cardSearch(slug, query, frequentOnly),
+    queryFn: () => api.searchInterviewCards(slug, query, frequentOnly),
+    enabled: query.trim().length >= 2,
   });
 }
 
@@ -45,7 +61,7 @@ export function useUpdateInterviewTopics() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: interviewKeys.decks }),
         queryClient.invalidateQueries({
-          queryKey: interviewKeys.session(variables.deckSlug),
+          queryKey: interviewKeys.sessionRoot(variables.deckSlug),
         }),
         queryClient.invalidateQueries({
           queryKey: interviewKeys.topics(variables.deckSlug),

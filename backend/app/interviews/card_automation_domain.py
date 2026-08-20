@@ -312,6 +312,8 @@ def next_personal_review(
         interval = max(1, success)
     elif rating is InterviewReviewRating.GOOD:
         interval = (1, 3, 7, 14, 30)[min(success - 1, 4)]
+    elif rating is InterviewReviewRating.KNOWN:
+        interval = 30
     else:
         interval = (3, 7, 14, 30, 60)[min(success - 1, 4)]
     return reference + timedelta(days=interval), success, success >= 4

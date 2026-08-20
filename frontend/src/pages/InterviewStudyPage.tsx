@@ -1,4 +1,5 @@
 import {
+  Accordion,
   Alert,
   Anchor,
   Badge,
@@ -7,18 +8,22 @@ import {
   Group,
   Progress,
   Stack,
+  Switch,
   Text,
+  TextInput,
   Title,
 } from "@mantine/core";
+import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { InterviewTopicSelector } from "../features/interviews/InterviewTopicSelector";
 import {
+  useInterviewCardSearch,
   useInterviewSession,
   useInterviewTopics,
   useReviewInterviewCard,
@@ -60,12 +65,35 @@ const ratings: Array<{
     description: "Редкий пересмотр",
     color: "green",
   },
+  {
+    rating: "known",
+    label: "Знаю отлично",
+    hint: "через 1 месяц",
+    description: "Можно надолго отложить",
+    color: "teal",
+  },
 ];
+
+function questionPreview(markdown: string) {
+  return markdown
+    .replace(/[`*_>#]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export function InterviewStudyPage() {
   const { deckSlug = "" } = useParams();
-  const query = useInterviewSession(deckSlug);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const frequentOnly = searchParams.get("frequent_only") === "true";
+  const searchText = searchParams.get("q") ?? "";
+  const [debouncedSearch] = useDebouncedValue(searchText.trim(), 300);
+  const query = useInterviewSession(deckSlug, frequentOnly);
   const topics = useInterviewTopics(deckSlug);
+  const search = useInterviewCardSearch(
+    deckSlug,
+    debouncedSearch,
+    frequentOnly,
+  );
   const review = useReviewInterviewCard();
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
 
@@ -129,13 +157,131 @@ export function InterviewStudyPage() {
 
       <InterviewTopicSelector deckSlug={deckSlug} topics={topics.data} />
 
+      <Card withBorder>
+        <Stack gap="md">
+          <TextInput
+            label="Поиск по карточкам"
+            description="Ищет по вопросам, ответам и выбранным темам, включая уже изученные карточки"
+            placeholder="Например: индексы в PostgreSQL"
+            value={searchText}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setSearchParams(
+                (current) => {
+                  const next = new URLSearchParams(current);
+                  if (value) next.set("q", value);
+                  else next.delete("q");
+                  return next;
+                },
+                { replace: true },
+              );
+              setRevealedCardId(null);
+            }}
+          />
+          <Switch
+            label="Только частые вопросы"
+            description="Скрыть редкие вопросы из тренировки и результатов поиска"
+            checked={frequentOnly}
+            onChange={(event) => {
+              const checked = event.currentTarget.checked;
+              setSearchParams(
+                (current) => {
+                  const next = new URLSearchParams(current);
+                  if (checked) next.set("frequent_only", "true");
+                  else next.delete("frequent_only");
+                  return next;
+                },
+                { replace: true },
+              );
+              setRevealedCardId(null);
+            }}
+          />
+        </Stack>
+      </Card>
+
       {review.isError && (
         <Alert color="red" title="Не удалось сохранить ответ">
           {review.error.message}
         </Alert>
       )}
 
-      {deck.stats.selected_categories === 0 ? (
+      {searchText.trim().length === 1 ? (
+        <Alert color="blue" title="Введите ещё один символ">
+          Поиск начинается с двух символов.
+        </Alert>
+      ) : debouncedSearch.length >= 2 ? (
+        search.isPending ? (
+          <LoadingState label="Ищем карточки…" />
+        ) : search.isError ? (
+          <ErrorState
+            error={search.error}
+            retry={() => void search.refetch()}
+          />
+        ) : search.data.length === 0 ? (
+          <Card withBorder>
+            <Stack align="center" ta="center">
+              <Title order={2}>Ничего не найдено</Title>
+              <Text c="dimmed">
+                Проверьте формулировку, выбранные темы и фильтр частых вопросов.
+              </Text>
+            </Stack>
+          </Card>
+        ) : (
+          <Stack gap="sm">
+            <Group justify="space-between">
+              <Title order={2}>Результаты поиска</Title>
+              <Badge variant="light">Показано: {search.data.length}</Badge>
+            </Group>
+            <Accordion variant="separated">
+              {search.data.map((item) => (
+                <Accordion.Item key={item.id} value={item.id}>
+                  <Accordion.Control>
+                    <Group justify="space-between" wrap="nowrap" pr="sm">
+                      <Text fw={650}>
+                        {questionPreview(item.question_markdown)}
+                      </Text>
+                      {item.frequency === "frequent" && (
+                        <Badge
+                          color="brandYellow"
+                          c="brandNavy.9"
+                          visibleFrom="sm"
+                        >
+                          Частый
+                        </Badge>
+                      )}
+                    </Group>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Stack gap="md">
+                      <Group gap="xs">
+                        <Badge variant="light">{item.category}</Badge>
+                        {item.subcategory && (
+                          <Badge variant="outline">{item.subcategory}</Badge>
+                        )}
+                        {item.is_new && <Badge variant="outline">Новая</Badge>}
+                      </Group>
+                      <div className="markdown-content">
+                        <ReactMarkdown>{item.question_markdown}</ReactMarkdown>
+                      </div>
+                      <Stack className="interview-answer">
+                        <Text className="technical-label">Ответ</Text>
+                        <div className="markdown-content">
+                          <ReactMarkdown>{item.answer_markdown}</ReactMarkdown>
+                        </div>
+                      </Stack>
+                      {item.companies && (
+                        <Text size="sm" c="dimmed">
+                          Встречался в компаниях: {item.companies}
+                        </Text>
+                      )}
+                    </Stack>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              ))}
+            </Accordion>
+          </Stack>
+        )
+      ) : deck.stats.selected_categories === 0 ? (
         <Card withBorder className="interview-complete-card">
           <Stack align="center" ta="center">
             <Text fz="2.5rem">↑</Text>
