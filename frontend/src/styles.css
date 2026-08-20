@@ -510,6 +510,7 @@ a {
   position: relative;
   display: block;
   width: clamp(190px, 18vw, 270px);
+  height: auto;
   aspect-ratio: 1;
   object-fit: cover;
   justify-self: end;
