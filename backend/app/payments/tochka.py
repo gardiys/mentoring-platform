@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import re
+import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal
@@ -272,10 +273,16 @@ class TochkaPaymentService:
         try:
             if self.client is not None:
                 return await callback(self.client)
+            verify: bool | ssl.SSLContext = True
+            if self.settings.tochka_ca_bundle_path is not None:
+                verify = ssl.create_default_context(
+                    cafile=self.settings.tochka_ca_bundle_path
+                )
             async with httpx.AsyncClient(
                 base_url=_normalize_api_base_url(self.settings.tochka_api_base_url),
                 timeout=self.settings.tochka_request_timeout_seconds,
                 proxy=proxy,
+                verify=verify,
                 # Payment traffic must only use the explicitly configured proxy.
                 # Inheriting HTTP(S)_PROXY from the host can unexpectedly route
                 # bank requests through a TLS-intercepting corporate proxy.
@@ -306,8 +313,8 @@ class TochkaPaymentService:
                 )
                 raise TochkaError(
                     "Could not verify the TLS certificate while connecting to Tochka Bank; "
-                    "leave TOCHKA_PROXY_URL empty for a direct connection or configure the "
-                    "proxy with a publicly trusted certificate"
+                    "check that TOCHKA_CA_BUNDLE_PATH contains the current Russian Trusted CA "
+                    "chain and that TOCHKA_PROXY_URL does not intercept TLS"
                 ) from error
             logger.warning(
                 "Tochka Bank connection failed proxy_configured=%s",
@@ -321,6 +328,15 @@ class TochkaPaymentService:
                 proxy is not None,
             )
             raise TochkaError("Could not complete the request to Tochka Bank") from error
+        except OSError as error:
+            logger.warning(
+                "Tochka Bank CA bundle could not be loaded proxy_configured=%s",
+                proxy is not None,
+            )
+            raise TochkaError(
+                "Could not load the trusted CA bundle for Tochka Bank; "
+                "check TOCHKA_CA_BUNDLE_PATH in the backend container"
+            ) from error
 
 
 def parse_webhook_body(

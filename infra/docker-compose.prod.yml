@@ -43,6 +43,7 @@ x-backend-environment: &backend-environment
   TOCHKA_JWT_TOKEN: ${TOCHKA_JWT_TOKEN:-}
   TOCHKA_API_BASE_URL: ${TOCHKA_API_BASE_URL:-https://enter.tochka.com/uapi}
   TOCHKA_PROXY_URL: ${TOCHKA_PROXY_URL:-}
+  TOCHKA_CA_BUNDLE_PATH: /etc/ssl/certs/ca-certificates.crt
   TOCHKA_PUBLIC_KEY: ${TOCHKA_PUBLIC_KEY:-}
   TOCHKA_CUSTOMER_CODE: ${TOCHKA_CUSTOMER_CODE:-}
   # Tochka accepts only absolute HTTPS redirects. Build them from the same

@@ -44,6 +44,12 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels --no-deps \
     && pip install --no-cache-dir --no-index --find-links=/wheels \
         --require-hashes -r requirements.txt \
     && rm -rf /wheels
+COPY certs/russian_trusted_root_ca.crt /usr/local/share/ca-certificates/russian_trusted_root_ca.crt
+COPY certs/russian_trusted_sub_ca.crt /usr/local/share/ca-certificates/russian_trusted_sub_ca.crt
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 FROM base AS migration
 COPY --chown=mentoring:mentoring app ./app

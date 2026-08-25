@@ -208,6 +208,7 @@ class Settings(BaseSettings):
     tochka_jwt_token: SecretStr | None = None
     tochka_api_base_url: str = "https://enter.tochka.com/uapi"
     tochka_proxy_url: SecretStr | None = None
+    tochka_ca_bundle_path: str | None = None
     tochka_public_key: SecretStr | None = None
     tochka_customer_code: str | None = None
     tochka_redirect_url: str | None = None
@@ -605,6 +606,7 @@ class Settings(BaseSettings):
         "openai_light_review_model",
         "tochka_client_id",
         "tochka_customer_code",
+        "tochka_ca_bundle_path",
         "tochka_redirect_url",
         "tochka_fail_redirect_url",
         mode="before",

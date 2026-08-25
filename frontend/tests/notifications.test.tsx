@@ -64,3 +64,20 @@ it("позволяет прочитать все уведомления", async 
 
   await waitFor(() => expect(markAll).toHaveBeenCalledOnce());
 });
+
+it("отменяет загрузку уведомлений при размонтировании", async () => {
+  let requestSignal: AbortSignal | undefined;
+  vi.spyOn(api, "notifications").mockImplementation(
+    (_limit, _offset, signal) => {
+      requestSignal = signal;
+      return new Promise(() => undefined);
+    },
+  );
+
+  const page = renderPage(<NotificationBell />);
+  await waitFor(() => expect(requestSignal).toBeDefined());
+
+  page.unmount();
+
+  expect(requestSignal?.aborted).toBe(true);
+});

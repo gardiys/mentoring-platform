@@ -645,6 +645,12 @@ TLS-сертификаты. Проверку TLS в платёжном клие�
 Точки не наследует глобальные `HTTP_PROXY`/`HTTPS_PROXY` контейнера и использует
 только явно заданный `TOCHKA_PROXY_URL`.
 
+Backend-образ устанавливает официальные `Russian Trusted Root CA` и
+`Russian Trusted Sub CA`, необходимые для `enter.tochka.com`, в системный bundle
+`/etc/ssl/certs/ca-certificates.crt`. Источник и контрольные отпечатки находятся
+в `backend/certs/README.md`; отключать проверку сертификата через `verify=False`
+не требуется и небезопасно.
+
 Также проверьте параметры чека `TOCHKA_RECEIPT_*` и поставщика `TOCHKA_SUPPLIER_*` из
 `.env.example` в соответствии с вашей системой налогообложения и договором. Для создания чека у
 ученика должен быть указан email. Секреты хранятся только в backend environment и не попадают во

@@ -274,14 +274,16 @@ async def list_notifications(
     session: AsyncSession, user: User, *, limit: int, offset: int
 ) -> NotificationPage:
     filters = (PlatformNotification.user_id == user.id,)
-    total = await session.scalar(
-        select(func.count()).select_from(PlatformNotification).where(*filters)
-    )
-    unread = await session.scalar(
-        select(func.count())
-        .select_from(PlatformNotification)
-        .where(*filters, PlatformNotification.read_at.is_(None))
-    )
+    total, unread = (
+        await session.execute(
+            select(
+                func.count(PlatformNotification.id),
+                func.count(PlatformNotification.id).filter(
+                    PlatformNotification.read_at.is_(None)
+                ),
+            ).where(*filters)
+        )
+    ).one()
     rows = list(
         await session.scalars(
             select(PlatformNotification)

@@ -356,9 +356,10 @@ function personalReviewSearchParams(
 }
 
 export const api = {
-  notifications: (limit = 20, offset = 0) =>
+  notifications: (limit = 20, offset = 0, signal?: AbortSignal) =>
     apiRequest<NotificationPage>(
       `/api/v1/notifications?limit=${limit}&offset=${offset}`,
+      { signal },
     ),
   markNotificationRead: (notificationId: string) =>
     apiRequest<void>(`/api/v1/notifications/${notificationId}/read`, {

@@ -38,6 +38,12 @@ class PlatformNotification(UUIDPrimaryKeyMixin, Base):
             "read_at",
             "created_at",
         ),
+        Index(
+            "ix_platform_notifications_user_created_id",
+            "user_id",
+            "created_at",
+            "id",
+        ),
     )
 
     user_id: Mapped[UUID] = mapped_column(

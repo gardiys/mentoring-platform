@@ -9,8 +9,13 @@ export const notificationKeys = {
 export function useNotifications() {
   return useQuery({
     queryKey: notificationKeys.all,
-    queryFn: () => api.notifications(),
+    queryFn: ({ signal }) => api.notifications(20, 0, signal),
     refetchInterval: 30_000,
+    // A failed background refresh must not immediately create a second
+    // request while the backend or connection is recovering. The next poll
+    // or an explicit retry is enough, and already loaded notifications stay
+    // visible in the cache.
+    retry: false,
   });
 }
 

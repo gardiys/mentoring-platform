@@ -1,7 +1,9 @@
 import json
+import ssl
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
+import certifi
 import httpx
 import jwt
 import pytest
@@ -140,7 +142,7 @@ async def test_payment_transport_tls_failure_is_reported_as_tochka_error() -> No
     ) as client:
         with pytest.raises(
             TochkaError,
-            match="leave TOCHKA_PROXY_URL empty for a direct connection",
+            match="TOCHKA_CA_BUNDLE_PATH contains the current Russian Trusted CA chain",
         ):
             await TochkaPaymentService(_settings(), client).create_payment_link(
                 installment_id=uuid4(),
@@ -190,6 +192,61 @@ async def test_payment_client_does_not_inherit_process_proxy(
     assert result.payment_url == "https://payment.example.com/link"
     assert captured_options["proxy"] is None
     assert captured_options["trust_env"] is False
+
+
+async def test_payment_client_uses_configured_ca_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_options: dict[str, object] = {}
+
+    class CapturingClient:
+        def __init__(self, **options: object) -> None:
+            captured_options.update(options)
+
+        async def __aenter__(self) -> "CapturingClient":
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def post(self, _path: str, **_options: object) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "Data": {
+                        "paymentLinkId": "payment-link-id",
+                        "paymentLink": "https://payment.example.com/link",
+                    }
+                },
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", CapturingClient)
+    settings = _settings().model_copy(update={"tochka_ca_bundle_path": certifi.where()})
+
+    await TochkaPaymentService(settings).create_payment_link(
+        installment_id=uuid4(),
+        payment_link_id="payment-link-id",
+        amount_kopecks=6_250_000,
+        client_name="Иван",
+        client_email="ivan@example.com",
+    )
+
+    assert isinstance(captured_options["verify"], ssl.SSLContext)
+
+
+async def test_payment_client_reports_missing_ca_bundle() -> None:
+    settings = _settings().model_copy(
+        update={"tochka_ca_bundle_path": "/missing/tochka-ca-bundle.crt"}
+    )
+
+    with pytest.raises(TochkaError, match="Could not load the trusted CA bundle"):
+        await TochkaPaymentService(settings).create_payment_link(
+            installment_id=uuid4(),
+            payment_link_id="payment-link-id",
+            amount_kopecks=6_250_000,
+            client_name="Иван",
+            client_email="ivan@example.com",
+        )
 
 
 @pytest.mark.parametrize(
