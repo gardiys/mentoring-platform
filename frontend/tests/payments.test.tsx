@@ -143,6 +143,34 @@ it("ученик сохраняет email перед созданием плат
   ).toBeInTheDocument();
 });
 
+it("после неуспешной оплаты закрывает старую попытку только один раз", async () => {
+  const student = {
+    ...admin,
+    id: dashboard.student_id,
+    role: "student" as const,
+    email: "student@example.com",
+  };
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "myPayments").mockResolvedValue(dashboard);
+  const reportFailure = vi
+    .spyOn(api, "reportFailedPaymentAttempt")
+    .mockResolvedValue(undefined);
+  const installmentId = dashboard.installments[0].id;
+  const paymentLinkId = `mp_${installmentId.replaceAll("-", "")}_r1`;
+
+  const { router } = renderPage(
+    <PaymentsPage />,
+    `/payments?payment_status=failed&payment_link_id=${paymentLinkId}&installment_id=${installmentId}`,
+    "/payments",
+  );
+
+  await waitFor(() =>
+    expect(reportFailure).toHaveBeenCalledWith(installmentId, paymentLinkId),
+  );
+  expect(reportFailure).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(router.state.location.search).toBe(""));
+});
+
 const studentRegistry: AdminPaymentStudentPage = {
   items: [
     {

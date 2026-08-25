@@ -9,9 +9,10 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
@@ -32,6 +33,7 @@ export function PaymentsPage() {
   const updateEmail = useUpdateMyEmail();
   const [email, setEmail] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
+  const handledReturn = useRef<string | null>(null);
 
   useEffect(() => {
     if (!email && me.data?.email) setEmail(me.data.email);
@@ -40,15 +42,51 @@ export function PaymentsPage() {
   useEffect(() => {
     const result = searchParams.get("payment_status");
     if (!result) return;
-    notifications.show({
-      color: result === "success" ? "green" : "red",
-      message:
-        result === "success"
-          ? "Платёж принят. Статус обновится после подтверждения банка."
-          : "Платёж не завершён. Можно повторить попытку.",
+    const paymentLinkId = searchParams.get("payment_link_id");
+    const returnedInstallmentId = searchParams.get("installment_id");
+    const returnKey = `${result}:${paymentLinkId ?? "unknown"}`;
+    if (handledReturn.current === returnKey) return;
+    handledReturn.current = returnKey;
+
+    const cleanedParams = new URLSearchParams(searchParams);
+    cleanedParams.delete("payment_status");
+    cleanedParams.delete("payment_link_id");
+    cleanedParams.delete("installment_id");
+    setSearchParams(cleanedParams, { replace: true });
+
+    void (async () => {
+      if (result !== "success" && paymentLinkId) {
+        const embeddedInstallmentId = paymentLinkId.match(
+          /^mp_([0-9a-f]{32})_r\d+$/i,
+        )?.[1];
+        const installmentId =
+          returnedInstallmentId ??
+          embeddedInstallmentId?.replace(
+            /^(........)(....)(....)(....)(............)$/,
+            "$1-$2-$3-$4-$5",
+          );
+        if (installmentId) {
+          await api.reportFailedPaymentAttempt(
+            installmentId,
+            paymentLinkId,
+          );
+        }
+      }
+      await query.refetch();
+      notifications.show({
+        color: result === "success" ? "green" : "red",
+        message:
+          result === "success"
+            ? "Платёж принят. Статус обновится после подтверждения банка."
+            : "Платёж не завершён. При повторной попытке будет создана новая ссылка.",
+      });
+    })().catch(() => {
+      void query.refetch();
+      notifications.show({
+        color: "red",
+        message: "Платёж не завершён. Обновите страницу и повторите попытку.",
+      });
     });
-    setSearchParams({}, { replace: true });
-    void query.refetch();
   }, [query, searchParams, setSearchParams]);
 
   if (query.isPending) return <LoadingState label="Загружаем платежи…" />;

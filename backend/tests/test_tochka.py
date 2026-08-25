@@ -59,12 +59,13 @@ async def test_payment_receipt_amounts_match_working_onboarding_format(
             },
         )
 
+    installment_id = uuid4()
     async with httpx.AsyncClient(
         base_url="https://enter.tochka.com/uapi",
         transport=httpx.MockTransport(handler),
     ) as client:
         await TochkaPaymentService(_settings(), client).create_payment_link(
-            installment_id=uuid4(),
+            installment_id=installment_id,
             payment_link_id="payment-link-id",
             amount_kopecks=amount_kopecks,
             client_name="Иван",
@@ -84,10 +85,12 @@ async def test_payment_receipt_amounts_match_working_onboarding_format(
     assert parse_qs(success_url.query) == {
         "payment_status": ["success"],
         "payment_link_id": ["payment-link-id"],
+        "installment_id": [str(installment_id)],
     }
     assert parse_qs(failure_url.query) == {
         "payment_status": ["failed"],
         "payment_link_id": ["payment-link-id"],
+        "installment_id": [str(installment_id)],
     }
 
 

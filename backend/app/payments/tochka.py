@@ -132,6 +132,7 @@ class TochkaPaymentService:
             setting_name="TOCHKA_REDIRECT_URL",
             payment_status="success",
             payment_link_id=payment_link_id,
+            installment_id=str(installment_id),
         )
         failure_url = _tochka_redirect_url(
             return_url
@@ -140,6 +141,7 @@ class TochkaPaymentService:
             setting_name="TOCHKA_FAIL_REDIRECT_URL",
             payment_status="failed",
             payment_link_id=payment_link_id,
+            installment_id=str(installment_id),
         )
         data: dict[str, Any] = {
             "customerCode": customer_code,
@@ -275,9 +277,7 @@ class TochkaPaymentService:
                 return await callback(self.client)
             verify: bool | ssl.SSLContext = True
             if self.settings.tochka_ca_bundle_path is not None:
-                verify = ssl.create_default_context(
-                    cafile=self.settings.tochka_ca_bundle_path
-                )
+                verify = ssl.create_default_context(cafile=self.settings.tochka_ca_bundle_path)
             async with httpx.AsyncClient(
                 base_url=_normalize_api_base_url(self.settings.tochka_api_base_url),
                 timeout=self.settings.tochka_request_timeout_seconds,

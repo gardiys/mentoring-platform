@@ -593,24 +593,30 @@ async def create_payment_link(
         or installment.status is PaymentInstallmentStatus.CANCELLED
     ):
         api_error(409, "payment_cancelled", "This payment was cancelled after employment ended")
+    manual_review_exists = await session.scalar(
+        select(PaymentAttempt.id).where(
+            PaymentAttempt.installment_id == installment.id,
+            PaymentAttempt.status == PaymentAttemptStatus.MANUAL_REVIEW,
+        )
+    )
+    if manual_review_exists is not None:
+        api_error(
+            409,
+            "payment_requires_manual_review",
+            "The bank payment is awaiting administrator review",
+        )
     existing = await session.scalar(
         select(PaymentAttempt)
         .where(
             PaymentAttempt.installment_id == installment.id,
-            PaymentAttempt.status.in_(
-                [PaymentAttemptStatus.PENDING, PaymentAttemptStatus.MANUAL_REVIEW]
-            ),
+            PaymentAttempt.status == PaymentAttemptStatus.PENDING,
             PaymentAttempt.payment_url.is_not(None),
         )
         .order_by(PaymentAttempt.created_at.desc())
     )
     if existing is not None and existing.payment_url is not None:
-        if settings.app_env != "production" or _is_absolute_https_url(existing.payment_url):
-            return PaymentLinkRead(
-                installment_id=installment.id,
-                payment_url=existing.payment_url,
-            )
-        # Old development/imported links must never escape to a production browser.
+        # A click on "Pay" always starts a new bank attempt. A link may have
+        # expired after the student opened it without completing the payment.
         existing.status = PaymentAttemptStatus.REVOKED
         existing.payment_url = None
 
@@ -646,6 +652,39 @@ async def create_payment_link(
     installment.status = PaymentInstallmentStatus.PENDING
     await session.commit()
     return PaymentLinkRead(installment_id=installment.id, payment_url=result.payment_url)
+
+
+async def mark_payment_attempt_failed(
+    session: AsyncSession,
+    student: User,
+    installment_id: UUID,
+    payment_link_id: str,
+) -> None:
+    row = (
+        await session.execute(
+            select(PaymentAttempt, PaymentInstallment)
+            .join(PaymentInstallment, PaymentInstallment.id == PaymentAttempt.installment_id)
+            .join(StudentEmployment, StudentEmployment.id == PaymentInstallment.employment_id)
+            .where(
+                PaymentInstallment.id == installment_id,
+                StudentEmployment.student_id == student.id,
+                PaymentAttempt.payment_link_id == payment_link_id,
+            )
+            .with_for_update()
+        )
+    ).one_or_none()
+    if row is None:
+        api_error(404, "payment_attempt_not_found", "Payment attempt was not found")
+
+    attempt, installment = row
+    if attempt.status is not PaymentAttemptStatus.PENDING:
+        return
+
+    attempt.status = PaymentAttemptStatus.FAILED
+    attempt.payment_url = None
+    if installment.status is PaymentInstallmentStatus.PENDING:
+        installment.status = PaymentInstallmentStatus.SCHEDULED
+    await session.commit()
 
 
 async def create_admin_tochka_test_payment(

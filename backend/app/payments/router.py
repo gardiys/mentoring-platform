@@ -79,6 +79,7 @@ from app.payments.service import (
     mark_installment_paid,
     mark_mentor_payout_paid,
     mark_mentor_reward_paid,
+    mark_payment_attempt_failed,
     mentor_reward_summary,
     payment_dashboard,
     payout_receipt_upload,
@@ -201,6 +202,20 @@ async def installment_payment_link(
     student: StudentUser,
 ) -> PaymentLinkRead:
     return await create_payment_link(session, student, installment_id)
+
+
+@router.post(
+    "/installments/{installment_id}/attempts/{payment_link_id}/failed",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def failed_installment_payment_attempt(
+    installment_id: UUID,
+    payment_link_id: str,
+    session: Session,
+    student: StudentUser,
+) -> Response:
+    await mark_payment_attempt_failed(session, student, installment_id, payment_link_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @mentor_router.get(

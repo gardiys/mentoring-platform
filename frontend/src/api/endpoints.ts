@@ -384,6 +384,14 @@ export const api = {
       `/api/v1/payments/installments/${installmentId}/link`,
       { method: "POST" },
     ),
+  reportFailedPaymentAttempt: (
+    installmentId: string,
+    paymentLinkId: string,
+  ) =>
+    apiRequest<void>(
+      `/api/v1/payments/installments/${encodeURIComponent(installmentId)}/attempts/${encodeURIComponent(paymentLinkId)}/failed`,
+      { method: "POST" },
+    ),
   mentorStudentPayments: (studentId: string) =>
     apiRequest<StudentPaymentDashboard>(
       `/api/v1/mentor/students/${studentId}/payments`,

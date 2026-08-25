@@ -40,7 +40,7 @@ from app.payments.service import (
     set_mentor_payout_receipt,
 )
 from app.payments.tochka import PaymentLinkResult
-from app.users.models import User
+from app.users.models import User, UserRole
 from tests.conftest import SeededData, TestSession, auth
 
 
@@ -1173,7 +1173,7 @@ async def test_entry_and_exclusion_create_one_time_mentor_rewards(
     assert {reward["mentor_name"] for reward in student_rewards} == {"Антон"}
 
 
-async def test_development_payment_link_is_idempotent(
+async def test_each_payment_button_click_creates_a_fresh_link(
     client: AsyncClient, seeded: SeededData
 ) -> None:
     dashboard = await client.put(
@@ -1195,7 +1195,100 @@ async def test_development_payment_link_is_idempotent(
         headers=auth(seeded.student_id),
     )
     assert first.status_code == second.status_code == 200
-    assert first.json()["payment_url"] == second.json()["payment_url"]
+    assert first.json()["payment_url"] != second.json()["payment_url"]
+
+    async with TestSession() as session:
+        attempts = list(
+            await session.scalars(
+                select(PaymentAttempt)
+                .where(PaymentAttempt.installment_id == UUID(installment_id))
+                .order_by(PaymentAttempt.created_at)
+            )
+        )
+    assert [attempt.status for attempt in attempts] == [
+        PaymentAttemptStatus.REVOKED,
+        PaymentAttemptStatus.PENDING,
+    ]
+    assert attempts[0].payment_url is None
+
+
+async def test_failed_payment_return_invalidates_link_and_retry_creates_new_one(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    dashboard = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.mentor_id),
+        json={
+            "company_name": "Yandex",
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 200_000,
+        },
+    )
+    installment_id = dashboard.json()["installments"][0]["id"]
+    first = await client.post(
+        f"/api/v1/payments/installments/{installment_id}/link",
+        headers=auth(seeded.student_id),
+    )
+    assert first.status_code == 200, first.text
+    first_url = first.json()["payment_url"]
+    payment_link_id = parse_qs(urlparse(first_url).query)["local_payment"][0]
+
+    failed = await client.post(
+        f"/api/v1/payments/installments/{installment_id}/attempts/{payment_link_id}/failed",
+        headers=auth(seeded.student_id),
+    )
+    assert failed.status_code == 204, failed.text
+
+    retry = await client.post(
+        f"/api/v1/payments/installments/{installment_id}/link",
+        headers=auth(seeded.student_id),
+    )
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["payment_url"] != first_url
+
+    async with TestSession() as session:
+        attempts = list(
+            await session.scalars(
+                select(PaymentAttempt)
+                .where(PaymentAttempt.installment_id == UUID(installment_id))
+                .order_by(PaymentAttempt.created_at)
+            )
+        )
+    assert [attempt.status for attempt in attempts] == [
+        PaymentAttemptStatus.FAILED,
+        PaymentAttemptStatus.PENDING,
+    ]
+    assert attempts[0].payment_url is None
+
+
+async def test_student_cannot_invalidate_another_students_payment_attempt(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    other_student_id = uuid4()
+    async with TestSession() as session:
+        session.add(User(id=other_student_id, first_name="Пётр", role=UserRole.STUDENT))
+        await session.commit()
+    dashboard = await client.put(
+        f"/api/v1/mentor/students/{seeded.student_id}/employment",
+        headers=auth(seeded.mentor_id),
+        json={
+            "company_name": "Yandex",
+            "start_date": "2026-08-12",
+            "net_salary_rubles": 200_000,
+        },
+    )
+    installment_id = dashboard.json()["installments"][0]["id"]
+    first = await client.post(
+        f"/api/v1/payments/installments/{installment_id}/link",
+        headers=auth(seeded.student_id),
+    )
+    payment_link_id = parse_qs(urlparse(first.json()["payment_url"]).query)["local_payment"][0]
+
+    forbidden = await client.post(
+        f"/api/v1/payments/installments/{installment_id}/attempts/{payment_link_id}/failed",
+        headers=auth(other_student_id),
+    )
+    assert forbidden.status_code == 404
 
 
 async def test_production_replaces_stale_non_https_payment_link(
