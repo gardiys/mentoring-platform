@@ -155,7 +155,9 @@ it("после неуспешной оплаты закрывает старую
   const reportFailure = vi
     .spyOn(api, "reportFailedPaymentAttempt")
     .mockResolvedValue(undefined);
-  const installmentId = dashboard.installments[0].id;
+  const installment = dashboard.installments.at(0);
+  if (!installment) throw new Error("Тестовый платёж не создан");
+  const installmentId = installment.id;
   const paymentLinkId = `mp_${installmentId.replaceAll("-", "")}_r1`;
 
   const { router } = renderPage(
