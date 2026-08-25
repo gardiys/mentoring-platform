@@ -264,19 +264,63 @@ class TochkaPaymentService:
         self,
         callback: Callable[[httpx.AsyncClient], Awaitable[dict[str, Any]]],
     ) -> dict[str, Any]:
-        if self.client is not None:
-            return await callback(self.client)
         proxy = (
             self.settings.tochka_proxy_url.get_secret_value()
             if self.settings.tochka_proxy_url is not None
             else None
         )
-        async with httpx.AsyncClient(
-            base_url=_normalize_api_base_url(self.settings.tochka_api_base_url),
-            timeout=self.settings.tochka_request_timeout_seconds,
-            proxy=proxy,
-        ) as client:
-            return await callback(client)
+        try:
+            if self.client is not None:
+                return await callback(self.client)
+            async with httpx.AsyncClient(
+                base_url=_normalize_api_base_url(self.settings.tochka_api_base_url),
+                timeout=self.settings.tochka_request_timeout_seconds,
+                proxy=proxy,
+                # Payment traffic must only use the explicitly configured proxy.
+                # Inheriting HTTP(S)_PROXY from the host can unexpectedly route
+                # bank requests through a TLS-intercepting corporate proxy.
+                trust_env=False,
+            ) as client:
+                return await callback(client)
+        except httpx.TimeoutException as error:
+            logger.warning(
+                "Tochka Bank request timed out proxy_configured=%s",
+                proxy is not None,
+            )
+            raise TochkaError("Tochka Bank did not respond before the timeout") from error
+        except httpx.ProxyError as error:
+            logger.warning(
+                "Tochka Bank proxy connection failed proxy_configured=%s",
+                proxy is not None,
+            )
+            raise TochkaError(
+                "Could not connect to Tochka Bank through TOCHKA_PROXY_URL; "
+                "check the proxy address, access rules and TLS certificate"
+            ) from error
+        except httpx.ConnectError as error:
+            message = str(error).lower()
+            if "certificate_verify_failed" in message or "self-signed certificate" in message:
+                logger.warning(
+                    "Tochka Bank TLS certificate verification failed proxy_configured=%s",
+                    proxy is not None,
+                )
+                raise TochkaError(
+                    "Could not verify the TLS certificate while connecting to Tochka Bank; "
+                    "leave TOCHKA_PROXY_URL empty for a direct connection or configure the "
+                    "proxy with a publicly trusted certificate"
+                ) from error
+            logger.warning(
+                "Tochka Bank connection failed proxy_configured=%s",
+                proxy is not None,
+            )
+            raise TochkaError("Could not connect to Tochka Bank") from error
+        except httpx.RequestError as error:
+            logger.warning(
+                "Tochka Bank transport failed error_type=%s proxy_configured=%s",
+                type(error).__name__,
+                proxy is not None,
+            )
+            raise TochkaError("Could not complete the request to Tochka Bank") from error
 
 
 def parse_webhook_body(

@@ -127,6 +127,71 @@ async def test_payment_link_error_contains_safe_provider_detail() -> None:
             )
 
 
+async def test_payment_transport_tls_failure_is_reported_as_tochka_error() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(
+            "[SSL: CERTIFICATE_VERIFY_FAILED] self-signed certificate in certificate chain",
+            request=request,
+        )
+
+    async with httpx.AsyncClient(
+        base_url="https://enter.tochka.com/uapi",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        with pytest.raises(
+            TochkaError,
+            match="leave TOCHKA_PROXY_URL empty for a direct connection",
+        ):
+            await TochkaPaymentService(_settings(), client).create_payment_link(
+                installment_id=uuid4(),
+                payment_link_id="payment-link-id",
+                amount_kopecks=6_250_000,
+                client_name="Иван",
+                client_email="ivan@example.com",
+            )
+
+
+async def test_payment_client_does_not_inherit_process_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_options: dict[str, object] = {}
+
+    class CapturingClient:
+        def __init__(self, **options: object) -> None:
+            captured_options.update(options)
+
+        async def __aenter__(self) -> "CapturingClient":
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def post(self, _path: str, **_options: object) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "Data": {
+                        "paymentLinkId": "payment-link-id",
+                        "paymentLink": "https://payment.example.com/link",
+                    }
+                },
+            )
+
+    monkeypatch.setattr(httpx, "AsyncClient", CapturingClient)
+
+    result = await TochkaPaymentService(_settings()).create_payment_link(
+        installment_id=uuid4(),
+        payment_link_id="payment-link-id",
+        amount_kopecks=6_250_000,
+        client_name="Иван",
+        client_email="ivan@example.com",
+    )
+
+    assert result.payment_url == "https://payment.example.com/link"
+    assert captured_options["proxy"] is None
+    assert captured_options["trust_env"] is False
+
+
 @pytest.mark.parametrize(
     "redirect_url",
     [

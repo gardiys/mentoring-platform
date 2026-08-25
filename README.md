@@ -639,6 +639,12 @@ TOCHKA_FAIL_REDIRECT_URL=https://platform.example.com/payments
 TOCHKA_PAYMENT_MODES=sbp,card
 ```
 
+`TOCHKA_PROXY_URL` не нужно заполнять, если API Точки доступен с сервера
+напрямую. Не используйте для банка Telegram/OpenAI proxy, который подменяет
+TLS-сертификаты. Проверку TLS в платёжном клиенте отключать нельзя. Клиент
+Точки не наследует глобальные `HTTP_PROXY`/`HTTPS_PROXY` контейнера и использует
+только явно заданный `TOCHKA_PROXY_URL`.
+
 Также проверьте параметры чека `TOCHKA_RECEIPT_*` и поставщика `TOCHKA_SUPPLIER_*` из
 `.env.example` в соответствии с вашей системой налогообложения и договором. Для создания чека у
 ученика должен быть указан email. Секреты хранятся только в backend environment и не попадают во
