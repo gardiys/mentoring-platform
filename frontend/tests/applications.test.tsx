@@ -38,6 +38,11 @@ const application: OnboardingApplicationDetail = {
   military_document_status: "Да",
   referral_source: "YouTube",
   form_answers: {},
+  form_answer_source: "none",
+  form_state: null,
+  form_complete: false,
+  form_missing_fields: [],
+  form_documents: {},
   bookings: [],
   payments: [],
   events: [
@@ -109,6 +114,64 @@ it("показывает воронку, карточку и выполняет 
       null,
     ),
   );
+});
+
+it("показывает подробную анкету, полноту и загруженные документы", async () => {
+  const detailedApplication: OnboardingApplicationDetail = {
+    ...application,
+    status: "APPLICATION_FORM_STARTED",
+    form_answer_source: "redis_draft",
+    form_state: "ApplicationFormStates:personal_data_consent",
+    form_complete: true,
+    form_missing_fields: [],
+    form_answers: {
+      direction: "Python",
+      last_name: "Иванов",
+      first_name: "Иван",
+      patronymic: "Иванович",
+      passport_series: "1234",
+      passport_number: "567890",
+      registration_address: "г. Москва, ул. Ленина, д. 1",
+      phone: "+79999999999",
+      email: "student@example.com",
+      personal_data_consent: true,
+    },
+    form_documents: {
+      passport_main_page_file: {
+        uploaded: true,
+        url: "https://files.example/passport.jpg",
+        content_type: "image/jpeg",
+        size: 2048,
+      },
+      passport_registration_page_file: {
+        uploaded: false,
+        url: null,
+        content_type: null,
+        size: null,
+      },
+    },
+  };
+  vi.spyOn(api, "adminApplications").mockResolvedValue({
+    ...page,
+    items: [detailedApplication],
+  });
+  vi.spyOn(api, "adminApplication").mockResolvedValue(detailedApplication);
+
+  renderPage(<AdminApplicationsPage />);
+  await userEvent.click(await screen.findByRole("button", { name: "Открыть" }));
+
+  expect(await screen.findByText("Заполнена полностью")).toBeInTheDocument();
+  expect(
+    screen.getByText("Черновик из текущего диалога с ботом"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Текущий шаг: согласие на обработку данных"),
+  ).toBeInTheDocument();
+  expect(screen.getByText("567890")).toBeInTheDocument();
+  expect(screen.getByText("г. Москва, ул. Ленина, д. 1")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Открыть документ" }),
+  ).toHaveAttribute("href", "https://files.example/passport.jpg");
 });
 
 it("возвращает заявку на предыдущий статус с подтверждением", async () => {

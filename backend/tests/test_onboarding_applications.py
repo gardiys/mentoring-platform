@@ -82,7 +82,22 @@ async def test_action_forwards_admin_identity() -> None:
             "study_time_per_day": None,
             "military_document_status": None,
             "referral_source": None,
-            "form_answers": {},
+            "form_answers": {
+                "first_name": "Иван",
+                "passport_series": "1234",
+            },
+            "form_answer_source": "database",
+            "form_state": None,
+            "form_complete": True,
+            "form_missing_fields": [],
+            "form_documents": {
+                "passport_main_page_file": {
+                    "uploaded": True,
+                    "url": "https://files.example/passport.jpg",
+                    "content_type": "image/jpeg",
+                    "size": 2048,
+                }
+            },
             "bookings": [],
             "payments": [],
             "events": [],
@@ -108,6 +123,9 @@ async def test_action_forwards_admin_identity() -> None:
         "actor_telegram_id": 777,
     }
     assert result.application.status == "REJECTED_BEFORE_CALL"
+    assert result.application.form_complete is True
+    assert result.application.form_answers["passport_series"] == "1234"
+    assert result.application.form_documents["passport_main_page_file"].uploaded is True
 
 
 @pytest.mark.asyncio

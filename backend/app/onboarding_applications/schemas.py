@@ -70,6 +70,13 @@ class OnboardingPayment(BaseModel):
     created_at: str
 
 
+class OnboardingApplicationFormDocument(BaseModel):
+    uploaded: bool
+    url: str | None
+    content_type: str | None
+    size: int | None
+
+
 class OnboardingApplicationDetail(OnboardingApplicationListItem):
     rollback_status: str | None = None
     age: str | None
@@ -79,6 +86,11 @@ class OnboardingApplicationDetail(OnboardingApplicationListItem):
     military_document_status: str | None
     referral_source: str | None
     form_answers: dict[str, Any]
+    form_answer_source: Literal["database", "redis_draft", "none"] = "none"
+    form_state: str | None = None
+    form_complete: bool = False
+    form_missing_fields: list[str] = Field(default_factory=list)
+    form_documents: dict[str, OnboardingApplicationFormDocument] = Field(default_factory=dict)
     bookings: list[OnboardingBooking]
     payments: list[OnboardingPayment]
     events: list[OnboardingApplicationEvent]

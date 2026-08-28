@@ -1896,6 +1896,13 @@ export interface OnboardingApplicationPayment {
   created_at: string;
 }
 
+export interface OnboardingApplicationFormDocument {
+  uploaded: boolean;
+  url: string | null;
+  content_type: string | null;
+  size: number | null;
+}
+
 export interface OnboardingApplicationDetail extends OnboardingApplicationListItem {
   rollback_status: string | null;
   age: string | null;
@@ -1905,6 +1912,11 @@ export interface OnboardingApplicationDetail extends OnboardingApplicationListIt
   military_document_status: string | null;
   referral_source: string | null;
   form_answers: Record<string, unknown>;
+  form_answer_source: "database" | "redis_draft" | "none";
+  form_state: string | null;
+  form_complete: boolean;
+  form_missing_fields: string[];
+  form_documents: Record<string, OnboardingApplicationFormDocument>;
   bookings: OnboardingApplicationBooking[];
   payments: OnboardingApplicationPayment[];
   events: OnboardingApplicationEvent[];

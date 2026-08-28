@@ -8870,6 +8870,17 @@ export interface components {
             delivered: boolean | null;
             application: components["schemas"]["OnboardingApplicationDetail"];
         };
+        /** OnboardingApplicationFormDocument */
+        OnboardingApplicationFormDocument: {
+            /** Uploaded */
+            uploaded: boolean;
+            /** Url */
+            url: string | null;
+            /** Content Type */
+            content_type: string | null;
+            /** Size */
+            size: number | null;
+        };
         /** OnboardingApplicationDetail */
         OnboardingApplicationDetail: {
             /** Applicant Id */
@@ -8917,6 +8928,18 @@ export interface components {
             /** Form Answers */
             form_answers: {
                 [key: string]: unknown;
+            };
+            /** Form Answer Source */
+            form_answer_source?: "database" | "redis_draft" | "none";
+            /** Form State */
+            form_state?: string | null;
+            /** Form Complete */
+            form_complete?: boolean;
+            /** Form Missing Fields */
+            form_missing_fields?: string[];
+            /** Form Documents */
+            form_documents?: {
+                [key: string]: components["schemas"]["OnboardingApplicationFormDocument"];
             };
             /** Bookings */
             bookings: components["schemas"]["OnboardingBooking"][];

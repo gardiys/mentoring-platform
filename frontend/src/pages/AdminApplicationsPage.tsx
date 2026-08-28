@@ -168,14 +168,53 @@ const ACTIONS: Record<
 };
 
 const FORM_LABELS: Record<string, string> = {
+  direction: "Направление",
   last_name: "Фамилия",
   first_name: "Имя",
   patronymic: "Отчество",
+  passport_series: "Серия паспорта",
+  passport_number: "Номер паспорта",
+  registration_address: "Адрес регистрации",
   phone: "Телефон",
   email: "Email",
   telegram_username: "Telegram",
-  direction: "Направление",
   personal_data_consent: "Согласие на обработку данных",
+  personal_data_consent_accepted_at: "Согласие принято",
+};
+
+const FORM_FIELD_ORDER = [
+  "direction",
+  "last_name",
+  "first_name",
+  "patronymic",
+  "passport_series",
+  "passport_number",
+  "registration_address",
+  "phone",
+  "email",
+  "telegram_username",
+  "personal_data_consent",
+  "personal_data_consent_accepted_at",
+] as const;
+
+const FORM_DOCUMENT_LABELS: Record<string, string> = {
+  passport_main_page_file: "Главная страница паспорта",
+  passport_registration_page_file: "Страница с регистрацией",
+};
+
+const FORM_STATE_LABELS: Record<string, string> = {
+  direction: "выбор направления",
+  last_name: "фамилия",
+  first_name: "имя",
+  patronymic: "отчество",
+  passport_series: "серия паспорта",
+  passport_number: "номер паспорта",
+  registration_address: "адрес регистрации",
+  phone: "телефон",
+  email: "email",
+  passport_main_page_file: "главная страница паспорта",
+  passport_registration_page_file: "страница с регистрацией",
+  personal_data_consent: "согласие на обработку данных",
 };
 
 function statusLabel(status: string) {
@@ -202,6 +241,30 @@ function formatDate(value: string | null, withTime = false) {
     year: "numeric",
     ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
   }).format(new Date(value));
+}
+
+function formatFileSize(value: number | null) {
+  if (value === null) return null;
+  if (value < 1024) return `${value} Б`;
+  if (value < 1024 * 1024) return `${Math.round(value / 1024)} КБ`;
+  return `${(value / (1024 * 1024)).toFixed(1)} МБ`;
+}
+
+function formStateLabel(value: string | null) {
+  if (!value) return null;
+  const state = value.split(":").at(-1) ?? value;
+  return FORM_STATE_LABELS[state] ?? state;
+}
+
+function formValue(application: OnboardingApplicationDetail, key: string) {
+  const value = application.form_answers[key];
+  if (
+    key === "personal_data_consent_accepted_at" &&
+    typeof value === "string"
+  ) {
+    return formatDate(value, true);
+  }
+  return value;
 }
 
 function countStatuses(
@@ -232,9 +295,23 @@ function Value({ label, value }: { label: string; value: unknown }) {
 
 function ApplicationDetails({
   application,
+  onRefresh,
+  refreshing,
 }: {
   application: OnboardingApplicationDetail;
+  onRefresh: () => void;
+  refreshing: boolean;
 }) {
+  const showDetailedForm =
+    application.form_answer_source !== "none" ||
+    application.status === "APPLICATION_FORM_STARTED" ||
+    application.status === "APPLICATION_FORM_SUBMITTED";
+  const totalRequiredFields = 12;
+  const completedFields = Math.max(
+    0,
+    totalRequiredFields - application.form_missing_fields.length,
+  );
+
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="flex-start">
@@ -288,19 +365,131 @@ function ApplicationDetails({
         value={application.life_difficulties}
       />
 
-      {Object.keys(application.form_answers).length > 0 && (
+      {showDetailedForm && (
         <>
-          <Divider label="Подробная анкета" labelPosition="left" />
+          <Group justify="space-between" align="center">
+            <Group gap="sm">
+              <Text fw={700}>Подробная анкета</Text>
+              <Badge
+                color={
+                  application.form_complete
+                    ? "green"
+                    : application.form_answer_source === "redis_draft"
+                      ? "yellow"
+                      : "red"
+                }
+                variant="light"
+              >
+                {application.form_complete
+                  ? "Заполнена полностью"
+                  : `${completedFields} из ${totalRequiredFields}`}
+              </Badge>
+            </Group>
+            <Button
+              size="xs"
+              variant="subtle"
+              loading={refreshing}
+              onClick={onRefresh}
+            >
+              Обновить
+            </Button>
+          </Group>
+
+          <Card withBorder padding="md">
+            <Stack gap="xs">
+              <Text size="sm" fw={600}>
+                {application.form_answer_source === "redis_draft"
+                  ? "Черновик из текущего диалога с ботом"
+                  : application.form_answer_source === "database"
+                    ? "Сохранённая анкета"
+                    : "Данные анкеты пока не найдены"}
+              </Text>
+              {application.form_answer_source === "redis_draft" && (
+                <Text size="sm" c="dimmed">
+                  Кандидат ещё не завершил отправку анкеты. Данные показаны
+                  напрямую из Redis и обновляются по кнопке выше.
+                </Text>
+              )}
+              {formStateLabel(application.form_state) && (
+                <Text size="sm" c="dimmed">
+                  Текущий шаг: {formStateLabel(application.form_state)}
+                </Text>
+              )}
+              {application.form_missing_fields.length > 0 && (
+                <Text size="sm" c="red">
+                  Не заполнено:{" "}
+                  {application.form_missing_fields
+                    .map(
+                      (key) =>
+                        FORM_LABELS[key] ?? FORM_DOCUMENT_LABELS[key] ?? key,
+                    )
+                    .join(", ")}
+                </Text>
+              )}
+            </Stack>
+          </Card>
+
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-            {Object.entries(application.form_answers)
-              .filter(([key]) => FORM_LABELS[key])
-              .map(([key, value]) => (
-                <Value
-                  key={key}
-                  label={FORM_LABELS[key] ?? key}
-                  value={value}
-                />
-              ))}
+            {FORM_FIELD_ORDER.map((key) => (
+              <Value
+                key={key}
+                label={FORM_LABELS[key] ?? key}
+                value={formValue(application, key)}
+              />
+            ))}
+          </SimpleGrid>
+
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+            {Object.entries(FORM_DOCUMENT_LABELS).map(([key, label]) => {
+              const document = application.form_documents[key];
+              const missing = application.form_missing_fields.includes(key);
+              return (
+                <Card key={key} withBorder padding="md">
+                  <Stack gap="xs">
+                    <Group justify="space-between">
+                      <Text size="sm" fw={600}>
+                        {label}
+                      </Text>
+                      <Badge
+                        color={
+                          document?.uploaded
+                            ? "green"
+                            : missing
+                              ? "red"
+                              : "gray"
+                        }
+                        variant="light"
+                      >
+                        {document?.uploaded
+                          ? "Загружен"
+                          : missing
+                            ? "Не загружен"
+                            : "Указан прочерк"}
+                      </Badge>
+                    </Group>
+                    {document?.uploaded && (
+                      <Text size="xs" c="dimmed">
+                        {[document.content_type, formatFileSize(document.size)]
+                          .filter(Boolean)
+                          .join(" · ") || "Файл загружен"}
+                      </Text>
+                    )}
+                    {document?.url && (
+                      <Button
+                        component="a"
+                        href={document.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        size="xs"
+                        variant="light"
+                      >
+                        Открыть документ
+                      </Button>
+                    )}
+                  </Stack>
+                </Card>
+              );
+            })}
           </SimpleGrid>
         </>
       )}
@@ -626,7 +815,11 @@ export function AdminApplicationsPage() {
           />
         ) : detail.data ? (
           <Stack gap="xl">
-            <ApplicationDetails application={detail.data} />
+            <ApplicationDetails
+              application={detail.data}
+              onRefresh={() => void detail.refetch()}
+              refreshing={detail.isFetching}
+            />
             {detail.data.available_actions.length > 0 && (
               <Card withBorder className="application-actions">
                 <Stack>
