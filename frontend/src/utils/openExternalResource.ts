@@ -1,12 +1,16 @@
+import { isTelegramLaunchContext } from "../platform/telegramSdk";
+
 /**
- * Opens a temporary window while the user gesture is still active, then
- * navigates it after the backend returns a short-lived signed URL. This avoids
- * browsers treating the delayed navigation as an unsolicited popup.
+ * Opens a temporary window in a regular browser while the user gesture is
+ * still active, then navigates it after the backend returns a signed URL.
+ * Telegram Mini Apps must not receive the temporary about:blank URL because
+ * their native link confirmation dialog captures it before it can be replaced.
  */
 export async function openExternalResource(
   request: Promise<string>,
 ): Promise<void> {
-  const popup = window.open("about:blank", "_blank");
+  const isTelegram = isTelegramLaunchContext();
+  const popup = isTelegram ? null : window.open("about:blank", "_blank");
   if (popup) popup.opener = null;
 
   try {
@@ -19,6 +23,11 @@ export async function openExternalResource(
     }
     if (url.protocol !== "https:" || url.username || url.password) {
       throw new Error("Разрешены только абсолютные HTTPS-ссылки");
+    }
+
+    if (isTelegram && window.Telegram?.WebApp?.openLink) {
+      window.Telegram.WebApp.openLink(url.href);
+      return;
     }
 
     if (popup && !popup.closed) {

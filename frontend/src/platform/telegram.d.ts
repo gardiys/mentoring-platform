@@ -21,6 +21,7 @@ interface TelegramWebApp {
   onEvent?(event: "themeChanged", callback: () => void): void;
   offEvent?(event: "themeChanged", callback: () => void): void;
   close?(): void;
+  openLink?(url: string, options?: { try_instant_view?: boolean }): void;
 }
 
 interface Window {

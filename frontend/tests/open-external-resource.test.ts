@@ -21,6 +21,9 @@ function mockPopup(): PopupMock {
 }
 
 afterEach(() => {
+  delete (window as Window & { TelegramWebviewProxy?: unknown })
+    .TelegramWebviewProxy;
+  delete window.Telegram;
   vi.restoreAllMocks();
 });
 
@@ -66,5 +69,24 @@ describe("openExternalResource", () => {
 
     expect(popup.location.replace).not.toHaveBeenCalled();
     expect(popup.close).toHaveBeenCalledOnce();
+  });
+
+  it("opens the resolved URL through Telegram without exposing about:blank", async () => {
+    const openLink = vi.fn();
+    (window as Window & { TelegramWebviewProxy?: unknown }).TelegramWebviewProxy = {
+      postEvent: vi.fn(),
+    };
+    window.Telegram = { WebApp: { openLink } };
+    const windowOpen = vi.spyOn(window, "open");
+
+    await openExternalResource(
+      Promise.resolve("https://secure.tochka.test/payment"),
+    );
+
+    expect(windowOpen).not.toHaveBeenCalled();
+    expect(openLink).toHaveBeenCalledOnce();
+    expect(openLink).toHaveBeenCalledWith(
+      "https://secure.tochka.test/payment",
+    );
   });
 });
