@@ -35,6 +35,7 @@ from app.interviews.schemas import (
 from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack
 from app.users.models import User, UserRole
+from app.users.privacy import HIDDEN_STUDENT_NAME
 
 
 async def sync_process_recruiters(
@@ -351,6 +352,8 @@ async def list_recruiters(
                 User.first_name,
                 User.telegram_username,
                 User.role,
+                User.public_identity_hidden_at,
+                User.personal_data_erased_at,
             )
             .join(User, User.id == RecruiterFeedback.user_id)
             .where(
@@ -376,14 +379,21 @@ async def list_recruiters(
         author_first_name,
         author_telegram_username,
         author_role,
+        public_identity_hidden_at,
+        personal_data_erased_at,
     ) in comment_rows:
+        hide_author = (
+            (public_identity_hidden_at is not None or personal_data_erased_at is not None)
+            and user.role is not UserRole.ADMIN
+            and user.id != author_id
+        )
         issue_comment_totals[recruiter_id] += 1
         if len(issue_comments[recruiter_id]) < 5:
             issue_comments[recruiter_id].append(
                 RecruiterIssueCommentRead(
                     author_id=author_id,
-                    author_first_name=author_first_name,
-                    author_telegram_username=author_telegram_username,
+                    author_first_name=(HIDDEN_STUDENT_NAME if hide_author else author_first_name),
+                    author_telegram_username=(None if hide_author else author_telegram_username),
                     author_role=author_role,
                     kind=kind,
                     reason=reason,

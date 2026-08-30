@@ -6,6 +6,7 @@ from pytest import MonkeyPatch
 
 from app.interviews import catalog_router
 from app.interviews.models import (
+    InterviewMediaAnonymizationStatus,
     InterviewProcess,
     InterviewProcessStage,
     InterviewProcessStageAttachment,
@@ -273,6 +274,66 @@ async def test_students_browse_company_tracks_files_and_comments(
     assert mentor_listing.json()["items"][0]["id"] == company_id
     assert cannot_delete_other_comment.status_code == 404
     assert deleted.status_code == 204
+
+    async with TestSession() as session:
+        owner = await session.get(User, seeded.student_id)
+        stage_model = await session.get(InterviewProcessStage, stage_id)
+        assert owner is not None and stage_model is not None
+        owner.public_identity_hidden_at = datetime.now(UTC)
+        owner.public_identity_hidden_reason = "Запрос ученика"
+        stage_model.anonymized_media_storage_key = f"anonymous/{stage_id}.mp4"
+        stage_model.anonymized_media_filename = "anonymous-interview.mp4"
+        stage_model.anonymized_media_content_type = "video/mp4"
+        stage_model.anonymized_media_size = 900
+        stage_model.media_anonymization_status = InterviewMediaAnonymizationStatus.READY
+        await session.commit()
+
+    anonymous_authors = await client.get(
+        "/api/v1/interviews/catalog/authors",
+        headers=auth(second_student_id),
+    )
+    anonymous_detail = await client.get(
+        f"/api/v1/interviews/catalog/companies/{company_id}",
+        headers=auth(second_student_id),
+    )
+    anonymous_media = await client.get(
+        f"/api/v1/interviews/catalog/stages/{stage_id}/media",
+        headers=auth(second_student_id),
+    )
+    anonymous_stream = await client.get(
+        anonymous_media.json()["url"],
+        headers={"Range": "bytes=0-", "Sec-Fetch-Dest": "video"},
+    )
+    hidden_attachment = await client.get(
+        f"/api/v1/interviews/catalog/stages/{stage_id}/attachments/{attachment_id}",
+        headers=auth(second_student_id),
+    )
+    owner_detail = await client.get(
+        f"/api/v1/interviews/catalog/companies/{company_id}",
+        headers=auth(seeded.student_id),
+    )
+    mentor_detail = await client.get(
+        f"/api/v1/interviews/catalog/companies/{company_id}",
+        headers=auth(seeded.mentor_id),
+    )
+
+    anonymous_track = anonymous_detail.json()["tracks"][0]
+    anonymous_stage = anonymous_track["stages"][0]
+    assert anonymous_authors.json() == []
+    assert anonymous_track["author"] == {
+        "id": str(seeded.student_id),
+        "name": "Скрытый ученик",
+        "telegram_username": None,
+    }
+    assert anonymous_stage["description"] is None
+    assert anonymous_stage["attachments"] == []
+    assert anonymous_stage["media"]["filename"] == "anonymous-interview.mp4"
+    assert anonymous_stream.status_code == 307
+    assert f"anonymous/{stage_id}.mp4" in anonymous_stream.headers["location"]
+    assert hidden_attachment.status_code == 404
+    assert owner_detail.json()["tracks"][0]["author"]["name"] == "Иван"
+    assert owner_detail.json()["tracks"][0]["stages"][0]["description"].startswith("Алгоритмы")
+    assert mentor_detail.json()["tracks"][0]["author"]["name"] == "Иван"
 
 
 async def test_catalog_is_scoped_and_filtered_by_student_directions(

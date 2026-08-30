@@ -384,10 +384,7 @@ export const api = {
       `/api/v1/payments/installments/${installmentId}/link`,
       { method: "POST" },
     ),
-  reportFailedPaymentAttempt: (
-    installmentId: string,
-    paymentLinkId: string,
-  ) =>
+  reportFailedPaymentAttempt: (installmentId: string, paymentLinkId: string) =>
     apiRequest<void>(
       `/api/v1/payments/installments/${encodeURIComponent(installmentId)}/attempts/${encodeURIComponent(paymentLinkId)}/failed`,
       { method: "POST" },
@@ -1467,6 +1464,26 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ is_active: isActive }),
     }),
+  setAdminStudentPublicIdentity: (
+    id: string,
+    hidden: boolean,
+    reason: string | null,
+  ) =>
+    apiRequest<AdminStudentDetail>(
+      `/api/v1/admin/students/${id}/public-identity`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ hidden, reason }),
+      },
+    ),
+  eraseAdminStudentPersonalData: (id: string, reason: string) =>
+    apiRequest<AdminStudentDetail>(
+      `/api/v1/admin/students/${id}/erase-personal-data`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason, confirmation: "УДАЛИТЬ" }),
+      },
+    ),
   adminMentors: () =>
     apiRequest<AdminMentorListItem[]>("/api/v1/admin/mentors"),
   adminMentorCandidates: (query = "") =>

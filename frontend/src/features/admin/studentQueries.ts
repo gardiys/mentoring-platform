@@ -112,3 +112,34 @@ export function useSetAdminStudentAccess() {
     },
   });
 }
+
+export function useSetAdminStudentPublicIdentity() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      hidden,
+      reason,
+    }: {
+      id: string;
+      hidden: boolean;
+      reason: string | null;
+    }) => api.setAdminStudentPublicIdentity(id, hidden, reason),
+    onSuccess: async (student) => {
+      queryClient.setQueryData(adminStudentKeys.detail(student.id), student);
+      await invalidateStudentData(queryClient);
+    },
+  });
+}
+
+export function useEraseAdminStudentPersonalData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.eraseAdminStudentPersonalData(id, reason),
+    onSuccess: async (student) => {
+      queryClient.setQueryData(adminStudentKeys.detail(student.id), student);
+      await invalidateStudentData(queryClient);
+    },
+  });
+}

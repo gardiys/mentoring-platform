@@ -13,11 +13,15 @@ from app.students.schemas import (
     AdminStudentMutation,
     AdminStudentOptions,
     AdminStudentPage,
+    AdminStudentPersonalDataErasureMutation,
+    AdminStudentPublicIdentityMutation,
 )
 from app.students.service import (
     create_student,
+    erase_student_personal_data,
     list_students,
     set_student_access,
+    set_student_public_identity,
     student_detail,
     student_options,
     update_student,
@@ -100,3 +104,34 @@ async def admin_set_student_access(
     _admin: AdminUser,
 ) -> AdminStudentDetail:
     return await set_student_access(session, student_id, is_active=payload.is_active)
+
+
+@router.patch("/{student_id}/public-identity", response_model=AdminStudentDetail)
+async def admin_set_student_public_identity(
+    student_id: UUID,
+    payload: AdminStudentPublicIdentityMutation,
+    session: Session,
+    admin: AdminUser,
+) -> AdminStudentDetail:
+    return await set_student_public_identity(
+        session,
+        admin,
+        student_id,
+        hidden=payload.hidden,
+        reason=payload.reason,
+    )
+
+
+@router.post("/{student_id}/erase-personal-data", response_model=AdminStudentDetail)
+async def admin_erase_student_personal_data(
+    student_id: UUID,
+    payload: AdminStudentPersonalDataErasureMutation,
+    session: Session,
+    admin: AdminUser,
+) -> AdminStudentDetail:
+    return await erase_student_personal_data(
+        session,
+        admin,
+        student_id,
+        reason=payload.reason,
+    )

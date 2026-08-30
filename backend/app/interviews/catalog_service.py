@@ -37,9 +37,10 @@ from app.interviews.schemas import (
     InterviewDirectionOption,
     InterviewStageAttachmentRead,
 )
-from app.mentors.models import MentorTrackAssignment
+from app.mentors.models import MentorStudent, MentorTrackAssignment
 from app.tracks.models import LearningTrack, LearningTrackEnrollment
 from app.users.models import User, UserRole
+from app.users.privacy import public_identity_is_hidden, public_telegram_username, public_user_name
 
 
 def _catalog_process_filters(
@@ -221,21 +222,28 @@ def _direction_filters(current_user: User) -> list[ColumnElement[bool]]:
     return [_student_direction_filter(current_user.id)]
 
 
-def _author(user: User) -> InterviewCatalogAuthorRead:
+def _author(user: User, *, reveal_private: bool = False) -> InterviewCatalogAuthorRead:
     return InterviewCatalogAuthorRead(
         id=user.id,
-        name=user.first_name,
-        telegram_username=user.telegram_username,
+        name=user.first_name if reveal_private else public_user_name(user),
+        telegram_username=(
+            user.telegram_username if reveal_private else public_telegram_username(user)
+        ),
     )
 
 
-def _media(stage: InterviewProcessStage) -> InterviewAttachmentRead | None:
-    if stage.media_filename is None or stage.media_content_type is None or stage.media_size is None:
+def _media(
+    stage: InterviewProcessStage, *, anonymized: bool = False
+) -> InterviewAttachmentRead | None:
+    filename = stage.anonymized_media_filename if anonymized else stage.media_filename
+    content_type = stage.anonymized_media_content_type if anonymized else stage.media_content_type
+    size = stage.anonymized_media_size if anonymized else stage.media_size
+    if filename is None or content_type is None or size is None:
         return None
     return InterviewAttachmentRead(
-        filename=stage.media_filename,
-        content_type=stage.media_content_type,
-        size=stage.media_size,
+        filename=filename,
+        content_type=content_type,
+        size=size,
     )
 
 
@@ -252,11 +260,17 @@ def _attachment(
 
 
 def _comment(
-    comment: InterviewStageComment, author: User | None, current_user: User
+    comment: InterviewStageComment,
+    author: User | None,
+    current_user: User,
+    privately_visible_student_ids: set[UUID] | None,
 ) -> InterviewCatalogCommentRead:
+    reveal_author = author is not None and _can_reveal_user(
+        current_user, author, privately_visible_student_ids
+    )
     return InterviewCatalogCommentRead(
         id=comment.id,
-        author=_author(author) if author is not None else None,
+        author=(_author(author, reveal_private=reveal_author) if author is not None else None),
         body=comment.body,
         is_own=comment.user_id == current_user.id,
         is_mentor_feedback=(author is not None and author.role.value in {"mentor", "admin"}),
@@ -264,6 +278,35 @@ def _comment(
         created_at=comment.created_at,
         updated_at=comment.updated_at,
     )
+
+
+def _can_reveal_user(
+    current_user: User,
+    subject: User,
+    privately_visible_student_ids: set[UUID] | None,
+) -> bool:
+    return (
+        current_user.role is UserRole.ADMIN
+        or current_user.id == subject.id
+        or (
+            privately_visible_student_ids is not None
+            and subject.id in privately_visible_student_ids
+        )
+    )
+
+
+async def _privately_visible_student_ids(
+    session: AsyncSession, current_user: User
+) -> set[UUID] | None:
+    if current_user.role is UserRole.ADMIN:
+        return None
+    if current_user.role is UserRole.MENTOR:
+        return set(
+            await session.scalars(
+                select(MentorStudent.student_id).where(MentorStudent.mentor_id == current_user.id)
+            )
+        )
+    return {current_user.id}
 
 
 async def list_catalog_companies(
@@ -427,12 +470,44 @@ async def list_catalog_authors(
 ) -> list[InterviewCatalogAuthorRead]:
     statement = select(User).join(InterviewProcess, InterviewProcess.user_id == User.id)
     statement = statement.where(*_direction_filters(current_user))
+    if current_user.role is UserRole.MENTOR:
+        statement = statement.where(
+            or_(
+                and_(
+                    User.public_identity_hidden_at.is_(None),
+                    User.personal_data_erased_at.is_(None),
+                ),
+                exists(
+                    select(1).where(
+                        MentorStudent.mentor_id == current_user.id,
+                        MentorStudent.student_id == User.id,
+                    )
+                ),
+            )
+        )
+    elif current_user.role is not UserRole.ADMIN:
+        statement = statement.where(
+            or_(
+                and_(
+                    User.public_identity_hidden_at.is_(None),
+                    User.personal_data_erased_at.is_(None),
+                ),
+                User.id == current_user.id,
+            )
+        )
     authors = list(
         await session.scalars(
             statement.distinct().order_by(User.first_name, User.telegram_username, User.id)
         )
     )
-    return [_author(author) for author in authors]
+    visible_ids = await _privately_visible_student_ids(session, current_user)
+    return [
+        _author(
+            author,
+            reveal_private=_can_reveal_user(current_user, author, visible_ids),
+        )
+        for author in authors
+    ]
 
 
 async def catalog_company_detail(
@@ -496,6 +571,7 @@ async def catalog_company_detail(
         )
     ).all()
     process_ids = [process.id for process, _, _ in process_rows]
+    privately_visible_ids = await _privately_visible_student_ids(session, current_user)
     stages = (
         list(
             await session.scalars(
@@ -587,18 +663,27 @@ async def catalog_company_detail(
 
     tracks = []
     for process, author, track in process_rows:
+        reveal_author = _can_reveal_user(current_user, author, privately_visible_ids)
+        anonymize_public_artifacts = public_identity_is_hidden(author) and not reveal_author
         track_stages = [
             InterviewCatalogStageRead(
                 id=stage.id,
                 stage_type=stage.stage_type,
                 scheduled_at=stage.scheduled_at,
-                description=stage.description,
-                media=_media(stage),
-                attachments=[
-                    _attachment(attachment) for attachment in attachments_by_stage[stage.id]
-                ],
+                description=None if anonymize_public_artifacts else stage.description,
+                media=_media(stage, anonymized=anonymize_public_artifacts),
+                attachments=(
+                    []
+                    if anonymize_public_artifacts
+                    else [_attachment(attachment) for attachment in attachments_by_stage[stage.id]]
+                ),
                 comments=[
-                    _comment(comment, comment_author, current_user)
+                    _comment(
+                        comment,
+                        comment_author,
+                        current_user,
+                        privately_visible_ids,
+                    )
                     for comment, comment_author in comments_by_stage[stage.id]
                 ],
                 is_viewed=stage.id in view_by_stage,
@@ -615,7 +700,7 @@ async def catalog_company_detail(
         tracks.append(
             InterviewCatalogTrackRead(
                 id=process.id,
-                author=_author(author),
+                author=_author(author, reveal_private=reveal_author),
                 recruiter_telegram_usernames=process.recruiter_telegram_usernames,
                 track_id=track.id,
                 track_slug=track.slug,
@@ -750,7 +835,7 @@ async def create_catalog_comment(
     )
     session.add(comment)
     await session.commit()
-    return _comment(comment, current_user, current_user)
+    return _comment(comment, current_user, current_user, {current_user.id})
 
 
 async def delete_catalog_comment(

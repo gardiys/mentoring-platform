@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
@@ -11,11 +12,13 @@ from sqlalchemy import (
     Date,
     DateTime,
     Enum,
+    ForeignKey,
     Integer,
     Numeric,
     String,
     true,
 )
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -77,9 +80,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     program_excluded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    program_exclusion_reason: Mapped[str | None] = mapped_column(
-        String(500), nullable=True
-    )
+    program_exclusion_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=true(), nullable=False
     )
@@ -89,6 +90,20 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         server_default="1",
         nullable=False,
     )
+    public_identity_hidden_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    public_identity_hidden_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    public_identity_hidden_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    personal_data_erased_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    personal_data_erased_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    personal_data_erasure_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     enrollments = relationship("RoadmapEnrollment", back_populates="user")
     topic_progress = relationship("TopicProgress", back_populates="user")

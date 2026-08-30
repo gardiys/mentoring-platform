@@ -32,7 +32,9 @@ import {
 } from "../../utils/telegram";
 import {
   useCreateAdminStudent,
+  useEraseAdminStudentPersonalData,
   useSetAdminStudentAccess,
+  useSetAdminStudentPublicIdentity,
   useUpdateAdminStudent,
 } from "./studentQueries";
 import { usePromoteAdminStudent } from "./mentorQueries";
@@ -86,10 +88,16 @@ export function AdminStudentForm({ options, student }: Props) {
   const createMutation = useCreateAdminStudent();
   const updateMutation = useUpdateAdminStudent();
   const accessMutation = useSetAdminStudentAccess();
+  const publicIdentityMutation = useSetAdminStudentPublicIdentity();
+  const erasePersonalDataMutation = useEraseAdminStudentPersonalData();
   const promoteMutation = usePromoteAdminStudent();
   const navigate = useNavigate();
   const editing = Boolean(student);
-  const pending = createMutation.isPending || updateMutation.isPending;
+  const pending =
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    publicIdentityMutation.isPending ||
+    erasePersonalDataMutation.isPending;
   const error = createMutation.error ?? updateMutation.error;
   const valid =
     typeof form.telegram_id === "number" &&
@@ -99,7 +107,8 @@ export function AdminStudentForm({ options, student }: Props) {
     Boolean(form.learning_start_date) &&
     Boolean(form.mentor_id) &&
     form.repayment_percent > 0 &&
-    form.entry_payment_rubles >= 0;
+    form.entry_payment_rubles >= 0 &&
+    !student?.personal_data_erased_at;
   const allowNavigation = useUnsavedChanges(
     JSON.stringify(form) !== JSON.stringify(initial.current),
   );
@@ -205,6 +214,63 @@ export function AdminStudentForm({ options, student }: Props) {
     });
   };
 
+  const setPublicIdentityHidden = (hidden: boolean) => {
+    if (!student) return;
+    const reason = hidden
+      ? window.prompt(
+          "Укажите причину. Имя будет скрыто, а записи будут обработаны в фоне.",
+        )
+      : null;
+    if (hidden && (!reason || reason.trim().length < 3)) return;
+    if (
+      !hidden &&
+      !window.confirm("Снова показывать имя ученика в общих разделах?")
+    ) {
+      return;
+    }
+    publicIdentityMutation.mutate(
+      { id: student.id, hidden, reason: reason?.trim() ?? null },
+      {
+        onSuccess: () =>
+          notifications.show({
+            color: "green",
+            message: hidden
+              ? "Ученик скрыт; записи поставлены в обработку"
+              : "Публичная личность восстановлена",
+          }),
+        onError: (mutationError) =>
+          notifications.show({ color: "red", message: mutationError.message }),
+      },
+    );
+  };
+
+  const erasePersonalData = () => {
+    if (!student) return;
+    const reason = window.prompt(
+      "Укажите причину необратимого удаления прямых персональных данных.",
+    );
+    if (!reason || reason.trim().length < 3) return;
+    if (
+      window.prompt(
+        "Действие необратимо. Введите УДАЛИТЬ для подтверждения.",
+      ) !== "УДАЛИТЬ"
+    ) {
+      return;
+    }
+    erasePersonalDataMutation.mutate(
+      { id: student.id, reason: reason.trim() },
+      {
+        onSuccess: () =>
+          notifications.show({
+            color: "green",
+            message: "Прямые персональные данные удалены",
+          }),
+        onError: (mutationError) =>
+          notifications.show({ color: "red", message: mutationError.message }),
+      },
+    );
+  };
+
   return (
     <form onSubmit={submit}>
       <Stack gap="xl">
@@ -217,6 +283,13 @@ export function AdminStudentForm({ options, student }: Props) {
         {error && (
           <Alert color="red" title="Не удалось сохранить ученика">
             {error.message}
+          </Alert>
+        )}
+
+        {student?.personal_data_erased_at && (
+          <Alert color="red" title="Прямые идентификаторы удалены">
+            Прямые идентификаторы восстановить через платформу нельзя. Артефакты
+            сотрудничества и финансовые записи сохранены под внутренним ID.
           </Alert>
         )}
 
@@ -242,6 +315,7 @@ export function AdminStudentForm({ options, student }: Props) {
                 color={student.is_active ? "red" : "green"}
                 variant="light"
                 loading={accessMutation.isPending}
+                disabled={Boolean(student.personal_data_erased_at)}
                 onClick={changeAccess}
               >
                 {student.is_active ? "Закрыть доступ" : "Открыть доступ"}
@@ -250,11 +324,95 @@ export function AdminStudentForm({ options, student }: Props) {
                 type="button"
                 variant="light"
                 loading={promoteMutation.isPending}
+                disabled={Boolean(student.personal_data_erased_at)}
                 onClick={promoteToMentor}
               >
                 Перевести в менторы
               </Button>
             </Group>
+          </Card>
+        )}
+
+        {student && (
+          <Card withBorder>
+            <Stack>
+              <Group justify="space-between" align="flex-start">
+                <div>
+                  <Group gap="sm">
+                    <Title order={2}>Приватность ученика</Title>
+                    {student.personal_data_erased_at ? (
+                      <Badge color="red" variant="light">
+                        Идентификаторы удалены
+                      </Badge>
+                    ) : student.public_identity_hidden_at ? (
+                      <Badge color="orange" variant="light">
+                        Скрыт публично
+                      </Badge>
+                    ) : (
+                      <Badge color="green" variant="light">
+                        Показывается
+                      </Badge>
+                    )}
+                  </Group>
+                  <Text c="dimmed" size="sm" mt={4} maw={760}>
+                    При скрытии имя заменяется в общих разделах, публичные
+                    описания и вложения убираются, а для записи создаётся
+                    отдельная версия с размытым видео и изменённым голосом.
+                    Оригинал доступен только ученику, назначенному ментору и
+                    администратору.
+                  </Text>
+                  {(student.personal_data_erasure_reason ??
+                    student.public_identity_hidden_reason) && (
+                    <Text size="sm" mt="sm">
+                      Причина:{" "}
+                      {student.personal_data_erasure_reason ??
+                        student.public_identity_hidden_reason}
+                    </Text>
+                  )}
+                </div>
+                {!student.personal_data_erased_at && (
+                  <Group>
+                    <Button
+                      type="button"
+                      color={
+                        student.public_identity_hidden_at ? "blue" : "orange"
+                      }
+                      variant="light"
+                      loading={publicIdentityMutation.isPending}
+                      onClick={() =>
+                        setPublicIdentityHidden(
+                          !student.public_identity_hidden_at,
+                        )
+                      }
+                    >
+                      {student.public_identity_hidden_at
+                        ? "Вернуть в общие разделы"
+                        : "Скрыть публично"}
+                    </Button>
+                    {student.public_identity_hidden_at && (
+                      <Button
+                        type="button"
+                        color="orange"
+                        variant="subtle"
+                        loading={publicIdentityMutation.isPending}
+                        onClick={() => setPublicIdentityHidden(true)}
+                      >
+                        Повторить неудачную обработку
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      color="red"
+                      variant="light"
+                      loading={erasePersonalDataMutation.isPending}
+                      onClick={erasePersonalData}
+                    >
+                      Удалить прямые идентификаторы
+                    </Button>
+                  </Group>
+                )}
+              </Group>
+            </Stack>
           </Card>
         )}
 

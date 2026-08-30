@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
@@ -7,11 +8,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
+from app.interviews.models import (
+    InterviewMediaAnonymizationStatus,
+    InterviewProcess,
+    InterviewProcessStage,
+)
+from app.media.interview_anonymization_queue import enqueue_interview_media_anonymization
 from app.mentors.models import (
     MentorStudent,
     StudentLearningStatus,
     StudentMentorshipState,
 )
+from app.notifications.models import NotificationKind, PlatformNotification, TelegramOutbox
 from app.payments.service import (
     change_student_repayment_percent,
     sync_one_time_mentor_rewards,
@@ -33,6 +41,8 @@ from app.tracks.models import LearningTrack, LearningTrackEnrollment
 from app.tracks.service import ensure_track_access
 from app.users.learning import learning_start_datetime
 from app.users.models import MENTOR_CAPABLE_ROLES, User, UserRole
+
+logger = logging.getLogger(__name__)
 
 
 async def get_student_model(session: AsyncSession, student_id: UUID, *, lock: bool = False) -> User:
@@ -298,6 +308,10 @@ async def list_students(
                 entry_payment_paid_at=student.entry_payment_paid_at,
                 program_excluded_at=student.program_excluded_at,
                 program_exclusion_reason=student.program_exclusion_reason,
+                public_identity_hidden_at=student.public_identity_hidden_at,
+                public_identity_hidden_reason=student.public_identity_hidden_reason,
+                personal_data_erased_at=student.personal_data_erased_at,
+                personal_data_erasure_reason=student.personal_data_erasure_reason,
             )
             for student in students
         ],
@@ -341,6 +355,10 @@ async def student_detail(session: AsyncSession, student_id: UUID) -> AdminStuden
         entry_payment_paid_at=student.entry_payment_paid_at,
         program_excluded_at=student.program_excluded_at,
         program_exclusion_reason=student.program_exclusion_reason,
+        public_identity_hidden_at=student.public_identity_hidden_at,
+        public_identity_hidden_reason=student.public_identity_hidden_reason,
+        personal_data_erased_at=student.personal_data_erased_at,
+        personal_data_erasure_reason=student.personal_data_erasure_reason,
     )
 
 
@@ -529,6 +547,12 @@ async def update_student(
     session: AsyncSession, student_id: UUID, payload: AdminStudentMutation
 ) -> AdminStudentDetail:
     student = await get_student_model(session, student_id, lock=True)
+    if student.personal_data_erased_at is not None:
+        api_error(
+            409,
+            "student_personal_data_erased",
+            "Erased personal data cannot be restored through student editing",
+        )
     # Keep the lock order consistent with mentor-side mutations (assignment,
     # then employment/payment rows) so reassignment cannot race an old
     # mentor's write and concurrent requests do not deadlock each other.
@@ -589,8 +613,147 @@ async def set_student_access(
     session: AsyncSession, student_id: UUID, *, is_active: bool
 ) -> AdminStudentDetail:
     student = await get_student_model(session, student_id, lock=True)
+    if is_active and student.personal_data_erased_at is not None:
+        api_error(
+            409,
+            "student_personal_data_erased",
+            "Access cannot be restored after personal data erasure",
+        )
     if student.is_active != is_active:
         student.session_version += 1
     student.is_active = is_active
     await session.commit()
+    return await student_detail(session, student.id)
+
+
+async def _queue_student_media_anonymization(session: AsyncSession, student_id: UUID) -> list[UUID]:
+    stages = list(
+        await session.scalars(
+            select(InterviewProcessStage)
+            .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
+            .where(
+                InterviewProcess.user_id == student_id,
+                InterviewProcessStage.media_storage_key.is_not(None),
+                InterviewProcessStage.media_filename.is_not(None),
+                InterviewProcessStage.media_content_type.is_not(None),
+                InterviewProcessStage.media_size.is_not(None),
+                or_(
+                    InterviewProcessStage.media_anonymization_status.is_(None),
+                    InterviewProcessStage.media_anonymization_status
+                    != InterviewMediaAnonymizationStatus.READY,
+                    InterviewProcessStage.anonymized_media_storage_key.is_(None),
+                ),
+            )
+            .with_for_update()
+        )
+    )
+    for stage in stages:
+        stage.media_anonymization_status = InterviewMediaAnonymizationStatus.QUEUED
+        stage.media_anonymization_started_at = None
+        stage.media_anonymization_completed_at = None
+        stage.media_anonymization_error = None
+    return [stage.id for stage in stages]
+
+
+async def _redact_student_public_notifications(session: AsyncSession, student_id: UUID) -> None:
+    await session.execute(
+        update(PlatformNotification)
+        .where(
+            PlatformNotification.actor_user_id == student_id,
+            PlatformNotification.kind == NotificationKind.INTERVIEW_PUBLISHED,
+        )
+        .values(body="Собеседование опубликовано скрытым учеником.")
+    )
+    all_stage_ids = list(
+        await session.scalars(
+            select(InterviewProcessStage.id)
+            .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
+            .where(InterviewProcess.user_id == student_id)
+        )
+    )
+    if all_stage_ids:
+        event_keys = [
+            f"telegram:interview-stage-published:{stage_id}" for stage_id in all_stage_ids
+        ]
+        await session.execute(
+            update(TelegramOutbox)
+            .where(TelegramOutbox.event_key.in_(event_keys))
+            .values(text="Новое собеседование опубликовано скрытым учеником.")
+        )
+
+
+async def _enqueue_anonymization_jobs(stage_ids: list[UUID]) -> None:
+    for stage_id in stage_ids:
+        try:
+            await enqueue_interview_media_anonymization(str(stage_id))
+        except Exception:
+            # Privacy state is already committed. The worker reconciler will
+            # discover queued rows after Redis becomes available again.
+            logger.exception(
+                "Could not enqueue interview media anonymization stage_id=%s", stage_id
+            )
+
+
+async def set_student_public_identity(
+    session: AsyncSession,
+    admin: User,
+    student_id: UUID,
+    *,
+    hidden: bool,
+    reason: str | None,
+) -> AdminStudentDetail:
+    student = await get_student_model(session, student_id, lock=True)
+    if not hidden and student.personal_data_erased_at is not None:
+        api_error(
+            409,
+            "student_personal_data_erased",
+            "Public identity cannot be restored after personal data erasure",
+        )
+    stage_ids: list[UUID] = []
+    if hidden:
+        student.public_identity_hidden_at = student.public_identity_hidden_at or datetime.now(UTC)
+        student.public_identity_hidden_by_user_id = admin.id
+        student.public_identity_hidden_reason = reason
+        stage_ids = await _queue_student_media_anonymization(session, student.id)
+        await _redact_student_public_notifications(session, student.id)
+    else:
+        student.public_identity_hidden_at = None
+        student.public_identity_hidden_by_user_id = None
+        student.public_identity_hidden_reason = None
+    await session.commit()
+    await _enqueue_anonymization_jobs(stage_ids)
+    return await student_detail(session, student.id)
+
+
+async def erase_student_personal_data(
+    session: AsyncSession,
+    admin: User,
+    student_id: UUID,
+    *,
+    reason: str,
+) -> AdminStudentDetail:
+    student = await get_student_model(session, student_id, lock=True)
+    if student.personal_data_erased_at is not None:
+        return await student_detail(session, student.id)
+    now = datetime.now(UTC)
+    stage_ids = await _queue_student_media_anonymization(session, student.id)
+    await _redact_student_public_notifications(session, student.id)
+    student.public_identity_hidden_at = student.public_identity_hidden_at or now
+    student.public_identity_hidden_by_user_id = admin.id
+    student.public_identity_hidden_reason = reason
+    student.personal_data_erased_at = now
+    student.personal_data_erased_by_user_id = admin.id
+    student.personal_data_erasure_reason = reason
+    # Direct identifiers are irreversibly removed. Stable internal IDs and
+    # collaboration/payment artifacts remain available for accounting and
+    # dispute-resolution workflows.
+    student.telegram_id = None
+    student.telegram_username = None
+    student.email = None
+    student.first_name = "Удалённый ученик"
+    student.last_name = None
+    student.is_active = False
+    student.session_version += 1
+    await session.commit()
+    await _enqueue_anonymization_jobs(stage_ids)
     return await student_detail(session, student.id)

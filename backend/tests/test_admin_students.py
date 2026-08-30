@@ -113,6 +113,81 @@ async def test_admin_edits_student_data_and_track_access(
         assert student.session_version == 2
 
 
+async def test_admin_can_hide_student_public_identity(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    hidden = await client.patch(
+        f"/api/v1/admin/students/{seeded.student_id}/public-identity",
+        headers=auth(seeded.admin_id),
+        json={"hidden": True, "reason": "Запрос ученика"},
+    )
+    forbidden = await client.patch(
+        f"/api/v1/admin/students/{seeded.student_id}/public-identity",
+        headers=auth(seeded.mentor_id),
+        json={"hidden": False, "reason": None},
+    )
+    restored = await client.patch(
+        f"/api/v1/admin/students/{seeded.student_id}/public-identity",
+        headers=auth(seeded.admin_id),
+        json={"hidden": False, "reason": None},
+    )
+
+    assert hidden.status_code == 200
+    assert hidden.json()["public_identity_hidden_at"] is not None
+    assert hidden.json()["public_identity_hidden_reason"] == "Запрос ученика"
+    assert forbidden.status_code == 403
+    assert restored.status_code == 200
+    assert restored.json()["public_identity_hidden_at"] is None
+
+
+async def test_personal_data_erasure_is_irreversible_and_preserves_artifacts(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    async with TestSession() as session:
+        student = await session.get(User, seeded.student_id)
+        assert student is not None
+        student.telegram_id = 777000333
+        student.telegram_username = "privacy_student"
+        student.email = "privacy@example.com"
+        student.first_name = "Настоящее имя"
+        await session.commit()
+
+    erased = await client.post(
+        f"/api/v1/admin/students/{seeded.student_id}/erase-personal-data",
+        headers=auth(seeded.admin_id),
+        json={"reason": "Запрос субъекта", "confirmation": "УДАЛИТЬ"},
+    )
+    restore_access = await client.patch(
+        f"/api/v1/admin/students/{seeded.student_id}/access",
+        headers=auth(seeded.admin_id),
+        json={"is_active": True},
+    )
+    edit = await client.put(
+        f"/api/v1/admin/students/{seeded.student_id}",
+        headers=auth(seeded.admin_id),
+        json=student_payload(seeded, telegram_id=777000444),
+    )
+
+    assert erased.status_code == 200
+    body = erased.json()
+    assert body["telegram_id"] is None
+    assert body["telegram_username"] is None
+    assert body["email"] is None
+    assert body["first_name"] == "Удалённый ученик"
+    assert body["personal_data_erased_at"] is not None
+    assert body["is_active"] is False
+    assert restore_access.status_code == 409
+    assert edit.status_code == 409
+
+    async with TestSession() as session:
+        track_count = await session.scalar(
+            select(func.count(LearningTrackEnrollment.user_id)).where(
+                LearningTrackEnrollment.user_id == seeded.student_id
+            )
+        )
+        assert track_count == 1
+
+
 async def test_admin_suspends_and_restores_student_without_losing_tracks(
     client: AsyncClient, seeded: SeededData
 ) -> None:

@@ -78,6 +78,13 @@ class InterviewStageType(StrEnum):
     OTHER = "other"
 
 
+class InterviewMediaAnonymizationStatus(StrEnum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    READY = "ready"
+    FAILED = "failed"
+
+
 class RecruiterFeedbackKind(StrEnum):
     HELPFUL = "helpful"
     IGNORES = "ignores"
@@ -438,6 +445,25 @@ class InterviewProcessStage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     media_filename: Mapped[str | None] = mapped_column(String(500), nullable=True)
     media_content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
     media_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    anonymized_media_storage_key: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    anonymized_media_filename: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    anonymized_media_content_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    anonymized_media_size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    media_anonymization_status: Mapped[InterviewMediaAnonymizationStatus | None] = mapped_column(
+        Enum(
+            InterviewMediaAnonymizationStatus,
+            name="interview_media_anonymization_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=True,
+    )
+    media_anonymization_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    media_anonymization_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    media_anonymization_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ai_analysis_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -123,6 +123,10 @@ export type AdminStudentListItem = Omit<
   entry_payment_paid_at: string | null;
   program_excluded_at: string | null;
   program_exclusion_reason: string | null;
+  public_identity_hidden_at: string | null;
+  public_identity_hidden_reason: string | null;
+  personal_data_erased_at: string | null;
+  personal_data_erasure_reason: string | null;
 };
 export type AdminStudentDetail = Omit<
   Schemas["AdminStudentDetail"],
@@ -145,6 +149,10 @@ export type AdminStudentDetail = Omit<
   entry_payment_paid_at: string | null;
   program_excluded_at: string | null;
   program_exclusion_reason: string | null;
+  public_identity_hidden_at: string | null;
+  public_identity_hidden_reason: string | null;
+  personal_data_erased_at: string | null;
+  personal_data_erasure_reason: string | null;
 };
 export type AdminStudentPage = Omit<Schemas["AdminStudentPage"], "items"> & {
   items: AdminStudentListItem[];

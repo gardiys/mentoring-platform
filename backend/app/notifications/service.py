@@ -21,6 +21,7 @@ from app.notifications.models import (
 from app.notifications.schemas import NotificationPage, NotificationRead
 from app.tracks.models import LearningTrack, LearningTrackEnrollment
 from app.users.models import User, UserRole
+from app.users.privacy import public_identity_is_hidden, public_telegram_username, public_user_name
 
 settings = get_settings()
 TELEGRAM_MESSAGE_LIMIT = 4_096
@@ -52,14 +53,17 @@ def _telegram_interview_destination(track_slug: str) -> tuple[str | None, int | 
 
 
 def actor_name(actor: User) -> str:
-    username = f"@{actor.telegram_username}" if actor.telegram_username else None
-    return " · ".join(value for value in (actor.first_name, username) if value)
+    public_username = public_telegram_username(actor)
+    username = f"@{public_username}" if public_username else None
+    return " · ".join(value for value in (public_user_name(actor), username) if value)
 
 
 def _telegram_author(actor: User) -> str:
-    if actor.telegram_username:
-        return f"{actor.first_name} (@{actor.telegram_username.lstrip('@')})"
-    return f"{actor.first_name} (Telegram username не указан)"
+    username = public_telegram_username(actor)
+    name = public_user_name(actor)
+    if username:
+        return f"{name} (@{username.lstrip('@')})"
+    return name if public_identity_is_hidden(actor) else f"{name} (Telegram username не указан)"
 
 
 def _fit_telegram_message(prefix: str, description: str) -> str:
@@ -87,10 +91,7 @@ def telegram_public_url(candidate: str) -> str | None:
     except ValueError:
         address = None
     if address is not None and (
-        address.is_loopback
-        or address.is_private
-        or address.is_link_local
-        or address.is_unspecified
+        address.is_loopback or address.is_private or address.is_link_local or address.is_unspecified
     ):
         return None
     if parsed.scheme != "https":
@@ -218,7 +219,7 @@ async def notify_interview_published(
     )
     stage_label = STAGE_LABELS[stage.stage_type]
     action_url = f"/interviews/catalog/{process.company_id}?stage={stage.id}"
-    description = (stage.description or "").strip()
+    description = "" if public_identity_is_hidden(actor) else (stage.description or "").strip()
     compact_description = " ".join(description.split())
     body = f"{stage_label.capitalize()} в {process.company_name}. Автор: {actor_name(actor)}."
     if compact_description:
@@ -278,9 +279,7 @@ async def list_notifications(
         await session.execute(
             select(
                 func.count(PlatformNotification.id),
-                func.count(PlatformNotification.id).filter(
-                    PlatformNotification.read_at.is_(None)
-                ),
+                func.count(PlatformNotification.id).filter(PlatformNotification.read_at.is_(None)),
             ).where(*filters)
         )
     ).one()

@@ -261,12 +261,23 @@ export function AdminStudentsPage() {
                           </Text>
                         </Table.Td>
                         <Table.Td>
-                          <Badge
-                            color={student.is_active ? "green" : "red"}
-                            variant="light"
-                          >
-                            {student.is_active ? "Открыт" : "Закрыт"}
-                          </Badge>
+                          <Group gap="xs">
+                            <Badge
+                              color={student.is_active ? "green" : "red"}
+                              variant="light"
+                            >
+                              {student.is_active ? "Открыт" : "Закрыт"}
+                            </Badge>
+                            {student.personal_data_erased_at ? (
+                              <Badge color="red" variant="outline">
+                                Идентификаторы удалены
+                              </Badge>
+                            ) : student.public_identity_hidden_at ? (
+                              <Badge color="orange" variant="outline">
+                                Скрыт публично
+                              </Badge>
+                            ) : null}
+                          </Group>
                         </Table.Td>
                         <Table.Td>
                           <Button

@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -12,6 +13,7 @@ from app.interviews.card_automation_cleanup import (
 from app.interviews.companies import resolve_company
 from app.interviews.intelligence_models import IntelligenceInterview
 from app.interviews.models import (
+    InterviewMediaAnonymizationStatus,
     InterviewProcess,
     InterviewProcessStage,
     InterviewProcessStageAttachment,
@@ -38,11 +40,15 @@ from app.interviews.schemas import (
     InterviewStageEditLockReason,
 )
 from app.interviews.uploads import StoredUpload
+from app.media.interview_anonymization_queue import enqueue_interview_media_anonymization
 from app.notifications.models import NotificationKind
 from app.notifications.service import notify_interview_published, notify_student
 from app.tracks.access import accessible_track_ids
 from app.tracks.models import LearningTrack
 from app.users.models import User
+from app.users.privacy import public_identity_is_hidden
+
+logger = logging.getLogger(__name__)
 
 
 def _attachment(
@@ -755,16 +761,27 @@ async def set_stage_media(
     process_id: UUID,
     stage_id: UUID,
     upload: StoredUpload,
-) -> tuple[InterviewProcessDetail, str | None]:
+) -> tuple[InterviewProcessDetail, list[str]]:
     stage = await get_stage_model(session, user, process_id, stage_id, lock=True)
     previous_key = stage.media_storage_key
+    previous_anonymized_key = stage.anonymized_media_storage_key
     if previous_key == upload.storage_key:
-        return await process_detail(session, user, process_id), previous_key
+        return await process_detail(session, user, process_id), []
     ensure_stage_editable(stage)
     stage.media_storage_key = upload.storage_key
     stage.media_filename = upload.filename
     stage.media_content_type = upload.content_type
     stage.media_size = upload.size
+    stage.anonymized_media_storage_key = None
+    stage.anonymized_media_filename = None
+    stage.anonymized_media_content_type = None
+    stage.anonymized_media_size = None
+    stage.media_anonymization_started_at = None
+    stage.media_anonymization_completed_at = None
+    stage.media_anonymization_error = None
+    stage.media_anonymization_status = (
+        InterviewMediaAnonymizationStatus.QUEUED if public_identity_is_hidden(user) else None
+    )
     process = await session.get(InterviewProcess, stage.process_id)
     if process is not None:
         await notify_interview_published(
@@ -774,21 +791,42 @@ async def set_stage_media(
             stage=stage,
         )
     await session.commit()
-    return await process_detail(session, user, process_id), previous_key
+    if stage.media_anonymization_status is InterviewMediaAnonymizationStatus.QUEUED:
+        try:
+            await enqueue_interview_media_anonymization(str(stage.id))
+        except Exception:
+            logger.exception(
+                "Could not enqueue interview media anonymization stage_id=%s", stage.id
+            )
+    obsolete_keys = [
+        key for key in (previous_key, previous_anonymized_key) if key and key != upload.storage_key
+    ]
+    return await process_detail(session, user, process_id), obsolete_keys
 
 
 async def clear_stage_media(
     session: AsyncSession, user: User, process_id: UUID, stage_id: UUID
-) -> tuple[InterviewProcessDetail, str | None]:
+) -> tuple[InterviewProcessDetail, list[str]]:
     stage = await get_stage_model(session, user, process_id, stage_id, lock=True)
     ensure_stage_editable(stage)
     previous_key = stage.media_storage_key
+    previous_anonymized_key = stage.anonymized_media_storage_key
     stage.media_storage_key = None
     stage.media_filename = None
     stage.media_content_type = None
     stage.media_size = None
+    stage.anonymized_media_storage_key = None
+    stage.anonymized_media_filename = None
+    stage.anonymized_media_content_type = None
+    stage.anonymized_media_size = None
+    stage.media_anonymization_status = None
+    stage.media_anonymization_started_at = None
+    stage.media_anonymization_completed_at = None
+    stage.media_anonymization_error = None
     await session.commit()
-    return await process_detail(session, user, process_id), previous_key
+    return await process_detail(session, user, process_id), [
+        key for key in (previous_key, previous_anonymized_key) if key
+    ]
 
 
 async def add_stage_attachment(

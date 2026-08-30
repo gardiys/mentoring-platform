@@ -30,6 +30,10 @@ from app.interviews.uploads import (
     InterviewUploadStore,
     StoredUpload,
 )
+from app.media.interview_anonymization import (
+    anonymize_interview_stage_media,
+    reconcile_interview_media_anonymization,
+)
 from app.media.models import ContentMediaProcessingStatus, ProtectedContentMedia
 from app.media.normalization import (
     ContentMediaNormalizationError,
@@ -157,6 +161,7 @@ async def reconcile_content_media_normalization(ctx: dict[str, Any]) -> None:
             cleaned += 1
     if cleaned:
         logger.info("Retired original content video objects count=%s", cleaned)
+    await reconcile_interview_media_anonymization(ctx)
 
 
 async def normalize_content_media(ctx: dict[str, Any], media_id: str) -> None:
@@ -525,7 +530,10 @@ def _retry_delay(ctx: dict[str, Any]) -> int:
 
 
 class ContentMediaWorkerSettings:
-    functions = [arq_func(normalize_content_media, max_tries=MAX_JOB_TRIES)]
+    functions = [
+        arq_func(normalize_content_media, max_tries=MAX_JOB_TRIES),
+        arq_func(anonymize_interview_stage_media, max_tries=MAX_JOB_TRIES),
+    ]
     cron_jobs = [
         cron(
             reconcile_content_media_normalization,

@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.mentors.models import StudentLearningStatus
 from app.users.models import UserRole
@@ -78,6 +78,10 @@ class AdminStudentListItem(BaseModel):
     entry_payment_paid_at: datetime | None
     program_excluded_at: datetime | None
     program_exclusion_reason: str | None
+    public_identity_hidden_at: datetime | None
+    public_identity_hidden_reason: str | None
+    personal_data_erased_at: datetime | None
+    personal_data_erasure_reason: str | None
 
 
 class AdminStudentDetail(AdminStudentListItem):
@@ -108,3 +112,30 @@ class AdminStudentOptions(BaseModel):
 
 class AdminStudentAccessMutation(BaseModel):
     is_active: bool
+
+
+class AdminStudentPublicIdentityMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    hidden: bool
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def hidden_requires_reason(self) -> "AdminStudentPublicIdentityMutation":
+        if self.hidden and (not self.reason or len(self.reason) < 3):
+            raise ValueError("A reason is required when hiding a student's identity")
+        return self
+
+
+class AdminStudentPersonalDataErasureMutation(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    reason: str = Field(min_length=3, max_length=500)
+    confirmation: str
+
+    @field_validator("confirmation")
+    @classmethod
+    def valid_confirmation(cls, value: str) -> str:
+        if value != "УДАЛИТЬ":
+            raise ValueError("Type УДАЛИТЬ to confirm personal data erasure")
+        return value

@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CatalogUser
@@ -26,7 +27,12 @@ from app.interviews.catalog_service import (
     set_catalog_favorite,
 )
 from app.interviews.media import ensure_stage_media_browser_playable
-from app.interviews.models import InterviewStageType
+from app.interviews.models import (
+    InterviewMediaAnonymizationStatus,
+    InterviewProcess,
+    InterviewProcessStage,
+    InterviewStageType,
+)
 from app.interviews.protected_stream import (
     create_interview_stream_ticket,
     read_interview_stream_ticket,
@@ -44,7 +50,9 @@ from app.interviews.schemas import (
 )
 from app.interviews.uploads import InterviewUploadStore, StoredUpload
 from app.media.delivery import direct_private_media_response
+from app.mentors.models import MentorStudent
 from app.users.models import User, UserRole
+from app.users.privacy import public_identity_is_hidden
 
 router = APIRouter(prefix="/interviews/catalog", tags=["interview-catalog"])
 Session = Annotated[AsyncSession, Depends(get_db_session)]
@@ -58,6 +66,74 @@ def _stream_secret() -> str:
     if settings.web_session_secret is not None:
         return settings.web_session_secret.get_secret_value()
     return settings.s3_secret_access_key.get_secret_value()
+
+
+async def _catalog_media_for_viewer(
+    session: AsyncSession, viewer: User, stage: InterviewProcessStage
+) -> tuple[StoredUpload, bool]:
+    use_anonymized = await _catalog_uses_anonymized_artifacts(session, viewer, stage)
+    if use_anonymized:
+        if (
+            stage.media_anonymization_status is not InterviewMediaAnonymizationStatus.READY
+            or stage.anonymized_media_storage_key is None
+            or stage.anonymized_media_filename is None
+            or stage.anonymized_media_content_type is None
+            or stage.anonymized_media_size is None
+        ):
+            api_error(
+                409,
+                "interview_media_anonymization_pending",
+                "The anonymous recording is still being prepared",
+            )
+        return (
+            StoredUpload(
+                storage_key=stage.anonymized_media_storage_key,
+                filename=stage.anonymized_media_filename,
+                content_type=stage.anonymized_media_content_type,
+                size=stage.anonymized_media_size,
+            ),
+            True,
+        )
+    if (
+        stage.media_storage_key is None
+        or stage.media_filename is None
+        or stage.media_content_type is None
+        or stage.media_size is None
+    ):
+        api_error(404, "interview_media_not_found", "Interview media was not found")
+    return (
+        StoredUpload(
+            storage_key=stage.media_storage_key,
+            filename=stage.media_filename,
+            content_type=stage.media_content_type,
+            size=stage.media_size,
+        ),
+        False,
+    )
+
+
+async def _catalog_uses_anonymized_artifacts(
+    session: AsyncSession, viewer: User, stage: InterviewProcessStage
+) -> bool:
+    owner = await session.scalar(
+        select(User)
+        .join(InterviewProcess, InterviewProcess.user_id == User.id)
+        .where(InterviewProcess.id == stage.process_id)
+    )
+    if owner is None:
+        api_error(404, "interview_media_owner_not_found", "Interview author was not found")
+    can_view_original = viewer.role is UserRole.ADMIN or viewer.id == owner.id
+    if not can_view_original and viewer.role is UserRole.MENTOR:
+        can_view_original = (
+            await session.scalar(
+                select(MentorStudent.student_id).where(
+                    MentorStudent.mentor_id == viewer.id,
+                    MentorStudent.student_id == owner.id,
+                )
+            )
+            is not None
+        )
+    return public_identity_is_hidden(owner) and not can_view_original
 
 
 @router.get("/directions", response_model=list[InterviewDirectionOption])
@@ -191,15 +267,10 @@ async def catalog_stage_media(
     response: Response,
 ) -> InterviewDownloadUrl:
     stage = await get_catalog_stage(session, student, stage_id)
-    if (
-        stage.media_storage_key is None
-        or stage.media_filename is None
-        or stage.media_content_type is None
-        or stage.media_size is None
-    ):
-        api_error(404, "interview_media_not_found", "Interview media was not found")
+    _, is_anonymized = await _catalog_media_for_viewer(session, student, stage)
     await mark_catalog_stage_viewed(session, student, stage_id)
-    await ensure_stage_media_browser_playable(session, stage, store)
+    if not is_anonymized:
+        await ensure_stage_media_browser_playable(session, stage, store)
     ticket = create_interview_stream_ticket(
         user_id=student.id,
         stage_id=stage.id,
@@ -252,25 +323,14 @@ async def catalog_stream_stage_media(
     ):
         api_error(403, "interview_stream_access_denied", "Playback access is not available")
     stage = await get_catalog_stage(session, user, stage_id)
-    if (
-        stage.media_storage_key is None
-        or stage.media_filename is None
-        or stage.media_content_type is None
-        or stage.media_size is None
-    ):
-        api_error(404, "interview_media_not_found", "Interview media was not found")
+    upload, _ = await _catalog_media_for_viewer(session, user, stage)
 
     range_header = request.headers.get("range")
     if range_header is not None and RANGE_PATTERN.fullmatch(range_header) is None:
         api_error(416, "invalid_interview_media_range", "Requested range is invalid")
     return direct_private_media_response(
         store,
-        StoredUpload(
-            storage_key=stage.media_storage_key,
-            filename=stage.media_filename,
-            content_type=stage.media_content_type,
-            size=stage.media_size,
-        ),
+        upload,
         expires_in=settings.media_stream_redirect_ttl_seconds,
     )
 
@@ -287,6 +347,14 @@ async def catalog_stage_attachment(
     inline: bool = Query(default=False),
 ) -> InterviewDownloadUrl:
     attachment = await get_catalog_attachment(session, student, stage_id, attachment_id)
+    stage = await get_catalog_stage(session, student, stage_id)
+    is_anonymized = await _catalog_uses_anonymized_artifacts(session, student, stage)
+    if is_anonymized:
+        api_error(
+            404,
+            "interview_attachment_hidden",
+            "Attachments are hidden for this anonymous interview",
+        )
     can_open_inline = attachment.content_type.startswith("image/") or (
         attachment.content_type == "application/pdf"
     )

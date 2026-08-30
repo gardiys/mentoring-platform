@@ -355,11 +355,13 @@ async def journal_complete_stage_media_upload(
         max_bytes=max_bytes,
     )
     try:
-        detail, previous_key = await set_stage_media(session, student, process_id, stage_id, upload)
+        detail, previous_keys = await set_stage_media(
+            session, student, process_id, stage_id, upload
+        )
     except Exception:
         await delete_upload_if_unreferenced(session, store, upload.storage_key)
         raise
-    if previous_key != upload.storage_key:
+    for previous_key in previous_keys:
         await store.delete(previous_key)
     return detail
 
@@ -400,8 +402,9 @@ async def journal_download_stage_media(
 async def journal_delete_stage_media(
     process_id: UUID, stage_id: UUID, session: Session, student: JournalUser
 ) -> Response:
-    _, previous_key = await clear_stage_media(session, student, process_id, stage_id)
-    await store.delete(previous_key)
+    _, previous_keys = await clear_stage_media(session, student, process_id, stage_id)
+    for previous_key in previous_keys:
+        await store.delete(previous_key)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
