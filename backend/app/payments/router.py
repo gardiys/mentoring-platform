@@ -30,6 +30,11 @@ from app.interviews.uploads import (
     InterviewUploadStore,
     StoredUpload,
 )
+from app.opportunities.models import OpportunityPaymentAttempt
+from app.opportunities.service import (
+    approve_opportunity_payment,
+    opportunity_payment_context,
+)
 from app.payments.models import (
     PaymentAttempt,
     PaymentAttemptStatus,
@@ -606,6 +611,7 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
 
     attempt = None
     test_payment = None
+    opportunity_attempt = None
     if event.payment_link_id:
         attempt = await session.scalar(
             select(PaymentAttempt)
@@ -618,7 +624,18 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
                 .where(TochkaTestPayment.payment_link_id == event.payment_link_id)
                 .with_for_update()
             )
-    if attempt is None and event.operation_id:
+        if attempt is None and test_payment is None:
+            opportunity_attempt = await session.scalar(
+                select(OpportunityPaymentAttempt)
+                .where(OpportunityPaymentAttempt.payment_link_id == event.payment_link_id)
+                .with_for_update()
+            )
+    if (
+        attempt is None
+        and test_payment is None
+        and opportunity_attempt is None
+        and event.operation_id
+    ):
         attempt = await session.scalar(
             select(PaymentAttempt)
             .where(PaymentAttempt.provider_operation_id == event.operation_id)
@@ -630,15 +647,27 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
                 .where(TochkaTestPayment.provider_operation_id == event.operation_id)
                 .with_for_update()
             )
+        if attempt is None and test_payment is None:
+            opportunity_attempt = await session.scalar(
+                select(OpportunityPaymentAttempt)
+                .where(OpportunityPaymentAttempt.provider_operation_id == event.operation_id)
+                .with_for_update()
+            )
 
     if (
-        (attempt is None and test_payment is None)
+        (attempt is None and test_payment is None and opportunity_attempt is None)
         or event.payment_link_id is None
         or event.operation_id is None
     ):
         return WebhookResult(status="unverified")
 
-    payment_record = attempt if attempt is not None else test_payment
+    payment_record = (
+        attempt
+        if attempt is not None
+        else test_payment
+        if test_payment is not None
+        else opportunity_attempt
+    )
     assert payment_record is not None
     if event.payment_link_id != payment_record.payment_link_id or (
         payment_record.provider_operation_id is not None
@@ -654,14 +683,30 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
             TochkaTestPayment.provider_operation_id == event.operation_id
         )
     )
+    operation_opportunity_attempt_id = await session.scalar(
+        select(OpportunityPaymentAttempt.id).where(
+            OpportunityPaymentAttempt.provider_operation_id == event.operation_id
+        )
+    )
     if attempt is not None and (
         (operation_attempt_id is not None and operation_attempt_id != attempt.id)
         or operation_test_payment_id is not None
+        or operation_opportunity_attempt_id is not None
     ):
         return WebhookResult(status="unverified")
     if test_payment is not None and (
         operation_attempt_id is not None
+        or operation_opportunity_attempt_id is not None
         or (operation_test_payment_id is not None and operation_test_payment_id != test_payment.id)
+    ):
+        return WebhookResult(status="unverified")
+    if opportunity_attempt is not None and (
+        operation_attempt_id is not None
+        or operation_test_payment_id is not None
+        or (
+            operation_opportunity_attempt_id is not None
+            and operation_opportunity_attempt_id != opportunity_attempt.id
+        )
     ):
         return WebhookResult(status="unverified")
 
@@ -676,10 +721,16 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
             return WebhookResult(status="unverified")
         consumer_id = installment.id
         amount_kopecks = installment.amount_kopecks
-    else:
+    elif test_payment is not None:
         assert test_payment is not None
         consumer_id = test_payment.id
         amount_kopecks = test_payment.amount_kopecks
+    else:
+        assert opportunity_attempt is not None
+        context = await opportunity_payment_context(session, opportunity_attempt)
+        if context is None:
+            return WebhookResult(status="unverified")
+        consumer_id, amount_kopecks = context
 
     verified_status = await _verified_status(
         event,
@@ -691,6 +742,9 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
         return WebhookResult(status="unverified")
     webhook_event = PaymentWebhookEvent(
         attempt_id=attempt.id if attempt is not None else None,
+        opportunity_attempt_id=(
+            opportunity_attempt.id if opportunity_attempt is not None else None
+        ),
         provider="tochka",
         event_id=event.event_id,
         deduplication_key=event.deduplication_key,
@@ -720,11 +774,19 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
         elif mapped in {PaymentAttemptStatus.FAILED, PaymentAttemptStatus.CANCELLED}:
             if installment.status is not PaymentInstallmentStatus.CANCELLED:
                 installment.status = PaymentInstallmentStatus.SCHEDULED
-    else:
+    elif test_payment is not None:
         assert test_payment is not None
         test_payment.status = mapped
         if mapped is PaymentAttemptStatus.APPROVED:
             test_payment.approved_at = datetime.now(UTC)
+    else:
+        assert opportunity_attempt is not None
+        if mapped is PaymentAttemptStatus.APPROVED:
+            await approve_opportunity_payment(
+                session, opportunity_attempt, approved_at=datetime.now(UTC)
+            )
+        else:
+            opportunity_attempt.status = mapped
     try:
         await session.commit()
     except IntegrityError:

@@ -58,6 +58,7 @@ from app.mentors.schemas import (
 )
 from app.notifications.models import NotificationKind
 from app.notifications.service import actor_name, notify_student
+from app.opportunities.service import record_current_track_completions
 from app.progress.models import ProgressStatus, TopicProgress
 from app.roadmaps.models import Roadmap, RoadmapEnrollment, RoadmapSection, Topic
 from app.roadmaps.queries import build_roadmap_detail, get_roadmap_model, list_roadmaps
@@ -1052,6 +1053,13 @@ async def update_student_state(
         )
         state.learning_status = payload.learning_status
         state.status_updated_at = now
+        if payload.learning_status is StudentLearningStatus.FINISHED:
+            await record_current_track_completions(
+                session,
+                student_id=student_id,
+                recorded_by_user_id=mentor.id,
+                completed_at=now,
+            )
     state.strength_level = payload.strength_level
     if relation is not None:
         relation.learning_status = state.learning_status

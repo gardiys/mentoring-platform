@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import delete, func, select
 
 from app.db.models import (
+    ConsultationMentorSetting,
     InterviewCard,
     InterviewCardFrequency,
     InterviewDeck,
@@ -15,9 +16,13 @@ from app.db.models import (
     LearningTrackEnrollment,
     LearningTrackRoadmap,
     MentorStudent,
+    MentorTrackAssignment,
+    ProgramCompletion,
     Roadmap,
     RoadmapEnrollment,
     RoadmapSection,
+    StudentLearningStatus,
+    StudentMentorshipState,
     Topic,
     User,
 )
@@ -26,6 +31,7 @@ from app.users.models import UserRole
 
 MENTOR_ID = UUID("10000000-0000-4000-8000-000000000001")
 STUDENT_ID = UUID("20000000-0000-4000-8000-000000000001")
+ALUMNI_ID = UUID("20000000-0000-4000-8000-000000000002")
 ADMIN_ID = UUID("90000000-0000-4000-8000-000000000001")
 ROADMAP_ID = UUID("30000000-0000-4000-8000-000000000001")
 PYTHON_TRACK_ID = UUID("40000000-0000-4000-8000-000000000001")
@@ -71,6 +77,19 @@ async def seed() -> None:
             session.add(student)
         student.onboarding_completed_at = student.onboarding_completed_at or datetime.now(UTC)
         student.learning_start_date = student.learning_start_date or datetime.now(UTC).date()
+        alumni = await session.get(User, ALUMNI_ID)
+        if alumni is None:
+            alumni = User(
+                id=ALUMNI_ID,
+                first_name="Пётр",
+                last_name="Выпускник",
+                email="alumni@example.com",
+                role=UserRole.STUDENT,
+            )
+            session.add(alumni)
+        alumni.is_active = True
+        alumni.onboarding_completed_at = alumni.onboarding_completed_at or datetime.now(UTC)
+        alumni.learning_start_date = alumni.learning_start_date or datetime.now(UTC).date()
         admin = await session.get(User, ADMIN_ID)
         if admin is None:
             admin = User(
@@ -179,8 +198,46 @@ async def seed() -> None:
                     position=0,
                 )
             )
+        if await session.get(MentorTrackAssignment, (MENTOR_ID, PYTHON_TRACK_ID)) is None:
+            session.add(
+                MentorTrackAssignment(
+                    mentor_id=MENTOR_ID,
+                    track_id=PYTHON_TRACK_ID,
+                )
+            )
+        consultant_setting = await session.get(ConsultationMentorSetting, MENTOR_ID)
+        if consultant_setting is None:
+            session.add(
+                ConsultationMentorSetting(
+                    mentor_id=MENTOR_ID,
+                    is_enabled=True,
+                    updated_by_user_id=ADMIN_ID,
+                )
+            )
         if await session.get(LearningTrackEnrollment, (STUDENT_ID, PYTHON_TRACK_ID)) is None:
             session.add(LearningTrackEnrollment(user_id=STUDENT_ID, track_id=PYTHON_TRACK_ID))
+        if await session.get(LearningTrackEnrollment, (ALUMNI_ID, PYTHON_TRACK_ID)) is None:
+            session.add(LearningTrackEnrollment(user_id=ALUMNI_ID, track_id=PYTHON_TRACK_ID))
+        if await session.get(ProgramCompletion, (ALUMNI_ID, PYTHON_TRACK_ID)) is None:
+            session.add(
+                ProgramCompletion(
+                    user_id=ALUMNI_ID,
+                    track_id=PYTHON_TRACK_ID,
+                    completed_at=datetime.now(UTC),
+                    recorded_by_user_id=ADMIN_ID,
+                )
+            )
+        alumni_state = await session.get(StudentMentorshipState, ALUMNI_ID)
+        if alumni_state is None:
+            session.add(
+                StudentMentorshipState(
+                    student_id=ALUMNI_ID,
+                    learning_status=StudentLearningStatus.FINISHED,
+                    status_updated_at=datetime.now(UTC),
+                )
+            )
+        else:
+            alumni_state.learning_status = StudentLearningStatus.FINISHED
 
         backend_knowledge = await session.get(KnowledgeTopic, KNOWLEDGE_BACKEND_ID)
         if backend_knowledge is None:
@@ -360,6 +417,7 @@ async def seed() -> None:
         await session.commit()
     print(f"Mentor UUID: {MENTOR_ID}")
     print(f"Student UUID: {STUDENT_ID}")
+    print(f"Alumni UUID: {ALUMNI_ID}")
     print(f"Admin UUID: {ADMIN_ID}")
 
 

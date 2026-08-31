@@ -55,6 +55,7 @@ class MentorRewardKind(StrEnum):
     ENTRY_PAYMENT = "entry_payment"
     PROGRAM_EXCLUSION = "program_exclusion"
     LEGACY_FIXED = "legacy_fixed"
+    CONSULTATION = "consultation"
 
 
 class MentorPayoutStatus(StrEnum):
@@ -285,6 +286,11 @@ class PaymentWebhookEvent(UUIDPrimaryKeyMixin, Base):
     attempt_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("payment_attempts.id", ondelete="SET NULL"), nullable=True
     )
+    opportunity_attempt_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("opportunity_payment_attempts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     deduplication_key: Mapped[str] = mapped_column(String(512), nullable=False)
@@ -325,6 +331,12 @@ class MentorReward(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     installment_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("payment_installments.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    consultation_request_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("consultation_requests.id", ondelete="CASCADE"),
+        unique=True,
         nullable=True,
     )
     student_id: Mapped[UUID] = mapped_column(

@@ -74,6 +74,8 @@ export function AppLayout() {
       location.pathname === "/interviews/personal-review" ||
       location.pathname === "/my-mentor" ||
       location.pathname === "/payments" ||
+      location.pathname.startsWith("/opportunities") ||
+      location.pathname === "/admin/opportunities" ||
       location.pathname === "/mentor/profile" ||
       location.pathname === "/mentor/rewards" ||
       location.pathname === "/mentor/card-automation/clusters" ||
@@ -186,6 +188,18 @@ export function AppLayout() {
               location.pathname.startsWith("/roadmaps") ||
               location.pathname.startsWith("/topics")
             }
+            onClick={close}
+          />
+          <NavLink
+            component={Link}
+            to={admin ? "/admin/opportunities" : "/opportunities"}
+            label="Возможности"
+            description={
+              admin ? "Заявки выпускников" : "Поддержка после программы"
+            }
+            leftSection={<span className="nav-index">+</span>}
+            className="brand-nav-link"
+            active={location.pathname.includes("opportunities")}
             onClick={close}
           />
           <NavLink

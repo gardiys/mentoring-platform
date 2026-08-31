@@ -9,6 +9,42 @@ import { lazyPage } from "./lazyRoute";
 
 const studentRoutes = [
   {
+    path: "/opportunities",
+    lazy: lazyPage(
+      () => import("../pages/OpportunitiesPage"),
+      "OpportunitiesPage",
+    ),
+  },
+  {
+    path: "/opportunities/alumni",
+    lazy: lazyPage(
+      () => import("../pages/AlumniOpportunitiesPage"),
+      "AlumniOpportunitiesPage",
+    ),
+  },
+  {
+    path: "/opportunities/alumni/consultations",
+    lazy: lazyPage(
+      () => import("../pages/AlumniConsultationsPage"),
+      "AlumniConsultationsPage",
+    ),
+  },
+  {
+    path: "/opportunities/alumni/go-transition",
+    lazy: lazyPage(
+      () => import("../pages/GoTransitionOpportunityPage"),
+      "GoTransitionOpportunityPage",
+    ),
+  },
+  {
+    path: "/opportunities/consultations",
+    element: <Navigate to="/opportunities/alumni/consultations" replace />,
+  },
+  {
+    path: "/opportunities/go-transition",
+    element: <Navigate to="/opportunities/alumni/go-transition" replace />,
+  },
+  {
     path: "/roadmaps",
     lazy: lazyPage(() => import("../pages/RoadmapsPage"), "RoadmapsPage"),
   },
@@ -184,6 +220,13 @@ const mentorRoutes = [
 ];
 
 const adminRoutes = [
+  {
+    path: "/admin/opportunities",
+    lazy: lazyPage(
+      () => import("../pages/AdminOpportunitiesPage"),
+      "AdminOpportunitiesPage",
+    ),
+  },
   {
     path: "/admin/applications",
     lazy: lazyPage(

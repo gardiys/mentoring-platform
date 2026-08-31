@@ -421,7 +421,11 @@ export type PaymentAttemptStatus =
 export type AdminEmploymentPaymentStatus = "outstanding" | "paid" | "all";
 export type StudentEmploymentStatus = "active" | "terminated";
 export type MentorRewardKind =
-  "employment_payment" | "entry_payment" | "program_exclusion" | "legacy_fixed";
+  | "employment_payment"
+  | "entry_payment"
+  | "program_exclusion"
+  | "legacy_fixed"
+  | "consultation";
 export type MentorPayoutStatus = "requested" | "paid" | "cancelled";
 export type MentorPayoutOrigin = "mentor_request" | "admin_direct";
 
@@ -1934,4 +1938,120 @@ export interface OnboardingApplicationActionResponse {
   message: string;
   delivered: boolean | null;
   application: OnboardingApplicationDetail;
+}
+
+export type OpportunitySegment =
+  "ACTIVE_STUDENT" | "PYTHON_ALUMNI" | "GO_ALUMNI" | "MULTI_ALUMNI" | "OTHER";
+export type ConsultationStatus =
+  | "requested"
+  | "payment_pending"
+  | "paid"
+  | "scheduled"
+  | "completed"
+  | "cancelled";
+export type ConsultationType =
+  | "free_topic"
+  | "technical_mock"
+  | "legend_mock"
+  | "resume_legend"
+  | "system_design_mock"
+  | "work_task";
+export type GoTransitionStatus =
+  | "submitted"
+  | "approved"
+  | "payment_pending"
+  | "paid"
+  | "rejected"
+  | "cancelled";
+export interface OpportunityMentor {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+  telegram_username: string | null;
+}
+export interface OpportunityOffer {
+  code: "ALUMNI_CONSULTATION" | "PYTHON_TO_GO_ALUMNI";
+  available: boolean;
+  title: string;
+  unavailable_reason: string | null;
+  price: { amount_kopecks: number; currency: string } | null;
+  comparison_price: { amount_kopecks: number; currency: string } | null;
+  upfront_price_kopecks: number | null;
+  success_fee_percent: number | null;
+  comparison_upfront_price_kopecks: number | null;
+  comparison_success_fee_percent: number | null;
+}
+export interface ConsultationRequestRead {
+  id: string;
+  mentor: OpportunityMentor | null;
+  consultation_type: ConsultationType;
+  brief: string;
+  price_kopecks: number;
+  mentor_reward_kopecks: number;
+  duration_minutes: number;
+  status: ConsultationStatus;
+  scheduled_at: string | null;
+  paid_at: string | null;
+  completed_at: string | null;
+  admin_note: string | null;
+  written_summary: string | null;
+  created_at: string;
+}
+export interface GoTransitionApplicationRead {
+  id: string;
+  motivation: string;
+  status: GoTransitionStatus;
+  upfront_price_kopecks: number;
+  success_fee_percent: number;
+  approved_at: string | null;
+  terms_accepted_at: string | null;
+  paid_at: string | null;
+  admin_note: string | null;
+  created_at: string;
+}
+export interface OpportunitiesDashboard {
+  segment: OpportunitySegment;
+  has_active_program: boolean;
+  has_alumni_access: boolean;
+  opportunities: OpportunityOffer[];
+  mentors: OpportunityMentor[];
+  consultation_types: Array<{
+    code: ConsultationType;
+    title: string;
+    description: string;
+    price_kopecks: number;
+    comparison_price_kopecks: number;
+    mentor_reward_kopecks: number;
+    duration_minutes: number;
+  }>;
+  go_transition_description_markdown: string;
+  consultations: ConsultationRequestRead[];
+  go_transition_applications: GoTransitionApplicationRead[];
+}
+export interface AdminOpportunityStudent {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+  telegram_username: string | null;
+  email: string | null;
+}
+export interface AdminConsultationRead extends ConsultationRequestRead {
+  student: AdminOpportunityStudent;
+}
+export interface AdminConsultationMentor extends OpportunityMentor {
+  is_enabled: boolean;
+}
+export interface AdminGoTransitionRead extends GoTransitionApplicationRead {
+  student: AdminOpportunityStudent;
+}
+export interface AdminOpportunitiesDashboard {
+  consultation_types: OpportunitiesDashboard["consultation_types"];
+  go_transition_description_markdown: string;
+  consultation_mentors: AdminConsultationMentor[];
+  consultations: AdminConsultationRead[];
+  go_transition_applications: AdminGoTransitionRead[];
+}
+export interface OpportunityPaymentLink {
+  payment_url: string;
+  payment_link_id: string;
 }

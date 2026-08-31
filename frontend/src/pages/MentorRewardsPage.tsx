@@ -383,6 +383,7 @@ function rewardTitle(kind: string, company: string | null) {
   if (kind === "entry_payment") return "Вступительный платёж";
   if (kind === "program_exclusion") return "Исключение из программы";
   if (kind === "legacy_fixed") return "Архив: вступление / исключение";
+  if (kind === "consultation") return "Консультация выпускника";
   return `Платёж после трудоустройства${company ? ` · ${company}` : ""}`;
 }
 

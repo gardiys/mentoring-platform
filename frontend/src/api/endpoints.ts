@@ -162,6 +162,11 @@ import type {
   QuestionClusterBulkMutation,
   QuestionClusterBulkResult,
   QuestionClusterVersionMutation,
+  OpportunitiesDashboard,
+  AdminOpportunitiesDashboard,
+  ConsultationStatus,
+  ConsultationType,
+  OpportunityPaymentLink,
 } from "../types/api";
 import {
   ApiError,
@@ -2204,4 +2209,93 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
+  myOpportunities: () =>
+    apiRequest<OpportunitiesDashboard>("/api/v1/opportunities/me"),
+  createConsultation: (payload: {
+    mentor_id: string | null;
+    consultation_type: ConsultationType;
+    brief: string;
+  }) =>
+    apiRequest<OpportunitiesDashboard>("/api/v1/opportunities/consultations", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  createConsultationPaymentLink: (id: string) =>
+    apiRequest<OpportunityPaymentLink>(
+      `/api/v1/opportunities/consultations/${id}/payment-link`,
+      { method: "POST" },
+    ),
+  createGoTransition: (payload: { motivation: string }) =>
+    apiRequest<OpportunitiesDashboard>("/api/v1/opportunities/go-transition", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  acceptGoTransition: (id: string) =>
+    apiRequest<OpportunitiesDashboard>(
+      `/api/v1/opportunities/go-transition/${id}/accept`,
+      { method: "POST" },
+    ),
+  createGoTransitionPaymentLink: (id: string) =>
+    apiRequest<OpportunityPaymentLink>(
+      `/api/v1/opportunities/go-transition/${id}/payment-link`,
+      { method: "POST" },
+    ),
+  completeDevelopmentOpportunityPayment: (paymentLinkId: string) =>
+    apiRequest<OpportunitiesDashboard>(
+      `/api/v1/opportunities/payments/${encodeURIComponent(paymentLinkId)}/development/complete`,
+      { method: "POST" },
+    ),
+  adminOpportunities: () =>
+    apiRequest<AdminOpportunitiesDashboard>("/api/v1/admin/opportunities"),
+  updateAdminConsultation: (
+    id: string,
+    payload: {
+      status: ConsultationStatus;
+      mentor_id: string | null;
+      scheduled_at: string | null;
+      admin_note: string | null;
+      written_summary: string | null;
+    },
+  ) =>
+    apiRequest<AdminOpportunitiesDashboard>(
+      `/api/v1/admin/opportunities/consultations/${id}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+  decideAdminGoTransition: (
+    id: string,
+    payload: { approved: boolean; admin_note: string | null },
+  ) =>
+    apiRequest<AdminOpportunitiesDashboard>(
+      `/api/v1/admin/opportunities/go-transition/${id}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+  setAdminConsultationMentor: (mentorId: string, isEnabled: boolean) =>
+    apiRequest<AdminOpportunitiesDashboard>(
+      `/api/v1/admin/opportunities/consultation-mentors/${mentorId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ is_enabled: isEnabled }),
+      },
+    ),
+  updateAdminConsultationType: (
+    consultationType: ConsultationType,
+    payload: {
+      price_kopecks: number;
+      comparison_price_kopecks: number;
+      mentor_reward_kopecks: number;
+      duration_minutes: number;
+    },
+  ) =>
+    apiRequest<AdminOpportunitiesDashboard>(
+      `/api/v1/admin/opportunities/consultation-types/${consultationType}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+  updateAdminGoTransitionProgram: (descriptionMarkdown: string) =>
+    apiRequest<AdminOpportunitiesDashboard>(
+      "/api/v1/admin/opportunities/go-transition-program",
+      {
+        method: "PATCH",
+        body: JSON.stringify({ description_markdown: descriptionMarkdown }),
+      },
+    ),
 };

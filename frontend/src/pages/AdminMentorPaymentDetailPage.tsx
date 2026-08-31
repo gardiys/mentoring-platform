@@ -433,6 +433,7 @@ function rewardSource(reward: MentorRewardRead) {
   if (reward.kind === "entry_payment") return "Вступительный платёж";
   if (reward.kind === "program_exclusion") return "Исключение из программы";
   if (reward.kind === "legacy_fixed") return "Архив: вступление / исключение";
+  if (reward.kind === "consultation") return "Консультация выпускника";
   return reward.company_name
     ? `Платёж после трудоустройства · ${reward.company_name}`
     : "Платёж после трудоустройства";

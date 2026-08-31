@@ -27,10 +27,10 @@ export function DevLoginPage() {
   const queryClient = useQueryClient();
   const valid = UUID_PATTERN.test(value.trim());
 
-  const login = (id: string) => {
+  const login = (id: string, destination = "/roadmaps") => {
     queryClient.clear();
     setDevUserId(id);
-    navigate("/roadmaps");
+    navigate(destination);
   };
 
   return (
@@ -79,7 +79,7 @@ export function DevLoginPage() {
                 <Text className="technical-label" mb="sm">
                   Быстрый вход
                 </Text>
-                <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="xs">
+                <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="xs">
                   {import.meta.env.VITE_DEV_STUDENT_ID && (
                     <Button
                       variant="light"
@@ -104,6 +104,20 @@ export function DevLoginPage() {
                       onClick={() => login(import.meta.env.VITE_DEV_ADMIN_ID!)}
                     >
                       Как админ
+                    </Button>
+                  )}
+                  {import.meta.env.VITE_DEV_ALUMNI_ID && (
+                    <Button
+                      color="yellow"
+                      variant="light"
+                      onClick={() =>
+                        login(
+                          import.meta.env.VITE_DEV_ALUMNI_ID!,
+                          "/opportunities",
+                        )
+                      }
+                    >
+                      Как выпускник
                     </Button>
                   )}
                 </SimpleGrid>
