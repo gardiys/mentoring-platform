@@ -65,7 +65,6 @@ class ConsultationRead(BaseModel):
     consultation_type: ConsultationType
     brief: str
     price_kopecks: int
-    mentor_reward_kopecks: int
     duration_minutes: int
     status: ConsultationStatus
     scheduled_at: datetime | None
@@ -81,6 +80,16 @@ class GoTransitionCreate(BaseModel):
     motivation: str = Field(min_length=10, max_length=5000)
 
 
+class GoTransitionTermsAcceptance(BaseModel):
+    accepted: bool
+
+    @model_validator(mode="after")
+    def require_acceptance(self) -> GoTransitionTermsAcceptance:
+        if not self.accepted:
+            raise ValueError("Terms must be accepted explicitly")
+        return self
+
+
 class GoTransitionRead(BaseModel):
     id: UUID
     motivation: str
@@ -91,10 +100,18 @@ class GoTransitionRead(BaseModel):
     terms_accepted_at: datetime | None
     paid_at: datetime | None
     admin_note: str | None
+    terms_version: int
+    terms_snapshot: dict[str, object]
+    terms_expires_at: datetime | None
+    accepted_terms_snapshot: dict[str, object] | None
     created_at: datetime
 
 
 class OpportunitiesDashboard(BaseModel):
+    opportunities_enabled: bool
+    consultations_enabled: bool
+    python_repeat_mentorship_enabled: bool
+    python_to_go_enabled: bool
     segment: OpportunitySegment
     has_active_program: bool
     has_alumni_access: bool
@@ -174,6 +191,7 @@ class AdminGoTransitionProgramMutation(BaseModel):
 
 class AdminConsultationRead(ConsultationRead):
     student: AdminOpportunityStudentRead
+    mentor_reward_kopecks: int
 
 
 class AdminGoTransitionRead(GoTransitionRead):

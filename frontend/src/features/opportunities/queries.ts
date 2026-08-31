@@ -1,12 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
-import type { ConsultationStatus, ConsultationType } from "../../types/api";
+import type {
+  ConsultationStatus,
+  ConsultationType,
+  PythonRepeatApplicationStatus,
+} from "../../types/api";
 
 export const opportunityKeys = {
   all: ["opportunities"] as const,
   mine: ["opportunities", "me"] as const,
   admin: ["opportunities", "admin"] as const,
+  pythonRepeat: ["opportunities", "python-repeat"] as const,
+  adminPythonRepeat: ["opportunities", "admin", "python-repeat"] as const,
 };
 
 function useMineMutation<T>(mutationFn: (payload: T) => Promise<unknown>) {
@@ -18,6 +24,131 @@ function useMineMutation<T>(mutationFn: (payload: T) => Promise<unknown>) {
       void queryClient.invalidateQueries({ queryKey: opportunityKeys.all });
     },
   });
+}
+
+export function usePythonRepeat() {
+  return useQuery({
+    queryKey: opportunityKeys.pythonRepeat,
+    queryFn: api.myPythonRepeat,
+  });
+}
+
+function usePythonRepeatMutation<T>(
+  mutationFn: (payload: T) => Promise<unknown>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: (data) => {
+      queryClient.setQueryData(opportunityKeys.pythonRepeat, data);
+      void queryClient.invalidateQueries({ queryKey: opportunityKeys.all });
+    },
+  });
+}
+
+export function useCreatePythonRepeatApplication() {
+  return usePythonRepeatMutation(api.createPythonRepeatApplication);
+}
+
+export function useUpdatePythonRepeatApplication() {
+  return usePythonRepeatMutation(
+    ({ id, payload }: { id: string; payload: Record<string, unknown> }) =>
+      api.updatePythonRepeatApplication(id, payload),
+  );
+}
+
+export function useSubmitPythonRepeatApplication() {
+  return usePythonRepeatMutation(api.submitPythonRepeatApplication);
+}
+
+export function useAcceptPythonRepeatTerms() {
+  return usePythonRepeatMutation(api.acceptPythonRepeatTerms);
+}
+
+export function useCheckoutPythonRepeat() {
+  return useMutation({ mutationFn: api.checkoutPythonRepeat });
+}
+
+export function useCreatePythonRepeatOffer() {
+  return usePythonRepeatMutation(api.createPythonRepeatOffer);
+}
+
+export function useSubmitPythonRepeatOffer() {
+  return usePythonRepeatMutation(api.submitPythonRepeatOffer);
+}
+
+export function useCheckoutPythonRepeatInstallment() {
+  return useMutation({ mutationFn: api.checkoutPythonRepeatInstallment });
+}
+
+export function useCompleteDevelopmentPythonRepeatPayment() {
+  return usePythonRepeatMutation(api.completeDevelopmentPythonRepeatPayment);
+}
+
+export function useAdminPythonRepeat() {
+  return useQuery({
+    queryKey: opportunityKeys.adminPythonRepeat,
+    queryFn: api.adminPythonRepeat,
+  });
+}
+
+function useAdminPythonRepeatMutation<T>(
+  mutationFn: (payload: T) => Promise<unknown>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: (data) => {
+      queryClient.setQueryData(opportunityKeys.adminPythonRepeat, data);
+      void queryClient.invalidateQueries({ queryKey: opportunityKeys.all });
+    },
+  });
+}
+
+export function useTransitionAdminPythonRepeat() {
+  return useAdminPythonRepeatMutation(
+    (payload: {
+      id: string;
+      status: PythonRepeatApplicationStatus;
+      comment: string;
+      responsible_user_id: string | null;
+    }) =>
+      api.transitionAdminPythonRepeat(payload.id, {
+        status: payload.status,
+        comment: payload.comment,
+        responsible_user_id: payload.responsible_user_id,
+      }),
+  );
+}
+
+export function useOverrideAdminPythonRepeatEligibility() {
+  return useAdminPythonRepeatMutation(
+    (payload: { id: string; reason: string }) =>
+      api.overrideAdminPythonRepeatEligibility(payload.id, payload.reason),
+  );
+}
+
+export function useAssignAdminPythonRepeatMentor() {
+  return useAdminPythonRepeatMutation(
+    (payload: { enrollmentId: string; mentorId: string }) =>
+      api.assignAdminPythonRepeatMentor(payload.enrollmentId, payload.mentorId),
+  );
+}
+
+export function useDecideAdminPythonRepeatOffer() {
+  return useAdminPythonRepeatMutation(
+    (payload: {
+      offerId: string;
+      verified: boolean;
+      salary_base_kopecks: number | null;
+      comment: string;
+    }) =>
+      api.decideAdminPythonRepeatOffer(payload.offerId, {
+        verified: payload.verified,
+        salary_base_kopecks: payload.salary_base_kopecks,
+        comment: payload.comment,
+      }),
+  );
 }
 
 export function useMyOpportunities() {

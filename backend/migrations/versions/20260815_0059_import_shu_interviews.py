@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import logging
 import re
 from collections import defaultdict
 from collections.abc import Sequence
@@ -45,6 +46,7 @@ INTERVIEW_FIELDS = {
 }
 COMPANY_FIELDS = {"id", "created_at", "updated_at", "name", "additional_names"}
 IMPORT_NAMESPACE = UUID("b4e13c60-0a0d-4b35-9237-270166e00440")
+logger = logging.getLogger("alembic.runtime.migration")
 # Only irreversible fingerprints are kept in the image. The full legacy user
 # export contains personal data and is intentionally excluded by .dockerignore.
 AUTHOR_TELEGRAM_FINGERPRINTS = {
@@ -228,7 +230,12 @@ def _resolve_users(
                 sa.text("SELECT id FROM users WHERE id = :id"), {"id": candidate}
             )
         if user_id is None:
-            raise RuntimeError(f"Platform user for Shu author {author_id} was not found")
+            logger.warning(
+                "Skipping Shu interviews for unresolved legacy author %s; "
+                "the deployment image intentionally has no legacy user PII",
+                author_id,
+            )
+            continue
         result[author_id] = user_id
     return result
 
@@ -338,6 +345,12 @@ def upgrade() -> None:
     if set(track_ids) != {"python", "go"}:
         raise RuntimeError("Python and Go learning tracks are required for Shu import")
     user_ids = _resolve_users(connection, interviews)
+    interviews = [row for row in interviews if row["author_id"] in user_ids]
+    if not interviews:
+        logger.warning(
+            "No resolvable Shu authors were found; skipping incremental interview import"
+        )
+        return
     company_ids = _resolve_companies(
         connection,
         interviews,

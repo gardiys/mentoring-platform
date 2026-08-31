@@ -24,6 +24,10 @@ const student = {
 };
 
 const dashboard: OpportunitiesDashboard = {
+  opportunities_enabled: true,
+  consultations_enabled: true,
+  python_repeat_mentorship_enabled: true,
+  python_to_go_enabled: true,
   segment: "PYTHON_ALUMNI",
   has_active_program: false,
   has_alumni_access: true,
@@ -37,6 +41,18 @@ const dashboard: OpportunitiesDashboard = {
       comparison_price: { amount_kopecks: 500_000, currency: "RUB" },
       upfront_price_kopecks: null,
       success_fee_percent: null,
+      comparison_upfront_price_kopecks: null,
+      comparison_success_fee_percent: null,
+    },
+    {
+      code: "PYTHON_REPEAT_MENTORSHIP",
+      available: true,
+      title: "Повторное менторство по Python",
+      unavailable_reason: null,
+      price: null,
+      comparison_price: null,
+      upfront_price_kopecks: 3_000_000,
+      success_fee_percent: 100,
       comparison_upfront_price_kopecks: null,
       comparison_success_fee_percent: null,
     },
@@ -156,7 +172,10 @@ it("показывает выпускнику рассчитанные backend �
 
   expect(await screen.findByText("Кабинет выпускника")).toBeInTheDocument();
   expect(screen.getAllByText("4 000 ₽")).toHaveLength(1);
-  expect(screen.getByText("30 000 ₽")).toBeInTheDocument();
+  expect(screen.getAllByText("30 000 ₽")).toHaveLength(2);
+  expect(
+    screen.getByRole("link", { name: "Подробнее и подать заявку" }),
+  ).toHaveAttribute("href", "/opportunities/alumni/python-repeat");
   expect(
     screen.getByRole("link", { name: "Посмотреть форматы консультаций" }),
   ).toHaveAttribute("href", "/opportunities/alumni/consultations");
@@ -178,6 +197,14 @@ it("отправляет заявку на переход с введенной 
         terms_accepted_at: null,
         paid_at: null,
         admin_note: null,
+        terms_version: 1,
+        terms_snapshot: {
+          product_code: "PYTHON_TO_GO_ALUMNI",
+          upfront_price_kopecks: 3_000_000,
+          success_fee_percent: 100,
+        },
+        terms_expires_at: null,
+        accepted_terms_snapshot: null,
         created_at: "2026-08-30T00:00:00Z",
       },
     ],

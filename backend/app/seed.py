@@ -27,6 +27,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import async_session_factory
+from app.opportunities.python_repeat_seed import seed_python_repeat_demo
 from app.users.models import UserRole
 
 MENTOR_ID = UUID("10000000-0000-4000-8000-000000000001")
@@ -414,6 +415,13 @@ async def seed() -> None:
                         is_published=True,
                     )
                 )
+        await session.flush()
+        await seed_python_repeat_demo(
+            session,
+            python_track_id=PYTHON_TRACK_ID,
+            mentor_id=MENTOR_ID,
+            admin_id=ADMIN_ID,
+        )
         await session.commit()
     print(f"Mentor UUID: {MENTOR_ID}")
     print(f"Student UUID: {STUDENT_ID}")

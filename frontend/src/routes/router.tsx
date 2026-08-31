@@ -37,6 +37,13 @@ const studentRoutes = [
     ),
   },
   {
+    path: "/opportunities/alumni/python-repeat",
+    lazy: lazyPage(
+      () => import("../pages/PythonRepeatOpportunityPage"),
+      "PythonRepeatOpportunityPage",
+    ),
+  },
+  {
     path: "/opportunities/consultations",
     element: <Navigate to="/opportunities/alumni/consultations" replace />,
   },
@@ -131,6 +138,13 @@ const studentRoutes = [
     ),
   },
   {
+    path: "/interviews/:deckSlug/questions",
+    lazy: lazyPage(
+      () => import("../pages/InterviewQuestionsPage"),
+      "InterviewQuestionsPage",
+    ),
+  },
+  {
     path: "/interviews/:deckSlug",
     lazy: lazyPage(
       () => import("../pages/InterviewStudyPage"),
@@ -220,6 +234,13 @@ const mentorRoutes = [
 ];
 
 const adminRoutes = [
+  {
+    path: "/admin/opportunities/python-repeat",
+    lazy: lazyPage(
+      () => import("../pages/AdminPythonRepeatPage"),
+      "AdminPythonRepeatPage",
+    ),
+  },
   {
     path: "/admin/opportunities",
     lazy: lazyPage(

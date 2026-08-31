@@ -4,6 +4,7 @@ import asyncio
 import logging
 import zlib
 from datetime import UTC, datetime
+from typing import cast
 
 from pydantic import BaseModel, ConfigDict
 from redis.asyncio import Redis
@@ -35,11 +36,14 @@ class InterviewCardDuplicateSnapshot(BaseModel):
 
 
 def _redis() -> Redis:
-    return Redis.from_url(
-        get_settings().redis_url,
-        decode_responses=False,
-        socket_connect_timeout=2,
-        socket_timeout=5,
+    return cast(
+        Redis,
+        Redis.from_url(
+            get_settings().redis_url,
+            decode_responses=False,
+            socket_connect_timeout=2,
+            socket_timeout=5,
+        ),
     )
 
 
@@ -161,9 +165,9 @@ async def release_duplicate_refresh_lock(owner: str) -> None:
             await pipeline.watch(REFRESH_LOCK_KEY)
             current = await pipeline.get(REFRESH_LOCK_KEY)
             if current != owner.encode("utf-8"):
-                await pipeline.reset()
+                await pipeline.reset()  # type: ignore[no-untyped-call]
                 return
-            pipeline.multi()
+            pipeline.multi()  # type: ignore[no-untyped-call]
             pipeline.delete(REFRESH_LOCK_KEY)
             await pipeline.execute()
     except RedisError:

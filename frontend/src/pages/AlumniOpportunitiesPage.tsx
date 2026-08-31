@@ -34,6 +34,9 @@ export function AlumniOpportunitiesPage() {
   const transition = query.data.opportunities.find(
     (item) => item.code === "PYTHON_TO_GO_ALUMNI",
   );
+  const pythonRepeat = query.data.opportunities.find(
+    (item) => item.code === "PYTHON_REPEAT_MENTORSHIP",
+  );
 
   return (
     <Stack gap="xl">
@@ -56,8 +59,8 @@ export function AlumniOpportunitiesPage() {
           оплата станут доступны после завершения программы.
         </Alert>
       )}
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
-        <Card withBorder>
+      <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }} spacing="xl">
+        {consultation && <Card withBorder>
           <Stack h="100%" gap="lg">
             <div>
               <Text className="brand-eyebrow">Поддержка команды</Text>
@@ -90,8 +93,40 @@ export function AlumniOpportunitiesPage() {
               Посмотреть форматы консультаций
             </Button>
           </Stack>
-        </Card>
-        <Card withBorder>
+        </Card>}
+        {pythonRepeat && (
+          <Card withBorder>
+            <Stack h="100%" gap="lg">
+              <div>
+                <Text className="brand-eyebrow">Новый карьерный цикл</Text>
+                <Title order={2}>Повторное менторство по Python</Title>
+              </div>
+              <Text>
+                Диагностика, персональный план и сопровождение до нового Python
+                Backend оффера без сброса старого прогресса.
+              </Text>
+              <Group align="baseline">
+                <Title order={3} c="blue">
+                  {formatRubles(pythonRepeat?.upfront_price_kopecks ?? 0)}
+                </Title>
+                <Text>
+                  + {pythonRepeat?.success_fee_percent ?? 0}% от оффера
+                </Text>
+              </Group>
+              {!pythonRepeat?.available && (
+                <Alert color="gray">{pythonRepeat?.unavailable_reason}</Alert>
+              )}
+              <Button
+                component={Link}
+                to="/opportunities/alumni/python-repeat"
+                mt="auto"
+              >
+                Подробнее и подать заявку
+              </Button>
+            </Stack>
+          </Card>
+        )}
+        {transition && <Card withBorder>
           <Stack h="100%" gap="lg">
             <div>
               <Text className="brand-eyebrow">Новое направление</Text>
@@ -121,7 +156,7 @@ export function AlumniOpportunitiesPage() {
               Подробнее о программе
             </Button>
           </Stack>
-        </Card>
+        </Card>}
       </SimpleGrid>
     </Stack>
   );

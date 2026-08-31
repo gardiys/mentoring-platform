@@ -36,6 +36,10 @@ from app.interviews.schemas import (
     InterviewCardStudy,
     InterviewDeckListItem,
     InterviewDeckStats,
+    InterviewQuestionLearnedFilter,
+    InterviewQuestionLearnedResult,
+    InterviewQuestionTableItem,
+    InterviewQuestionTablePage,
     InterviewReviewResult,
     InterviewStudySession,
     InterviewTopicOption,
@@ -356,6 +360,170 @@ async def search_interview_cards(
         )
         for card, progress in rows
     ]
+
+
+async def list_interview_questions(
+    session: AsyncSession,
+    user: User,
+    deck_slug: str,
+    *,
+    category: str | None,
+    frequent_only: bool,
+    learned: InterviewQuestionLearnedFilter,
+    query: str | None,
+    limit: int,
+    offset: int,
+) -> InterviewQuestionTablePage:
+    deck, track = await _public_deck_model(session, deck_slug, user)
+    filters = [
+        InterviewCard.deck_id == deck.id,
+        InterviewCard.is_published.is_(True),
+    ]
+    normalized_category = category.strip() if category else None
+    if normalized_category:
+        filters.append(InterviewCard.category == normalized_category)
+    if frequent_only:
+        filters.append(effective_frequent_predicate())
+    if learned is InterviewQuestionLearnedFilter.LEARNED:
+        filters.append(InterviewCardProgress.first_learned_at.is_not(None))
+    elif learned is InterviewQuestionLearnedFilter.UNLEARNED:
+        filters.append(InterviewCardProgress.first_learned_at.is_(None))
+
+    normalized_query = query.strip() if query else ""
+    if normalized_query:
+        search_query = func.websearch_to_tsquery("russian", normalized_query).op("||")(
+            func.websearch_to_tsquery("simple", normalized_query)
+        )
+        filters.append(InterviewCard.search_vector.op("@@")(search_query))
+
+    base = (
+        select(InterviewCard, InterviewCardProgress)
+        .outerjoin(
+            InterviewCardProgress,
+            (InterviewCardProgress.card_id == InterviewCard.id)
+            & (InterviewCardProgress.user_id == user.id),
+        )
+        .where(*filters)
+    )
+    total = (
+        await session.scalar(
+            select(func.count())
+            .select_from(InterviewCard)
+            .outerjoin(
+                InterviewCardProgress,
+                (InterviewCardProgress.card_id == InterviewCard.id)
+                & (InterviewCardProgress.user_id == user.id),
+            )
+            .where(*filters)
+        )
+        or 0
+    )
+    rows = (
+        await session.execute(
+            base.order_by(
+                effective_frequent_predicate().desc(),
+                InterviewCard.category,
+                InterviewCard.position,
+                InterviewCard.id,
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+    return InterviewQuestionTablePage(
+        deck=await _deck_list_item(session, user.id, deck, track),
+        items=[
+            InterviewQuestionTableItem(
+                id=card.id,
+                slug=card.slug,
+                category=card.category,
+                subcategory=card.subcategory,
+                question_markdown=card.question_markdown,
+                answer_markdown=card.answer_markdown,
+                frequency=effective_card_frequency(card),
+                learned=progress is not None and progress.first_learned_at is not None,
+                learned_at=progress.first_learned_at if progress is not None else None,
+                repetitions=progress.repetitions if progress is not None else 0,
+                due_at=progress.due_at if progress is not None else None,
+            )
+            for card, progress in rows
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+async def set_interview_question_learned(
+    session: AsyncSession,
+    user: User,
+    card_id: UUID,
+    *,
+    learned: bool,
+) -> InterviewQuestionLearnedResult:
+    row = (
+        await session.execute(
+            select(InterviewCard, InterviewDeck)
+            .join(InterviewDeck, InterviewDeck.id == InterviewCard.deck_id)
+            .join(LearningTrack, LearningTrack.id == InterviewDeck.track_id)
+            .where(
+                InterviewCard.id == card_id,
+                InterviewCard.is_published.is_(True),
+                InterviewDeck.is_published.is_(True),
+                LearningTrack.is_published.is_(True),
+            )
+        )
+    ).one_or_none()
+    if row is None:
+        api_error(404, "interview_card_not_found", "Interview card was not found")
+    card, deck = row
+    if not await _has_track_access(session, user, deck.track_id):
+        api_error(403, "interview_deck_access_denied", "Track access is required")
+
+    progress = await session.get(InterviewCardProgress, (user.id, card.id), with_for_update=True)
+    now = datetime.now(UTC)
+    if learned:
+        if progress is None:
+            progress = InterviewCardProgress(
+                user_id=user.id,
+                card_id=card.id,
+                repetitions=1,
+                interval_days=30,
+                ease_factor=2.65,
+                lapses=0,
+                due_at=now + timedelta(days=30),
+                first_learned_at=now,
+                last_reviewed_at=now,
+                last_rating=InterviewReviewRating.KNOWN,
+            )
+            session.add(progress)
+        elif progress.first_learned_at is None:
+            progress.repetitions = max(1, progress.repetitions)
+            progress.interval_days = 30
+            progress.ease_factor = max(2.65, progress.ease_factor)
+            progress.due_at = now + timedelta(days=30)
+            progress.first_learned_at = now
+            progress.last_reviewed_at = now
+            progress.last_rating = InterviewReviewRating.KNOWN
+    elif progress is not None:
+        progress.repetitions = 0
+        progress.interval_days = 0
+        progress.ease_factor = 2.5
+        progress.lapses = 0
+        progress.due_at = now
+        progress.first_learned_at = None
+        progress.last_reviewed_at = None
+        progress.last_rating = None
+
+    await session.commit()
+    if progress is not None:
+        await session.refresh(progress)
+    return InterviewQuestionLearnedResult(
+        card_id=card.id,
+        learned=progress is not None and progress.first_learned_at is not None,
+        learned_at=progress.first_learned_at if progress is not None else None,
+        due_at=progress.due_at if progress is not None else None,
+    )
 
 
 async def get_interview_topics(

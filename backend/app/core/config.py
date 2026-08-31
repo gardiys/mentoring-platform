@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     app_debug: bool = False
     dev_auth_enabled: bool = False
+    opportunities_enabled: bool = True
+    consultations_enabled: bool = True
+    python_repeat_mentorship_enabled: bool = True
+    python_to_go_enabled: bool = True
     api_max_request_body_bytes: int = Field(
         default=8_388_608,
         ge=1_024,

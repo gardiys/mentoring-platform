@@ -3,6 +3,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Group,
   Paper,
   Stack,
@@ -45,6 +46,9 @@ export function GoTransitionOpportunityPage() {
   const accept = useAcceptGoTransition();
   const payment = useCreateGoTransitionPaymentLink();
   const [motivation, setMotivation] = useState("");
+  const [acceptedApplicationId, setAcceptedApplicationId] = useState<
+    string | null
+  >(null);
 
   if (query.isPending)
     return <LoadingState label="Загружаем программу перехода…" />;
@@ -157,14 +161,26 @@ export function GoTransitionOpportunityPage() {
                 <Stack align="flex-end">
                   <Badge>{statusLabels[item.status]}</Badge>
                   {item.status === "approved" && (
-                    <Button
-                      loading={accept.isPending}
-                      onClick={() =>
-                        accept.mutate(item.id, { onError: notifyError })
-                      }
-                    >
-                      Принять условия
-                    </Button>
+                    <Stack align="flex-end">
+                      <Checkbox
+                        checked={acceptedApplicationId === item.id}
+                        onChange={(event) =>
+                          setAcceptedApplicationId(
+                            event.currentTarget.checked ? item.id : null,
+                          )
+                        }
+                        label="Я ознакомился и принимаю условия"
+                      />
+                      <Button
+                        disabled={acceptedApplicationId !== item.id}
+                        loading={accept.isPending}
+                        onClick={() =>
+                          accept.mutate(item.id, { onError: notifyError })
+                        }
+                      >
+                        Принять условия
+                      </Button>
+                    </Stack>
                   )}
                   {item.status === "payment_pending" && (
                     <Button

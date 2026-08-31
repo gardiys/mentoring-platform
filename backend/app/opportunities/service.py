@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -24,10 +24,12 @@ from app.opportunities.models import (
     ConsultationType,
     ConsultationTypeSetting,
     GoTransitionApplication,
+    GoTransitionEnrollment,
     GoTransitionProgramSetting,
     GoTransitionStatus,
     OpportunityPaymentAttempt,
     ProgramCompletion,
+    PythonRepeatProductOffer,
 )
 from app.opportunities.schemas import (
     AdminConsultationMentorRead,
@@ -78,6 +80,8 @@ ACTIVE_TRANSITION_STATUSES = (
     GoTransitionStatus.PAID,
 )
 DEFAULT_CONSULTATION_DURATION_MINUTES = 60
+GO_TRANSITION_TERMS_VERSION = 1
+GO_TRANSITION_OFFER_VALID_DAYS = 14
 DEFAULT_GO_TRANSITION_DESCRIPTION_MARKDOWN = """## Что входит в программу
 
 - язык Go, его идиомы, типизация и работа с ошибками;
@@ -161,6 +165,18 @@ CONSULTATION_TYPES = (
         duration_minutes=DEFAULT_CONSULTATION_DURATION_MINUTES,
     ),
 )
+
+
+def _go_transition_terms_snapshot() -> dict[str, object]:
+    return {
+        "product_code": "PYTHON_TO_GO_ALUMNI",
+        "terms_version": GO_TRANSITION_TERMS_VERSION,
+        "upfront_price_kopecks": ALUMNI_GO_UPFRONT_PRICE_KOPECKS,
+        "success_fee_percent": ALUMNI_GO_SUCCESS_FEE_PERCENT,
+        "comparison_upfront_price_kopecks": STANDARD_GO_UPFRONT_PRICE_KOPECKS,
+        "comparison_success_fee_percent": STANDARD_GO_SUCCESS_FEE_PERCENT,
+        "currency": "RUB",
+    }
 
 
 async def _consultation_types(session: AsyncSession) -> list[ConsultationTypeRead]:
@@ -327,7 +343,6 @@ async def _consultation_read(session: AsyncSession, item: ConsultationRequest) -
         consultation_type=item.consultation_type,
         brief=item.brief,
         price_kopecks=item.price_kopecks,
-        mentor_reward_kopecks=item.mentor_reward_kopecks,
         duration_minutes=item.duration_minutes,
         status=item.status,
         scheduled_at=item.scheduled_at,
@@ -350,11 +365,16 @@ def _transition_read(item: GoTransitionApplication) -> GoTransitionRead:
         terms_accepted_at=item.terms_accepted_at,
         paid_at=item.paid_at,
         admin_note=item.admin_note,
+        terms_version=item.terms_version,
+        terms_snapshot=item.terms_snapshot,
+        terms_expires_at=item.terms_expires_at,
+        accepted_terms_snapshot=item.accepted_terms_snapshot,
         created_at=item.created_at,
     )
 
 
 async def opportunities_dashboard(session: AsyncSession, student: User) -> OpportunitiesDashboard:
+    settings = get_settings()
     completed, active = await _track_state(session, student.id)
     python_alumni = any(_is_python(track) for track in completed)
     go_alumni = any(_is_go(track) for track in completed)
@@ -387,13 +407,26 @@ async def opportunities_dashboard(session: AsyncSession, student: User) -> Oppor
     consultation_mentors = (
         await _mentor_options(session, completed) if consultation_eligible else []
     )
-    consultation_available = consultation_eligible and bool(consultation_mentors)
+    consultation_available = (
+        settings.opportunities_enabled
+        and settings.consultations_enabled
+        and consultation_eligible
+        and bool(consultation_mentors)
+    )
     has_go = any(_is_go(track) for track in [*completed, *active])
     active_application = any(item.status in ACTIVE_TRANSITION_STATUSES for item in applications)
     overdue = await _student_has_overdue_obligations(session, student.id)
     consultation_types = await _consultation_types(session)
     transition_available = all(
-        (student.is_active, python_alumni, not has_go, not active_application, not overdue)
+        (
+            settings.opportunities_enabled,
+            settings.python_to_go_enabled,
+            student.is_active,
+            python_alumni,
+            not has_go,
+            not active_application,
+            not overdue,
+        )
     )
     transition_reason = None
     if not student.is_active:
@@ -407,31 +440,52 @@ async def opportunities_dashboard(session: AsyncSession, student: User) -> Oppor
     elif overdue:
         transition_reason = "Сначала погасите просроченные обязательства"
 
-    return OpportunitiesDashboard(
-        segment=segment,
-        has_active_program=bool(active),
-        has_alumni_access=bool(completed),
-        opportunities=[
-            OpportunityRead(
-                code="ALUMNI_CONSULTATION",
-                available=consultation_available,
-                title="Консультация с ментором",
-                unavailable_reason=(
-                    None
-                    if consultation_available
-                    else (
-                        "Сейчас нет доступных менторов для консультации"
-                        if consultation_eligible
-                        else "Платная консультация доступна выпускникам без активной программы"
-                    )
-                ),
-                price=MoneyRead(
-                    amount_kopecks=min(item.price_kopecks for item in consultation_types)
-                ),
-                comparison_price=MoneyRead(
-                    amount_kopecks=min(item.comparison_price_kopecks for item in consultation_types)
-                ),
+    opportunity_items = [
+        OpportunityRead(
+            code="ALUMNI_CONSULTATION",
+            available=consultation_available,
+            title="Консультация с ментором",
+            unavailable_reason=(
+                None
+                if consultation_available
+                else (
+                    "Сейчас нет доступных менторов для консультации"
+                    if consultation_eligible
+                    else "Платная консультация доступна выпускникам без активной программы"
+                )
             ),
+            price=MoneyRead(amount_kopecks=min(item.price_kopecks for item in consultation_types)),
+            comparison_price=MoneyRead(
+                amount_kopecks=min(item.comparison_price_kopecks for item in consultation_types)
+            ),
+        )
+    ] if settings.consultations_enabled and settings.opportunities_enabled else []
+    if settings.python_repeat_mentorship_enabled and settings.opportunities_enabled:
+        # Imported lazily because the detailed product service reuses helpers from this module.
+        from app.opportunities.python_repeat_service import python_repeat_eligibility
+
+        repeat_eligibility = await python_repeat_eligibility(session, student)
+        repeat_product = await session.scalar(
+            select(PythonRepeatProductOffer)
+            .where(PythonRepeatProductOffer.is_active.is_(True))
+            .order_by(PythonRepeatProductOffer.version.desc())
+            .limit(1)
+        )
+        if repeat_product is not None:
+            opportunity_items.append(
+                OpportunityRead(
+                    code="PYTHON_REPEAT_MENTORSHIP",
+                    available=repeat_eligibility.eligible,
+                    title="Повторное менторство по Python",
+                    unavailable_reason=(
+                        None if repeat_eligibility.eligible else repeat_eligibility.message
+                    ),
+                    upfront_price_kopecks=repeat_product.upfront_price_kopecks,
+                    success_fee_percent=repeat_product.success_fee_percent,
+                )
+            )
+    if settings.python_to_go_enabled and settings.opportunities_enabled:
+        opportunity_items.append(
             OpportunityRead(
                 code="PYTHON_TO_GO_ALUMNI",
                 available=transition_available,
@@ -441,8 +495,18 @@ async def opportunities_dashboard(session: AsyncSession, student: User) -> Oppor
                 success_fee_percent=ALUMNI_GO_SUCCESS_FEE_PERCENT,
                 comparison_upfront_price_kopecks=STANDARD_GO_UPFRONT_PRICE_KOPECKS,
                 comparison_success_fee_percent=STANDARD_GO_SUCCESS_FEE_PERCENT,
-            ),
-        ],
+            )
+        )
+
+    return OpportunitiesDashboard(
+        opportunities_enabled=settings.opportunities_enabled,
+        consultations_enabled=settings.consultations_enabled,
+        python_repeat_mentorship_enabled=settings.python_repeat_mentorship_enabled,
+        python_to_go_enabled=settings.python_to_go_enabled,
+        segment=segment,
+        has_active_program=bool(active),
+        has_alumni_access=bool(completed),
+        opportunities=opportunity_items,
         mentors=consultation_mentors,
         consultation_types=consultation_types,
         go_transition_description_markdown=await _go_transition_description(session),
@@ -454,6 +518,9 @@ async def opportunities_dashboard(session: AsyncSession, student: User) -> Oppor
 async def create_consultation(
     session: AsyncSession, student: User, payload: ConsultationCreate
 ) -> OpportunitiesDashboard:
+    settings = get_settings()
+    if not settings.opportunities_enabled or not settings.consultations_enabled:
+        api_error(404, "consultations_disabled", "Consultations are disabled")
     dashboard = await opportunities_dashboard(session, student)
     offer = next(item for item in dashboard.opportunities if item.code == "ALUMNI_CONSULTATION")
     if not offer.available:
@@ -484,6 +551,9 @@ async def create_consultation(
 async def create_go_transition(
     session: AsyncSession, student: User, payload: GoTransitionCreate
 ) -> OpportunitiesDashboard:
+    settings = get_settings()
+    if not settings.opportunities_enabled or not settings.python_to_go_enabled:
+        api_error(404, "python_to_go_disabled", "Python to Go transition is disabled")
     dashboard = await opportunities_dashboard(session, student)
     offer = next(item for item in dashboard.opportunities if item.code == "PYTHON_TO_GO_ALUMNI")
     if not offer.available:
@@ -495,6 +565,8 @@ async def create_go_transition(
             status=GoTransitionStatus.SUBMITTED,
             upfront_price_kopecks=ALUMNI_GO_UPFRONT_PRICE_KOPECKS,
             success_fee_percent=ALUMNI_GO_SUCCESS_FEE_PERCENT,
+            terms_version=GO_TRANSITION_TERMS_VERSION,
+            terms_snapshot=_go_transition_terms_snapshot(),
         )
     )
     try:
@@ -524,8 +596,12 @@ async def accept_go_transition(
         api_error(404, "go_transition_not_found", "Application was not found")
     if item.status is not GoTransitionStatus.APPROVED:
         api_error(409, "go_transition_not_approved", "The application is not ready for acceptance")
+    now = datetime.now(UTC)
+    if item.terms_expires_at is not None and item.terms_expires_at < now:
+        api_error(409, "go_transition_terms_expired", "The approved terms have expired")
     item.status = GoTransitionStatus.PAYMENT_PENDING
-    item.terms_accepted_at = datetime.now(UTC)
+    item.terms_accepted_at = now
+    item.accepted_terms_snapshot = dict(item.terms_snapshot)
     await session.commit()
     return await opportunities_dashboard(session, student)
 
@@ -555,17 +631,34 @@ async def _new_payment_link(
             item.status = PaymentAttemptStatus.REVOKED
             item.payment_url = None
     payment_link_id = f"opp_{resource_id.hex}_r{len(attempts) + 1}"
+    if not student.email:
+        api_error(
+            422,
+            "opportunity_payment_email_required",
+            "Укажите email в профиле перед созданием платёжной ссылки.",
+        )
     try:
         result = await TochkaPaymentService(get_settings()).create_payment_link(
             installment_id=resource_id,
             payment_link_id=payment_link_id,
             amount_kopecks=amount,
             client_name=" ".join(filter(None, (student.first_name, student.last_name))),
-            client_email=student.email or "",
+            client_email=student.email,
             return_path="/opportunities",
         )
     except TochkaError as error:
         api_error(502, "opportunity_payment_link_failed", str(error))
+    if transition is not None:
+        terms_snapshot = transition.accepted_terms_snapshot
+    else:
+        assert consultation is not None
+        terms_snapshot = {
+            "product_code": "ALUMNI_CONSULTATION",
+            "price_kopecks": consultation.price_kopecks,
+            "mentor_reward_kopecks": consultation.mentor_reward_kopecks,
+            "duration_minutes": consultation.duration_minutes,
+            "currency": "RUB",
+        }
     session.add(
         OpportunityPaymentAttempt(
             consultation_request_id=consultation.id if consultation else None,
@@ -574,6 +667,7 @@ async def _new_payment_link(
             provider_operation_id=result.provider_operation_id,
             status=PaymentAttemptStatus.PENDING,
             payment_url=result.payment_url,
+            terms_snapshot=terms_snapshot,
             raw_create_response=result.raw_response,
         )
     )
@@ -629,6 +723,14 @@ async def approve_opportunity_payment(
     if attempt.status is PaymentAttemptStatus.REVOKED:
         attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
         return
+    if (
+        attempt.python_repeat_application_id is not None
+        or attempt.python_repeat_installment_id is not None
+    ):
+        from app.opportunities.python_repeat_service import approve_python_repeat_payment
+
+        await approve_python_repeat_payment(session, attempt, approved_at=now)
+        return
     attempt.status = PaymentAttemptStatus.APPROVED
     attempt.approved_at = now
     if attempt.consultation_request_id is not None:
@@ -641,21 +743,6 @@ async def approve_opportunity_payment(
             return
         consultation.status = ConsultationStatus.PAID
         consultation.paid_at = now
-        existing_reward = await session.scalar(
-            select(MentorReward.id).where(MentorReward.consultation_request_id == consultation.id)
-        )
-        if existing_reward is None:
-            session.add(
-                MentorReward(
-                    consultation_request_id=consultation.id,
-                    student_id=consultation.student_id,
-                    mentor_id=consultation.mentor_id,
-                    kind=MentorRewardKind.CONSULTATION,
-                    basis_kopecks=consultation.price_kopecks,
-                    amount_kopecks=consultation.mentor_reward_kopecks,
-                    paid_kopecks=0,
-                )
-            )
         return
     assert attempt.transition_application_id is not None
     transition = await session.get(GoTransitionApplication, attempt.transition_application_id)
@@ -671,6 +758,11 @@ async def approve_opportunity_payment(
     if go_track is None:
         attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
         return
+    completed_tracks, _active_tracks = await _track_state(session, transition.student_id)
+    python_track = next((track for track in completed_tracks if _is_python(track)), None)
+    if python_track is None or transition.accepted_terms_snapshot is None:
+        attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+        return
     transition.status = GoTransitionStatus.PAID
     transition.paid_at = now
     enrollment = await session.get(
@@ -679,6 +771,24 @@ async def approve_opportunity_payment(
     )
     if enrollment is None:
         session.add(LearningTrackEnrollment(user_id=transition.student_id, track_id=go_track.id))
+    source_enrollment = await session.scalar(
+        select(GoTransitionEnrollment).where(
+            GoTransitionEnrollment.application_id == transition.id
+        )
+    )
+    if source_enrollment is None:
+        session.add(
+            GoTransitionEnrollment(
+                application_id=transition.id,
+                student_id=transition.student_id,
+                track_id=go_track.id,
+                previous_python_track_id=python_track.id,
+                source="python_to_go",
+                status="active",
+                started_at=now,
+                terms_snapshot=dict(transition.accepted_terms_snapshot),
+            )
+        )
     student = await session.get(User, transition.student_id)
     if student is not None:
         student.repayment_percent = Decimal(transition.success_fee_percent)
@@ -705,6 +815,25 @@ async def opportunity_payment_context(
     if attempt.transition_application_id is not None:
         transition = await session.get(GoTransitionApplication, attempt.transition_application_id)
         return (transition.id, transition.upfront_price_kopecks) if transition is not None else None
+    if attempt.python_repeat_application_id is not None:
+        from app.opportunities.models import PythonRepeatApplication
+
+        application = await session.get(
+            PythonRepeatApplication, attempt.python_repeat_application_id
+        )
+        if application is None or application.terms_snapshot is None:
+            return None
+        amount = application.terms_snapshot.get("upfront_price_kopecks")
+        if not isinstance(amount, int):
+            return None
+        return application.id, amount
+    if attempt.python_repeat_installment_id is not None:
+        from app.opportunities.models import PythonRepeatInstallment
+
+        installment = await session.get(
+            PythonRepeatInstallment, attempt.python_repeat_installment_id
+        )
+        return (installment.id, installment.amount_kopecks) if installment is not None else None
     return None
 
 
@@ -733,6 +862,10 @@ async def development_complete_payment(
                 GoTransitionApplication.id == attempt.transition_application_id
             )
         )
+    elif attempt.python_repeat_application_id or attempt.python_repeat_installment_id:
+        from app.opportunities.python_repeat_service import _attempt_owner
+
+        owner_id = await _attempt_owner(session, attempt)
     if owner_id != student.id:
         api_error(404, "payment_attempt_not_found", "Payment attempt was not found")
     await approve_opportunity_payment(session, attempt)
@@ -783,7 +916,11 @@ async def admin_dashboard(session: AsyncSession) -> AdminOpportunitiesDashboard:
     for item, student in consultation_rows:
         base = await _consultation_read(session, item)
         consultations.append(
-            AdminConsultationRead(**base.model_dump(), student=student_read(student))
+            AdminConsultationRead(
+                **base.model_dump(),
+                student=student_read(student),
+                mentor_reward_kopecks=item.mentor_reward_kopecks,
+            )
         )
     return AdminOpportunitiesDashboard(
         consultation_types=await _consultation_types(session),
@@ -931,6 +1068,27 @@ async def admin_update_consultation(
     item.written_summary = payload.written_summary
     if payload.status is ConsultationStatus.COMPLETED:
         item.completed_at = item.completed_at or datetime.now(UTC)
+        if item.paid_at is None or item.mentor_id is None:
+            api_error(
+                409,
+                "consultation_not_paid",
+                "Only a paid consultation with an assigned mentor can be completed",
+            )
+        existing_reward = await session.scalar(
+            select(MentorReward.id).where(MentorReward.consultation_request_id == item.id)
+        )
+        if existing_reward is None:
+            session.add(
+                MentorReward(
+                    consultation_request_id=item.id,
+                    student_id=item.student_id,
+                    mentor_id=item.mentor_id,
+                    kind=MentorRewardKind.CONSULTATION,
+                    basis_kopecks=item.price_kopecks,
+                    amount_kopecks=item.mentor_reward_kopecks,
+                    paid_kopecks=0,
+                )
+            )
     await session.commit()
     return await admin_dashboard(session)
 
@@ -957,6 +1115,13 @@ async def admin_decide_transition(
     if approved:
         item.approved_at = datetime.now(UTC)
         item.approved_by_user_id = admin.id
+        item.upfront_price_kopecks = ALUMNI_GO_UPFRONT_PRICE_KOPECKS
+        item.success_fee_percent = ALUMNI_GO_SUCCESS_FEE_PERCENT
+        item.terms_version = GO_TRANSITION_TERMS_VERSION
+        item.terms_snapshot = _go_transition_terms_snapshot()
+        item.terms_expires_at = item.approved_at + timedelta(
+            days=GO_TRANSITION_OFFER_VALID_DAYS
+        )
     await session.commit()
     return await admin_dashboard(session)
 

@@ -1,7 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
-import type { InterviewReviewRating } from "../../types/api";
+import type {
+  InterviewQuestionLearnedFilter,
+  InterviewReviewRating,
+} from "../../types/api";
+
+export interface InterviewQuestionTableFilters {
+  category: string | null;
+  frequentOnly: boolean;
+  learned: InterviewQuestionLearnedFilter;
+  query: string;
+  limit: number;
+  offset: number;
+}
 
 export const interviewKeys = {
   all: ["interviews"] as const,
@@ -12,6 +24,10 @@ export const interviewKeys = {
   cardSearch: (slug: string, query: string, frequentOnly: boolean) =>
     ["interviews", "card-search", slug, query, { frequentOnly }] as const,
   topics: (slug: string) => ["interviews", "topics", slug] as const,
+  questionTableRoot: (slug: string) =>
+    ["interviews", "questions", slug] as const,
+  questionTable: (slug: string, filters: InterviewQuestionTableFilters) =>
+    [...interviewKeys.questionTableRoot(slug), filters] as const,
 };
 
 export function useInterviewDecks() {
@@ -44,6 +60,27 @@ export function useInterviewTopics(slug: string) {
   return useQuery({
     queryKey: interviewKeys.topics(slug),
     queryFn: () => api.interviewTopics(slug),
+  });
+}
+
+export function useInterviewQuestionTable(
+  slug: string,
+  filters: InterviewQuestionTableFilters,
+) {
+  return useQuery({
+    queryKey: interviewKeys.questionTable(slug, filters),
+    queryFn: () => api.interviewQuestionTable(slug, filters),
+  });
+}
+
+export function useSetInterviewQuestionLearned() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cardId, learned }: { cardId: string; learned: boolean }) =>
+      api.setInterviewQuestionLearned(cardId, learned),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: interviewKeys.all });
+    },
   });
 }
 

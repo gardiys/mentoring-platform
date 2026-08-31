@@ -22,6 +22,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { InterviewTopicSelector } from "../features/interviews/InterviewTopicSelector";
+import { InterviewQuestionModeNavigation } from "../features/interviews/InterviewQuestionModeNavigation";
 import {
   useInterviewCardSearch,
   useInterviewSession,
@@ -154,6 +155,8 @@ export function InterviewStudyPage() {
           radius="xl"
         />
       </div>
+
+      <InterviewQuestionModeNavigation deckSlug={deckSlug} mode="study" />
 
       <InterviewTopicSelector deckSlug={deckSlug} topics={topics.data} />
 

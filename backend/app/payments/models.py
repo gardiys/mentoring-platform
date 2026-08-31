@@ -56,6 +56,8 @@ class MentorRewardKind(StrEnum):
     PROGRAM_EXCLUSION = "program_exclusion"
     LEGACY_FIXED = "legacy_fixed"
     CONSULTATION = "consultation"
+    PYTHON_REPEAT_FIXED = "python_repeat_fixed"
+    PYTHON_REPEAT_SUCCESS_FEE = "python_repeat_success_fee"
 
 
 class MentorPayoutStatus(StrEnum):
@@ -336,6 +338,18 @@ class MentorReward(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     consultation_request_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("consultation_requests.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=True,
+    )
+    python_repeat_enrollment_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("python_repeat_enrollments.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=True,
+    )
+    python_repeat_installment_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("python_repeat_installments.id", ondelete="CASCADE"),
         unique=True,
         nullable=True,
     )

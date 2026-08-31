@@ -16,6 +16,7 @@ from app.opportunities.schemas import (
     AdminTransitionMutation,
     ConsultationCreate,
     GoTransitionCreate,
+    GoTransitionTermsAcceptance,
     OpportunitiesDashboard,
     OpportunityPaymentLinkRead,
 )
@@ -75,7 +76,10 @@ async def request_go_transition(
     response_model=OpportunitiesDashboard,
 )
 async def accept_transition(
-    application_id: UUID, session: Session, student: StudentUser
+    application_id: UUID,
+    _payload: GoTransitionTermsAcceptance,
+    session: Session,
+    student: StudentUser,
 ) -> OpportunitiesDashboard:
     return await accept_go_transition(session, student, application_id)
 

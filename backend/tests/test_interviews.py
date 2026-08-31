@@ -191,6 +191,71 @@ async def test_student_searches_all_selected_cards(client: AsyncClient, seeded: 
     assert [card["slug"] for card in response.json()] == ["python-gil"]
 
 
+async def test_student_filters_question_table_and_marks_card_learned(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    deck = await create_deck(client, seeded)
+
+    all_questions = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/questions",
+        headers=auth(seeded.student_id),
+    )
+    assert all_questions.status_code == 200, all_questions.text
+    assert all_questions.json()["total"] == 2
+    assert all_questions.json()["items"][0]["answer_markdown"]
+
+    frequent = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/questions",
+        params={"frequent_only": True, "learned": "all"},
+        headers=auth(seeded.student_id),
+    )
+    assert frequent.status_code == 200, frequent.text
+    assert frequent.json()["total"] == 1
+    assert frequent.json()["items"][0]["slug"] == "python-gil"
+    assert frequent.json()["items"][0]["learned"] is False
+
+    frequent_card = next(card for card in deck["cards"] if card["slug"] == "python-gil")
+    marked = await client.put(
+        f"/api/v1/interviews/cards/{frequent_card['id']}/learned",
+        headers=auth(seeded.student_id),
+        json={"learned": True},
+    )
+    assert marked.status_code == 200, marked.text
+    assert marked.json()["learned"] is True
+    assert marked.json()["learned_at"] is not None
+    assert marked.json()["due_at"] is not None
+
+    learned = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/questions",
+        params={
+            "category": "Основы Python",
+            "learned": "learned",
+            "query": "GIL",
+        },
+        headers=auth(seeded.student_id),
+    )
+    assert learned.status_code == 200, learned.text
+    assert learned.json()["total"] == 1
+    assert learned.json()["items"][0]["learned"] is True
+    assert learned.json()["items"][0]["repetitions"] == 1
+
+    unlearned = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/questions",
+        params={"learned": "unlearned"},
+        headers=auth(seeded.student_id),
+    )
+    assert unlearned.status_code == 200, unlearned.text
+    assert [item["slug"] for item in unlearned.json()["items"]] == ["python-metaclass"]
+
+    reset = await client.put(
+        f"/api/v1/interviews/cards/{frequent_card['id']}/learned",
+        headers=auth(seeded.student_id),
+        json={"learned": False},
+    )
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["learned"] is False
+
+
 async def test_student_selects_topics_before_study(client: AsyncClient, seeded: SeededData) -> None:
     deck = await create_deck(client, seeded)
 

@@ -9,6 +9,10 @@ from app.db.session import get_db_session
 from app.interviews.schemas import (
     InterviewCardStudy,
     InterviewDeckListItem,
+    InterviewQuestionLearnedFilter,
+    InterviewQuestionLearnedMutation,
+    InterviewQuestionLearnedResult,
+    InterviewQuestionTablePage,
     InterviewReviewMutation,
     InterviewReviewResult,
     InterviewStudySession,
@@ -19,8 +23,10 @@ from app.interviews.service import (
     get_interview_topics,
     get_study_session,
     list_interview_decks,
+    list_interview_questions,
     review_interview_card,
     search_interview_cards,
+    set_interview_question_learned,
     update_interview_topics,
 )
 
@@ -74,6 +80,34 @@ async def interview_card_search(
     )
 
 
+@router.get(
+    "/decks/{deck_slug}/questions",
+    response_model=InterviewQuestionTablePage,
+)
+async def interview_question_table(
+    deck_slug: str,
+    session: Session,
+    current_user: CurrentUser,
+    category: Annotated[str | None, Query(max_length=240)] = None,
+    frequent_only: bool = False,
+    learned: InterviewQuestionLearnedFilter = InterviewQuestionLearnedFilter.ALL,
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> InterviewQuestionTablePage:
+    return await list_interview_questions(
+        session,
+        current_user,
+        deck_slug,
+        category=category,
+        frequent_only=frequent_only,
+        learned=learned,
+        query=query,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.get("/decks/{deck_slug}/topics", response_model=list[InterviewTopicOption])
 async def interview_topics(
     deck_slug: str, session: Session, current_user: CurrentUser
@@ -99,3 +133,21 @@ async def interview_card_review(
     current_user: CurrentUser,
 ) -> InterviewReviewResult:
     return await review_interview_card(session, current_user, card_id, payload.rating)
+
+
+@router.put(
+    "/cards/{card_id}/learned",
+    response_model=InterviewQuestionLearnedResult,
+)
+async def interview_card_learned(
+    card_id: UUID,
+    payload: InterviewQuestionLearnedMutation,
+    session: Session,
+    current_user: CurrentUser,
+) -> InterviewQuestionLearnedResult:
+    return await set_interview_question_learned(
+        session,
+        current_user,
+        card_id,
+        learned=payload.learned,
+    )

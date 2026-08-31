@@ -61,6 +61,9 @@ import type {
   InterviewDirectionOption,
   InterviewReviewRating,
   InterviewReviewResult,
+  InterviewQuestionLearnedFilter,
+  InterviewQuestionLearnedResult,
+  InterviewQuestionTablePage,
   InterviewCardDuplicateMergeMutation,
   InterviewCardDuplicateMutation,
   InterviewCardDuplicatePage,
@@ -167,6 +170,9 @@ import type {
   ConsultationStatus,
   ConsultationType,
   OpportunityPaymentLink,
+  PythonRepeatDashboard,
+  AdminPythonRepeatDashboard,
+  PythonRepeatApplicationStatus,
 } from "../types/api";
 import {
   ApiError,
@@ -1825,6 +1831,37 @@ export const api = {
       `/api/v1/interviews/decks/${deckSlug}/cards/search?${params.toString()}`,
     );
   },
+  interviewQuestionTable: (
+    deckSlug: string,
+    filters: {
+      category: string | null;
+      frequentOnly: boolean;
+      learned: InterviewQuestionLearnedFilter;
+      query: string;
+      limit: number;
+      offset: number;
+    },
+  ) => {
+    const params = new URLSearchParams({
+      learned: filters.learned,
+      limit: String(filters.limit),
+      offset: String(filters.offset),
+    });
+    if (filters.category) params.set("category", filters.category);
+    if (filters.frequentOnly) params.set("frequent_only", "true");
+    if (filters.query.trim()) params.set("query", filters.query.trim());
+    return apiRequest<InterviewQuestionTablePage>(
+      `/api/v1/interviews/decks/${deckSlug}/questions?${params.toString()}`,
+    );
+  },
+  setInterviewQuestionLearned: (cardId: string, learned: boolean) =>
+    apiRequest<InterviewQuestionLearnedResult>(
+      `/api/v1/interviews/cards/${cardId}/learned`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ learned }),
+      },
+    ),
   interviewTopics: (deckSlug: string) =>
     apiRequest<InterviewTopicOption[]>(
       `/api/v1/interviews/decks/${deckSlug}/topics`,
@@ -2233,7 +2270,7 @@ export const api = {
   acceptGoTransition: (id: string) =>
     apiRequest<OpportunitiesDashboard>(
       `/api/v1/opportunities/go-transition/${id}/accept`,
-      { method: "POST" },
+      { method: "POST", body: JSON.stringify({ accepted: true }) },
     ),
   createGoTransitionPaymentLink: (id: string) =>
     apiRequest<OpportunityPaymentLink>(
@@ -2297,5 +2334,96 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ description_markdown: descriptionMarkdown }),
       },
+    ),
+  myPythonRepeat: () =>
+    apiRequest<PythonRepeatDashboard>("/api/v1/opportunities/python-repeat"),
+  createPythonRepeatApplication: (payload: Record<string, unknown>) =>
+    apiRequest<PythonRepeatDashboard>(
+      "/api/v1/opportunities/python-repeat/applications",
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  updatePythonRepeatApplication: (
+    id: string,
+    payload: Record<string, unknown>,
+  ) =>
+    apiRequest<PythonRepeatDashboard>(
+      `/api/v1/opportunities/python-repeat/applications/${id}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+  submitPythonRepeatApplication: (id: string) =>
+    apiRequest<PythonRepeatDashboard>(
+      `/api/v1/opportunities/python-repeat/applications/${id}/submit`,
+      { method: "POST" },
+    ),
+  acceptPythonRepeatTerms: (id: string) =>
+    apiRequest<PythonRepeatDashboard>(
+      `/api/v1/opportunities/python-repeat/applications/${id}/accept-terms`,
+      { method: "POST", body: JSON.stringify({ accepted: true }) },
+    ),
+  checkoutPythonRepeat: (id: string) =>
+    apiRequest<OpportunityPaymentLink>(
+      `/api/v1/opportunities/python-repeat/applications/${id}/checkout`,
+      { method: "POST" },
+    ),
+  createPythonRepeatOffer: (payload: Record<string, unknown>) =>
+    apiRequest<PythonRepeatDashboard>(
+      "/api/v1/opportunities/python-repeat/offers",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
+  submitPythonRepeatOffer: (id: string) =>
+    apiRequest<PythonRepeatDashboard>(
+      `/api/v1/opportunities/python-repeat/offers/${id}/submit`,
+      { method: "POST" },
+    ),
+  checkoutPythonRepeatInstallment: (id: string) =>
+    apiRequest<OpportunityPaymentLink>(
+      `/api/v1/opportunities/python-repeat/installments/${id}/checkout`,
+      { method: "POST" },
+    ),
+  completeDevelopmentPythonRepeatPayment: (paymentLinkId: string) =>
+    apiRequest<PythonRepeatDashboard>(
+      `/api/v1/opportunities/python-repeat/development/payments/${encodeURIComponent(paymentLinkId)}/succeed`,
+      { method: "POST" },
+    ),
+  adminPythonRepeat: () =>
+    apiRequest<AdminPythonRepeatDashboard>(
+      "/api/v1/admin/opportunities/python-repeat",
+    ),
+  transitionAdminPythonRepeat: (
+    id: string,
+    payload: {
+      status: PythonRepeatApplicationStatus;
+      comment: string;
+      responsible_user_id: string | null;
+    },
+  ) =>
+    apiRequest<AdminPythonRepeatDashboard>(
+      `/api/v1/admin/opportunities/python-repeat/applications/${id}/transition`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  overrideAdminPythonRepeatEligibility: (id: string, reason: string) =>
+    apiRequest<AdminPythonRepeatDashboard>(
+      `/api/v1/admin/opportunities/python-repeat/applications/${id}/eligibility-override`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
+  assignAdminPythonRepeatMentor: (enrollmentId: string, mentorId: string) =>
+    apiRequest<AdminPythonRepeatDashboard>(
+      `/api/v1/admin/opportunities/python-repeat/enrollments/${enrollmentId}/assign-mentor`,
+      { method: "POST", body: JSON.stringify({ mentor_id: mentorId }) },
+    ),
+  decideAdminPythonRepeatOffer: (
+    offerId: string,
+    payload: {
+      verified: boolean;
+      salary_base_kopecks: number | null;
+      comment: string;
+    },
+  ) =>
+    apiRequest<AdminPythonRepeatDashboard>(
+      `/api/v1/admin/opportunities/python-repeat/offers/${offerId}/decision`,
+      { method: "POST", body: JSON.stringify(payload) },
     ),
 };

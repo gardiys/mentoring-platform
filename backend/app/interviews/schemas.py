@@ -73,6 +73,45 @@ class InterviewReviewResult(BaseModel):
     learned: bool
 
 
+class InterviewQuestionLearnedFilter(StrEnum):
+    ALL = "all"
+    LEARNED = "learned"
+    UNLEARNED = "unlearned"
+
+
+class InterviewQuestionTableItem(BaseModel):
+    id: UUID
+    slug: str
+    category: str
+    subcategory: str | None
+    question_markdown: str
+    answer_markdown: str
+    frequency: InterviewCardFrequency
+    learned: bool
+    learned_at: datetime | None
+    repetitions: int
+    due_at: datetime | None
+
+
+class InterviewQuestionTablePage(BaseModel):
+    deck: InterviewDeckListItem
+    items: list[InterviewQuestionTableItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class InterviewQuestionLearnedMutation(BaseModel):
+    learned: bool
+
+
+class InterviewQuestionLearnedResult(BaseModel):
+    card_id: UUID
+    learned: bool
+    learned_at: datetime | None
+    due_at: datetime | None
+
+
 class InterviewTopicOption(BaseModel):
     name: str
     total_cards: int

@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { api } from "../src/api/endpoints";
 import { AdminInterviewDeckForm } from "../src/features/admin/AdminInterviewDeckForm";
 import { AdminInterviewCardEditPage } from "../src/pages/AdminInterviewCardEditPage";
+import { InterviewQuestionsPage } from "../src/pages/InterviewQuestionsPage";
 import { InterviewStudyPage } from "../src/pages/InterviewStudyPage";
 import { InterviewsPage } from "../src/pages/InterviewsPage";
 import type {
@@ -12,6 +13,7 @@ import type {
   AdminInterviewCardRead,
   AdminTrackRead,
   InterviewDeckListItem,
+  InterviewQuestionTablePage,
   InterviewStudySession,
   InterviewTopicOption,
 } from "../src/types/api";
@@ -69,6 +71,41 @@ const session: InterviewStudySession = {
       repetitions: 0,
     },
   ],
+};
+
+const questionTable: InterviewQuestionTablePage = {
+  deck,
+  items: [
+    {
+      id: session.cards[0]!.id,
+      slug: session.cards[0]!.slug,
+      category: session.cards[0]!.category,
+      subcategory: session.cards[0]!.subcategory,
+      question_markdown: session.cards[0]!.question_markdown,
+      answer_markdown: session.cards[0]!.answer_markdown,
+      frequency: session.cards[0]!.frequency,
+      learned: true,
+      learned_at: "2026-08-20T00:00:00Z",
+      repetitions: 2,
+      due_at: "2026-09-20T00:00:00Z",
+    },
+    {
+      id: "61000000-0000-4000-8000-000000000099",
+      slug: "python-indexes",
+      category: "Базы данных",
+      subcategory: "PostgreSQL",
+      question_markdown: "Какие индексы PostgreSQL вы знаете?",
+      answer_markdown: "B-tree, Hash, GiST, SP-GiST, GIN и BRIN.",
+      frequency: "occasional",
+      learned: false,
+      learned_at: null,
+      repetitions: 0,
+      due_at: null,
+    },
+  ],
+  total: 2,
+  limit: 25,
+  offset: 0,
 };
 
 const adminTrack: AdminTrackRead = {
@@ -157,6 +194,67 @@ it("показывает изученные и оставшиеся карточ
   expect(screen.getByText("Изучено 4 из 10")).toBeInTheDocument();
   expect(screen.getByText("Осталось: 6")).toBeInTheDocument();
   expect(screen.getByText("К повторению: 2")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Таблица вопросов" }),
+  ).toHaveAttribute("href", "/interviews/python-interview/questions");
+  expect(
+    screen.getByRole("link", { name: "Продолжить карточки" }),
+  ).toHaveAttribute("href", "/interviews/python-interview");
+});
+
+it("показывает таблицу вопросов, фильтрует её и сохраняет отметку", async () => {
+  vi.spyOn(api, "interviewTopics").mockResolvedValue([
+    topics[0]!,
+    { ...topics[1]!, is_selected: true },
+  ]);
+  const tableRequest = vi
+    .spyOn(api, "interviewQuestionTable")
+    .mockResolvedValue(questionTable);
+  const learnedRequest = vi
+    .spyOn(api, "setInterviewQuestionLearned")
+    .mockReturnValue(new Promise(() => undefined));
+
+  renderPage(
+    <InterviewQuestionsPage />,
+    "/interviews/python-interview/questions",
+    "/interviews/:deckSlug/questions",
+  );
+
+  const learnedQuestion = await screen.findByText("Что такое GIL?");
+  const learnedRow = learnedQuestion.closest("tr");
+  expect(learnedRow).toHaveClass("interview-question-row--learned");
+  expect(learnedRow).toHaveTextContent("Выучен");
+  expect(screen.queryByText(/блокирует параллельное/)).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: /Что такое GIL/ }));
+  expect(screen.getByText(/блокирует параллельное/)).toBeInTheDocument();
+
+  await userEvent.click(
+    screen.getByRole("checkbox", {
+      name: /Отметить выученным: Какие индексы PostgreSQL/,
+    }),
+  );
+  expect(learnedRequest).toHaveBeenCalledWith(
+    "61000000-0000-4000-8000-000000000099",
+    true,
+  );
+
+  await userEvent.click(
+    screen.getByRole("switch", { name: /Только частые вопросы/ }),
+  );
+  await userEvent.click(screen.getByText("Не выучены"));
+  await userEvent.type(screen.getByLabelText("Поиск вопроса"), "индексы");
+
+  await waitFor(() =>
+    expect(tableRequest).toHaveBeenLastCalledWith(
+      "python-interview",
+      expect.objectContaining({
+        frequentOnly: true,
+        learned: "unlearned",
+        query: "индексы",
+      }),
+    ),
+  );
 });
 
 it("показывает админу личный дневник без общего списка треков учеников", async () => {
@@ -284,9 +382,7 @@ it("фильтрует частые карточки и ищет по всей �
   expect(
     await screen.findByRole("heading", { name: "Результаты поиска" }),
   ).toBeInTheDocument();
-  await userEvent.click(
-    screen.getByRole("button", { name: /Что такое GIL/ }),
-  );
+  await userEvent.click(screen.getByRole("button", { name: /Что такое GIL/ }));
   expect(screen.getByText(/блокирует параллельное/)).toBeInTheDocument();
 });
 

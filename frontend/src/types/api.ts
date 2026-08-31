@@ -200,6 +200,33 @@ export type InterviewDeckListItem = Schemas["InterviewDeckListItem"];
 export type InterviewStudySession = Schemas["InterviewStudySession"];
 export type InterviewTopicOption = Schemas["InterviewTopicOption"];
 export type InterviewReviewResult = Schemas["InterviewReviewResult"];
+export type InterviewQuestionLearnedFilter = "all" | "learned" | "unlearned";
+export interface InterviewQuestionTableItem {
+  id: string;
+  slug: string;
+  category: string;
+  subcategory: string | null;
+  question_markdown: string;
+  answer_markdown: string;
+  frequency: "frequent" | "occasional";
+  learned: boolean;
+  learned_at: string | null;
+  repetitions: number;
+  due_at: string | null;
+}
+export interface InterviewQuestionTablePage {
+  deck: InterviewDeckListItem;
+  items: InterviewQuestionTableItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+export interface InterviewQuestionLearnedResult {
+  card_id: string;
+  learned: boolean;
+  learned_at: string | null;
+  due_at: string | null;
+}
 export type AdminInterviewCardMutation = Schemas["AdminInterviewCardMutation"];
 export type AdminInterviewDeckMutation = Schemas["AdminInterviewDeckMutation"];
 export type AdminInterviewDeckRead = Schemas["AdminInterviewDeckRead"];
@@ -1970,7 +1997,8 @@ export interface OpportunityMentor {
   telegram_username: string | null;
 }
 export interface OpportunityOffer {
-  code: "ALUMNI_CONSULTATION" | "PYTHON_TO_GO_ALUMNI";
+  code:
+    "ALUMNI_CONSULTATION" | "PYTHON_REPEAT_MENTORSHIP" | "PYTHON_TO_GO_ALUMNI";
   available: boolean;
   title: string;
   unavailable_reason: string | null;
@@ -1987,7 +2015,6 @@ export interface ConsultationRequestRead {
   consultation_type: ConsultationType;
   brief: string;
   price_kopecks: number;
-  mentor_reward_kopecks: number;
   duration_minutes: number;
   status: ConsultationStatus;
   scheduled_at: string | null;
@@ -2007,9 +2034,17 @@ export interface GoTransitionApplicationRead {
   terms_accepted_at: string | null;
   paid_at: string | null;
   admin_note: string | null;
+  terms_version: number;
+  terms_snapshot: Record<string, unknown>;
+  terms_expires_at: string | null;
+  accepted_terms_snapshot: Record<string, unknown> | null;
   created_at: string;
 }
 export interface OpportunitiesDashboard {
+  opportunities_enabled: boolean;
+  consultations_enabled: boolean;
+  python_repeat_mentorship_enabled: boolean;
+  python_to_go_enabled: boolean;
   segment: OpportunitySegment;
   has_active_program: boolean;
   has_alumni_access: boolean;
@@ -2037,6 +2072,7 @@ export interface AdminOpportunityStudent {
 }
 export interface AdminConsultationRead extends ConsultationRequestRead {
   student: AdminOpportunityStudent;
+  mentor_reward_kopecks: number;
 }
 export interface AdminConsultationMentor extends OpportunityMentor {
   is_enabled: boolean;
@@ -2054,4 +2090,157 @@ export interface AdminOpportunitiesDashboard {
 export interface OpportunityPaymentLink {
   payment_url: string;
   payment_link_id: string;
+}
+
+export type PythonRepeatApplicationStatus =
+  | "draft"
+  | "submitted"
+  | "under_review"
+  | "needs_diagnostic"
+  | "needs_clarification"
+  | "approved"
+  | "rejected"
+  | "terms_accepted"
+  | "payment_pending"
+  | "paid"
+  | "enrolled"
+  | "cancelled"
+  | "expired";
+
+export interface PythonRepeatApplication {
+  id: string;
+  student_id: string;
+  employment_status: string;
+  reason: string;
+  current_position: string | null;
+  current_company: string | null;
+  current_stack: string | null;
+  last_interview_at: string | null;
+  target_position: string;
+  target_salary_kopecks: number | null;
+  technical_gaps: string;
+  hours_per_week: number;
+  desired_start_date: string | null;
+  search_mode: string;
+  additional_comment: string | null;
+  status: PythonRepeatApplicationStatus;
+  responsible_user_id: string | null;
+  eligibility_override_reason: string | null;
+  admin_comment: string | null;
+  terms_version: number | null;
+  terms_snapshot: Record<string, unknown> | null;
+  approved_at: string | null;
+  offer_expires_at: string | null;
+  accepted_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+  history: Array<{
+    old_status: PythonRepeatApplicationStatus | null;
+    new_status: PythonRepeatApplicationStatus;
+    actor_user_id: string | null;
+    comment: string | null;
+    created_at: string;
+  }>;
+}
+
+export interface PythonRepeatEnrollment {
+  id: string;
+  application_id: string;
+  student_id: string;
+  track_id: string;
+  previous_track_id: string;
+  mentor_id: string | null;
+  mentor_assigned_at: string | null;
+  status: "active" | "completed" | "cancelled";
+  started_at: string;
+  ended_at: string | null;
+  personal_plan_markdown: string | null;
+  terms_snapshot: Record<string, unknown>;
+}
+
+export interface PythonRepeatEmploymentOffer {
+  id: string;
+  enrollment_id: string;
+  student_id: string;
+  position: string;
+  company: string;
+  technology_direction: string;
+  fixed_monthly_salary_kopecks: number;
+  currency: string;
+  employment_type: string | null;
+  received_at: string;
+  expected_start_date: string;
+  status:
+    | "draft"
+    | "submitted"
+    | "under_review"
+    | "verified"
+    | "rejected"
+    | "cancelled";
+  submitted_at: string | null;
+  verified_at: string | null;
+  verification_comment: string | null;
+  created_at: string;
+}
+
+export interface PythonRepeatInstallment {
+  id: string;
+  sequence_number: number;
+  amount_kopecks: number;
+  salary_percent: number;
+  due_at: string;
+  status: "scheduled" | "pending" | "paid" | "refunded" | "cancelled";
+  paid_at: string | null;
+  actual_received_kopecks: number | null;
+  refunded_at: string | null;
+}
+
+export interface PythonRepeatDashboard {
+  enabled: boolean;
+  eligibility: {
+    eligible: boolean;
+    code: string;
+    message: string;
+    override_allowed: boolean;
+  };
+  product: {
+    product_code: string;
+    terms_version: number;
+    upfront_price_kopecks: number;
+    success_fee_percent: number;
+    success_fee_installments_count: number;
+    active_support_months: number;
+    probation_support_days: number;
+    included_mock_interviews: number;
+    offer_valid_days: number;
+  };
+  application: PythonRepeatApplication | null;
+  enrollment: PythonRepeatEnrollment | null;
+  offers: PythonRepeatEmploymentOffer[];
+  obligation: null | {
+    id: string;
+    salary_base_kopecks: number;
+    success_fee_percent: number;
+    total_amount_kopecks: number;
+    installments_count: number;
+    status: "active" | "paid" | "cancelled";
+    installments: PythonRepeatInstallment[];
+  };
+}
+
+export interface AdminPythonRepeatApplication extends PythonRepeatApplication {
+  student: AdminOpportunityStudent;
+  eligibility: PythonRepeatDashboard["eligibility"];
+  enrollment: PythonRepeatEnrollment | null;
+  offers: PythonRepeatEmploymentOffer[];
+  obligation: PythonRepeatDashboard["obligation"];
+  revenue_received_kopecks: number;
+  mentor_accrued_kopecks: number;
+  mentor_paid_kopecks: number;
+  gross_remainder_kopecks: number;
+}
+
+export interface AdminPythonRepeatDashboard {
+  applications: AdminPythonRepeatApplication[];
+  mentors: AdminOpportunityStudent[];
 }

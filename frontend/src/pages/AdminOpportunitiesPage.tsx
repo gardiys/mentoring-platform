@@ -16,6 +16,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
@@ -255,6 +256,19 @@ export function AdminOpportunitiesPage() {
         title="Возможности"
         description="Персональные предложения, заявки на консультации и переход Python → Go."
       />
+      <Card withBorder>
+        <Group justify="space-between" align="center">
+          <div>
+            <Title order={2}>Повторное менторство по Python</Title>
+            <Text c="dimmed">
+              Заявки, зачисления, менторы, новые офферы и постоплата 100%.
+            </Text>
+          </div>
+          <Button component={Link} to="/admin/opportunities/python-repeat">
+            Открыть управление
+          </Button>
+        </Group>
+      </Card>
       <GoTransitionProgramSettings
         description={query.data.go_transition_description_markdown}
       />

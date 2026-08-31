@@ -92,6 +92,10 @@ services:
       APP_ENV: development
       APP_DEBUG: "true"
       DEV_AUTH_ENABLED: "true"
+      PYTHON_REPEAT_MENTORSHIP_ENABLED: ${PYTHON_REPEAT_MENTORSHIP_ENABLED:-true}
+      OPPORTUNITIES_ENABLED: ${OPPORTUNITIES_ENABLED:-true}
+      CONSULTATIONS_ENABLED: ${CONSULTATIONS_ENABLED:-true}
+      PYTHON_TO_GO_ENABLED: ${PYTHON_TO_GO_ENABLED:-true}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mentoring}:${POSTGRES_PASSWORD:-mentoring}@postgres:5432/${POSTGRES_DB:-mentoring}
       CORS_ORIGINS: http://localhost:5173
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
