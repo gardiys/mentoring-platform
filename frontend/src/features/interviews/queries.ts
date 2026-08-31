@@ -3,13 +3,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/endpoints";
 import type {
   InterviewQuestionLearnedFilter,
+  InterviewQuestionSort,
+  InterviewQuestionSortDirection,
   InterviewReviewRating,
 } from "../../types/api";
 
 export interface InterviewQuestionTableFilters {
-  category: string | null;
+  categories: string[];
   frequentOnly: boolean;
   learned: InterviewQuestionLearnedFilter;
+  sort: InterviewQuestionSort;
+  order: InterviewQuestionSortDirection;
   query: string;
   limit: number;
   offset: number;

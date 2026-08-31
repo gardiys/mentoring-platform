@@ -216,7 +216,7 @@ it("показывает таблицу вопросов, фильтрует е�
 
   renderPage(
     <InterviewQuestionsPage />,
-    "/interviews/python-interview/questions",
+    "/interviews/python-interview/questions?category=Конкурентность+в+Python&category=Архитектура+ПО",
     "/interviews/:deckSlug/questions",
   );
 
@@ -228,6 +228,20 @@ it("показывает таблицу вопросов, фильтрует е�
 
   await userEvent.click(screen.getByRole("button", { name: /Что такое GIL/ }));
   expect(screen.getByText(/блокирует параллельное/)).toBeInTheDocument();
+
+  await userEvent.click(
+    screen.getByRole("button", { name: "Сортировать: Вопрос" }),
+  );
+  await waitFor(() =>
+    expect(tableRequest).toHaveBeenLastCalledWith(
+      "python-interview",
+      expect.objectContaining({
+        categories: ["Конкурентность в Python", "Архитектура ПО"],
+        sort: "question",
+        order: "asc",
+      }),
+    ),
+  );
 
   await userEvent.click(
     screen.getByRole("checkbox", {
@@ -252,6 +266,9 @@ it("показывает таблицу вопросов, фильтрует е�
         frequentOnly: true,
         learned: "unlearned",
         query: "индексы",
+        categories: ["Конкурентность в Python", "Архитектура ПО"],
+        sort: "question",
+        order: "asc",
       }),
     ),
   );

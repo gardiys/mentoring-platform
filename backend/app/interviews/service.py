@@ -38,6 +38,8 @@ from app.interviews.schemas import (
     InterviewDeckStats,
     InterviewQuestionLearnedFilter,
     InterviewQuestionLearnedResult,
+    InterviewQuestionSort,
+    InterviewQuestionSortDirection,
     InterviewQuestionTableItem,
     InterviewQuestionTablePage,
     InterviewReviewResult,
@@ -367,9 +369,11 @@ async def list_interview_questions(
     user: User,
     deck_slug: str,
     *,
-    category: str | None,
+    categories: list[str] | None,
     frequent_only: bool,
     learned: InterviewQuestionLearnedFilter,
+    sort: InterviewQuestionSort,
+    order: InterviewQuestionSortDirection,
     query: str | None,
     limit: int,
     offset: int,
@@ -379,9 +383,11 @@ async def list_interview_questions(
         InterviewCard.deck_id == deck.id,
         InterviewCard.is_published.is_(True),
     ]
-    normalized_category = category.strip() if category else None
-    if normalized_category:
-        filters.append(InterviewCard.category == normalized_category)
+    normalized_categories = {
+        category.strip() for category in categories or [] if category.strip()
+    }
+    if normalized_categories:
+        filters.append(InterviewCard.category.in_(normalized_categories))
     if frequent_only:
         filters.append(effective_frequent_predicate())
     if learned is InterviewQuestionLearnedFilter.LEARNED:
@@ -418,9 +424,25 @@ async def list_interview_questions(
         )
         or 0
     )
+    sort_expression = {
+        InterviewQuestionSort.FREQUENCY: effective_frequent_predicate(),
+        InterviewQuestionSort.QUESTION: func.lower(InterviewCard.question_markdown),
+        InterviewQuestionSort.CATEGORY: func.lower(InterviewCard.category),
+        InterviewQuestionSort.LEARNED: InterviewCardProgress.first_learned_at.is_not(None),
+        InterviewQuestionSort.DUE_AT: InterviewCardProgress.due_at,
+    }[sort]
+    primary_order = (
+        sort_expression.desc()
+        if order is InterviewQuestionSortDirection.DESC
+        else sort_expression.asc()
+    )
+    if sort is InterviewQuestionSort.DUE_AT:
+        primary_order = primary_order.nulls_last()
+
     rows = (
         await session.execute(
             base.order_by(
+                primary_order,
                 effective_frequent_predicate().desc(),
                 InterviewCard.category,
                 InterviewCard.position,

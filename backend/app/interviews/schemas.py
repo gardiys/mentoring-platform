@@ -79,6 +79,19 @@ class InterviewQuestionLearnedFilter(StrEnum):
     UNLEARNED = "unlearned"
 
 
+class InterviewQuestionSort(StrEnum):
+    FREQUENCY = "frequency"
+    QUESTION = "question"
+    CATEGORY = "category"
+    LEARNED = "learned"
+    DUE_AT = "due_at"
+
+
+class InterviewQuestionSortDirection(StrEnum):
+    ASC = "asc"
+    DESC = "desc"
+
+
 class InterviewQuestionTableItem(BaseModel):
     id: UUID
     slug: str

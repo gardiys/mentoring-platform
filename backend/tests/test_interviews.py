@@ -1,8 +1,13 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from httpx import AsyncClient
+from sqlalchemy import delete
 
 from app.interviews.models import InterviewCard, InterviewCardFrequency
+from app.mentors.models import MentorStudent
+from app.opportunities.models import ProgramCompletion
+from app.tracks.models import LearningTrackEnrollment
 from tests.conftest import SeededData, TestSession, auth
 
 
@@ -204,6 +209,21 @@ async def test_student_filters_question_table_and_marks_card_learned(
     assert all_questions.json()["total"] == 2
     assert all_questions.json()["items"][0]["answer_markdown"]
 
+    sorted_questions = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/questions",
+        params={
+            "category": ["Основы Python", "Продвинутый Python"],
+            "sort": "question",
+            "order": "asc",
+        },
+        headers=auth(seeded.student_id),
+    )
+    assert sorted_questions.status_code == 200, sorted_questions.text
+    assert [item["slug"] for item in sorted_questions.json()["items"]] == [
+        "python-gil",
+        "python-metaclass",
+    ]
+
     frequent = await client.get(
         "/api/v1/interviews/decks/python-core-interview/questions",
         params={"frequent_only": True, "learned": "all"},
@@ -254,6 +274,45 @@ async def test_student_filters_question_table_and_marks_card_learned(
     )
     assert reset.status_code == 200, reset.text
     assert reset.json()["learned"] is False
+
+
+async def test_completed_student_without_mentor_keeps_interview_access(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    await create_deck(client, seeded)
+    async with TestSession() as session:
+        session.add(
+            ProgramCompletion(
+                user_id=seeded.student_id,
+                track_id=seeded.python_track_id,
+                completed_at=datetime.now(UTC),
+                recorded_by_user_id=seeded.admin_id,
+            )
+        )
+        await session.execute(
+            delete(LearningTrackEnrollment).where(
+                LearningTrackEnrollment.user_id == seeded.student_id,
+                LearningTrackEnrollment.track_id == seeded.python_track_id,
+            )
+        )
+        await session.execute(
+            delete(MentorStudent).where(MentorStudent.student_id == seeded.student_id)
+        )
+        await session.commit()
+
+    decks = await client.get(
+        "/api/v1/interviews/decks",
+        headers=auth(seeded.student_id),
+    )
+    assert decks.status_code == 200, decks.text
+    assert [deck["slug"] for deck in decks.json()] == ["python-core-interview"]
+
+    questions = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/questions",
+        headers=auth(seeded.student_id),
+    )
+    assert questions.status_code == 200, questions.text
+    assert questions.json()["total"] == 2
 
 
 async def test_student_selects_topics_before_study(client: AsyncClient, seeded: SeededData) -> None:

@@ -400,6 +400,19 @@ a {
   overflow: hidden;
 }
 
+.interview-question-sort-button {
+  width: 100%;
+  min-height: 2rem;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.interview-question-sort-button:hover {
+  color: var(--brand-blue);
+}
+
 .interview-question-table-toggle {
   width: 100%;
   padding: 0.35rem 0.5rem;

@@ -63,6 +63,8 @@ import type {
   InterviewReviewResult,
   InterviewQuestionLearnedFilter,
   InterviewQuestionLearnedResult,
+  InterviewQuestionSort,
+  InterviewQuestionSortDirection,
   InterviewQuestionTablePage,
   InterviewCardDuplicateMergeMutation,
   InterviewCardDuplicateMutation,
@@ -1834,9 +1836,11 @@ export const api = {
   interviewQuestionTable: (
     deckSlug: string,
     filters: {
-      category: string | null;
+      categories: string[];
       frequentOnly: boolean;
       learned: InterviewQuestionLearnedFilter;
+      sort: InterviewQuestionSort;
+      order: InterviewQuestionSortDirection;
       query: string;
       limit: number;
       offset: number;
@@ -1844,10 +1848,14 @@ export const api = {
   ) => {
     const params = new URLSearchParams({
       learned: filters.learned,
+      sort: filters.sort,
+      order: filters.order,
       limit: String(filters.limit),
       offset: String(filters.offset),
     });
-    if (filters.category) params.set("category", filters.category);
+    filters.categories.forEach((category) =>
+      params.append("category", category),
+    );
     if (filters.frequentOnly) params.set("frequent_only", "true");
     if (filters.query.trim()) params.set("query", filters.query.trim());
     return apiRequest<InterviewQuestionTablePage>(

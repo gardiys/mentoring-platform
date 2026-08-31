@@ -201,6 +201,9 @@ export type InterviewStudySession = Schemas["InterviewStudySession"];
 export type InterviewTopicOption = Schemas["InterviewTopicOption"];
 export type InterviewReviewResult = Schemas["InterviewReviewResult"];
 export type InterviewQuestionLearnedFilter = "all" | "learned" | "unlearned";
+export type InterviewQuestionSort =
+  "frequency" | "question" | "category" | "learned" | "due_at";
+export type InterviewQuestionSortDirection = "asc" | "desc";
 export interface InterviewQuestionTableItem {
   id: string;
   slug: string;

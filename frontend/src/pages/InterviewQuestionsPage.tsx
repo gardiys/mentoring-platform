@@ -4,9 +4,9 @@ import {
   Card,
   Checkbox,
   Group,
+  MultiSelect,
   Pagination,
   SegmentedControl,
-  Select,
   Stack,
   Switch,
   Table,
@@ -31,10 +31,49 @@ import {
 } from "../features/interviews/queries";
 import type {
   InterviewQuestionLearnedFilter,
+  InterviewQuestionSort,
+  InterviewQuestionSortDirection,
   InterviewQuestionTableItem,
 } from "../types/api";
 
 const PAGE_SIZE = 25;
+const QUESTION_SORTS: InterviewQuestionSort[] = [
+  "frequency",
+  "question",
+  "category",
+  "learned",
+  "due_at",
+];
+
+function SortableHeader({
+  label,
+  field,
+  sort,
+  order,
+  onSort,
+}: {
+  label: string;
+  field: InterviewQuestionSort;
+  sort: InterviewQuestionSort;
+  order: InterviewQuestionSortDirection;
+  onSort: (field: InterviewQuestionSort) => void;
+}) {
+  const active = sort === field;
+  return (
+    <UnstyledButton
+      className="interview-question-sort-button"
+      aria-label={`Сортировать: ${label}`}
+      onClick={() => onSort(field)}
+    >
+      <Group gap={6} wrap="nowrap">
+        <span>{label}</span>
+        <span aria-hidden="true">
+          {active ? (order === "asc" ? "↑" : "↓") : "↕"}
+        </span>
+      </Group>
+    </UnstyledButton>
+  );
+}
 
 function plainText(markdown: string) {
   return markdown
@@ -60,22 +99,32 @@ export function InterviewQuestionsPage() {
   );
   const searchText = searchParams.get("q") ?? "";
   const [debouncedSearch] = useDebouncedValue(searchText.trim(), 300);
-  const category = searchParams.get("category");
+  const categories = searchParams
+    .getAll("category")
+    .map((value) => value.trim())
+    .filter(Boolean);
   const frequentOnly = searchParams.get("frequent_only") === "true";
   const learnedParam = searchParams.get("learned");
   const learned: InterviewQuestionLearnedFilter =
     learnedParam === "learned" || learnedParam === "unlearned"
       ? learnedParam
       : "all";
+  const sortParam = searchParams.get("sort") as InterviewQuestionSort | null;
+  const sort: InterviewQuestionSort =
+    sortParam && QUESTION_SORTS.includes(sortParam) ? sortParam : "frequency";
+  const order: InterviewQuestionSortDirection =
+    searchParams.get("order") === "asc" ? "asc" : "desc";
   const requestedPage = Number(searchParams.get("page") ?? "1");
   const page =
     Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
 
   const topics = useInterviewTopics(deckSlug);
   const questions = useInterviewQuestionTable(deckSlug, {
-    category,
+    categories,
     frequentOnly,
     learned,
+    sort,
+    order,
     query: debouncedSearch,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
@@ -89,6 +138,36 @@ export function InterviewQuestionsPage() {
         if (value) next.set(key, value);
         else next.delete(key);
         if (key !== "page") next.delete("page");
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  const setCategories = (values: string[]) => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("category");
+        values.forEach((value) => next.append("category", value));
+        next.delete("page");
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  const changeSort = (field: InterviewQuestionSort) => {
+    const defaultOrder: InterviewQuestionSortDirection =
+      field === "frequency" || field === "learned" ? "desc" : "asc";
+    const nextOrder =
+      sort === field ? (order === "asc" ? "desc" : "asc") : defaultOrder;
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set("sort", field);
+        next.set("order", nextOrder);
+        next.delete("page");
         return next;
       },
       { replace: true },
@@ -174,14 +253,14 @@ export function InterviewQuestionsPage() {
             }
           />
           <Group grow align="flex-end">
-            <Select
-              label="Тема"
-              placeholder="Все выбранные темы"
+            <MultiSelect
+              label="Темы"
+              placeholder="Все темы"
               clearable
               searchable
-              value={category}
+              value={categories}
               data={topics.data.map((topic) => topic.name)}
-              onChange={(value) => setFilter("category", value)}
+              onChange={setCategories}
             />
             <div>
               <Text size="sm" fw={500} mb={6}>
@@ -231,11 +310,51 @@ export function InterviewQuestionsPage() {
             <Table verticalSpacing="md" horizontalSpacing="md" highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th w={100}>Выучен</Table.Th>
-                  <Table.Th>Вопрос</Table.Th>
-                  <Table.Th w={240}>Тема</Table.Th>
-                  <Table.Th w={140}>Частота</Table.Th>
-                  <Table.Th w={180}>Повторение</Table.Th>
+                  <Table.Th w={100}>
+                    <SortableHeader
+                      label="Выучен"
+                      field="learned"
+                      sort={sort}
+                      order={order}
+                      onSort={changeSort}
+                    />
+                  </Table.Th>
+                  <Table.Th>
+                    <SortableHeader
+                      label="Вопрос"
+                      field="question"
+                      sort={sort}
+                      order={order}
+                      onSort={changeSort}
+                    />
+                  </Table.Th>
+                  <Table.Th w={240}>
+                    <SortableHeader
+                      label="Тема"
+                      field="category"
+                      sort={sort}
+                      order={order}
+                      onSort={changeSort}
+                    />
+                  </Table.Th>
+                  <Table.Th w={140}>
+                    <SortableHeader
+                      label="Частота"
+                      field="frequency"
+                      sort={sort}
+                      order={order}
+                      onSort={changeSort}
+                    />
+                  </Table.Th>
+                  <Table.Th w={180}>
+                    <SortableHeader
+                      label="Повторение"
+                      field="due_at"
+                      sort={sort}
+                      order={order}
+                      onSort={changeSort}
+                    />
+                  </Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>

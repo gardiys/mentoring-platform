@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mentors.models import MentorTrackAssignment
+from app.opportunities.models import ProgramCompletion
 from app.tracks.models import LearningTrack, LearningTrackEnrollment
 from app.users.models import User, UserRole
 
@@ -25,7 +26,7 @@ async def accessible_track_ids(session: AsyncSession, user: User) -> set[UUID]:
                 )
             )
         )
-    return set(
+    enrolled_track_ids = set(
         await session.scalars(
             select(LearningTrackEnrollment.track_id)
             .join(
@@ -38,6 +39,17 @@ async def accessible_track_ids(session: AsyncSession, user: User) -> set[UUID]:
             )
         )
     )
+    completed_track_ids = set(
+        await session.scalars(
+            select(ProgramCompletion.track_id)
+            .join(LearningTrack, LearningTrack.id == ProgramCompletion.track_id)
+            .where(
+                ProgramCompletion.user_id == user.id,
+                LearningTrack.is_published.is_(True),
+            )
+        )
+    )
+    return enrolled_track_ids | completed_track_ids
 
 
 async def has_track_access(session: AsyncSession, user: User, track_id: UUID) -> bool:
