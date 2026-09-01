@@ -158,6 +158,13 @@ export function useUpdateInterviewStage() {
   );
 }
 
+export function useDeleteInterviewStage() {
+  return useJournalMutation(
+    ({ processId, stageId }: { processId: string; stageId: string }) =>
+      api.deleteInterviewProcessStage(processId, stageId),
+  );
+}
+
 export function useStartInterviewStageAnalysis() {
   return useJournalMutation(
     ({ processId, stageId }: { processId: string; stageId: string }) =>

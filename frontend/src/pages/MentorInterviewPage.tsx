@@ -15,7 +15,10 @@ import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
-import { useDeleteAdminInterviewProcess } from "../features/admin/interviewQueries";
+import {
+  useDeleteAdminInterviewProcess,
+  useDeleteAdminInterviewStage,
+} from "../features/admin/interviewQueries";
 import { useMe } from "../features/auth/queries";
 import {
   useCreateMentorInterviewFeedback,
@@ -43,16 +46,19 @@ function MentorStage({
   processId,
   stage,
   comments,
+  canDelete,
 }: {
   studentId: string;
   processId: string;
   stage: InterviewProcessStageRead;
   comments: InterviewCatalogCommentRead[];
+  canDelete: boolean;
 }) {
   const [feedback, setFeedback] = useState("");
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
   const mutation = useCreateMentorInterviewFeedback(studentId, processId);
+  const deleteStage = useDeleteAdminInterviewStage();
   const storedMediaKind = stage.media
     ? mediaKind(stage.media.content_type, stage.media.filename)
     : null;
@@ -88,11 +94,46 @@ function MentorStage({
   return (
     <Card withBorder>
       <Stack>
-        <Group justify="space-between">
+        <Group justify="space-between" align="flex-start">
           <Badge>{stageLabels[stage.stage_type]}</Badge>
-          <Text size="sm" c="dimmed">
-            {new Date(stage.scheduled_at).toLocaleString("ru-RU")}
-          </Text>
+          <Group gap="xs">
+            <Text size="sm" c="dimmed">
+              {new Date(stage.scheduled_at).toLocaleString("ru-RU")}
+            </Text>
+            {canDelete && (
+              <Button
+                size="xs"
+                color="red"
+                variant="light"
+                loading={deleteStage.isPending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Удалить этап собеседования вместе с записью, вложениями и AI-разбором? Это действие нельзя отменить.",
+                    )
+                  )
+                    return;
+                  deleteStage.mutate(
+                    { processId, stageId: stage.id },
+                    {
+                      onSuccess: () =>
+                        notifications.show({
+                          color: "green",
+                          message: "Этап собеседования удалён",
+                        }),
+                      onError: (error) =>
+                        notifications.show({
+                          color: "red",
+                          message: error.message,
+                        }),
+                    },
+                  );
+                }}
+              >
+                Удалить этап
+              </Button>
+            )}
+          </Group>
         </Group>
         {stage.description && (
           <Text style={{ whiteSpace: "pre-wrap" }}>{stage.description}</Text>
@@ -327,6 +368,7 @@ export function MentorInterviewPage() {
               feedback.find((item) => item.stage_id === stage.id)?.comments ??
               []
             }
+            canDelete={me.data?.role === "admin"}
           />
         ))
       )}

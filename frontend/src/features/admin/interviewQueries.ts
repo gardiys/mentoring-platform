@@ -52,6 +52,26 @@ export function useDeleteAdminInterviewProcess() {
   });
 }
 
+export function useDeleteAdminInterviewStage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      processId,
+      stageId,
+    }: {
+      processId: string;
+      stageId: string;
+    }) => api.deleteAdminInterviewStage(processId, stageId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: adminInterviewKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ["interviews"] }),
+        queryClient.invalidateQueries({ queryKey: ["mentor"] }),
+      ]);
+    },
+  });
+}
+
 export function useAdminInterviewDeck(id: string) {
   return useQuery({
     queryKey: adminInterviewKeys.detail(id),

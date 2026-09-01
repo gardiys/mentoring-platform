@@ -21,6 +21,7 @@ from app.interviews.journal_service import (
     create_process,
     create_stage,
     delete_own_process,
+    delete_stage,
     ensure_stage_attachment_capacity,
     ensure_stage_editable,
     get_process_model,
@@ -283,6 +284,23 @@ async def journal_update_stage(
     student: JournalUser,
 ) -> InterviewProcessDetail:
     return await update_stage(session, student, process_id, stage_id, payload)
+
+
+@router.delete(
+    "/tracks/{process_id}/stages/{stage_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def journal_delete_stage(
+    process_id: UUID,
+    stage_id: UUID,
+    session: Session,
+    student: JournalUser,
+) -> Response:
+    storage_keys = await delete_stage(session, student, process_id, stage_id)
+    for storage_key in storage_keys:
+        await delete_upload_if_unreferenced(session, store, storage_key)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

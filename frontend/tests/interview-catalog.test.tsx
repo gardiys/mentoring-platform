@@ -249,6 +249,38 @@ it("показывает треки, запись, файлы и отправл�
   });
 });
 
+it("позволяет админу удалить любой этап прямо из каталога", async () => {
+  const track = detail.tracks[0]!;
+  const stage = track.stages[0]!;
+  vi.spyOn(api, "me").mockResolvedValue({
+    id: "admin-1",
+    telegram_id: 1,
+    first_name: "Администратор",
+    last_name: null,
+    email: null,
+    role: "admin",
+    onboarding_completed_at: "2026-08-01T00:00:00Z",
+    is_active: true,
+  });
+  vi.spyOn(api, "interviewCatalogCompany").mockResolvedValue(detail);
+  const remove = vi.spyOn(api, "deleteAdminInterviewStage").mockResolvedValue();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  renderPage(
+    <InterviewCatalogCompanyPage />,
+    `/interviews/catalog/${company.id}`,
+    "/interviews/catalog/:companyId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: /Техническое интервью/ }),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Удалить этап", hidden: true }),
+  );
+
+  expect(remove).toHaveBeenCalledWith(track.id, stage.id);
+});
+
 it("отмечает конкретный этап избранным", async () => {
   vi.spyOn(api, "interviewCatalogCompany").mockResolvedValue(detail);
   const favorite = vi

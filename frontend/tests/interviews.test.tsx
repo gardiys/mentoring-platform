@@ -84,6 +84,7 @@ const questionTable: InterviewQuestionTablePage = {
       question_markdown: session.cards[0]!.question_markdown,
       answer_markdown: session.cards[0]!.answer_markdown,
       frequency: session.cards[0]!.frequency,
+      asked_count: 12,
       learned: true,
       learned_at: "2026-08-20T00:00:00Z",
       repetitions: 2,
@@ -97,6 +98,7 @@ const questionTable: InterviewQuestionTablePage = {
       question_markdown: "Какие индексы PostgreSQL вы знаете?",
       answer_markdown: "B-tree, Hash, GiST, SP-GiST, GIN и BRIN.",
       frequency: "occasional",
+      asked_count: 1,
       learned: false,
       learned_at: null,
       repetitions: 0,
@@ -224,6 +226,7 @@ it("показывает таблицу вопросов, фильтрует е�
   const learnedRow = learnedQuestion.closest("tr");
   expect(learnedRow).toHaveClass("interview-question-row--learned");
   expect(learnedRow).toHaveTextContent("Выучен");
+  expect(learnedRow).toHaveTextContent("Спрашивали: 12");
   expect(screen.queryByText(/блокирует параллельное/)).not.toBeInTheDocument();
 
   await userEvent.click(screen.getByRole("button", { name: /Что такое GIL/ }));

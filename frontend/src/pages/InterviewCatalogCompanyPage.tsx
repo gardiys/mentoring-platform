@@ -20,6 +20,8 @@ import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useDeleteAdminInterviewStage } from "../features/admin/interviewQueries";
+import { useMe } from "../features/auth/queries";
 import {
   interviewCatalogFiltersFromParams,
   interviewCatalogKeys,
@@ -125,11 +127,13 @@ function CatalogStage({
   track,
   stage,
   highlighted,
+  canDelete,
 }: {
   companyId: string;
   track: InterviewCatalogTrackRead;
   stage: InterviewCatalogStageRead;
   highlighted?: boolean;
+  canDelete: boolean;
 }) {
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const [playerLoading, setPlayerLoading] = useState(false);
@@ -143,6 +147,7 @@ function CatalogStage({
   const deleteMutation = useDeleteInterviewCatalogComment(companyId);
   const viewMutation = useMarkInterviewCatalogStageViewed();
   const favoriteMutation = useSetInterviewCatalogFavorite();
+  const deleteStage = useDeleteAdminInterviewStage();
   const storedMediaKind = stage.media
     ? mediaKind(stage.media.content_type, stage.media.filename)
     : null;
@@ -334,6 +339,39 @@ function CatalogStage({
             >
               Отметить просмотренным
             </Button>
+            {canDelete && (
+              <Button
+                size="compact-xs"
+                color="red"
+                variant="light"
+                loading={deleteStage.isPending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Удалить этап собеседования вместе с записью, вложениями и AI-разбором? Это действие нельзя отменить.",
+                    )
+                  )
+                    return;
+                  deleteStage.mutate(
+                    { processId: track.id, stageId: stage.id },
+                    {
+                      onSuccess: () =>
+                        notifications.show({
+                          color: "green",
+                          message: "Этап собеседования удалён",
+                        }),
+                      onError: (error) =>
+                        notifications.show({
+                          color: "red",
+                          message: error.message,
+                        }),
+                    },
+                  );
+                }}
+              >
+                Удалить этап
+              </Button>
+            )}
           </Stack>
         </Group>
 
@@ -613,6 +651,7 @@ export function InterviewCatalogCompanyPage() {
   const [searchParams] = useSearchParams();
   const filters = interviewCatalogFiltersFromParams(searchParams);
   const query = useInterviewCatalogCompany(companyId, filters);
+  const me = useMe();
   const targetStageId = searchParams.get("stage");
 
   useEffect(() => {
@@ -711,6 +750,7 @@ export function InterviewCatalogCompanyPage() {
                       track={track}
                       stage={stage}
                       highlighted={stage.id === targetStageId}
+                      canDelete={me.data?.role === "admin"}
                     />
                   ))}
                 </Stack>

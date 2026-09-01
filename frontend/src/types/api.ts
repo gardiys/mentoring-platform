@@ -212,6 +212,7 @@ export interface InterviewQuestionTableItem {
   question_markdown: string;
   answer_markdown: string;
   frequency: "frequent" | "occasional";
+  asked_count: number;
   learned: boolean;
   learned_at: string | null;
   repetitions: number;

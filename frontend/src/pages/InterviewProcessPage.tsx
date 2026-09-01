@@ -25,12 +25,16 @@ import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { UploadProgressPanel } from "../components/UploadProgressPanel";
-import { useDeleteAdminInterviewProcess } from "../features/admin/interviewQueries";
+import {
+  useDeleteAdminInterviewProcess,
+  useDeleteAdminInterviewStage,
+} from "../features/admin/interviewQueries";
 import { useMe } from "../features/auth/queries";
 import {
   useCancelInterviewOffer,
   useCreateInterviewStage,
   useDeleteInterviewProcess,
+  useDeleteInterviewStage,
   useDeleteInterviewStageAttachment,
   useDeleteInterviewStageMedia,
   useInterviewProcess,
@@ -622,13 +626,17 @@ function StageAttachments({
 function EditStageModal({
   processId,
   stage,
+  isAdmin,
   onClose,
 }: {
   processId: string;
   stage: InterviewProcessStageRead | null;
+  isAdmin: boolean;
   onClose: () => void;
 }) {
   const mutation = useUpdateInterviewStage();
+  const ownerDeleteMutation = useDeleteInterviewStage();
+  const adminDeleteMutation = useDeleteAdminInterviewStage();
   const [stageType, setStageType] = useState<InterviewStageType>("other");
   const [scheduledAt, setScheduledAt] = useState("");
   const [description, setDescription] = useState("");
@@ -667,6 +675,40 @@ function EditStageModal({
     );
   };
 
+  const remove = () => {
+    if (
+      !stage ||
+      ownerDeleteMutation.isPending ||
+      adminDeleteMutation.isPending ||
+      !window.confirm(
+        "Удалить этап собеседования вместе с записью и вложениями? Это действие нельзя отменить.",
+      )
+    ) {
+      return;
+    }
+    const options = {
+      onSuccess: () => {
+        onClose();
+        notifications.show({
+          color: "green",
+          message: "Этап собеседования удалён",
+        });
+      },
+      onError: (error: Error) =>
+        notifications.show({ color: "red", message: error.message }),
+    };
+    const variables = { processId, stageId: stage.id };
+    if (isAdmin) {
+      adminDeleteMutation.mutate(variables, options);
+    } else {
+      ownerDeleteMutation.mutate(variables, options);
+    }
+  };
+
+  const deletePending =
+    ownerDeleteMutation.isPending || adminDeleteMutation.isPending;
+  const isPending = mutation.isPending || deletePending;
+
   return (
     <Modal
       opened={stage !== null}
@@ -674,8 +716,8 @@ function EditStageModal({
       title="Редактировать этап"
       size="lg"
       centered
-      closeOnClickOutside={!mutation.isPending}
-      closeOnEscape={!mutation.isPending}
+      closeOnClickOutside={!isPending}
+      closeOnEscape={!isPending}
     >
       <form onSubmit={submit}>
         <Stack>
@@ -705,21 +747,34 @@ function EditStageModal({
             value={description}
             onChange={(event) => setDescription(event.currentTarget.value)}
           />
-          <Group justify="flex-end">
+          <Group justify="space-between">
             <Button
-              variant="subtle"
-              onClick={onClose}
+              type="button"
+              color="red"
+              variant="light"
+              loading={deletePending}
               disabled={mutation.isPending}
+              onClick={remove}
             >
-              Отмена
+              Удалить этап
             </Button>
-            <Button
-              type="submit"
-              loading={mutation.isPending}
-              disabled={!scheduledAt}
-            >
-              Сохранить изменения
-            </Button>
+            <Group gap="xs">
+              <Button
+                type="button"
+                variant="subtle"
+                onClick={onClose}
+                disabled={isPending}
+              >
+                Отмена
+              </Button>
+              <Button
+                type="submit"
+                loading={mutation.isPending}
+                disabled={!scheduledAt || deletePending}
+              >
+                Сохранить изменения
+              </Button>
+            </Group>
           </Group>
         </Stack>
       </form>
@@ -734,6 +789,7 @@ export function InterviewProcessPage() {
   const query = useInterviewProcess(processId);
   const deleteOwnProcess = useDeleteInterviewProcess();
   const deleteAdminProcess = useDeleteAdminInterviewProcess();
+  const deleteAdminStage = useDeleteAdminInterviewStage();
   const stageMutation = useCreateInterviewStage();
   const outcomeMutation = useSetInterviewProcessOutcome();
   const recruiterMutation = useSetInterviewProcessRecruiters();
@@ -1094,6 +1150,39 @@ export function InterviewProcessPage() {
                         Редактировать этап
                       </Button>
                     )}
+                    {me.data?.role === "admin" && !stage.can_edit && (
+                      <Button
+                        size="xs"
+                        color="red"
+                        variant="light"
+                        loading={deleteAdminStage.isPending}
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              "Удалить этап собеседования вместе с записью и вложениями? Это действие нельзя отменить.",
+                            )
+                          )
+                            return;
+                          deleteAdminStage.mutate(
+                            { processId, stageId: stage.id },
+                            {
+                              onSuccess: () =>
+                                notifications.show({
+                                  color: "green",
+                                  message: "Этап собеседования удалён",
+                                }),
+                              onError: (error) =>
+                                notifications.show({
+                                  color: "red",
+                                  message: error.message,
+                                }),
+                            },
+                          );
+                        }}
+                      >
+                        Удалить этап
+                      </Button>
+                    )}
                   </Group>
                 </Group>
                 {stage.can_edit ? (
@@ -1341,6 +1430,7 @@ export function InterviewProcessPage() {
       <EditStageModal
         processId={processId}
         stage={editingStage}
+        isAdmin={me.data?.role === "admin"}
         onClose={() => setEditingStage(null)}
       />
     </Stack>

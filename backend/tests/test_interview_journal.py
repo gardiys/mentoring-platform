@@ -224,6 +224,63 @@ async def test_only_admin_can_delete_interview_track_and_its_files(
         assert await session.get(InterviewProcessStageAttachment, attachment_id) is None
 
 
+async def test_only_admin_can_delete_any_interview_stage_and_its_files(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    store = FakeInterviewUploadStore()
+    monkeypatch.setattr(admin_process_router, "store", store)
+    created = await create_process(client, seeded, "Трек с административным удалением")
+    process_id = UUID(str(created["id"]))
+    stage_response = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process_id}/stages",
+        headers=auth(seeded.student_id),
+        json=stage_payload(),
+    )
+    stage_id = UUID(stage_response.json()["stages"][0]["id"])
+
+    async with TestSession() as session:
+        stage = await session.get(InterviewProcessStage, stage_id)
+        assert stage is not None
+        stage.created_at = datetime.now(UTC) - timedelta(days=4)
+        stage.scheduled_at = datetime.now(UTC) - timedelta(days=3)
+        stage.ai_analysis_requested_at = datetime.now(UTC) - timedelta(days=2)
+        stage.media_storage_key = "interview-media/admin-stage-recording.mp4"
+        stage.media_filename = "recording.mp4"
+        stage.media_content_type = "video/mp4"
+        stage.media_size = 512
+        session.add(
+            InterviewProcessStageAttachment(
+                stage_id=stage.id,
+                storage_key="interview-attachments/admin-stage-notes.pdf",
+                filename="notes.pdf",
+                content_type="application/pdf",
+                size=64,
+            )
+        )
+        await session.commit()
+
+    forbidden = await client.delete(
+        f"/api/v1/admin/interviews/processes/{process_id}/stages/{stage_id}",
+        headers=auth(seeded.student_id),
+    )
+    deleted = await client.delete(
+        f"/api/v1/admin/interviews/processes/{process_id}/stages/{stage_id}",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert forbidden.status_code == 403
+    assert deleted.status_code == 204, deleted.text
+    assert set(store.deleted) == {
+        "interview-media/admin-stage-recording.mp4",
+        "interview-attachments/admin-stage-notes.pdf",
+    }
+    async with TestSession() as session:
+        assert await session.get(InterviewProcessStage, stage_id) is None
+        assert await session.get(InterviewProcess, process_id) is not None
+
+
 async def test_owner_deletes_recent_interview_track_and_its_files(
     client: AsyncClient,
     seeded: SeededData,
@@ -466,8 +523,12 @@ async def test_stage_editing_is_locked_after_window_or_ai_analysis(
         headers=auth(seeded.student_id),
         json={"filename": "notes.txt", "content_type": "text/plain", "size": 10},
     )
+    expired_delete = await client.delete(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}",
+        headers=auth(seeded.student_id),
+    )
 
-    for response in (expired_update, expired_media, expired_attachment):
+    for response in (expired_update, expired_media, expired_attachment, expired_delete):
         assert response.status_code == 409
         assert response.json()["detail"]["code"] == "interview_stage_edit_window_expired"
 
@@ -489,11 +550,72 @@ async def test_stage_editing_is_locked_after_window_or_ai_analysis(
         headers=auth(seeded.student_id),
         json={"filename": "recording.mp4", "content_type": "video/mp4", "size": 10},
     )
+    ai_locked_delete = await client.delete(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}",
+        headers=auth(seeded.student_id),
+    )
 
     assert ai_locked.status_code == 409
     assert ai_locked.json()["detail"]["code"] == "interview_stage_locked_for_ai_analysis"
     assert ai_locked_media.status_code == 409
     assert ai_locked_media.json()["detail"]["code"] == "interview_stage_locked_for_ai_analysis"
+    assert ai_locked_delete.status_code == 409
+    assert ai_locked_delete.json()["detail"]["code"] == ("interview_stage_locked_for_ai_analysis")
+
+
+async def test_owner_deletes_recent_interview_stage_and_its_files(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    store = FakeInterviewUploadStore()
+    monkeypatch.setattr(journal_router, "store", store)
+    process = await create_process(client, seeded, "Трек с удаляемым этапом")
+    created = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages",
+        headers=auth(seeded.student_id),
+        json=stage_payload("technical_interview"),
+    )
+    stage_id = UUID(created.json()["stages"][0]["id"])
+
+    async with TestSession() as session:
+        stage = await session.get(InterviewProcessStage, stage_id)
+        assert stage is not None
+        stage.media_storage_key = "interview-media/stage-recording.mp4"
+        stage.media_filename = "recording.mp4"
+        stage.media_content_type = "video/mp4"
+        stage.media_size = 512
+        stage.anonymized_media_storage_key = "interview-media/stage-recording-anonymous.mp4"
+        stage.anonymized_media_filename = "recording.mp4"
+        stage.anonymized_media_content_type = "video/mp4"
+        stage.anonymized_media_size = 512
+        attachment = InterviewProcessStageAttachment(
+            stage_id=stage.id,
+            storage_key="interview-attachments/stage-notes.pdf",
+            filename="notes.pdf",
+            content_type="application/pdf",
+            size=64,
+        )
+        session.add(attachment)
+        await session.commit()
+        attachment_id = attachment.id
+
+    deleted = await client.delete(
+        f"/api/v1/interviews/journal/tracks/{process['id']}/stages/{stage_id}",
+        headers=auth(seeded.student_id),
+    )
+
+    assert deleted.status_code == 204, deleted.text
+    assert set(store.deleted) == {
+        "interview-media/stage-recording.mp4",
+        "interview-media/stage-recording-anonymous.mp4",
+        "interview-attachments/stage-notes.pdf",
+    }
+    async with TestSession() as session:
+        assert await session.get(InterviewProcessStage, stage_id) is None
+        assert await session.get(InterviewProcessStageAttachment, attachment_id) is None
+        remaining_process = await session.get(InterviewProcess, UUID(process["id"]))
+        assert remaining_process is not None
 
 
 async def test_student_adds_and_edits_recruiter_telegram_usernames(

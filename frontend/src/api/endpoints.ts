@@ -1945,6 +1945,11 @@ export const api = {
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}`,
       { method: "PUT", body: JSON.stringify(payload) },
     ),
+  deleteInterviewProcessStage: (processId: string, stageId: string) =>
+    apiRequest<void>(
+      `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}`,
+      { method: "DELETE" },
+    ),
   uploadInterviewStageMedia: (
     processId: string,
     stageId: string,
@@ -2192,6 +2197,11 @@ export const api = {
     apiRequest<void>(`/api/v1/admin/interviews/processes/${id}`, {
       method: "DELETE",
     }),
+  deleteAdminInterviewStage: (processId: string, stageId: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/interviews/processes/${processId}/stages/${stageId}`,
+      { method: "DELETE" },
+    ),
   adminInterviewDeckSummaries: () =>
     apiRequest<AdminInterviewDeckSummary[]>(
       "/api/v1/admin/interviews/decks/summaries",

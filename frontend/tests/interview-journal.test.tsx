@@ -384,6 +384,35 @@ it("редактирует описание и параметры этапа в 
   );
 });
 
+it("удаляет этап из окна редактирования после подтверждения", async () => {
+  vi.spyOn(api, "interviewProcess").mockResolvedValue(processDetail);
+  const remove = vi
+    .spyOn(api, "deleteInterviewProcessStage")
+    .mockResolvedValue();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  renderPage(
+    <InterviewProcessPage />,
+    `/interviews/journal/${processDetail.id}`,
+    "/interviews/journal/:processId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Редактировать этап" }),
+  );
+  const dialog = await screen.findByRole("dialog");
+  await userEvent.click(
+    within(dialog).getByRole("button", { name: "Удалить этап" }),
+  );
+
+  expect(window.confirm).toHaveBeenCalledWith(
+    "Удалить этап собеседования вместе с записью и вложениями? Это действие нельзя отменить.",
+  );
+  expect(remove).toHaveBeenCalledWith(
+    processDetail.id,
+    processDetail.stages[0]!.id,
+  );
+});
+
 it("объясняет блокировку редактирования после AI-разбора", async () => {
   const lockedProcess: InterviewProcessDetail = {
     ...processDetail,
@@ -412,6 +441,36 @@ it("объясняет блокировку редактирования пос�
   expect(
     document.querySelector('input[type="file"][accept="audio/*,video/*"]'),
   ).toBeNull();
+});
+
+it("позволяет админу удалить заблокированный этап без окна редактирования", async () => {
+  const lockedStage = {
+    ...processDetail.stages[0]!,
+    can_edit: false,
+    edit_locked_reason: "ai_analysis_requested" as const,
+    ai_analysis_requested_at: "2026-08-05T13:00:00Z",
+  };
+  vi.spyOn(api, "me").mockResolvedValue({ ...student, role: "admin" });
+  vi.spyOn(api, "interviewProcess").mockResolvedValue({
+    ...processDetail,
+    stages: [lockedStage],
+  });
+  const remove = vi.spyOn(api, "deleteAdminInterviewStage").mockResolvedValue();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  renderPage(
+    <InterviewProcessPage />,
+    `/interviews/journal/${processDetail.id}`,
+    "/interviews/journal/:processId",
+  );
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Удалить этап" }),
+  );
+
+  expect(remove).toHaveBeenCalledWith(processDetail.id, lockedStage.id);
+  expect(
+    screen.queryByRole("button", { name: "Редактировать этап" }),
+  ).not.toBeInTheDocument();
 });
 
 it("восстанавливает закрытый трек и сохраняет причину прошлого отказа", async () => {

@@ -755,6 +755,70 @@ async def update_stage(
     return await process_detail(session, user, process_id)
 
 
+async def delete_stage(
+    session: AsyncSession,
+    user: User,
+    process_id: UUID,
+    stage_id: UUID,
+) -> list[str]:
+    stage = await get_stage_model(session, user, process_id, stage_id, lock=True)
+    ensure_stage_editable(stage)
+    return await _delete_stage(session, stage)
+
+
+async def delete_admin_stage(
+    session: AsyncSession,
+    process_id: UUID,
+    stage_id: UUID,
+) -> list[str]:
+    stage = await session.scalar(
+        select(InterviewProcessStage)
+        .where(
+            InterviewProcessStage.id == stage_id,
+            InterviewProcessStage.process_id == process_id,
+        )
+        .with_for_update()
+    )
+    if stage is None:
+        api_error(404, "interview_stage_not_found", "Interview stage was not found")
+    return await _delete_stage(session, stage)
+
+
+async def _delete_stage(
+    session: AsyncSession,
+    stage: InterviewProcessStage,
+) -> list[str]:
+    attachment_keys = list(
+        await session.scalars(
+            select(InterviewProcessStageAttachment.storage_key).where(
+                InterviewProcessStageAttachment.stage_id == stage.id
+            )
+        )
+    )
+    interview_rows = (
+        await session.execute(
+            select(
+                IntelligenceInterview.id,
+                IntelligenceInterview.normalized_audio_key,
+            ).where(IntelligenceInterview.stage_id == stage.id)
+        )
+    ).all()
+    interview_ids = [interview_id for interview_id, _audio_key in interview_rows]
+    impact = await prepare_automation_deletion(session, interview_ids)
+    storage_keys = [
+        stage.media_storage_key,
+        stage.anonymized_media_storage_key,
+        *attachment_keys,
+        *(audio_key for _interview_id, audio_key in interview_rows if audio_key is not None),
+    ]
+
+    await session.delete(stage)
+    await session.flush()
+    await finalize_automation_deletion(session, impact)
+    await session.commit()
+    return list(dict.fromkeys(key for key in storage_keys if key))
+
+
 async def set_stage_media(
     session: AsyncSession,
     user: User,

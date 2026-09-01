@@ -433,6 +433,11 @@ export function InterviewQuestionsPage() {
                               ? "Частый"
                               : "Редкий"}
                           </Badge>
+                          <Text size="xs" c="dimmed" mt={4}>
+                            {item.asked_count > 0
+                              ? `Спрашивали: ${item.asked_count}`
+                              : "Появлений пока нет"}
+                          </Text>
                         </Table.Td>
                         <Table.Td>
                           {item.learned && item.due_at ? (

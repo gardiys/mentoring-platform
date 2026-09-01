@@ -1,11 +1,12 @@
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.errors import api_error
 from app.interviews.card_frequency import (
@@ -424,25 +425,33 @@ async def list_interview_questions(
         )
         or 0
     )
-    sort_expression = {
-        InterviewQuestionSort.FREQUENCY: effective_frequent_predicate(),
-        InterviewQuestionSort.QUESTION: func.lower(InterviewCard.question_markdown),
-        InterviewQuestionSort.CATEGORY: func.lower(InterviewCard.category),
-        InterviewQuestionSort.LEARNED: InterviewCardProgress.first_learned_at.is_not(None),
-        InterviewQuestionSort.DUE_AT: InterviewCardProgress.due_at,
-    }[sort]
-    primary_order = (
-        sort_expression.desc()
-        if order is InterviewQuestionSortDirection.DESC
-        else sort_expression.asc()
-    )
-    if sort is InterviewQuestionSort.DUE_AT:
-        primary_order = primary_order.nulls_last()
+    descending = order is InterviewQuestionSortDirection.DESC
+    primary_orders: tuple[ColumnElement[Any], ...]
+    if sort is InterviewQuestionSort.FREQUENCY:
+        primary_orders = (
+            effective_frequent_predicate().desc()
+            if descending
+            else effective_frequent_predicate().asc(),
+            InterviewCard.asked_count.desc()
+            if descending
+            else InterviewCard.asked_count.asc(),
+        )
+    else:
+        sort_expression = {
+            InterviewQuestionSort.QUESTION: func.lower(InterviewCard.question_markdown),
+            InterviewQuestionSort.CATEGORY: func.lower(InterviewCard.category),
+            InterviewQuestionSort.LEARNED: InterviewCardProgress.first_learned_at.is_not(None),
+            InterviewQuestionSort.DUE_AT: InterviewCardProgress.due_at,
+        }[sort]
+        primary_order = sort_expression.desc() if descending else sort_expression.asc()
+        if sort is InterviewQuestionSort.DUE_AT:
+            primary_order = primary_order.nulls_last()
+        primary_orders = (primary_order,)
 
     rows = (
         await session.execute(
             base.order_by(
-                primary_order,
+                *primary_orders,
                 effective_frequent_predicate().desc(),
                 InterviewCard.category,
                 InterviewCard.position,
@@ -463,6 +472,7 @@ async def list_interview_questions(
                 question_markdown=card.question_markdown,
                 answer_markdown=card.answer_markdown,
                 frequency=effective_card_frequency(card),
+                asked_count=card.asked_count,
                 learned=progress is not None and progress.first_learned_at is not None,
                 learned_at=progress.first_learned_at if progress is not None else None,
                 repetitions=progress.repetitions if progress is not None else 0,

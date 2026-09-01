@@ -50,7 +50,7 @@ def effective_frequent_predicate() -> ColumnElement[bool]:
             InterviewCard.frequency_override.is_(None),
             InterviewCard.asked_count >= frequent_occurrence_threshold(),
         ),
-    )
+    ).is_(True)
 
 
 def refresh_card_frequency(

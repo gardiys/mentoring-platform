@@ -100,6 +100,7 @@ class InterviewQuestionTableItem(BaseModel):
     question_markdown: str
     answer_markdown: str
     frequency: InterviewCardFrequency
+    asked_count: int
     learned: bool
     learned_at: datetime | None
     repetitions: int

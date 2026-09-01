@@ -512,3 +512,70 @@ it.each([
     expect(media).toHaveBeenCalledWith(stageId);
   },
 );
+
+it("позволяет админу удалить любой этап из прогресса ученика", async () => {
+  const stageId = "71000000-0000-4000-8000-000000000099";
+  const processId = "70000000-0000-4000-8000-000000000099";
+  const detail: MentorInterviewDetail = {
+    process: {
+      id: processId,
+      company_name: "Яндекс",
+      recruiter_telegram_usernames: [],
+      track_id: "40000000-0000-4000-8000-000000000001",
+      track_slug: "python",
+      track_title: "Python",
+      status: "active",
+      close_reason: null,
+      closed_at: null,
+      stage_count: 1,
+      next_stage_at: null,
+      has_offer_file: false,
+      created_at: "2026-08-01T10:00:00Z",
+      updated_at: "2026-08-01T10:00:00Z",
+      can_delete: false,
+      delete_locked_reason: "ai_analysis_requested",
+      deletable_until: "2026-08-06T12:00:00Z",
+      offer: null,
+      stages: [
+        {
+          id: stageId,
+          stage_type: "technical_interview",
+          scheduled_at: "2026-08-05T12:00:00Z",
+          description: "Алгоритмы и Python",
+          media: null,
+          attachments: [],
+          can_edit: false,
+          edit_locked_reason: "ai_analysis_requested",
+          editable_until: "2026-08-06T12:00:00Z",
+          created_at: "2026-08-01T10:00:00Z",
+          updated_at: "2026-08-01T10:00:00Z",
+        },
+      ],
+    },
+    feedback: [{ stage_id: stageId, comments: [] }],
+  };
+  vi.spyOn(api, "me").mockResolvedValue({
+    id: "admin-1",
+    telegram_id: 1,
+    first_name: "Администратор",
+    last_name: null,
+    email: null,
+    role: "admin",
+    onboarding_completed_at: "2026-08-01T00:00:00Z",
+    is_active: true,
+  });
+  vi.spyOn(api, "mentorInterview").mockResolvedValue(detail);
+  const remove = vi.spyOn(api, "deleteAdminInterviewStage").mockResolvedValue();
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+
+  renderPage(
+    <MentorInterviewPage />,
+    `/mentor/students/student-1/interviews/${processId}`,
+    "/mentor/students/:studentId/interviews/:processId",
+  );
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Удалить этап" }),
+  );
+
+  expect(remove).toHaveBeenCalledWith(processId, stageId);
+});

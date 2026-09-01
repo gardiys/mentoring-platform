@@ -315,6 +315,51 @@ async def test_completed_student_without_mentor_keeps_interview_access(
     assert questions.json()["total"] == 2
 
 
+async def test_frequency_sort_is_applied_before_question_table_pagination(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    deck = await create_deck(client, seeded)
+    async with TestSession() as session:
+        session.add_all(
+            [
+                InterviewCard(
+                    deck_id=UUID(deck["id"]),
+                    slug=f"frequency-page-{asked_count}",
+                    category="Нагрузочное тестирование",
+                    question_markdown=f"Вопрос с частотой {asked_count}",
+                    answer_markdown="Ответ",
+                    frequency=InterviewCardFrequency.OCCASIONAL,
+                    frequency_override=None,
+                    asked_count=asked_count,
+                    position=100 + asked_count,
+                    is_published=True,
+                )
+                for asked_count in range(1, 31)
+            ]
+        )
+        await session.commit()
+
+    first_page = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/questions",
+        params={"sort": "frequency", "order": "desc", "limit": 10, "offset": 0},
+        headers=auth(seeded.student_id),
+    )
+    second_page = await client.get(
+        "/api/v1/interviews/decks/python-core-interview/questions",
+        params={"sort": "frequency", "order": "desc", "limit": 10, "offset": 10},
+        headers=auth(seeded.student_id),
+    )
+
+    assert first_page.status_code == 200, first_page.text
+    assert second_page.status_code == 200, second_page.text
+    assert [item["asked_count"] for item in first_page.json()["items"]] == list(
+        range(30, 20, -1)
+    )
+    assert [item["asked_count"] for item in second_page.json()["items"]] == list(
+        range(20, 10, -1)
+    )
+
+
 async def test_student_selects_topics_before_study(client: AsyncClient, seeded: SeededData) -> None:
     deck = await create_deck(client, seeded)
 
