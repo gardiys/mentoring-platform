@@ -15,12 +15,14 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { useMe } from "../features/auth/queries";
+import { OpportunityFlow } from "../features/opportunities/OpportunityFlow";
 import {
   useAcceptPythonRepeatTerms,
   useCheckoutPythonRepeat,
@@ -32,7 +34,14 @@ import {
   useUpdatePythonRepeatApplication,
   useSubmitPythonRepeatOffer,
 } from "../features/opportunities/queries";
-import type { PythonRepeatApplicationStatus } from "../types/api";
+import type {
+  PythonRepeatApplicationStatus,
+  PythonRepeatDashboard,
+} from "../types/api";
+import {
+  dateToLocalDateTimeInput,
+  localDateTimeInputToIso,
+} from "../utils/dateTimeInput";
 import { formatRubles } from "../utils/money";
 import { openExternalResource } from "../utils/openExternalResource";
 
@@ -50,6 +59,56 @@ const statusLabels: Record<PythonRepeatApplicationStatus, string> = {
   enrolled: "Повторное менторство активно",
   cancelled: "Отменено",
   expired: "Срок предложения истёк",
+};
+
+const statusColors: Record<PythonRepeatApplicationStatus, string> = {
+  draft: "gray",
+  submitted: "blue",
+  under_review: "blue",
+  needs_diagnostic: "yellow",
+  needs_clarification: "yellow",
+  approved: "yellow",
+  rejected: "red",
+  terms_accepted: "blue",
+  payment_pending: "yellow",
+  paid: "green",
+  enrolled: "green",
+  cancelled: "gray",
+  expired: "red",
+};
+
+const offerStatusLabels: Record<string, string> = {
+  draft: "Черновик",
+  submitted: "На проверке",
+  under_review: "Проверяется",
+  verified: "Подтверждён",
+  rejected: "Отклонён",
+  cancelled: "Отменён",
+};
+
+const offerStatusColors: Record<string, string> = {
+  draft: "gray",
+  submitted: "blue",
+  under_review: "blue",
+  verified: "green",
+  rejected: "red",
+  cancelled: "gray",
+};
+
+const installmentStatusLabels: Record<string, string> = {
+  scheduled: "Запланирован",
+  pending: "Ожидает оплаты",
+  paid: "Оплачен",
+  refunded: "Возвращён",
+  cancelled: "Отменён",
+};
+
+const installmentStatusColors: Record<string, string> = {
+  scheduled: "blue",
+  pending: "yellow",
+  paid: "green",
+  refunded: "gray",
+  cancelled: "gray",
 };
 
 const employmentOptions = [
@@ -76,6 +135,7 @@ const reasonOptions = [
 
 export function PythonRepeatOpportunityPage() {
   const query = usePythonRepeat();
+  const me = useMe();
   const createApplication = useCreatePythonRepeatApplication();
   const updateApplication = useUpdatePythonRepeatApplication();
   const submitApplication = useSubmitPythonRepeatApplication();
@@ -103,12 +163,22 @@ export function PythonRepeatOpportunityPage() {
     company: "",
     salaryRubles: 250_000,
     employment_type: "Трудовой договор",
-    received_at: new Date().toISOString().slice(0, 16),
-    expected_start_date: new Date().toISOString().slice(0, 16),
+    received_at: dateToLocalDateTimeInput(new Date()),
+    expected_start_date: dateToLocalDateTimeInput(new Date()),
   });
+  const initializedApplicationKey = useRef<string | null>(null);
   const current = query.data?.application;
   useEffect(() => {
-    if (!current || current.status !== "needs_clarification") return;
+    if (
+      !current ||
+      !(["draft", "needs_clarification"] as string[]).includes(current.status)
+    ) {
+      initializedApplicationKey.current = null;
+      return;
+    }
+    const initializationKey = `${current.id}:${current.status}`;
+    if (initializedApplicationKey.current === initializationKey) return;
+    initializedApplicationKey.current = initializationKey;
     setApplication({
       employment_status: current.employment_status,
       reason: current.reason,
@@ -134,6 +204,130 @@ export function PythonRepeatOpportunityPage() {
   const mutationError = (error: Error) =>
     notifications.show({ color: "red", message: error.message });
   const refresh = () => void query.refetch();
+  const technicalGapsLength = application.technical_gaps.trim().length;
+  const applicationValid =
+    application.target_position.trim().length > 0 &&
+    application.target_salary_rubles > 0 &&
+    application.hours_per_week >= 1 &&
+    application.hours_per_week <= 80 &&
+    technicalGapsLength >= 10;
+  const offerValid =
+    offer.company.trim().length >= 2 &&
+    offer.position.trim().length >= 2 &&
+    offer.salaryRubles > 0 &&
+    offer.employment_type.trim().length > 0 &&
+    Boolean(offer.received_at) &&
+    Boolean(offer.expected_start_date) &&
+    offer.expected_start_date >= offer.received_at;
+  const canCreateOffer =
+    Boolean(data.enrollment) &&
+    !data.offers.some(
+      (item) => !["rejected", "cancelled"].includes(item.status),
+    );
+  const hasPaymentEmail = Boolean(me.data?.email);
+  const termsExpired = Boolean(
+    current?.offer_expires_at &&
+    new Date(current.offer_expires_at).getTime() <= Date.now(),
+  );
+
+  const saveApplication = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!data.eligibility.eligible || !applicationValid) return;
+    const payload = {
+      ...application,
+      target_salary_kopecks: Math.round(application.target_salary_rubles * 100),
+      last_interview_at: null,
+      desired_start_date: null,
+    };
+    if (current) {
+      updateApplication.mutate(
+        { id: current.id, payload },
+        {
+          onSuccess: () => {
+            if (
+              current.status === "draft" ||
+              current.status === "needs_clarification"
+            ) {
+              submitApplication.mutate(current.id, {
+                onSuccess: () =>
+                  notifications.show({
+                    color: "green",
+                    message:
+                      current.status === "needs_clarification"
+                        ? "Уточнения сохранены, заявка отправлена повторно"
+                        : "Изменения сохранены, заявка отправлена на рассмотрение",
+                  }),
+                onError: mutationError,
+              });
+              return;
+            }
+            notifications.show({
+              color: "green",
+              message: "Черновик обновлён",
+            });
+          },
+          onError: mutationError,
+        },
+      );
+      return;
+    }
+    createApplication.mutate(payload, {
+      onSuccess: () =>
+        notifications.show({
+          color: "green",
+          message: "Черновик заявки сохранён",
+        }),
+      onError: mutationError,
+    });
+  };
+
+  const saveOffer = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!offerValid) return;
+    const receivedAt = localDateTimeInputToIso(offer.received_at);
+    const expectedStartDate = localDateTimeInputToIso(
+      offer.expected_start_date,
+    );
+    if (!receivedAt || !expectedStartDate) return;
+    createOffer.mutate(
+      {
+        position: offer.position.trim(),
+        company: offer.company.trim(),
+        fixed_monthly_salary_kopecks: Math.round(offer.salaryRubles * 100),
+        employment_type: offer.employment_type.trim(),
+        received_at: receivedAt,
+        expected_start_date: expectedStartDate,
+      },
+      {
+        onSuccess: (dashboard) => {
+          const createdDraft = (dashboard as PythonRepeatDashboard).offers
+            .filter((item) => item.status === "draft")
+            .sort(
+              (left, right) =>
+                new Date(right.created_at).getTime() -
+                new Date(left.created_at).getTime(),
+            )[0];
+          if (!createdDraft) {
+            notifications.show({
+              color: "red",
+              message:
+                "Оффер сохранён, но не удалось отправить его автоматически. Обновите страницу и повторите отправку.",
+            });
+            return;
+          }
+          submitOffer.mutate(createdDraft.id, {
+            onSuccess: () =>
+              notifications.show({
+                color: "green",
+                message: "Оффер сохранён и отправлен на проверку",
+              }),
+            onError: mutationError,
+          });
+        },
+        onError: mutationError,
+      },
+    );
+  };
 
   return (
     <Stack gap="xl">
@@ -150,6 +344,47 @@ export function PythonRepeatOpportunityPage() {
         title="Повторное менторство по Python"
         description="Точечная диагностика, персональный план и поддержка до нового подтверждённого Python Backend оффера. Старый прогресс остаётся в истории."
       />
+      {current && (
+        <Alert
+          color={statusColors[current.status]}
+          title={`Текущий статус: ${statusLabels[current.status]}`}
+        >
+          <Group justify="space-between" align="center" mt="xs">
+            <Text size="sm">
+              Все условия, комментарии команды и следующее доступное действие
+              собраны в вашей заявке.
+            </Text>
+            <Button
+              component="a"
+              href="#python-repeat-application"
+              variant="light"
+              size="sm"
+            >
+              Перейти к заявке
+            </Button>
+          </Group>
+        </Alert>
+      )}
+      <OpportunityFlow
+        steps={[
+          {
+            title: "Заполните заявку",
+            description: "Цель, текущая ситуация и пробелы в знаниях",
+          },
+          {
+            title: "Пройдите диагностику",
+            description: "Команда уточнит подходящий план возврата",
+          },
+          {
+            title: "Примите условия",
+            description: "Сумма и процент фиксируются в заявке",
+          },
+          {
+            title: "Оплатите и начните",
+            description: "Старый прогресс останется в истории",
+          },
+        ]}
+      />
       <SimpleGrid cols={{ base: 1, md: 3 }}>
         <Card withBorder>
           <Text c="dimmed">Вступительный платёж</Text>
@@ -160,7 +395,9 @@ export function PythonRepeatOpportunityPage() {
         <Card withBorder>
           <Text c="dimmed">После нового оффера</Text>
           <Title order={2}>{data.product.success_fee_percent}% зарплаты</Title>
-          <Text size="sm">4 платежа по 25%</Text>
+          <Text size="sm">
+            Равными платежами: {data.product.success_fee_installments_count}
+          </Text>
         </Card>
         <Card withBorder>
           <Text c="dimmed">Поддержка</Text>
@@ -172,8 +409,10 @@ export function PythonRepeatOpportunityPage() {
         </Card>
       </SimpleGrid>
 
-      {(!current || current.status === "needs_clarification") && (
-        <Card withBorder>
+      {(!current ||
+        current.status === "draft" ||
+        current.status === "needs_clarification") && (
+        <Card withBorder component="form" onSubmit={saveApplication}>
           <Stack>
             <Title order={2}>Заявка</Title>
             <Alert color={data.eligibility.eligible ? "blue" : "gray"}>
@@ -227,11 +466,19 @@ export function PythonRepeatOpportunityPage() {
                   })
                 }
                 required
+                error={
+                  application.target_position.length > 0 &&
+                  !application.target_position.trim()
+                    ? "Укажите должность"
+                    : undefined
+                }
               />
               <NumberInput
                 label="Целевая зарплата"
+                description="Желаемая сумма на руки в месяц"
                 suffix=" ₽"
                 min={1}
+                required
                 value={application.target_salary_rubles}
                 onChange={(value) =>
                   setApplication({
@@ -242,8 +489,10 @@ export function PythonRepeatOpportunityPage() {
               />
               <NumberInput
                 label="Часов в неделю"
+                description="Реалистичная нагрузка от 1 до 80 часов"
                 min={1}
                 max={80}
+                required
                 value={application.hours_per_week}
                 onChange={(value) =>
                   setApplication({
@@ -284,7 +533,10 @@ export function PythonRepeatOpportunityPage() {
             />
             <Textarea
               label="Какие пробелы хотите закрыть"
+              description="Минимум 10 символов — это поможет подготовить диагностику"
               minRows={4}
+              minLength={10}
+              maxLength={5000}
               required
               value={application.technical_gaps}
               onChange={(event) =>
@@ -293,7 +545,16 @@ export function PythonRepeatOpportunityPage() {
                   technical_gaps: event.currentTarget.value,
                 })
               }
+              error={
+                application.technical_gaps.length > 0 &&
+                technicalGapsLength < 10
+                  ? "Опишите цель чуть подробнее"
+                  : undefined
+              }
             />
+            <Text size="xs" c="dimmed" ta="right">
+              {technicalGapsLength} / 5000
+            </Text>
             <Textarea
               label="Дополнительный комментарий"
               value={application.additional_comment}
@@ -305,62 +566,49 @@ export function PythonRepeatOpportunityPage() {
               }
             />
             <Button
-              disabled={
-                !data.eligibility.eligible ||
-                application.technical_gaps.trim().length < 10
-              }
+              type="submit"
+              disabled={!data.eligibility.eligible || !applicationValid}
               loading={
-                createApplication.isPending || updateApplication.isPending
+                createApplication.isPending ||
+                updateApplication.isPending ||
+                ((current?.status === "draft" ||
+                  current?.status === "needs_clarification") &&
+                  submitApplication.isPending)
               }
-              onClick={() => {
-                const payload = {
-                    ...application,
-                    target_salary_kopecks: Math.round(
-                      application.target_salary_rubles * 100,
-                    ),
-                    last_interview_at: null,
-                    desired_start_date: null,
-                  };
-                if (current) {
-                  updateApplication.mutate(
-                    { id: current.id, payload },
-                    { onError: mutationError },
-                  );
-                } else {
-                  createApplication.mutate(payload, { onError: mutationError });
-                }
-              }}
             >
-              {current ? "Сохранить уточнения" : "Сохранить заявку"}
+              {current?.status === "needs_clarification"
+                ? "Сохранить и отправить повторно"
+                : current?.status === "draft"
+                  ? "Сохранить и отправить на рассмотрение"
+                  : "Сохранить заявку"}
             </Button>
           </Stack>
         </Card>
       )}
 
       {current && (
-        <Card withBorder>
+        <Card
+          withBorder
+          id="python-repeat-application"
+          style={{ scrollMarginTop: 24 }}
+          className="opportunity-request-card"
+          data-complete={["paid", "enrolled"].includes(current.status)}
+        >
           <Stack>
             <Group justify="space-between">
               <Title order={2}>Ваша заявка</Title>
-              <Badge>{statusLabels[current.status]}</Badge>
+              <Badge color={statusColors[current.status]}>
+                {statusLabels[current.status]}
+              </Badge>
             </Group>
             <Text>Цель: {current.target_position}</Text>
+            <Text size="sm" c="dimmed">
+              Создана {new Date(current.created_at).toLocaleDateString("ru-RU")}
+            </Text>
             {current.admin_comment && (
               <Alert color="blue" title="Комментарий команды">
                 {current.admin_comment}
               </Alert>
-            )}
-            {current.status === "draft" && (
-              <Button
-                loading={submitApplication.isPending}
-                onClick={() =>
-                  submitApplication.mutate(current.id, {
-                    onError: mutationError,
-                  })
-                }
-              >
-                Отправить на рассмотрение
-              </Button>
             )}
             {current.status === "needs_clarification" && (
               <Text size="sm" c="dimmed">
@@ -371,22 +619,43 @@ export function PythonRepeatOpportunityPage() {
             {current.status === "approved" && (
               <Stack>
                 <Alert
-                  color="yellow"
+                  color={termsExpired ? "red" : "yellow"}
                   title={`Условия, версия ${current.terms_version}`}
                 >
-                  {formatRubles(
-                    Number(current.terms_snapshot?.upfront_price_kopecks ?? 0),
-                  )}{" "}
-                  + {Number(current.terms_snapshot?.success_fee_percent ?? 0)}%
-                  от подтверждённой зарплаты, четырьмя платежами.
+                  <Stack gap={4}>
+                    <Text>
+                      {formatRubles(
+                        Number(
+                          current.terms_snapshot?.upfront_price_kopecks ?? 0,
+                        ),
+                      )}{" "}
+                      +{" "}
+                      {Number(current.terms_snapshot?.success_fee_percent ?? 0)}
+                      % от подтверждённой зарплаты. Количество платежей:{" "}
+                      {Number(
+                        current.terms_snapshot
+                          ?.success_fee_installments_count ??
+                          data.product.success_fee_installments_count,
+                      )}
+                      .
+                    </Text>
+                    {current.offer_expires_at && (
+                      <Text size="sm">
+                        {termsExpired
+                          ? "Срок принятия условий истёк. Свяжитесь с командой, чтобы получить актуальное предложение."
+                          : `Принять до ${new Date(current.offer_expires_at).toLocaleString("ru-RU")}`}
+                      </Text>
+                    )}
+                  </Stack>
                 </Alert>
                 <Checkbox
+                  disabled={termsExpired}
                   checked={accepted}
                   onChange={(event) => setAccepted(event.currentTarget.checked)}
                   label="Я ознакомился и принимаю условия повторного менторства по Python"
                 />
                 <Button
-                  disabled={!accepted}
+                  disabled={termsExpired || !accepted}
                   loading={acceptTerms.isPending}
                   onClick={() =>
                     acceptTerms.mutate(current.id, { onError: mutationError })
@@ -398,21 +667,25 @@ export function PythonRepeatOpportunityPage() {
             )}
             {(current.status === "terms_accepted" ||
               current.status === "payment_pending") && (
-              <Button
-                loading={checkout.isPending}
-                onClick={() =>
-                  void openExternalResource(
-                    checkout
-                      .mutateAsync(current.id)
-                      .then((value) => value.payment_url),
-                  ).catch(mutationError)
-                }
-              >
-                Оплатить{" "}
-                {formatRubles(
-                  Number(current.terms_snapshot?.upfront_price_kopecks ?? 0),
-                )}
-              </Button>
+              <Stack align="flex-start">
+                {!hasPaymentEmail && <PaymentEmailAlert />}
+                <Button
+                  disabled={!hasPaymentEmail}
+                  loading={checkout.isPending}
+                  onClick={() =>
+                    void openExternalResource(
+                      checkout
+                        .mutateAsync(current.id)
+                        .then((value) => value.payment_url),
+                    ).catch(mutationError)
+                  }
+                >
+                  Оплатить{" "}
+                  {formatRubles(
+                    Number(current.terms_snapshot?.upfront_price_kopecks ?? 0),
+                  )}
+                </Button>
+              </Stack>
             )}
           </Stack>
         </Card>
@@ -438,31 +711,45 @@ export function PythonRepeatOpportunityPage() {
         </Card>
       )}
 
-      {data.enrollment && data.offers.length === 0 && (
-        <Card withBorder>
+      {canCreateOffer && (
+        <Card withBorder component="form" onSubmit={saveOffer}>
           <Stack>
             <Title order={2}>Новый оффер</Title>
             <SimpleGrid cols={{ base: 1, md: 2 }}>
               <TextInput
                 label="Компания"
                 required
+                minLength={2}
                 value={offer.company}
                 onChange={(event) =>
                   setOffer({ ...offer, company: event.currentTarget.value })
+                }
+                error={
+                  offer.company.length > 0 && offer.company.trim().length < 2
+                    ? "Укажите название компании"
+                    : undefined
                 }
               />
               <TextInput
                 label="Должность"
                 required
+                minLength={2}
                 value={offer.position}
                 onChange={(event) =>
                   setOffer({ ...offer, position: event.currentTarget.value })
                 }
+                error={
+                  offer.position.length > 0 && offer.position.trim().length < 2
+                    ? "Укажите должность"
+                    : undefined
+                }
               />
               <NumberInput
                 label="Фиксированная зарплата на руки"
+                description="Сумма после налогов и обязательных комиссий"
                 suffix=" ₽"
                 min={1}
+                required
                 value={offer.salaryRubles}
                 onChange={(value) =>
                   setOffer({ ...offer, salaryRubles: Number(value) || 0 })
@@ -470,6 +757,7 @@ export function PythonRepeatOpportunityPage() {
               />
               <TextInput
                 label="Формат трудоустройства"
+                required
                 value={offer.employment_type}
                 onChange={(event) =>
                   setOffer({
@@ -481,6 +769,8 @@ export function PythonRepeatOpportunityPage() {
               <TextInput
                 type="datetime-local"
                 label="Оффер получен"
+                description="Время отображается в вашем часовом поясе"
+                required
                 value={offer.received_at}
                 onChange={(event) =>
                   setOffer({ ...offer, received_at: event.currentTarget.value })
@@ -489,6 +779,13 @@ export function PythonRepeatOpportunityPage() {
               <TextInput
                 type="datetime-local"
                 label="Плановая дата выхода"
+                description="Время отображается в вашем часовом поясе"
+                required
+                error={
+                  offer.expected_start_date < offer.received_at
+                    ? "Дата выхода не может быть раньше получения оффера"
+                    : undefined
+                }
                 value={offer.expected_start_date}
                 onChange={(event) =>
                   setOffer({
@@ -499,27 +796,11 @@ export function PythonRepeatOpportunityPage() {
               />
             </SimpleGrid>
             <Button
-              disabled={!offer.company.trim()}
-              loading={createOffer.isPending}
-              onClick={() =>
-                createOffer.mutate(
-                  {
-                    position: offer.position,
-                    company: offer.company,
-                    fixed_monthly_salary_kopecks: Math.round(
-                      offer.salaryRubles * 100,
-                    ),
-                    employment_type: offer.employment_type,
-                    received_at: new Date(offer.received_at).toISOString(),
-                    expected_start_date: new Date(
-                      offer.expected_start_date,
-                    ).toISOString(),
-                  },
-                  { onError: mutationError },
-                )
-              }
+              type="submit"
+              disabled={!offerValid}
+              loading={createOffer.isPending || submitOffer.isPending}
             >
-              Сохранить оффер
+              Сохранить и отправить на проверку
             </Button>
           </Stack>
         </Card>
@@ -535,7 +816,9 @@ export function PythonRepeatOpportunityPage() {
                 {formatRubles(item.fixed_monthly_salary_kopecks)}
               </Text>
             </div>
-            <Badge>{item.status}</Badge>
+            <Badge color={offerStatusColors[item.status] ?? "gray"}>
+              {offerStatusLabels[item.status] ?? item.status}
+            </Badge>
           </Group>
           {item.status === "draft" && (
             <Button
@@ -547,6 +830,15 @@ export function PythonRepeatOpportunityPage() {
             >
               Отправить оффер на проверку
             </Button>
+          )}
+          {item.verification_comment && (
+            <Alert
+              mt="md"
+              color={item.status === "rejected" ? "red" : "blue"}
+              title="Комментарий команды"
+            >
+              {item.verification_comment}
+            </Alert>
           )}
         </Card>
       ))}
@@ -567,6 +859,10 @@ export function PythonRepeatOpportunityPage() {
                   ),
               )}
             </Text>
+            {!hasPaymentEmail &&
+              data.obligation.installments.some((item) =>
+                ["scheduled", "pending"].includes(item.status),
+              ) && <PaymentEmailAlert />}
             {data.obligation.installments.map((item) => (
               <Group key={item.id} justify="space-between">
                 <div>
@@ -579,11 +875,17 @@ export function PythonRepeatOpportunityPage() {
                   </Text>
                 </div>
                 <Group>
-                  <Badge>{item.status}</Badge>
+                  <Badge color={installmentStatusColors[item.status] ?? "gray"}>
+                    {installmentStatusLabels[item.status] ?? item.status}
+                  </Badge>
                   {(item.status === "scheduled" ||
                     item.status === "pending") && (
                     <Button
-                      loading={checkoutInstallment.isPending}
+                      disabled={!hasPaymentEmail}
+                      loading={
+                        checkoutInstallment.isPending &&
+                        checkoutInstallment.variables === item.id
+                      }
                       onClick={() =>
                         void openExternalResource(
                           checkoutInstallment
@@ -605,5 +907,21 @@ export function PythonRepeatOpportunityPage() {
         Обновить данные
       </Button>
     </Stack>
+  );
+}
+
+function PaymentEmailAlert() {
+  return (
+    <Alert color="orange" title="Нужен email для чека">
+      <Stack gap="xs">
+        <Text size="sm">
+          Сохраните email в платёжном профиле, после этого станет доступна
+          оплата.
+        </Text>
+        <Button component={Link} to="/payments" variant="light" size="xs">
+          Указать email
+        </Button>
+      </Stack>
+    </Alert>
   );
 }

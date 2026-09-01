@@ -215,7 +215,7 @@ it("отправляет заявку на переход с введенной 
     "/opportunities/alumni/go-transition",
   );
 
-  const field = await screen.findByLabelText("Зачем вам Go-направление");
+  const field = await screen.findByLabelText(/Зачем вам Go-направление/);
   await userEvent.type(field, "Хочу развиваться в Go backend");
   await userEvent.click(screen.getByRole("button", { name: "Подать заявку" }));
   await waitFor(() =>
@@ -243,7 +243,7 @@ it("по умолчанию отправляет консультацию люб
     screen.getByRole("radio", { name: /Техническое мок-собеседование/ }),
   );
   await userEvent.type(
-    screen.getByLabelText("Короткий бриф"),
+    screen.getByLabelText(/Короткий бриф/),
     "Хочу проверить знания Python перед интервью",
   );
   await userEvent.click(
@@ -276,4 +276,101 @@ it("показывает повышенную цену у премиальног
   ).toBeInTheDocument();
   expect(screen.getByText("6 000 ₽")).toBeInTheDocument();
   expect(screen.getByText("7 000 ₽")).toBeInTheDocument();
+});
+
+it("явно объясняет, почему оплата консультации недоступна без email", async () => {
+  vi.spyOn(api, "me").mockResolvedValue({ ...student, email: null });
+  vi.spyOn(api, "myOpportunities").mockResolvedValue({
+    ...dashboard,
+    consultations: [
+      {
+        id: "40000000-0000-4000-8000-000000000001",
+        mentor: null,
+        consultation_type: "free_topic",
+        brief: "Нужно разобрать дальнейший карьерный план",
+        price_kopecks: 400_000,
+        duration_minutes: 60,
+        status: "payment_pending",
+        scheduled_at: null,
+        paid_at: null,
+        completed_at: null,
+        admin_note: null,
+        written_summary: null,
+        created_at: "2026-08-30T00:00:00Z",
+      },
+    ],
+  });
+  renderPage(
+    <AlumniConsultationsPage />,
+    "/opportunities/alumni/consultations",
+    "/opportunities/alumni/consultations",
+  );
+
+  expect(await screen.findByText("Нужен email для чека")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Указать email" })).toHaveAttribute(
+    "href",
+    "/payments",
+  );
+  expect(screen.getByRole("button", { name: /Оплатить/ })).toBeDisabled();
+});
+
+it("показывает зафиксированные условия Go-заявки, а не текущий тариф", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "myOpportunities").mockResolvedValue({
+    ...dashboard,
+    go_transition_applications: [
+      {
+        id: "50000000-0000-4000-8000-000000000001",
+        motivation: "Хочу перейти на Go backend",
+        status: "approved",
+        upfront_price_kopecks: 2_500_000,
+        success_fee_percent: 75,
+        approved_at: "2026-08-31T00:00:00Z",
+        terms_accepted_at: null,
+        paid_at: null,
+        admin_note: null,
+        terms_version: 7,
+        terms_snapshot: {
+          product_code: "PYTHON_TO_GO_ALUMNI",
+          upfront_price_kopecks: 2_500_000,
+          success_fee_percent: 75,
+        },
+        terms_expires_at: "2099-09-15T12:00:00Z",
+        accepted_terms_snapshot: null,
+        created_at: "2026-08-30T00:00:00Z",
+      },
+    ],
+  });
+  renderPage(
+    <GoTransitionOpportunityPage />,
+    "/opportunities/alumni/go-transition",
+    "/opportunities/alumni/go-transition",
+  );
+
+  expect(
+    await screen.findByText("Зафиксированные условия · версия 7"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("25 000 ₽ + 75% после Go-оффера"),
+  ).toBeInTheDocument();
+});
+
+it("выделяет выбранный формат консультации целиком", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "myOpportunities").mockResolvedValue(dashboard);
+  renderPage(
+    <AlumniConsultationsPage />,
+    "/opportunities/alumni/consultations",
+    "/opportunities/alumni/consultations",
+  );
+
+  const option = await screen.findByRole("radio", {
+    name: /Техническое мок-собеседование/,
+  });
+  await userEvent.click(option);
+
+  expect(option.closest(".opportunity-choice")).toHaveAttribute(
+    "data-selected",
+    "true",
+  );
 });

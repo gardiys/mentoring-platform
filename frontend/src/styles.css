@@ -549,6 +549,122 @@ a {
   box-shadow: 0 12px 36px rgb(25 53 95 / 6%);
 }
 
+.opportunity-card {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.opportunity-card::after {
+  position: absolute;
+  right: -2.75rem;
+  bottom: -3.5rem;
+  width: 8rem;
+  height: 8rem;
+  pointer-events: none;
+  content: "";
+  background: color-mix(in srgb, var(--brand-blue) 9%, transparent);
+  border-radius: 50%;
+}
+
+.opportunity-card:hover {
+  border-color: color-mix(in srgb, var(--brand-blue) 52%, var(--brand-border));
+  box-shadow: 0 18px 44px rgb(25 53 95 / 12%);
+  transform: translateY(-2px);
+}
+
+.opportunity-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.opportunity-choice {
+  position: relative;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.opportunity-choice:hover {
+  border-color: color-mix(in srgb, var(--brand-blue) 55%, var(--brand-border));
+  transform: translateY(-1px);
+}
+
+.opportunity-choice:focus-within {
+  outline: 3px solid color-mix(in srgb, var(--brand-blue) 24%, transparent);
+  outline-offset: 2px;
+}
+
+.opportunity-choice[data-selected="true"] {
+  border-color: var(--brand-blue);
+  background: color-mix(in srgb, var(--brand-blue) 9%, var(--brand-warm));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-blue) 20%, transparent);
+}
+
+.opportunity-flow-step {
+  min-width: 0;
+  padding: 0.9rem 1rem;
+  background: color-mix(in srgb, var(--brand-blue) 6%, var(--brand-warm));
+  border: 1px solid var(--brand-border);
+  border-radius: 0.9rem;
+}
+
+.opportunity-flow-number {
+  display: grid;
+  flex: 0 0 auto;
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--brand-navy);
+  font-weight: 800;
+  background: var(--brand-yellow);
+  border-radius: 50%;
+  place-items: center;
+}
+
+.opportunity-request-card {
+  border-left: 4px solid var(--brand-blue);
+}
+
+.opportunity-request-card[data-complete="true"] {
+  border-left-color: var(--mantine-color-green-6);
+}
+
+.opportunity-request-main {
+  min-width: 0;
+  flex: 1 1 24rem;
+}
+
+.opportunity-request-actions {
+  flex: 0 1 auto;
+}
+
+@media (max-width: 48em) {
+  .opportunity-card:hover,
+  .opportunity-choice:hover {
+    transform: none;
+  }
+
+  .opportunity-request-actions {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .opportunity-request-actions .mantine-Button-root {
+    width: 100%;
+  }
+
+  .opportunity-summary-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .mantine-Input-input {
   background: color-mix(in srgb, var(--brand-warm) 88%, transparent);
   border-color: var(--brand-border);

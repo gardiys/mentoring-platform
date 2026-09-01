@@ -40,7 +40,7 @@ export function OpportunitiesPage() {
         description="Здесь собраны дополнительные программы и сервисы команды. Состав предложений зависит от текущего этапа обучения и уже завершённых направлений."
       />
 
-      {localPayment && (
+      {import.meta.env.DEV && localPayment && (
         <Alert color="blue" title="Локальная тестовая оплата">
           <Stack gap="sm">
             <Text size="sm">
@@ -77,19 +77,17 @@ export function OpportunitiesPage() {
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
         {query.data.has_active_program && (
-          <Card withBorder>
+          <Card withBorder className="opportunity-card">
             <Stack h="100%" gap="lg">
               <div>
                 <Badge color="blue" variant="light" mb="sm">
                   Действующая программа
                 </Badge>
-                <Title order={2}>Возможности для учеников</Title>
+                <Title order={2}>Поддержка во время обучения</Title>
               </div>
               <Text>
-                Используйте поддержку, уже включённую в программу: профиль
-                ментора, групповые встречи и персональные материалы. Новые
-                предложения для действующих учеников будут появляться в этом
-                подразделе.
+                Расписание созвонов, контакты ментора, полезные ссылки и
+                персональные материалы собраны в одном месте.
               </Text>
               <Button component={Link} to="/my-mentor" mt="auto">
                 Перейти к поддержке ментора
@@ -99,7 +97,7 @@ export function OpportunitiesPage() {
         )}
 
         {(query.data.has_alumni_access || query.data.has_active_program) && (
-          <Card withBorder>
+          <Card withBorder className="opportunity-card">
             <Stack h="100%" gap="lg">
               <div>
                 <Badge
@@ -114,8 +112,9 @@ export function OpportunitiesPage() {
                 <Title order={2}>Кабинет выпускника</Title>
               </div>
               <Text>
-                Посмотрите консультации с менторами и условия перехода Python →
-                Go. Оформление станет доступно после завершения программы.
+                {query.data.has_alumni_access
+                  ? "Консультации с менторами и специальные программы для следующего карьерного шага."
+                  : "Посмотрите консультации с менторами и условия перехода Python → Go. Оформление станет доступно после завершения программы."}
               </Text>
               <Button component={Link} to="/opportunities/alumni" mt="auto">
                 {query.data.has_alumni_access

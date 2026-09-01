@@ -13,7 +13,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
@@ -25,6 +25,7 @@ import {
   useCreateConsultationPaymentLink,
   useMyOpportunities,
 } from "../features/opportunities/queries";
+import { OpportunityFlow } from "../features/opportunities/OpportunityFlow";
 import type { ConsultationStatus, ConsultationType } from "../types/api";
 import { formatRubles } from "../utils/money";
 import { openExternalResource } from "../utils/openExternalResource";
@@ -36,6 +37,15 @@ const statusLabels: Record<ConsultationStatus, string> = {
   scheduled: "Запланирована",
   completed: "Завершена",
   cancelled: "Отменена",
+};
+
+const statusColors: Record<ConsultationStatus, string> = {
+  requested: "blue",
+  payment_pending: "yellow",
+  paid: "green",
+  scheduled: "cyan",
+  completed: "green",
+  cancelled: "gray",
 };
 
 export function AlumniConsultationsPage() {
@@ -60,8 +70,43 @@ export function AlumniConsultationsPage() {
   const typeByCode = new Map(
     query.data.consultation_types.map((item) => [item.code, item]),
   );
+  const selectedType = typeByCode.get(consultationType);
+  const activeConsultations = query.data.consultations.filter(
+    (item) => !["completed", "cancelled"].includes(item.status),
+  );
+  const briefLength = brief.trim().length;
   const notifyError = (error: Error) =>
     notifications.show({ color: "red", message: error.message });
+  const submitConsultation = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!offer?.available || briefLength < 10) return;
+    if (
+      activeConsultations.length > 0 &&
+      !window.confirm(
+        "У вас уже есть активная заявка. Создать ещё одну консультацию?",
+      )
+    ) {
+      return;
+    }
+    create.mutate(
+      {
+        mentor_id: mentorId === "any" ? null : mentorId,
+        consultation_type: consultationType,
+        brief: brief.trim(),
+      },
+      {
+        onSuccess: () => {
+          setBrief("");
+          setMentorId("any");
+          notifications.show({
+            color: "green",
+            message: "Заявка отправлена и появилась в разделе ниже",
+          });
+        },
+        onError: notifyError,
+      },
+    );
+  };
 
   return (
     <Stack gap="xl">
@@ -76,20 +121,70 @@ export function AlumniConsultationsPage() {
       <PageHeader
         eyebrow="Кабинет выпускника"
         title="Консультации с менторами"
-        description="Выберите задачу и специалиста. Встреча длится 50–60 минут и включает короткий бриф, созвон, письменный итог и план дальнейших действий."
+        description="Выберите задачу и специалиста. Длительность зависит от формата; после созвона вы получите письменный итог и план дальнейших действий."
       />
+      <OpportunityFlow
+        steps={[
+          {
+            title: "Выберите формат",
+            description: "Задачу, длительность и подходящую цену",
+          },
+          {
+            title: "Оставьте заявку",
+            description: "Можно выбрать ментора или доверить выбор команде",
+          },
+          {
+            title: "Согласуйте и оплатите",
+            description: "Оплата появится после подтверждения заявки",
+          },
+          {
+            title: "Получите результат",
+            description: "Созвон, письменный итог и следующие шаги",
+          },
+        ]}
+      />
+      {activeConsultations.length > 0 && (
+        <Alert color="blue" title="Консультация уже в работе">
+          <Group justify="space-between" align="center" mt="xs">
+            <Text size="sm">
+              Активных заявок: {activeConsultations.length}. Статус и следующее
+              действие находятся в разделе «Мои консультации».
+            </Text>
+            <Button
+              component="a"
+              href="#my-consultations"
+              variant="light"
+              size="sm"
+            >
+              Перейти к заявкам
+            </Button>
+          </Group>
+        </Alert>
+      )}
       <Stack gap="md">
         <Title order={2}>Выберите формат</Title>
         <Radio.Group
+          label="Формат консультации"
           value={consultationType}
           onChange={(value) => setConsultationType(value as ConsultationType)}
         >
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
             {query.data.consultation_types.map((item) => (
-              <Card withBorder key={item.code} component="label">
+              <Radio.Card
+                withBorder
+                key={item.code}
+                value={item.code}
+                p="lg"
+                radius="md"
+                className="opportunity-choice"
+                data-selected={consultationType === item.code}
+              >
                 <Stack gap="xs">
                   <Group justify="space-between" align="flex-start">
-                    <Radio value={item.code} label={item.title} />
+                    <Group gap="sm" wrap="nowrap">
+                      <Radio.Indicator />
+                      <Text fw={700}>{item.title}</Text>
+                    </Group>
                     <Badge color="gray" variant="light">
                       {item.duration_minutes} мин
                     </Badge>
@@ -106,14 +201,14 @@ export function AlumniConsultationsPage() {
                     </Text>
                   </Group>
                 </Stack>
-              </Card>
+              </Radio.Card>
             ))}
           </SimpleGrid>
         </Radio.Group>
       </Stack>
 
       {offer?.available ? (
-        <Card withBorder>
+        <Card withBorder component="form" onSubmit={submitConsultation}>
           <Stack>
             <Title order={2}>Оставить заявку</Title>
             <Select
@@ -134,69 +229,68 @@ export function AlumniConsultationsPage() {
             />
             <Textarea
               label="Короткий бриф"
-              description={typeByCode.get(consultationType)?.description}
+              description="Опишите контекст, цель встречи и что хотите получить в результате"
               minRows={5}
+              minLength={10}
+              maxLength={5000}
+              required
               value={brief}
               onChange={(event) => setBrief(event.currentTarget.value)}
+              error={
+                brief.length > 0 && briefLength < 10
+                  ? "Добавьте немного деталей — минимум 10 символов"
+                  : undefined
+              }
             />
+            <Text size="xs" c="dimmed" ta="right">
+              {briefLength} / 5000
+            </Text>
             <Alert color="blue" variant="light">
-              <Group justify="space-between" align="baseline">
-                <Text>
-                  {typeByCode.get(consultationType)?.title ?? "Консультация"}
-                </Text>
+              <Group
+                justify="space-between"
+                align="baseline"
+                className="opportunity-summary-row"
+              >
+                <Text>{selectedType?.title ?? "Консультация"}</Text>
                 <Group gap="xs" align="baseline">
                   <Text fw={700}>
-                    {formatRubles(
-                      typeByCode.get(consultationType)?.price_kopecks ?? 0,
-                    )}
+                    {formatRubles(selectedType?.price_kopecks ?? 0)}
                   </Text>
                   <Badge color="yellow">Цена для выпускника</Badge>
                   <Badge color="gray" variant="light">
-                    {typeByCode.get(consultationType)?.duration_minutes ?? 0}{" "}
-                    мин
+                    {selectedType?.duration_minutes ?? 0} мин
                   </Badge>
                 </Group>
               </Group>
             </Alert>
             <Button
-              disabled={brief.trim().length < 10}
+              type="submit"
+              disabled={briefLength < 10}
               loading={create.isPending}
-              onClick={() =>
-                create.mutate(
-                  {
-                    mentor_id: mentorId === "any" ? null : mentorId,
-                    consultation_type: consultationType,
-                    brief: brief.trim(),
-                  },
-                  {
-                    onSuccess: () => {
-                      setBrief("");
-                      setMentorId("any");
-                      notifications.show({
-                        color: "green",
-                        message: "Заявка отправлена",
-                      });
-                    },
-                    onError: notifyError,
-                  },
-                )
-              }
             >
               Отправить заявку
             </Button>
           </Stack>
         </Card>
       ) : (
-        <Alert color="gray">{offer?.unavailable_reason}</Alert>
+        <Alert color="gray" title="Оформление сейчас недоступно">
+          {offer?.unavailable_reason ??
+            "Консультации временно отключены. Вы можете изучить форматы и вернуться позже."}
+        </Alert>
       )}
 
       {query.data.consultations.length > 0 && (
-        <Stack>
+        <Stack id="my-consultations" style={{ scrollMarginTop: 24 }}>
           <Title order={2}>Мои консультации</Title>
           {query.data.consultations.map((item) => (
-            <Card withBorder key={item.id}>
-              <Group justify="space-between" align="flex-start">
-                <div>
+            <Card
+              withBorder
+              key={item.id}
+              className="opportunity-request-card"
+              data-complete={item.status === "completed"}
+            >
+              <Group justify="space-between" align="flex-start" wrap="wrap">
+                <div className="opportunity-request-main">
                   <Title order={3}>
                     {typeByCode.get(item.consultation_type)?.title ??
                       "Консультация"}
@@ -206,10 +300,34 @@ export function AlumniConsultationsPage() {
                       ? `Ментор: ${[item.mentor.first_name, item.mentor.last_name].filter(Boolean).join(" ")}`
                       : "Ментор будет назначен после рассмотрения заявки"}
                   </Text>
-                  <Text mt="xs">{item.brief}</Text>
-                  <Text size="sm" c="dimmed" mt="xs">
-                    Длительность: {item.duration_minutes} минут
+                  <Text
+                    mt="xs"
+                    style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+                  >
+                    {item.brief}
                   </Text>
+                  <Text size="sm" c="dimmed" mt="xs">
+                    Заявка от{" "}
+                    {new Date(item.created_at).toLocaleDateString("ru-RU")} ·{" "}
+                    {item.duration_minutes} минут
+                  </Text>
+                  {item.admin_note && (
+                    <Alert
+                      color={item.status === "cancelled" ? "red" : "blue"}
+                      variant="light"
+                      mt="sm"
+                      title="Комментарий команды"
+                    >
+                      <Text
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
+                        {item.admin_note}
+                      </Text>
+                    </Alert>
+                  )}
                   {item.scheduled_at && (
                     <Text mt="xs">
                       Встреча:{" "}
@@ -217,25 +335,63 @@ export function AlumniConsultationsPage() {
                     </Text>
                   )}
                   {item.written_summary && (
-                    <Text mt="xs">Итог: {item.written_summary}</Text>
+                    <Alert
+                      color="green"
+                      variant="light"
+                      mt="sm"
+                      title="Итог консультации"
+                    >
+                      <Text
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
+                        {item.written_summary}
+                      </Text>
+                    </Alert>
                   )}
                 </div>
-                <Stack align="flex-end">
-                  <Badge>{statusLabels[item.status]}</Badge>
+                <Stack align="flex-end" className="opportunity-request-actions">
+                  <Badge color={statusColors[item.status]}>
+                    {statusLabels[item.status]}
+                  </Badge>
                   {item.status === "payment_pending" && (
-                    <Button
-                      disabled={!me.data?.email}
-                      loading={payment.isPending}
-                      onClick={() =>
-                        void openExternalResource(
-                          payment
-                            .mutateAsync(item.id)
-                            .then((result) => result.payment_url),
-                        ).catch(notifyError)
-                      }
-                    >
-                      Оплатить {formatRubles(item.price_kopecks)}
-                    </Button>
+                    <>
+                      {!me.data?.email && (
+                        <Alert color="orange" title="Нужен email для чека">
+                          <Stack gap="xs">
+                            <Text size="sm">
+                              Сохраните email, после этого станет доступна
+                              оплата.
+                            </Text>
+                            <Button
+                              component={Link}
+                              to="/payments"
+                              variant="light"
+                              size="xs"
+                            >
+                              Указать email
+                            </Button>
+                          </Stack>
+                        </Alert>
+                      )}
+                      <Button
+                        disabled={!me.data?.email}
+                        loading={
+                          payment.isPending && payment.variables === item.id
+                        }
+                        onClick={() =>
+                          void openExternalResource(
+                            payment
+                              .mutateAsync(item.id)
+                              .then((result) => result.payment_url),
+                          ).catch(notifyError)
+                        }
+                      >
+                        Оплатить {formatRubles(item.price_kopecks)}
+                      </Button>
+                    </>
                   )}
                 </Stack>
               </Group>

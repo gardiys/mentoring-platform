@@ -15,7 +15,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
@@ -35,6 +35,10 @@ import type {
   GoTransitionStatus,
   OpportunitiesDashboard,
 } from "../types/api";
+import {
+  isoToLocalDateTimeInput,
+  localDateTimeInputToIso,
+} from "../utils/dateTimeInput";
 import { formatRubles } from "../utils/money";
 
 const consultationLabels: Record<ConsultationStatus, string> = {
@@ -46,6 +50,15 @@ const consultationLabels: Record<ConsultationStatus, string> = {
   cancelled: "Отменена",
 };
 
+const consultationColors: Record<ConsultationStatus, string> = {
+  requested: "blue",
+  payment_pending: "yellow",
+  paid: "green",
+  scheduled: "cyan",
+  completed: "green",
+  cancelled: "gray",
+};
+
 const transitionLabels: Record<GoTransitionStatus, string> = {
   submitted: "Новая заявка",
   approved: "Одобрена",
@@ -53,6 +66,15 @@ const transitionLabels: Record<GoTransitionStatus, string> = {
   paid: "Оплачена",
   rejected: "Отклонена",
   cancelled: "Отменена",
+};
+
+const transitionColors: Record<GoTransitionStatus, string> = {
+  submitted: "blue",
+  approved: "yellow",
+  payment_pending: "yellow",
+  paid: "green",
+  rejected: "red",
+  cancelled: "gray",
 };
 
 const consultationTypeLabels: Record<ConsultationType, string> = {
@@ -78,6 +100,17 @@ function ConsultationPriceCard({
     item.mentor_reward_kopecks / 100,
   );
   const [durationMinutes, setDurationMinutes] = useState(item.duration_minutes);
+  useEffect(() => {
+    setPrice(item.price_kopecks / 100);
+    setComparisonPrice(item.comparison_price_kopecks / 100);
+    setMentorReward(item.mentor_reward_kopecks / 100);
+    setDurationMinutes(item.duration_minutes);
+  }, [
+    item.comparison_price_kopecks,
+    item.duration_minutes,
+    item.mentor_reward_kopecks,
+    item.price_kopecks,
+  ]);
   const invalid =
     price <= 0 ||
     comparisonPrice < price ||
@@ -85,6 +118,11 @@ function ConsultationPriceCard({
     mentorReward > price ||
     durationMinutes < 15 ||
     durationMinutes > 480;
+  const dirty =
+    Math.round(price * 100) !== item.price_kopecks ||
+    Math.round(comparisonPrice * 100) !== item.comparison_price_kopecks ||
+    Math.round(mentorReward * 100) !== item.mentor_reward_kopecks ||
+    Math.round(durationMinutes) !== item.duration_minutes;
   const numberValue = (value: string | number) =>
     typeof value === "number" ? value : Number(value) || 0;
 
@@ -141,7 +179,7 @@ function ConsultationPriceCard({
         )}
         <Button
           mt="auto"
-          disabled={invalid}
+          disabled={invalid || !dirty}
           loading={mutation.isPending}
           onClick={() =>
             mutation.mutate(
@@ -174,6 +212,8 @@ function ConsultationPriceCard({
 function GoTransitionProgramSettings({ description }: { description: string }) {
   const mutation = useUpdateAdminGoTransitionProgram();
   const [value, setValue] = useState(description);
+  useEffect(() => setValue(description), [description]);
+  const dirty = value.trim() !== description.trim();
 
   return (
     <Card withBorder>
@@ -195,7 +235,7 @@ function GoTransitionProgramSettings({ description }: { description: string }) {
         />
         <Button
           w="fit-content"
-          disabled={value.trim().length < 20}
+          disabled={value.trim().length < 20 || !dirty}
           loading={mutation.isPending}
           onClick={() =>
             mutation.mutate(value.trim(), {
@@ -242,6 +282,16 @@ export function AdminOpportunitiesPage() {
     );
   const error = (value: Error) =>
     notifications.show({ color: "red", message: value.message });
+  const clearConsultationDraft = (id: string) =>
+    setConsultationDrafts((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  const consultationSuccess = (id: string, message: string) => {
+    clearConsultationDraft(id);
+    notifications.show({ color: "green", message });
+  };
   const enabledMentorOptions = query.data.consultation_mentors
     .filter((mentor) => mentor.is_enabled)
     .map((mentor) => ({
@@ -256,6 +306,19 @@ export function AdminOpportunitiesPage() {
         title="Возможности"
         description="Персональные предложения, заявки на консультации и переход Python → Go."
       />
+      <Card withBorder p="sm">
+        <Group gap="sm">
+          <Button component="a" href="#consultation-requests" variant="light">
+            Консультации · {query.data.consultations.length}
+          </Button>
+          <Button component="a" href="#go-requests" variant="light">
+            Python → Go · {query.data.go_transition_applications.length}
+          </Button>
+          <Button component="a" href="#opportunity-settings" variant="subtle">
+            Тарифы и настройки
+          </Button>
+        </Group>
+      </Card>
       <Card withBorder>
         <Group justify="space-between" align="center">
           <div>
@@ -269,10 +332,10 @@ export function AdminOpportunitiesPage() {
           </Button>
         </Group>
       </Card>
-      <GoTransitionProgramSettings
-        description={query.data.go_transition_description_markdown}
-      />
-      <Stack>
+      <Stack id="opportunity-settings" style={{ scrollMarginTop: 24 }}>
+        <GoTransitionProgramSettings
+          description={query.data.go_transition_description_markdown}
+        />
         <div>
           <Title order={2}>Тарифы консультаций</Title>
           <Text c="dimmed">
@@ -285,52 +348,71 @@ export function AdminOpportunitiesPage() {
             <ConsultationPriceCard item={item} key={item.code} />
           ))}
         </SimpleGrid>
+        <Stack>
+          <div>
+            <Title order={2}>Менторы-консультанты</Title>
+            <Text c="dimmed">
+              Только включённые здесь менторы доступны выпускникам и могут быть
+              назначены на заявку.
+            </Text>
+          </div>
+          <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }}>
+            {query.data.consultation_mentors.map((mentor) => (
+              <Card withBorder key={mentor.id}>
+                <Switch
+                  checked={mentor.is_enabled}
+                  disabled={consultantMutation.isPending}
+                  label={[mentor.first_name, mentor.last_name]
+                    .filter(Boolean)
+                    .join(" ")}
+                  description={
+                    mentor.telegram_username
+                      ? `@${mentor.telegram_username}`
+                      : "Telegram не указан"
+                  }
+                  onChange={(event) => {
+                    const enabled = event.currentTarget.checked;
+                    consultantMutation.mutate(
+                      { mentorId: mentor.id, enabled },
+                      {
+                        onError: error,
+                        onSuccess: () =>
+                          notifications.show({
+                            color: "green",
+                            message: enabled
+                              ? "Ментор добавлен в консультации"
+                              : "Ментор убран из консультаций",
+                          }),
+                      },
+                    );
+                  }}
+                />
+              </Card>
+            ))}
+          </SimpleGrid>
+        </Stack>
       </Stack>
-      <Stack>
-        <div>
-          <Title order={2}>Менторы-консультанты</Title>
-          <Text c="dimmed">
-            Только включённые здесь менторы доступны выпускникам и могут быть
-            назначены на заявку.
-          </Text>
-        </div>
-        <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }}>
-          {query.data.consultation_mentors.map((mentor) => (
-            <Card withBorder key={mentor.id}>
-              <Switch
-                checked={mentor.is_enabled}
-                disabled={consultantMutation.isPending}
-                label={[mentor.first_name, mentor.last_name]
-                  .filter(Boolean)
-                  .join(" ")}
-                description={
-                  mentor.telegram_username
-                    ? `@${mentor.telegram_username}`
-                    : "Telegram не указан"
-                }
-                onChange={(event) => {
-                  const enabled = event.currentTarget.checked;
-                  consultantMutation.mutate(
-                    { mentorId: mentor.id, enabled },
-                    {
-                      onError: error,
-                      onSuccess: () =>
-                        notifications.show({
-                          color: "green",
-                          message: enabled
-                            ? "Ментор добавлен в консультации"
-                            : "Ментор убран из консультаций",
-                        }),
-                    },
-                  );
-                }}
-              />
-            </Card>
-          ))}
-        </SimpleGrid>
-      </Stack>
-      <Stack>
-        <Title order={2}>Консультации</Title>
+      <Stack id="consultation-requests" style={{ scrollMarginTop: 24 }}>
+        <Group justify="space-between">
+          <Title order={2}>Консультации</Title>
+          <Badge color="blue" variant="light">
+            Требуют решения:{" "}
+            {
+              query.data.consultations.filter(
+                (item) => item.status === "requested",
+              ).length
+            }
+          </Badge>
+        </Group>
+        {enabledMentorOptions.length === 0 &&
+          query.data.consultations.some(
+            (item) => item.status === "requested",
+          ) && (
+            <Alert color="orange" title="Нет доступных менторов-консультантов">
+              Включите хотя бы одного ментора в настройках выше, чтобы назначить
+              исполнителя и одобрить заявку.
+            </Alert>
+          )}
         {query.data.consultations.length === 0 && (
           <Alert color="gray">Новых заявок нет</Alert>
         )}
@@ -353,7 +435,9 @@ export function AdminOpportunitiesPage() {
                   </Badge>
                   <Text mt="sm">{item.brief}</Text>
                 </div>
-                <Badge>{consultationLabels[item.status]}</Badge>
+                <Badge color={consultationColors[item.status]}>
+                  {consultationLabels[item.status]}
+                </Badge>
               </Group>
               {item.status === "requested" && (
                 <Select
@@ -371,7 +455,9 @@ export function AdminOpportunitiesPage() {
                       ...current,
                       [item.id]: {
                         mentorId: value,
-                        scheduledAt: current[item.id]?.scheduledAt ?? "",
+                        scheduledAt:
+                          current[item.id]?.scheduledAt ??
+                          isoToLocalDateTimeInput(item.scheduled_at),
                         note: current[item.id]?.note ?? item.admin_note ?? "",
                         summary:
                           current[item.id]?.summary ??
@@ -384,6 +470,18 @@ export function AdminOpportunitiesPage() {
               )}
               <Textarea
                 label="Комментарий администратора"
+                description={
+                  (["requested", "paid", "scheduled"] as string[]).includes(
+                    item.status,
+                  )
+                    ? "Сохранится вместе со следующим действием"
+                    : "Заявка сейчас не допускает редактирование комментария"
+                }
+                readOnly={
+                  !(["requested", "paid", "scheduled"] as string[]).includes(
+                    item.status,
+                  )
+                }
                 value={
                   consultationDrafts[item.id]?.note ?? item.admin_note ?? ""
                 }
@@ -393,7 +491,9 @@ export function AdminOpportunitiesPage() {
                     [item.id]: {
                       mentorId:
                         current[item.id]?.mentorId ?? item.mentor?.id ?? null,
-                      scheduledAt: current[item.id]?.scheduledAt ?? "",
+                      scheduledAt:
+                        current[item.id]?.scheduledAt ??
+                        isoToLocalDateTimeInput(item.scheduled_at),
                       note: event.currentTarget.value,
                       summary:
                         current[item.id]?.summary ?? item.written_summary ?? "",
@@ -406,8 +506,13 @@ export function AdminOpportunitiesPage() {
               ) && (
                 <Textarea
                   label="Краткий письменный итог"
-                  description="Рекомендации и план дальнейших действий"
+                  description={
+                    item.status === "completed"
+                      ? "Сохранённый итог консультации"
+                      : "Рекомендации и план дальнейших действий"
+                  }
                   minRows={3}
+                  readOnly={item.status === "completed"}
                   value={
                     consultationDrafts[item.id]?.summary ??
                     item.written_summary ??
@@ -419,7 +524,9 @@ export function AdminOpportunitiesPage() {
                       [item.id]: {
                         mentorId:
                           current[item.id]?.mentorId ?? item.mentor?.id ?? null,
-                        scheduledAt: current[item.id]?.scheduledAt ?? "",
+                        scheduledAt:
+                          current[item.id]?.scheduledAt ??
+                          isoToLocalDateTimeInput(item.scheduled_at),
                         note: current[item.id]?.note ?? item.admin_note ?? "",
                         summary: event.currentTarget.value,
                       },
@@ -431,7 +538,10 @@ export function AdminOpportunitiesPage() {
                 {item.status === "requested" && (
                   <Group>
                     <Button
-                      loading={consultationMutation.isPending}
+                      loading={
+                        consultationMutation.isPending &&
+                        consultationMutation.variables?.id === item.id
+                      }
                       disabled={
                         !(
                           consultationDrafts[item.id]?.mentorId ??
@@ -452,7 +562,14 @@ export function AdminOpportunitiesPage() {
                               consultationDrafts[item.id]?.note || null,
                             written_summary: null,
                           },
-                          { onError: error },
+                          {
+                            onError: error,
+                            onSuccess: () =>
+                              consultationSuccess(
+                                item.id,
+                                "Заявка одобрена, счёт доступен ученику",
+                              ),
+                          },
                         )
                       }
                     >
@@ -461,7 +578,18 @@ export function AdminOpportunitiesPage() {
                     <Button
                       color="red"
                       variant="light"
-                      onClick={() =>
+                      loading={
+                        consultationMutation.isPending &&
+                        consultationMutation.variables?.id === item.id
+                      }
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `Отклонить консультацию для ${item.student.first_name}?`,
+                          )
+                        ) {
+                          return;
+                        }
                         consultationMutation.mutate(
                           {
                             id: item.id,
@@ -475,23 +603,66 @@ export function AdminOpportunitiesPage() {
                               consultationDrafts[item.id]?.note || null,
                             written_summary: null,
                           },
-                          { onError: error },
-                        )
-                      }
+                          {
+                            onError: error,
+                            onSuccess: () =>
+                              consultationSuccess(item.id, "Заявка отклонена"),
+                          },
+                        );
+                      }}
                     >
                       Отклонить
                     </Button>
                   </Group>
                 )}
+                {item.status === "payment_pending" && (
+                  <Button
+                    color="red"
+                    variant="light"
+                    loading={
+                      consultationMutation.isPending &&
+                      consultationMutation.variables?.id === item.id
+                    }
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          `Отменить неоплаченную консультацию для ${item.student.first_name}?`,
+                        )
+                      ) {
+                        return;
+                      }
+                      consultationMutation.mutate(
+                        {
+                          id: item.id,
+                          status: "cancelled",
+                          mentor_id: item.mentor?.id ?? null,
+                          scheduled_at: null,
+                          admin_note: item.admin_note,
+                          written_summary: null,
+                        },
+                        {
+                          onError: error,
+                          onSuccess: () =>
+                            consultationSuccess(
+                              item.id,
+                              "Неоплаченная заявка отменена",
+                            ),
+                        },
+                      );
+                    }}
+                  >
+                    Отменить неоплаченную заявку
+                  </Button>
+                )}
                 {(item.status === "paid" || item.status === "scheduled") && (
                   <>
                     <TextInput
                       type="datetime-local"
-                      aria-label="Дата консультации"
+                      label="Дата и время встречи"
+                      description="Время отображается в вашем часовом поясе"
                       value={
                         consultationDrafts[item.id]?.scheduledAt ??
-                        item.scheduled_at?.slice(0, 16) ??
-                        ""
+                        isoToLocalDateTimeInput(item.scheduled_at)
                       }
                       onChange={(event) =>
                         setConsultationDrafts((current) => ({
@@ -514,6 +685,10 @@ export function AdminOpportunitiesPage() {
                     />
                     <Button
                       variant="light"
+                      loading={
+                        consultationMutation.isPending &&
+                        consultationMutation.variables?.id === item.id
+                      }
                       disabled={
                         !(
                           consultationDrafts[item.id]?.scheduledAt ??
@@ -529,9 +704,9 @@ export function AdminOpportunitiesPage() {
                             id: item.id,
                             status: "scheduled",
                             mentor_id: item.mentor?.id ?? null,
-                            scheduled_at: scheduled
-                              ? new Date(scheduled).toISOString()
-                              : null,
+                            scheduled_at: localDateTimeInputToIso(
+                              scheduled ?? "",
+                            ),
                             admin_note:
                               consultationDrafts[item.id]?.note ??
                               item.admin_note,
@@ -539,13 +714,24 @@ export function AdminOpportunitiesPage() {
                               consultationDrafts[item.id]?.summary ??
                               item.written_summary,
                           },
-                          { onError: error },
+                          {
+                            onError: error,
+                            onSuccess: () =>
+                              consultationSuccess(
+                                item.id,
+                                "Дата консультации сохранена",
+                              ),
+                          },
                         );
                       }}
                     >
                       Запланировать
                     </Button>
                     <Button
+                      loading={
+                        consultationMutation.isPending &&
+                        consultationMutation.variables?.id === item.id
+                      }
                       disabled={
                         (
                           consultationDrafts[item.id]?.summary ??
@@ -553,13 +739,17 @@ export function AdminOpportunitiesPage() {
                           ""
                         ).trim().length < 10
                       }
-                      onClick={() =>
+                      onClick={() => {
+                        const draftScheduledAt =
+                          consultationDrafts[item.id]?.scheduledAt;
                         consultationMutation.mutate(
                           {
                             id: item.id,
                             status: "completed",
                             mentor_id: item.mentor?.id ?? null,
-                            scheduled_at: item.scheduled_at,
+                            scheduled_at: draftScheduledAt
+                              ? localDateTimeInputToIso(draftScheduledAt)
+                              : item.scheduled_at,
                             admin_note:
                               consultationDrafts[item.id]?.note ??
                               item.admin_note,
@@ -567,9 +757,16 @@ export function AdminOpportunitiesPage() {
                               consultationDrafts[item.id]?.summary ??
                               item.written_summary,
                           },
-                          { onError: error },
-                        )
-                      }
+                          {
+                            onError: error,
+                            onSuccess: () =>
+                              consultationSuccess(
+                                item.id,
+                                "Консультация завершена, итог сохранён",
+                              ),
+                          },
+                        );
+                      }}
                     >
                       Завершить с итогом
                     </Button>
@@ -580,8 +777,18 @@ export function AdminOpportunitiesPage() {
           </Card>
         ))}
       </Stack>
-      <Stack>
-        <Title order={2}>Переход Python → Go</Title>
+      <Stack id="go-requests" style={{ scrollMarginTop: 24 }}>
+        <Group justify="space-between">
+          <Title order={2}>Переход Python → Go</Title>
+          <Badge color="blue" variant="light">
+            Требуют решения:{" "}
+            {
+              query.data.go_transition_applications.filter(
+                (item) => item.status === "submitted",
+              ).length
+            }
+          </Badge>
+        </Group>
         {query.data.go_transition_applications.length === 0 && (
           <Alert color="gray">Новых заявок нет</Alert>
         )}
@@ -597,9 +804,16 @@ export function AdminOpportunitiesPage() {
                     {formatRubles(item.upfront_price_kopecks)} +{" "}
                     {item.success_fee_percent}% после оффера
                   </Text>
-                  <Text mt="sm">{item.motivation}</Text>
+                  <Text
+                    mt="sm"
+                    style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+                  >
+                    {item.motivation}
+                  </Text>
                 </div>
-                <Badge>{transitionLabels[item.status]}</Badge>
+                <Badge color={transitionColors[item.status]}>
+                  {transitionLabels[item.status]}
+                </Badge>
               </Group>
               {item.status === "submitted" && (
                 <Textarea
@@ -622,7 +836,10 @@ export function AdminOpportunitiesPage() {
                 {item.status === "submitted" && (
                   <Group>
                     <Button
-                      loading={transitionMutation.isPending}
+                      loading={
+                        transitionMutation.isPending &&
+                        transitionMutation.variables?.id === item.id
+                      }
                       onClick={() =>
                         transitionMutation.mutate(
                           {
@@ -630,7 +847,20 @@ export function AdminOpportunitiesPage() {
                             approved: true,
                             admin_note: transitionNotes[item.id] || null,
                           },
-                          { onError: error },
+                          {
+                            onError: error,
+                            onSuccess: () => {
+                              setTransitionNotes((current) => {
+                                const next = { ...current };
+                                delete next[item.id];
+                                return next;
+                              });
+                              notifications.show({
+                                color: "green",
+                                message: "Заявка на переход одобрена",
+                              });
+                            },
+                          },
                         )
                       }
                     >
@@ -639,16 +869,40 @@ export function AdminOpportunitiesPage() {
                     <Button
                       color="red"
                       variant="light"
-                      onClick={() =>
+                      loading={
+                        transitionMutation.isPending &&
+                        transitionMutation.variables?.id === item.id
+                      }
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `Отклонить заявку ${item.student.first_name} на переход в Go?`,
+                          )
+                        ) {
+                          return;
+                        }
                         transitionMutation.mutate(
                           {
                             id: item.id,
                             approved: false,
                             admin_note: transitionNotes[item.id] || null,
                           },
-                          { onError: error },
-                        )
-                      }
+                          {
+                            onError: error,
+                            onSuccess: () => {
+                              setTransitionNotes((current) => {
+                                const next = { ...current };
+                                delete next[item.id];
+                                return next;
+                              });
+                              notifications.show({
+                                color: "green",
+                                message: "Заявка на переход отклонена",
+                              });
+                            },
+                          },
+                        );
+                      }}
                     >
                       Отклонить
                     </Button>
