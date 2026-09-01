@@ -24,6 +24,8 @@ export const adminStudentKeys = {
   list: (options: AdminStudentListOptions) =>
     ["admin", "students", "list", options] as const,
   detail: (id: string) => ["admin", "students", id] as const,
+  mediaAnonymization: (id: string) =>
+    ["admin", "students", id, "media-anonymization"] as const,
   options: ["admin", "students", "options"] as const,
 };
 
@@ -61,6 +63,21 @@ export function useAdminStudentOptions() {
   return useQuery({
     queryKey: adminStudentKeys.options,
     queryFn: api.adminStudentOptions,
+  });
+}
+
+export function useAdminStudentMediaAnonymization(
+  id: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: adminStudentKeys.mediaAnonymization(id),
+    queryFn: () => api.adminStudentMediaAnonymization(id),
+    enabled: Boolean(id) && enabled,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return data && (data.queued > 0 || data.processing > 0) ? 10_000 : false;
+    },
   });
 }
 
@@ -128,6 +145,16 @@ export function useSetAdminStudentPublicIdentity() {
     onSuccess: async (student) => {
       queryClient.setQueryData(adminStudentKeys.detail(student.id), student);
       await invalidateStudentData(queryClient);
+    },
+  });
+}
+
+export function useRetryAdminStudentMediaAnonymization() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.retryAdminStudentMediaAnonymization(id),
+    onSuccess: (status, id) => {
+      queryClient.setQueryData(adminStudentKeys.mediaAnonymization(id), status);
     },
   });
 }

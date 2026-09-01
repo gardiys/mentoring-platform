@@ -10,6 +10,7 @@ from app.mentors.models import StudentLearningStatus
 from app.students.schemas import (
     AdminStudentAccessMutation,
     AdminStudentDetail,
+    AdminStudentMediaAnonymizationStatus,
     AdminStudentMutation,
     AdminStudentOptions,
     AdminStudentPage,
@@ -20,9 +21,11 @@ from app.students.service import (
     create_student,
     erase_student_personal_data,
     list_students,
+    retry_student_media_anonymization,
     set_student_access,
     set_student_public_identity,
     student_detail,
+    student_media_anonymization_status,
     student_options,
     update_student,
 )
@@ -120,6 +123,26 @@ async def admin_set_student_public_identity(
         hidden=payload.hidden,
         reason=payload.reason,
     )
+
+
+@router.get(
+    "/{student_id}/media-anonymization",
+    response_model=AdminStudentMediaAnonymizationStatus,
+)
+async def admin_student_media_anonymization(
+    student_id: UUID, session: Session, _admin: AdminUser
+) -> AdminStudentMediaAnonymizationStatus:
+    return await student_media_anonymization_status(session, student_id)
+
+
+@router.post(
+    "/{student_id}/media-anonymization/retry",
+    response_model=AdminStudentMediaAnonymizationStatus,
+)
+async def admin_retry_student_media_anonymization(
+    student_id: UUID, session: Session, _admin: AdminUser
+) -> AdminStudentMediaAnonymizationStatus:
+    return await retry_student_media_anonymization(session, student_id)
 
 
 @router.post("/{student_id}/erase-personal-data", response_model=AdminStudentDetail)

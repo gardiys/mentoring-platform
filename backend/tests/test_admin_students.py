@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from httpx import AsyncClient
@@ -7,8 +8,16 @@ from sqlalchemy import func, select
 
 from app.auth import dependencies as auth_dependencies
 from app.auth.web_session import create_browser_session
+from app.interviews.models import (
+    Company,
+    InterviewMediaAnonymizationStatus,
+    InterviewProcess,
+    InterviewProcessStage,
+    InterviewStageType,
+)
 from app.mentors.models import MentorStudent, StudentLearningStatus
 from app.roadmaps.models import RoadmapEnrollment
+from app.students import service as student_service
 from app.tracks.models import LearningTrackEnrollment
 from app.users.models import User, UserRole
 from tests.conftest import SeededData, TestSession, auth
@@ -138,6 +147,78 @@ async def test_admin_can_hide_student_public_identity(
     assert forbidden.status_code == 403
     assert restored.status_code == 200
     assert restored.json()["public_identity_hidden_at"] is None
+
+
+async def test_admin_can_inspect_and_retry_failed_media_anonymization(
+    client: AsyncClient, seeded: SeededData, monkeypatch: MonkeyPatch
+) -> None:
+    company_id = uuid4()
+    process_id = uuid4()
+    stage_id = uuid4()
+    async with TestSession() as session:
+        student = await session.get(User, seeded.student_id)
+        assert student is not None
+        student.public_identity_hidden_at = datetime.now(UTC)
+        company = Company(
+            id=company_id,
+            name="Example",
+            normalized_name=f"example-{company_id}",
+            transliterated_name="example",
+        )
+        process = InterviewProcess(
+            id=process_id,
+            user_id=seeded.student_id,
+            track_id=seeded.python_track_id,
+            company_id=company_id,
+            company_name="Example",
+        )
+        stage = InterviewProcessStage(
+            id=stage_id,
+            process_id=process_id,
+            stage_type=InterviewStageType.TECHNICAL_INTERVIEW,
+            scheduled_at=datetime.now(UTC),
+            media_storage_key="interviews/source.mp4",
+            media_filename="source.mp4",
+            media_content_type="video/mp4",
+            media_size=1024,
+            media_anonymization_status=InterviewMediaAnonymizationStatus.FAILED,
+            media_anonymization_error="ANONYMIZATION_FAILED: invalid media",
+        )
+        session.add_all([company, process, stage])
+        await session.commit()
+
+    enqueued: list[tuple[str, bool]] = []
+
+    async def fake_enqueue(stage_id: str, *, force: bool = False) -> str:
+        enqueued.append((stage_id, force))
+        return stage_id
+
+    monkeypatch.setattr(
+        student_service,
+        "enqueue_interview_media_anonymization",
+        fake_enqueue,
+    )
+
+    forbidden = await client.get(
+        f"/api/v1/admin/students/{seeded.student_id}/media-anonymization",
+        headers=auth(seeded.student_id),
+    )
+    status_response = await client.get(
+        f"/api/v1/admin/students/{seeded.student_id}/media-anonymization",
+        headers=auth(seeded.admin_id),
+    )
+    retry = await client.post(
+        f"/api/v1/admin/students/{seeded.student_id}/media-anonymization/retry",
+        headers=auth(seeded.admin_id),
+    )
+
+    assert forbidden.status_code == 403
+    assert status_response.status_code == 200
+    assert status_response.json()["failed"] == 1
+    assert status_response.json()["items"][0]["error"].startswith("ANONYMIZATION_FAILED")
+    assert retry.status_code == 200
+    assert retry.json()["queued"] == 1
+    assert enqueued == [(str(stage_id), True)]
 
 
 async def test_personal_data_erasure_is_irreversible_and_preserves_artifacts(

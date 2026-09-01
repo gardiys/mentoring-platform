@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
@@ -7,6 +7,7 @@ from sqlalchemy import String, and_, cast, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.errors import api_error
 from app.interviews.models import (
     InterviewMediaAnonymizationStatus,
@@ -30,6 +31,8 @@ from app.roadmaps.models import RoadmapEnrollment
 from app.students.schemas import (
     AdminStudentDetail,
     AdminStudentListItem,
+    AdminStudentMediaAnonymizationItem,
+    AdminStudentMediaAnonymizationStatus,
     AdminStudentMentorRead,
     AdminStudentMutation,
     AdminStudentOptions,
@@ -682,16 +685,137 @@ async def _redact_student_public_notifications(session: AsyncSession, student_id
         )
 
 
-async def _enqueue_anonymization_jobs(stage_ids: list[UUID]) -> None:
+async def _enqueue_anonymization_jobs(stage_ids: list[UUID], *, force: bool = False) -> None:
     for stage_id in stage_ids:
         try:
-            await enqueue_interview_media_anonymization(str(stage_id))
+            await enqueue_interview_media_anonymization(str(stage_id), force=force)
         except Exception:
             # Privacy state is already committed. The worker reconciler will
             # discover queued rows after Redis becomes available again.
             logger.exception(
                 "Could not enqueue interview media anonymization stage_id=%s", stage_id
             )
+
+
+def _stage_anonymization_ready(stage: InterviewProcessStage) -> bool:
+    return (
+        stage.media_anonymization_status == InterviewMediaAnonymizationStatus.READY
+        and stage.anonymized_media_storage_key is not None
+        and stage.anonymized_media_filename is not None
+        and stage.anonymized_media_content_type is not None
+        and stage.anonymized_media_size is not None
+        and stage.anonymized_media_size > 0
+    )
+
+
+async def student_media_anonymization_status(
+    session: AsyncSession, student_id: UUID
+) -> AdminStudentMediaAnonymizationStatus:
+    student = await get_student_model(session, student_id)
+    rows = (
+        await session.execute(
+            select(InterviewProcessStage, InterviewProcess.company_name)
+            .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
+            .where(
+                InterviewProcess.user_id == student.id,
+                InterviewProcessStage.media_storage_key.is_not(None),
+            )
+            .order_by(
+                InterviewProcessStage.scheduled_at.desc(),
+                InterviewProcessStage.id,
+            )
+        )
+    ).all()
+    items: list[AdminStudentMediaAnonymizationItem] = []
+    counts = {
+        "ready": 0,
+        "queued": 0,
+        "processing": 0,
+        "failed": 0,
+        "not_started": 0,
+    }
+    for stage, company_name in rows:
+        ready = _stage_anonymization_ready(stage)
+        if ready:
+            counts["ready"] += 1
+        elif stage.media_anonymization_status == InterviewMediaAnonymizationStatus.QUEUED:
+            counts["queued"] += 1
+        elif stage.media_anonymization_status == InterviewMediaAnonymizationStatus.PROCESSING:
+            counts["processing"] += 1
+        elif stage.media_anonymization_status in {
+            InterviewMediaAnonymizationStatus.FAILED,
+            InterviewMediaAnonymizationStatus.READY,
+        }:
+            # READY without an object is an inconsistent, retryable state.
+            counts["failed"] += 1
+        else:
+            counts["not_started"] += 1
+        items.append(
+            AdminStudentMediaAnonymizationItem(
+                stage_id=stage.id,
+                process_id=stage.process_id,
+                company_name=company_name,
+                filename=stage.media_filename or "Запись без имени",
+                status=stage.media_anonymization_status,
+                ready=ready,
+                error=stage.media_anonymization_error,
+                started_at=stage.media_anonymization_started_at,
+                completed_at=stage.media_anonymization_completed_at,
+            )
+        )
+    return AdminStudentMediaAnonymizationStatus(
+        identity_hidden=(
+            student.public_identity_hidden_at is not None
+            or student.personal_data_erased_at is not None
+        ),
+        total=len(items),
+        items=items,
+        **counts,
+    )
+
+
+async def retry_student_media_anonymization(
+    session: AsyncSession, student_id: UUID
+) -> AdminStudentMediaAnonymizationStatus:
+    student = await get_student_model(session, student_id, lock=True)
+    if student.public_identity_hidden_at is None and student.personal_data_erased_at is None:
+        api_error(
+            409,
+            "student_identity_not_hidden",
+            "Hide the student's public identity before anonymizing recordings",
+        )
+    stale_before = datetime.now(UTC) - timedelta(
+        seconds=get_settings().content_media_normalization_stale_seconds
+    )
+    stages = list(
+        await session.scalars(
+            select(InterviewProcessStage)
+            .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
+            .where(
+                InterviewProcess.user_id == student.id,
+                InterviewProcessStage.media_storage_key.is_not(None),
+            )
+            .with_for_update()
+        )
+    )
+    retry_ids: list[UUID] = []
+    for stage in stages:
+        ready = _stage_anonymization_ready(stage)
+        active = (
+            stage.media_anonymization_status == InterviewMediaAnonymizationStatus.PROCESSING
+            and stage.media_anonymization_started_at is not None
+            and stage.media_anonymization_started_at >= stale_before
+        )
+        if ready or active:
+            continue
+        stage.media_anonymization_status = InterviewMediaAnonymizationStatus.QUEUED
+        stage.media_anonymization_started_at = None
+        stage.media_anonymization_completed_at = None
+        stage.media_anonymization_error = None
+        retry_ids.append(stage.id)
+    await session.commit()
+    await _enqueue_anonymization_jobs(retry_ids, force=True)
+    return await student_media_anonymization_status(session, student.id)
 
 
 async def set_student_public_identity(

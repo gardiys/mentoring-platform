@@ -33,6 +33,8 @@ import {
 import {
   useCreateAdminStudent,
   useEraseAdminStudentPersonalData,
+  useAdminStudentMediaAnonymization,
+  useRetryAdminStudentMediaAnonymization,
   useSetAdminStudentAccess,
   useSetAdminStudentPublicIdentity,
   useUpdateAdminStudent,
@@ -90,6 +92,15 @@ export function AdminStudentForm({ options, student }: Props) {
   const accessMutation = useSetAdminStudentAccess();
   const publicIdentityMutation = useSetAdminStudentPublicIdentity();
   const erasePersonalDataMutation = useEraseAdminStudentPersonalData();
+  const identityHidden = Boolean(
+    student?.public_identity_hidden_at ?? student?.personal_data_erased_at,
+  );
+  const mediaAnonymizationQuery = useAdminStudentMediaAnonymization(
+    student?.id ?? "",
+    identityHidden,
+  );
+  const retryMediaAnonymizationMutation =
+    useRetryAdminStudentMediaAnonymization();
   const promoteMutation = usePromoteAdminStudent();
   const navigate = useNavigate();
   const editing = Boolean(student);
@@ -244,6 +255,22 @@ export function AdminStudentForm({ options, student }: Props) {
     );
   };
 
+  const retryMediaAnonymization = () => {
+    if (!student) return;
+    retryMediaAnonymizationMutation.mutate(student.id, {
+      onSuccess: (status) =>
+        notifications.show({
+          color: "green",
+          message:
+            status.queued > 0
+              ? `Повторно поставлено в очередь: ${status.queued}`
+              : "Активные и готовые записи не перезапускались",
+        }),
+      onError: (mutationError) =>
+        notifications.show({ color: "red", message: mutationError.message }),
+    });
+  };
+
   const erasePersonalData = () => {
     if (!student) return;
     const reason = window.prompt(
@@ -389,17 +416,6 @@ export function AdminStudentForm({ options, student }: Props) {
                         ? "Вернуть в общие разделы"
                         : "Скрыть публично"}
                     </Button>
-                    {student.public_identity_hidden_at && (
-                      <Button
-                        type="button"
-                        color="orange"
-                        variant="subtle"
-                        loading={publicIdentityMutation.isPending}
-                        onClick={() => setPublicIdentityHidden(true)}
-                      >
-                        Повторить неудачную обработку
-                      </Button>
-                    )}
                     <Button
                       type="button"
                       color="red"
@@ -412,6 +428,112 @@ export function AdminStudentForm({ options, student }: Props) {
                   </Group>
                 )}
               </Group>
+              {identityHidden && (
+                <Stack gap="sm">
+                  <Divider />
+                  <Group justify="space-between" align="flex-start">
+                    <div>
+                      <Text fw={700}>Анонимизация записей</Text>
+                      {mediaAnonymizationQuery.isLoading && (
+                        <Text c="dimmed" size="sm">
+                          Проверяем состояние обработки…
+                        </Text>
+                      )}
+                      {mediaAnonymizationQuery.isError && (
+                        <Text c="red" size="sm">
+                          Не удалось получить состояние:{" "}
+                          {mediaAnonymizationQuery.error.message}
+                        </Text>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      color="orange"
+                      variant="light"
+                      loading={retryMediaAnonymizationMutation.isPending}
+                      disabled={
+                        mediaAnonymizationQuery.isLoading ||
+                        !mediaAnonymizationQuery.data
+                      }
+                      onClick={retryMediaAnonymization}
+                    >
+                      Перезапустить незавершённые
+                    </Button>
+                  </Group>
+                  {mediaAnonymizationQuery.data && (
+                    <>
+                      <Group gap="xs">
+                        <Badge color="green" variant="light">
+                          Готово: {mediaAnonymizationQuery.data.ready}
+                        </Badge>
+                        <Badge color="blue" variant="light">
+                          В очереди: {mediaAnonymizationQuery.data.queued}
+                        </Badge>
+                        <Badge color="cyan" variant="light">
+                          Обрабатывается:{" "}
+                          {mediaAnonymizationQuery.data.processing}
+                        </Badge>
+                        <Badge
+                          color={
+                            mediaAnonymizationQuery.data.failed ? "red" : "gray"
+                          }
+                          variant="light"
+                        >
+                          Ошибки: {mediaAnonymizationQuery.data.failed}
+                        </Badge>
+                        {mediaAnonymizationQuery.data.not_started > 0 && (
+                          <Badge color="orange" variant="light">
+                            Не запущено:{" "}
+                            {mediaAnonymizationQuery.data.not_started}
+                          </Badge>
+                        )}
+                      </Group>
+                      {mediaAnonymizationQuery.data.total === 0 && (
+                        <Alert color="gray">
+                          У ученика нет аудио- или видеозаписей для обработки.
+                        </Alert>
+                      )}
+                      {mediaAnonymizationQuery.data.items
+                        .filter((item) => !item.ready)
+                        .map((item) => (
+                          <Paper key={item.stage_id} withBorder p="sm">
+                            <Group justify="space-between" align="flex-start">
+                              <div>
+                                <Text fw={600}>{item.company_name}</Text>
+                                <Text c="dimmed" size="sm">
+                                  {item.filename}
+                                </Text>
+                                {item.error && (
+                                  <Text c="red" size="sm" mt={4}>
+                                    {item.error}
+                                  </Text>
+                                )}
+                              </div>
+                              <Badge
+                                color={
+                                  item.status === "failed"
+                                    ? "red"
+                                    : item.status === "processing"
+                                      ? "cyan"
+                                      : "blue"
+                                }
+                                variant="light"
+                              >
+                                {item.status === "failed"
+                                  ? "Ошибка"
+                                  : item.status === "processing"
+                                    ? "Обрабатывается"
+                                    : item.status === "queued"
+                                      ? "В очереди"
+                                      : "Не запущено"}
+                              </Badge>
+                            </Group>
+                          </Paper>
+                        ))}
+                    </>
+                  )}
+                </Stack>
+              )}
             </Stack>
           </Card>
         )}

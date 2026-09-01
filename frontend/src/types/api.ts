@@ -920,6 +920,32 @@ export type IntelligenceProcessingStatus =
   | "analyzing"
   | "ready"
   | "failed";
+
+export type InterviewMediaAnonymizationStatus =
+  "queued" | "processing" | "ready" | "failed";
+
+export interface AdminStudentMediaAnonymizationItem {
+  stage_id: string;
+  process_id: string;
+  company_name: string;
+  filename: string;
+  status: InterviewMediaAnonymizationStatus | null;
+  ready: boolean;
+  error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface AdminStudentMediaAnonymizationSummary {
+  identity_hidden: boolean;
+  total: number;
+  ready: number;
+  queued: number;
+  processing: number;
+  failed: number;
+  not_started: number;
+  items: AdminStudentMediaAnonymizationItem[];
+}
 export type IntelligenceSpeakerRole =
   "unknown" | "candidate" | "interviewer" | "recruiter" | "other";
 export type IntelligenceReviewStatus =

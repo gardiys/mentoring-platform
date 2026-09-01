@@ -39,6 +39,7 @@ import type {
   AdminSectionMutation,
   AdminSectionOutline,
   AdminStudentDetail,
+  AdminStudentMediaAnonymizationSummary,
   AdminStudentMutation,
   AdminStudentOptions,
   AdminStudentPage,
@@ -1488,6 +1489,15 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify({ hidden, reason }),
       },
+    ),
+  adminStudentMediaAnonymization: (id: string) =>
+    apiRequest<AdminStudentMediaAnonymizationSummary>(
+      `/api/v1/admin/students/${id}/media-anonymization`,
+    ),
+  retryAdminStudentMediaAnonymization: (id: string) =>
+    apiRequest<AdminStudentMediaAnonymizationSummary>(
+      `/api/v1/admin/students/${id}/media-anonymization/retry`,
+      { method: "POST" },
     ),
   eraseAdminStudentPersonalData: (id: string, reason: string) =>
     apiRequest<AdminStudentDetail>(

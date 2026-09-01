@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.interviews.models import InterviewMediaAnonymizationStatus
 from app.mentors.models import StudentLearningStatus
 from app.users.models import UserRole
 from app.users.telegram import normalize_telegram_username
@@ -125,6 +126,29 @@ class AdminStudentPublicIdentityMutation(BaseModel):
         if self.hidden and (not self.reason or len(self.reason) < 3):
             raise ValueError("A reason is required when hiding a student's identity")
         return self
+
+
+class AdminStudentMediaAnonymizationItem(BaseModel):
+    stage_id: UUID
+    process_id: UUID
+    company_name: str
+    filename: str
+    status: InterviewMediaAnonymizationStatus | None
+    ready: bool
+    error: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class AdminStudentMediaAnonymizationStatus(BaseModel):
+    identity_hidden: bool
+    total: int
+    ready: int
+    queued: int
+    processing: int
+    failed: int
+    not_started: int
+    items: list[AdminStudentMediaAnonymizationItem] = Field(default_factory=list)
 
 
 class AdminStudentPersonalDataErasureMutation(BaseModel):

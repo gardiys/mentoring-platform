@@ -1,5 +1,5 @@
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from arq.connections import ArqRedis, RedisSettings, create_pool
 
@@ -16,9 +16,14 @@ async def enqueue_interview_media_anonymization(
     *,
     defer_seconds: int | float | None = None,
     redis: ArqRedis | None = None,
+    force: bool = False,
 ) -> str:
     """Enqueue one idempotent anonymized-copy job for an interview stage."""
     job_id = interview_media_anonymization_job_id(stage_id)
+    if force:
+        # A failed ARQ result can retain the deterministic job id until its
+        # expiry. An explicit admin retry must not be blocked by that stale key.
+        job_id = f"{job_id}:retry:{uuid4()}"
     owned_pool = redis is None
     if redis is None:
         redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
