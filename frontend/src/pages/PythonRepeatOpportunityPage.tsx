@@ -233,9 +233,11 @@ export function PythonRepeatOpportunityPage() {
   const saveApplication = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!data.eligibility.eligible || !applicationValid) return;
+    const { target_salary_rubles: targetSalaryRubles, ...applicationFields } =
+      application;
     const payload = {
-      ...application,
-      target_salary_kopecks: Math.round(application.target_salary_rubles * 100),
+      ...applicationFields,
+      target_salary_kopecks: Math.round(targetSalaryRubles * 100),
       last_interview_at: null,
       desired_start_date: null,
     };
@@ -272,11 +274,26 @@ export function PythonRepeatOpportunityPage() {
       return;
     }
     createApplication.mutate(payload, {
-      onSuccess: () =>
-        notifications.show({
-          color: "green",
-          message: "Черновик заявки сохранён",
-        }),
+      onSuccess: (dashboard) => {
+        const createdApplication = (dashboard as PythonRepeatDashboard)
+          .application;
+        if (!createdApplication || createdApplication.status !== "draft") {
+          notifications.show({
+            color: "red",
+            message:
+              "Заявка сохранена, но не отправлена автоматически. Обновите страницу и повторите отправку.",
+          });
+          return;
+        }
+        submitApplication.mutate(createdApplication.id, {
+          onSuccess: () =>
+            notifications.show({
+              color: "green",
+              message: "Заявка отправлена на рассмотрение",
+            }),
+          onError: mutationError,
+        });
+      },
       onError: mutationError,
     });
   };
@@ -571,16 +588,14 @@ export function PythonRepeatOpportunityPage() {
               loading={
                 createApplication.isPending ||
                 updateApplication.isPending ||
-                ((current?.status === "draft" ||
-                  current?.status === "needs_clarification") &&
-                  submitApplication.isPending)
+                submitApplication.isPending
               }
             >
               {current?.status === "needs_clarification"
                 ? "Сохранить и отправить повторно"
                 : current?.status === "draft"
                   ? "Сохранить и отправить на рассмотрение"
-                  : "Сохранить заявку"}
+                  : "Отправить заявку"}
             </Button>
           </Stack>
         </Card>

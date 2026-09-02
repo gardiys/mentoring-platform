@@ -7,7 +7,11 @@ import { AlumniConsultationsPage } from "../src/pages/AlumniConsultationsPage";
 import { AlumniOpportunitiesPage } from "../src/pages/AlumniOpportunitiesPage";
 import { GoTransitionOpportunityPage } from "../src/pages/GoTransitionOpportunityPage";
 import { OpportunitiesPage } from "../src/pages/OpportunitiesPage";
-import type { OpportunitiesDashboard } from "../src/types/api";
+import { PythonRepeatOpportunityPage } from "../src/pages/PythonRepeatOpportunityPage";
+import type {
+  OpportunitiesDashboard,
+  PythonRepeatDashboard,
+} from "../src/types/api";
 import { renderPage } from "./render";
 
 afterEach(() => vi.restoreAllMocks());
@@ -110,6 +114,64 @@ const dashboard: OpportunitiesDashboard = {
     "## Что входит в программу\n\n- Go и конкурентность\n- Backend-практика",
   consultations: [],
   go_transition_applications: [],
+};
+
+const pythonRepeatDashboard: PythonRepeatDashboard = {
+  enabled: true,
+  eligibility: {
+    eligible: true,
+    code: "eligible",
+    message: "Можно подать заявку",
+    override_allowed: false,
+  },
+  product: {
+    product_code: "PYTHON_REPEAT_MENTORSHIP",
+    terms_version: 1,
+    upfront_price_kopecks: 3_000_000,
+    success_fee_percent: 100,
+    success_fee_installments_count: 4,
+    active_support_months: 3,
+    probation_support_days: 90,
+    included_mock_interviews: 2,
+    offer_valid_days: 14,
+  },
+  application: null,
+  enrollment: null,
+  offers: [],
+  obligation: null,
+};
+
+const pythonRepeatDraftDashboard: PythonRepeatDashboard = {
+  ...pythonRepeatDashboard,
+  application: {
+    id: "60000000-0000-4000-8000-000000000001",
+    student_id: student.id,
+    employment_status: "employed",
+    reason: "wants_higher_salary",
+    current_position: "Python-разработчик",
+    current_company: "Компания",
+    current_stack: "Python",
+    last_interview_at: null,
+    target_position: "Python Backend Developer",
+    target_salary_kopecks: 25_000_000,
+    technical_gaps: "Хочу системно повторить Python и архитектуру",
+    hours_per_week: 10,
+    desired_start_date: null,
+    search_mode: "search_while_employed",
+    additional_comment: null,
+    status: "draft",
+    responsible_user_id: null,
+    eligibility_override_reason: null,
+    admin_comment: null,
+    terms_version: null,
+    terms_snapshot: null,
+    approved_at: null,
+    offer_expires_at: null,
+    accepted_at: null,
+    paid_at: null,
+    created_at: "2026-09-01T00:00:00Z",
+    history: [],
+  },
 };
 
 it("показывает кабинет выпускника отдельным подразделом возможностей", async () => {
@@ -372,5 +434,45 @@ it("выделяет выбранный формат консультации ц
   expect(option.closest(".opportunity-choice")).toHaveAttribute(
     "data-selected",
     "true",
+  );
+});
+
+it("отправляет заявку повторного менторства без внутренних полей формы", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "myPythonRepeat").mockResolvedValue(pythonRepeatDashboard);
+  const create = vi
+    .spyOn(api, "createPythonRepeatApplication")
+    .mockResolvedValue(pythonRepeatDraftDashboard);
+  const submit = vi
+    .spyOn(api, "submitPythonRepeatApplication")
+    .mockResolvedValue(pythonRepeatDraftDashboard);
+  renderPage(
+    <PythonRepeatOpportunityPage />,
+    "/opportunities/alumni/python-repeat",
+    "/opportunities/alumni/python-repeat",
+  );
+
+  await userEvent.type(
+    await screen.findByLabelText(/Какие пробелы хотите закрыть/),
+    "Хочу системно повторить Python и архитектуру",
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Отправить заявку" }),
+  );
+
+  await waitFor(() => expect(create).toHaveBeenCalled());
+  const payload = create.mock.calls[0]?.[0];
+  expect(payload).toBeDefined();
+  expect(payload).toMatchObject({
+    target_position: "Python Backend Developer",
+    target_salary_kopecks: 25_000_000,
+    technical_gaps: "Хочу системно повторить Python и архитектуру",
+  });
+  expect(payload).not.toHaveProperty("target_salary_rubles");
+  await waitFor(() =>
+    expect(submit).toHaveBeenCalledWith(
+      pythonRepeatDraftDashboard.application?.id,
+      expect.anything(),
+    ),
   );
 });
