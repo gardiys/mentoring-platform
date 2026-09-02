@@ -37,6 +37,17 @@ from app.tracks.models import LearningTrackEnrollment
 from app.users.models import User
 from tests.conftest import SeededData, TestSession, auth
 
+PUBLIC_OFFER_REVISION = "02.09.2026"
+PUBLIC_OFFER_URL = "/legal/python-repeat-mentorship-offer-2026-09-02.pdf"
+PUBLIC_OFFER_SHA256 = "2f7a2c4e01609f37a9ebb04b7c93943d4f616cb2f55691ec409d41e9270bbd3f"
+PUBLIC_OFFER_STATEMENT = (
+    "Я ознакомился и полностью принимаю Публичную оферту на оказание "
+    "информационно-консультационных услуг по программе повторного менторства по "
+    "Python-разработке в редакции от 02.09.2026. Я понимаю, что стоимость услуг "
+    "составляет 30 000 ₽ предоплаты и дополнительно 100% расчетного ежемесячного "
+    "вознаграждения при новом трудоустройстве, выплачиваемые двумя равными платежами."
+)
+
 
 async def _graduate_python(seeded: SeededData, *, with_email: bool = True) -> None:
     async with TestSession() as session:
@@ -66,17 +77,22 @@ async def _seed_python_repeat_product() -> None:
     async with TestSession() as session:
         session.add(
             PythonRepeatProductOffer(
-                version=2,
+                version=3,
                 is_active=True,
                 upfront_price_kopecks=3_000_000,
                 success_fee_percent=100,
-                success_fee_installments_count=4,
+                success_fee_installments_count=2,
                 mentor_fixed_accrual_kopecks=1_000_000,
                 mentor_success_fee_share_percent=30,
                 active_support_months=4,
                 probation_support_days=30,
                 included_mock_interviews=2,
                 offer_valid_days=14,
+                public_offer_revision=PUBLIC_OFFER_REVISION,
+                public_offer_published_at=datetime(2026, 9, 2, tzinfo=UTC).date(),
+                public_offer_url=PUBLIC_OFFER_URL,
+                public_offer_sha256=PUBLIC_OFFER_SHA256,
+                acceptance_statement=PUBLIC_OFFER_STATEMENT,
                 valid_from=datetime.now(UTC),
             )
         )
@@ -191,9 +207,7 @@ async def test_alumnus_consultation_accrues_reward_only_after_completion(
     async with TestSession() as session:
         rewards = list(
             await session.scalars(
-                select(MentorReward).where(
-                    MentorReward.consultation_request_id == UUID(request_id)
-                )
+                select(MentorReward).where(MentorReward.consultation_request_id == UUID(request_id))
             )
         )
         assert len(rewards) == 1
@@ -352,6 +366,19 @@ async def test_python_alumnus_transition_requires_approval_acceptance_and_paymen
         json={"approved": True, "admin_note": "Подтверждено"},
     )
     assert decided.status_code == 200, decided.text
+    stale_acceptance = await client.post(
+        f"/api/v1/opportunities/python-repeat/applications/{application_id}/accept-terms",
+        headers=auth(seeded.student_id),
+        json={
+            "accepted": True,
+            "terms_version": 3,
+            "public_offer_revision": "01.09.2026",
+            "public_offer_sha256": PUBLIC_OFFER_SHA256,
+            "acceptance_statement": PUBLIC_OFFER_STATEMENT,
+        },
+    )
+    assert stale_acceptance.status_code == 409, stale_acceptance.text
+
     accepted = await client.post(
         f"/api/v1/opportunities/go-transition/{application_id}/accept",
         headers=auth(seeded.student_id),
@@ -635,7 +662,7 @@ async def test_python_repeat_full_payment_and_mentor_reward_flow(
     assert application["terms_snapshot"]["success_fee_percent"] == 100
     async with TestSession() as session:
         product = await session.scalar(
-            select(PythonRepeatProductOffer).where(PythonRepeatProductOffer.version == 2)
+            select(PythonRepeatProductOffer).where(PythonRepeatProductOffer.version == 3)
         )
         assert product is not None
         product.upfront_price_kopecks = 9_999_999
@@ -647,9 +674,23 @@ async def test_python_repeat_full_payment_and_mentor_reward_flow(
     accepted = await client.post(
         f"/api/v1/opportunities/python-repeat/applications/{application_id}/accept-terms",
         headers=auth(seeded.student_id),
-        json={"accepted": True},
+        json={
+            "accepted": True,
+            "terms_version": 3,
+            "public_offer_revision": PUBLIC_OFFER_REVISION,
+            "public_offer_sha256": PUBLIC_OFFER_SHA256,
+            "acceptance_statement": PUBLIC_OFFER_STATEMENT,
+        },
     )
     assert accepted.status_code == 200, accepted.text
+    async with TestSession() as session:
+        accepted_model = await session.get(PythonRepeatApplication, UUID(application_id))
+        assert accepted_model is not None
+        assert accepted_model.acceptance_evidence is not None
+        assert accepted_model.acceptance_evidence["user"]["id"] == str(seeded.student_id)
+        assert accepted_model.acceptance_evidence["user"]["email"] == "graduate@example.com"
+        assert accepted_model.acceptance_evidence["offer"]["revision"] == PUBLIC_OFFER_REVISION
+        assert accepted_model.acceptance_evidence["explicit_acceptance"]["accepted"] is True
     payment_link = await client.post(
         f"/api/v1/opportunities/python-repeat/applications/{application_id}/checkout",
         headers=auth(seeded.student_id),
@@ -733,10 +774,12 @@ async def test_python_repeat_full_payment_and_mentor_reward_flow(
     obligation = verified.json()["applications"][0]["obligation"]
     assert obligation["total_amount_kopecks"] == 25_000_000
     assert [item["amount_kopecks"] for item in obligation["installments"]] == [
-        6_250_000,
-        6_250_000,
-        6_250_000,
-        6_250_000,
+        12_500_000,
+        12_500_000,
+    ]
+    assert [datetime.fromisoformat(item["due_at"]) for item in obligation["installments"]] == [
+        python_repeat_service._add_calendar_months(now, 1),
+        python_repeat_service._add_calendar_months(now, 2),
     ]
 
     first_installment = obligation["installments"][0]
@@ -763,10 +806,10 @@ async def test_python_repeat_full_payment_and_mentor_reward_flow(
     )
     assert finance.status_code == 200, finance.text
     finance_item = finance.json()["applications"][0]
-    assert finance_item["revenue_received_kopecks"] == 9_250_000
-    assert finance_item["mentor_accrued_kopecks"] == 2_875_000
+    assert finance_item["revenue_received_kopecks"] == 15_500_000
+    assert finance_item["mentor_accrued_kopecks"] == 4_750_000
     assert finance_item["mentor_paid_kopecks"] == 0
-    assert finance_item["gross_remainder_kopecks"] == 6_375_000
+    assert finance_item["gross_remainder_kopecks"] == 10_750_000
 
     for installment in obligation["installments"][1:]:
         next_link = await client.post(
@@ -836,13 +879,19 @@ async def test_python_repeat_full_payment_and_mentor_reward_flow(
             "track_id": str(seeded.python_track_id),
         }
         assert obligation_model is not None
-        assert len(installments) == 4
+        assert len(installments) == 2
         assert sorted(reward.amount_kopecks for reward in rewards) == [
             1_000_000,
-            1_875_000,
-            1_875_000,
-            1_875_000,
-            1_875_000,
+            3_750_000,
+            3_750_000,
         ]
+        assert application_model.contract_accepted_at is not None
+        assert (
+            application_model.acceptance_payment_link_id == refreshed_link.json()["payment_link_id"]
+        )
+        assert application_model.acceptance_evidence is not None
+        assert application_model.acceptance_evidence["contract_acceptance"]["method"] == (
+            "payment_crediting"
+        )
         assert any("application-submitted" in item.event_key for item in notifications)
         assert any("installment-paid" in item.event_key for item in notifications)

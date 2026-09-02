@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
@@ -8,6 +8,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -299,9 +300,7 @@ class GoTransitionApplication(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     terms_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    accepted_terms_snapshot: Mapped[dict[str, object] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    accepted_terms_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
 
 
 class GoTransitionEnrollment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -378,6 +377,11 @@ class PythonRepeatProductOffer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     probation_support_days: Mapped[int] = mapped_column(nullable=False)
     included_mock_interviews: Mapped[int] = mapped_column(nullable=False)
     offer_valid_days: Mapped[int] = mapped_column(nullable=False)
+    public_offer_revision: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    public_offer_published_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    public_offer_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    public_offer_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    acceptance_statement: Mapped[str | None] = mapped_column(Text, nullable=True)
     valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -470,6 +474,12 @@ class PythonRepeatApplication(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     acceptance_ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     acceptance_user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    acceptance_evidence: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    contract_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    acceptance_payment_link_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    acceptance_provider_operation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

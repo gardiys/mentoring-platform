@@ -126,14 +126,20 @@ const pythonRepeatDashboard: PythonRepeatDashboard = {
   },
   product: {
     product_code: "PYTHON_REPEAT_MENTORSHIP",
-    terms_version: 1,
+    terms_version: 3,
     upfront_price_kopecks: 3_000_000,
     success_fee_percent: 100,
-    success_fee_installments_count: 4,
+    success_fee_installments_count: 2,
     active_support_months: 3,
     probation_support_days: 90,
     included_mock_interviews: 2,
     offer_valid_days: 14,
+    public_offer_revision: "02.09.2026",
+    public_offer_published_at: "2026-09-02",
+    public_offer_url: "/legal/python-repeat-mentorship-offer-2026-09-02.pdf",
+    public_offer_sha256:
+      "2f7a2c4e01609f37a9ebb04b7c93943d4f616cb2f55691ec409d41e9270bbd3f",
+    acceptance_statement: "Я ознакомился и полностью принимаю Публичную оферту",
   },
   application: null,
   enrollment: null,
@@ -168,6 +174,10 @@ const pythonRepeatDraftDashboard: PythonRepeatDashboard = {
     approved_at: null,
     offer_expires_at: null,
     accepted_at: null,
+    acceptance_evidence: null,
+    contract_accepted_at: null,
+    acceptance_payment_link_id: null,
+    acceptance_provider_operation_id: null,
     paid_at: null,
     created_at: "2026-09-01T00:00:00Z",
     history: [],
@@ -472,6 +482,65 @@ it("отправляет заявку повторного менторства 
   await waitFor(() =>
     expect(submit).toHaveBeenCalledWith(
       pythonRepeatDraftDashboard.application?.id,
+      expect.anything(),
+    ),
+  );
+});
+
+it("показывает оферту и передает ее неизменяемую редакцию при подтверждении", async () => {
+  const statement =
+    "Я ознакомился и полностью принимаю Публичную оферту на оказание информационно-консультационных услуг по программе повторного менторства по Python-разработке в редакции от 02.09.2026. Я понимаю, что стоимость услуг составляет 30 000 ₽ предоплаты и дополнительно 100% расчетного ежемесячного вознаграждения при новом трудоустройстве, выплачиваемые двумя равными платежами.";
+  const approvedDashboard: PythonRepeatDashboard = {
+    ...pythonRepeatDashboard,
+    application: {
+      ...pythonRepeatDraftDashboard.application!,
+      status: "approved",
+      terms_version: 3,
+      terms_snapshot: {
+        ...pythonRepeatDashboard.product,
+        currency: "RUB",
+        acceptance_statement: statement,
+      },
+      approved_at: "2026-09-02T09:00:00Z",
+      offer_expires_at: "2099-09-16T09:00:00Z",
+    },
+  };
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "myPythonRepeat").mockResolvedValue(approvedDashboard);
+  const accept = vi
+    .spyOn(api, "acceptPythonRepeatTerms")
+    .mockResolvedValue(approvedDashboard);
+  renderPage(
+    <PythonRepeatOpportunityPage />,
+    "/opportunities/alumni/python-repeat",
+    "/opportunities/alumni/python-repeat",
+  );
+
+  expect(
+    await screen.findByRole("link", { name: "Открыть Публичную оферту (PDF)" }),
+  ).toHaveAttribute(
+    "href",
+    "/legal/python-repeat-mentorship-offer-2026-09-02.pdf",
+  );
+  expect(screen.getByText(/Формула общей стоимости/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("checkbox", { name: statement }));
+  await userEvent.click(
+    screen.getByRole("button", {
+      name: "Подтвердить ознакомление с офертой",
+    }),
+  );
+
+  await waitFor(() =>
+    expect(accept).toHaveBeenCalledWith(
+      {
+        id: approvedDashboard.application?.id,
+        accepted: true,
+        terms_version: 3,
+        public_offer_revision: "02.09.2026",
+        public_offer_sha256:
+          "2f7a2c4e01609f37a9ebb04b7c93943d4f616cb2f55691ec409d41e9270bbd3f",
+        acceptance_statement: statement,
+      },
       expect.anything(),
     ),
   );

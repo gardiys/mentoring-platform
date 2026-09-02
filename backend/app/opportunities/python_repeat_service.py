@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import cast
@@ -48,6 +49,7 @@ from app.opportunities.python_repeat_schemas import (
     PythonRepeatOfferCreate,
     PythonRepeatOfferRead,
     PythonRepeatStatusHistoryRead,
+    PythonRepeatTermsAcceptance,
 )
 from app.opportunities.schemas import OpportunityPaymentLinkRead
 from app.opportunities.service import _student_has_overdue_obligations, _track_state
@@ -65,7 +67,7 @@ from app.users.models import MENTOR_CAPABLE_ROLES, User, UserRole
 PRODUCT_CODE = "PYTHON_REPEAT_MENTORSHIP"
 DEFAULT_UPFRONT_KOPECKS = 3_000_000
 DEFAULT_SUCCESS_FEE_PERCENT = 100
-DEFAULT_INSTALLMENTS_COUNT = 4
+DEFAULT_INSTALLMENTS_COUNT = 2
 DEFAULT_MENTOR_FIXED_KOPECKS = 1_000_000
 DEFAULT_MENTOR_SHARE_PERCENT = 30
 DEFAULT_ACTIVE_SUPPORT_MONTHS = 4
@@ -98,6 +100,14 @@ def _percent(amount: int, value: int) -> int:
     )
 
 
+def _add_calendar_months(value: datetime, months: int) -> datetime:
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
 def _snapshot_int(snapshot: dict[str, object], key: str) -> int:
     value = snapshot.get(key)
     if not isinstance(value, int):
@@ -118,7 +128,7 @@ async def _active_product(session: AsyncSession) -> PythonRepeatProductOffer:
 
 
 def _product_snapshot(product: PythonRepeatProductOffer) -> dict[str, object]:
-    return {
+    snapshot: dict[str, object] = {
         "product_code": PRODUCT_CODE,
         "terms_version": product.version,
         "upfront_price_kopecks": product.upfront_price_kopecks,
@@ -131,6 +141,49 @@ def _product_snapshot(product: PythonRepeatProductOffer) -> dict[str, object]:
         "probation_support_days": product.probation_support_days,
         "included_mock_interviews": product.included_mock_interviews,
         "offer_valid_days": product.offer_valid_days,
+    }
+    if product.public_offer_revision:
+        snapshot.update(
+            {
+                "success_fee_installment_percent": 50,
+                "success_fee_first_due_months_after_employment": 1,
+                "success_fee_second_due_months_after_employment": 2,
+                "success_fee_minimum_kopecks": 0,
+                "pre_acceptance_employment_processes_excluded": True,
+                "public_offer_revision": product.public_offer_revision,
+                "public_offer_published_at": (
+                    product.public_offer_published_at.isoformat()
+                    if product.public_offer_published_at
+                    else None
+                ),
+                "public_offer_url": product.public_offer_url,
+                "public_offer_sha256": product.public_offer_sha256,
+                "acceptance_statement": product.acceptance_statement,
+                "contract_acceptance_method": "payment_crediting",
+            }
+        )
+    return snapshot
+
+
+def _application_answers_snapshot(item: PythonRepeatApplication) -> dict[str, object]:
+    return {
+        "employment_status": item.employment_status.value,
+        "reason": item.reason.value,
+        "current_position": item.current_position,
+        "current_company": item.current_company,
+        "current_stack": item.current_stack,
+        "last_interview_at": (
+            item.last_interview_at.isoformat() if item.last_interview_at else None
+        ),
+        "target_position": item.target_position,
+        "target_salary_kopecks": item.target_salary_kopecks,
+        "technical_gaps": item.technical_gaps,
+        "hours_per_week": item.hours_per_week,
+        "desired_start_date": (
+            item.desired_start_date.isoformat() if item.desired_start_date else None
+        ),
+        "search_mode": item.search_mode.value,
+        "additional_comment": item.additional_comment,
     }
 
 
@@ -489,9 +542,7 @@ async def submit_application(
     session: AsyncSession, student: User, application_id: UUID
 ) -> PythonRepeatDashboard:
     item = await _owned_application(session, student.id, application_id, lock=True)
-    eligibility = await python_repeat_eligibility(
-        session, student, ignore_application_id=item.id
-    )
+    eligibility = await python_repeat_eligibility(session, student, ignore_application_id=item.id)
     if not eligibility.eligible and item.eligibility_override_by_user_id is None:
         api_error(409, eligibility.code.casefold(), eligibility.message)
     if item.status is PythonRepeatApplicationStatus.NEEDS_CLARIFICATION:
@@ -515,20 +566,91 @@ async def accept_terms(
     student: User,
     application_id: UUID,
     *,
+    acceptance: PythonRepeatTermsAcceptance,
     ip_address: str | None,
     user_agent: str | None,
+    accept_language: str | None,
+    request_id: str | None,
 ) -> PythonRepeatDashboard:
     item = await _owned_application(session, student.id, application_id, lock=True)
     if item.offer_expires_at is not None and item.offer_expires_at < _now():
         await _transition(session, item, PythonRepeatApplicationStatus.EXPIRED, student.id)
         await session.commit()
         api_error(409, "python_repeat_offer_expired", "The approved terms have expired")
+    terms = item.terms_snapshot
+    if terms is None:
+        api_error(409, "python_repeat_terms_missing", "Approved terms were not found")
+    expected_revision = terms.get("public_offer_revision")
+    expected_hash = terms.get("public_offer_sha256")
+    expected_statement = terms.get("acceptance_statement")
+    if not all(
+        isinstance(value, str) and value
+        for value in (expected_revision, expected_hash, expected_statement)
+    ):
+        api_error(
+            409,
+            "python_repeat_public_offer_missing",
+            "The approved public offer is not configured; ask the team to renew the offer",
+        )
+    if (
+        acceptance.terms_version != item.terms_version
+        or acceptance.public_offer_revision != expected_revision
+        or acceptance.public_offer_sha256 != expected_hash
+        or acceptance.acceptance_statement != expected_statement
+    ):
+        api_error(
+            409,
+            "python_repeat_offer_changed",
+            "The public offer has changed; reload the page and review the current revision",
+        )
+    accepted_at = _now()
     await _transition(session, item, PythonRepeatApplicationStatus.TERMS_ACCEPTED, student.id)
-    item.accepted_at = _now()
+    item.accepted_at = accepted_at
     item.accepted_by_user_id = student.id
     item.acceptance_ip_address = ip_address
     item.acceptance_user_agent = user_agent[:500] if user_agent else None
-    await _event(session, "python_repeat_terms_accepted", item.id, student.id)
+    item.acceptance_evidence = {
+        "evidence_version": 1,
+        "recorded_at": accepted_at.isoformat(),
+        "application_id": str(item.id),
+        "user": {
+            "id": str(student.id),
+            "email": student.email,
+            "telegram_id": student.telegram_id,
+            "telegram_username": student.telegram_username,
+        },
+        "application_answers": _application_answers_snapshot(item),
+        "explicit_acceptance": {
+            "accepted": acceptance.accepted,
+            "statement": acceptance.acceptance_statement,
+        },
+        "offer": {
+            "terms_version": item.terms_version,
+            "revision": expected_revision,
+            "published_at": terms.get("public_offer_published_at"),
+            "url": terms.get("public_offer_url"),
+            "sha256": expected_hash,
+            "financial_terms": terms,
+        },
+        "technical": {
+            "ip_address": ip_address,
+            "user_agent": user_agent[:500] if user_agent else None,
+            "accept_language": accept_language[:250] if accept_language else None,
+            "request_id": request_id,
+        },
+        "contract_acceptance_method": "payment_crediting",
+    }
+    await _event(
+        session,
+        "python_repeat_terms_accepted",
+        item.id,
+        student.id,
+        payload={
+            "terms_version": item.terms_version,
+            "public_offer_revision": expected_revision,
+            "public_offer_sha256": expected_hash,
+        },
+    )
     await session.commit()
     return await dashboard(session, student)
 
@@ -537,9 +659,7 @@ async def checkout(
     session: AsyncSession, student: User, application_id: UUID
 ) -> OpportunityPaymentLinkRead:
     item = await _owned_application(session, student.id, application_id, lock=True)
-    eligibility = await python_repeat_eligibility(
-        session, student, ignore_application_id=item.id
-    )
+    eligibility = await python_repeat_eligibility(session, student, ignore_application_id=item.id)
     if (
         not eligibility.eligible
         and eligibility.code != "FEATURE_DISABLED"
@@ -625,7 +745,7 @@ async def _payment_link(
     except TochkaError as error:
         api_error(502, "python_repeat_payment_link_failed", str(error))
     session.add(
-        OpportunityPaymentAttempt(
+        payment_attempt := OpportunityPaymentAttempt(
             python_repeat_application_id=repeat_application.id if repeat_application else None,
             python_repeat_installment_id=repeat_installment.id if repeat_installment else None,
             payment_link_id=payment.payment_link_id,
@@ -637,6 +757,17 @@ async def _payment_link(
         )
     )
     await session.flush()
+    if repeat_application is not None:
+        repeat_application.acceptance_payment_link_id = payment.payment_link_id
+        repeat_application.acceptance_provider_operation_id = payment.provider_operation_id
+        evidence = dict(repeat_application.acceptance_evidence or {})
+        evidence["latest_payment_attempt"] = {
+            "attempt_id": str(payment_attempt.id),
+            "payment_link_id": payment.payment_link_id,
+            "provider_operation_id": payment.provider_operation_id,
+            "created_at": _now().isoformat(),
+        }
+        repeat_application.acceptance_evidence = evidence
     return OpportunityPaymentLinkRead(
         payment_url=payment.payment_url,
         payment_link_id=payment.payment_link_id,
@@ -677,6 +808,20 @@ async def approve_python_repeat_payment(
             attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
             return
         application.paid_at = approved_at
+        application.contract_accepted_at = approved_at
+        application.acceptance_payment_link_id = attempt.payment_link_id
+        application.acceptance_provider_operation_id = attempt.provider_operation_id
+        evidence = dict(application.acceptance_evidence or {})
+        evidence["contract_acceptance"] = {
+            "method": "payment_crediting",
+            "accepted_at": approved_at.isoformat(),
+            "payment_attempt_id": str(attempt.id),
+            "payment_link_id": attempt.payment_link_id,
+            "provider_operation_id": attempt.provider_operation_id,
+            "amount_kopecks": _snapshot_int(application.terms_snapshot, "upfront_price_kopecks"),
+            "currency": application.terms_snapshot.get("currency", "RUB"),
+        }
+        application.acceptance_evidence = evidence
         await _transition(session, application, PythonRepeatApplicationStatus.PAID, None)
         enrollment = await session.scalar(
             select(PythonRepeatEnrollment).where(
@@ -961,9 +1106,9 @@ async def decide_offer(
             PythonRepeatSuccessFeeObligation.verified_offer_id == item.id
         )
     )
+    count = _snapshot_int(enrollment.terms_snapshot, "success_fee_installments_count")
     if obligation is None:
         fee_percent = _snapshot_int(enrollment.terms_snapshot, "success_fee_percent")
-        count = _snapshot_int(enrollment.terms_snapshot, "success_fee_installments_count")
         total = _percent(payload.salary_base_kopecks, fee_percent)
         obligation = PythonRepeatSuccessFeeObligation(
             enrollment_id=enrollment.id,
@@ -978,15 +1123,25 @@ async def decide_offer(
         session.add(obligation)
         await session.flush()
         base, remainder = divmod(total, count)
-        first_due = max(item.expected_start_date, _now()) + timedelta(days=30)
+        uses_public_offer_schedule = (
+            enrollment.terms_snapshot.get("success_fee_first_due_months_after_employment") == 1
+            and enrollment.terms_snapshot.get("success_fee_second_due_months_after_employment") == 2
+            and count == 2
+        )
+        legacy_first_due = max(item.expected_start_date, _now()) + timedelta(days=30)
         for index in range(count):
+            due_at = (
+                _add_calendar_months(item.expected_start_date, index + 1)
+                if uses_public_offer_schedule
+                else legacy_first_due + timedelta(days=15 * index)
+            )
             session.add(
                 PythonRepeatInstallment(
                     obligation_id=obligation.id,
                     sequence_number=index + 1,
                     amount_kopecks=base + (remainder if index == count - 1 else 0),
                     salary_percent=fee_percent // count,
-                    due_at=first_due + timedelta(days=15 * index),
+                    due_at=due_at,
                     status=PythonRepeatInstallmentStatus.SCHEDULED,
                 )
             )
@@ -997,7 +1152,7 @@ async def decide_offer(
         student_id=item.student_id,
         event_key=f"python-repeat-offer-verified:{item.id}",
         title="Оффер подтверждён",
-        body="Зарплата подтверждена, график из четырёх платежей сформирован.",
+        body=f"Зарплата подтверждена, график из {count} платежей сформирован.",
         actor_id=admin.id,
         kind=NotificationKind.OFFER,
     )
@@ -1318,8 +1473,7 @@ async def dashboard(session: AsyncSession, student: User) -> PythonRepeatDashboa
         )
     return PythonRepeatDashboard(
         enabled=(
-            get_settings().opportunities_enabled
-            and get_settings().python_repeat_mentorship_enabled
+            get_settings().opportunities_enabled and get_settings().python_repeat_mentorship_enabled
         ),
         eligibility=eligibility,
         product=_product_snapshot(product),

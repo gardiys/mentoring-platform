@@ -5,6 +5,7 @@ import {
   Card,
   Checkbox,
   Group,
+  List,
   NumberInput,
   Select,
   SimpleGrid,
@@ -53,7 +54,7 @@ const statusLabels: Record<PythonRepeatApplicationStatus, string> = {
   needs_clarification: "Нужно уточнение",
   approved: "Условия одобрены",
   rejected: "Заявка отклонена",
-  terms_accepted: "Условия приняты",
+  terms_accepted: "Оферта подтверждена — нужна оплата",
   payment_pending: "Ожидает оплаты",
   paid: "Оплачено",
   enrolled: "Повторное менторство активно",
@@ -132,6 +133,87 @@ const reasonOptions = [
   },
   { value: "other", label: "Иное" },
 ];
+
+function snapshotString(
+  snapshot: Record<string, unknown> | null,
+  key: string,
+): string | null {
+  const value = snapshot?.[key];
+  return typeof value === "string" && value ? value : null;
+}
+
+function PythonRepeatOfferSummary({
+  terms,
+}: {
+  terms: Record<string, unknown> | null;
+}) {
+  const offerUrl = snapshotString(terms, "public_offer_url");
+  const revision = snapshotString(terms, "public_offer_revision");
+  const upfront = Number(terms?.upfront_price_kopecks ?? 0);
+  const successFee = Number(terms?.success_fee_percent ?? 0);
+  const installmentCount = Number(terms?.success_fee_installments_count ?? 0);
+
+  if (!revision) {
+    return (
+      <Alert color="yellow" title="Зафиксированные условия прежней версии">
+        {formatRubles(upfront)} + {successFee}% расчетного ежемесячного
+        вознаграждения, {installmentCount} платежа. Новая редакция Публичной
+        оферты от 02.09.2026 к уже подтвержденным условиям автоматически не
+        применяется.
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert
+      color="blue"
+      title={`Финансовые условия${revision ? ` · редакция оферты от ${revision}` : ""}`}
+    >
+      <Stack gap="sm">
+        <List spacing="xs" size="sm">
+          <List.Item>
+            Первая часть услуг — {formatRubles(upfront)} на условиях 100%
+            предоплаты.
+          </List.Item>
+          <List.Item>
+            При новом трудоустройстве дополнительно оплачивается {successFee}%
+            расчетного ежемесячного вознаграждения. Формула общей стоимости:{" "}
+            {formatRubles(upfront)} + {successFee}% расчетного ежемесячного
+            вознаграждения. Минимальный размер результативного компонента не
+            установлен.
+          </List.Item>
+          <List.Item>
+            Расчетная база включает гарантированные ежемесячные выплаты после
+            обязательных налогов; учитываемые переменные выплаты за первые 4
+            месяца усредняются, подтвержденные компенсации расходов не входят в
+            расчет.
+          </List.Item>
+          <List.Item>
+            Результативный компонент делится на {installmentCount} равных
+            платежа по 50%: первый — не позднее одного календарного месяца,
+            второй — не позднее двух календарных месяцев с даты трудоустройства.
+          </List.Item>
+          <List.Item>
+            Офферы и процессы отбора, возникшие до акцепта, не учитываются, если
+            иное прямо не согласовано до акцепта.
+          </List.Item>
+        </List>
+        {offerUrl && (
+          <Button
+            component="a"
+            href={offerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="light"
+            w="fit-content"
+          >
+            Открыть Публичную оферту (PDF)
+          </Button>
+        )}
+      </Stack>
+    </Alert>
+  );
+}
 
 export function PythonRepeatOpportunityPage() {
   const query = usePythonRepeat();
@@ -228,6 +310,24 @@ export function PythonRepeatOpportunityPage() {
   const termsExpired = Boolean(
     current?.offer_expires_at &&
     new Date(current.offer_expires_at).getTime() <= Date.now(),
+  );
+  const acceptanceStatement = snapshotString(
+    current?.terms_snapshot ?? null,
+    "acceptance_statement",
+  );
+  const publicOfferRevision = snapshotString(
+    current?.terms_snapshot ?? null,
+    "public_offer_revision",
+  );
+  const publicOfferSha256 = snapshotString(
+    current?.terms_snapshot ?? null,
+    "public_offer_sha256",
+  );
+  const canAcceptPublicOffer = Boolean(
+    current?.terms_version &&
+    acceptanceStatement &&
+    publicOfferRevision &&
+    publicOfferSha256,
   );
 
   const saveApplication = (event: FormEvent<HTMLFormElement>) => {
@@ -633,56 +733,55 @@ export function PythonRepeatOpportunityPage() {
             )}
             {current.status === "approved" && (
               <Stack>
-                <Alert
-                  color={termsExpired ? "red" : "yellow"}
-                  title={`Условия, версия ${current.terms_version}`}
-                >
-                  <Stack gap={4}>
-                    <Text>
-                      {formatRubles(
-                        Number(
-                          current.terms_snapshot?.upfront_price_kopecks ?? 0,
-                        ),
-                      )}{" "}
-                      +{" "}
-                      {Number(current.terms_snapshot?.success_fee_percent ?? 0)}
-                      % от подтверждённой зарплаты. Количество платежей:{" "}
-                      {Number(
-                        current.terms_snapshot
-                          ?.success_fee_installments_count ??
-                          data.product.success_fee_installments_count,
-                      )}
-                      .
-                    </Text>
-                    {current.offer_expires_at && (
-                      <Text size="sm">
-                        {termsExpired
-                          ? "Срок принятия условий истёк. Свяжитесь с командой, чтобы получить актуальное предложение."
-                          : `Принять до ${new Date(current.offer_expires_at).toLocaleString("ru-RU")}`}
-                      </Text>
-                    )}
-                  </Stack>
-                </Alert>
+                <PythonRepeatOfferSummary terms={current.terms_snapshot} />
+                {current.offer_expires_at && (
+                  <Alert color={termsExpired ? "red" : "yellow"}>
+                    {termsExpired
+                      ? "Срок принятия условий истёк. Свяжитесь с командой, чтобы получить актуальное предложение."
+                      : `Подтвердить ознакомление до ${new Date(current.offer_expires_at).toLocaleString("ru-RU")}`}
+                  </Alert>
+                )}
+                {!canAcceptPublicOffer && (
+                  <Alert color="red">
+                    Для заявки не опубликована версия оферты. Обратитесь к
+                    администратору, чтобы получить актуальные условия.
+                  </Alert>
+                )}
                 <Checkbox
-                  disabled={termsExpired}
+                  disabled={termsExpired || !canAcceptPublicOffer}
                   checked={accepted}
                   onChange={(event) => setAccepted(event.currentTarget.checked)}
-                  label="Я ознакомился и принимаю условия повторного менторства по Python"
+                  label={acceptanceStatement ?? "Публичная оферта не настроена"}
                 />
                 <Button
-                  disabled={termsExpired || !accepted}
+                  disabled={termsExpired || !accepted || !canAcceptPublicOffer}
                   loading={acceptTerms.isPending}
                   onClick={() =>
-                    acceptTerms.mutate(current.id, { onError: mutationError })
+                    acceptTerms.mutate(
+                      {
+                        id: current.id,
+                        accepted: true,
+                        terms_version: current.terms_version as number,
+                        public_offer_revision: publicOfferRevision as string,
+                        public_offer_sha256: publicOfferSha256 as string,
+                        acceptance_statement: acceptanceStatement as string,
+                      },
+                      { onError: mutationError },
+                    )
                   }
                 >
-                  Принять условия
+                  Подтвердить ознакомление с офертой
                 </Button>
+                <Text size="xs" c="dimmed">
+                  В соответствии с офертой полный и безоговорочный акцепт
+                  совершается в момент зачисления предоплаты.
+                </Text>
               </Stack>
             )}
             {(current.status === "terms_accepted" ||
               current.status === "payment_pending") && (
               <Stack align="flex-start">
+                <PythonRepeatOfferSummary terms={current.terms_snapshot} />
                 {!hasPaymentEmail && <PaymentEmailAlert />}
                 <Button
                   disabled={!hasPaymentEmail}
@@ -695,11 +794,15 @@ export function PythonRepeatOpportunityPage() {
                     ).catch(mutationError)
                   }
                 >
-                  Оплатить{" "}
+                  Перейти к оплате{" "}
                   {formatRubles(
                     Number(current.terms_snapshot?.upfront_price_kopecks ?? 0),
                   )}
                 </Button>
+                <Text size="xs" c="dimmed">
+                  Зачисление предоплаты означает полный и безоговорочный акцепт
+                  указанной редакции Публичной оферты.
+                </Text>
               </Stack>
             )}
           </Stack>

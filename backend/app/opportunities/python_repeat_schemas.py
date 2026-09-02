@@ -86,6 +86,10 @@ class PythonRepeatApplicationRead(BaseModel):
     approved_at: datetime | None
     offer_expires_at: datetime | None
     accepted_at: datetime | None
+    acceptance_evidence: dict[str, object] | None
+    contract_accepted_at: datetime | None
+    acceptance_payment_link_id: str | None
+    acceptance_provider_operation_id: str | None
     paid_at: datetime | None
     created_at: datetime
     history: list[PythonRepeatStatusHistoryRead] = []
@@ -193,7 +197,13 @@ class PythonRepeatDashboard(BaseModel):
 
 
 class PythonRepeatTermsAcceptance(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
     accepted: bool
+    terms_version: int = Field(gt=0)
+    public_offer_revision: str = Field(min_length=1, max_length=32)
+    public_offer_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    acceptance_statement: str = Field(min_length=1, max_length=5000)
 
     @model_validator(mode="after")
     def require_acceptance(self) -> PythonRepeatTermsAcceptance:

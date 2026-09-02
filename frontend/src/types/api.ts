@@ -2162,6 +2162,10 @@ export interface PythonRepeatApplication {
   approved_at: string | null;
   offer_expires_at: string | null;
   accepted_at: string | null;
+  acceptance_evidence: Record<string, unknown> | null;
+  contract_accepted_at: string | null;
+  acceptance_payment_link_id: string | null;
+  acceptance_provider_operation_id: string | null;
   paid_at: string | null;
   created_at: string;
   history: Array<{
@@ -2243,6 +2247,11 @@ export interface PythonRepeatDashboard {
     probation_support_days: number;
     included_mock_interviews: number;
     offer_valid_days: number;
+    public_offer_revision?: string | null;
+    public_offer_published_at?: string | null;
+    public_offer_url?: string | null;
+    public_offer_sha256?: string | null;
+    acceptance_statement?: string | null;
   };
   application: PythonRepeatApplication | null;
   enrollment: PythonRepeatEnrollment | null;

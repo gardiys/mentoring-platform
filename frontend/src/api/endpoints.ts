@@ -2383,10 +2383,20 @@ export const api = {
       `/api/v1/opportunities/python-repeat/applications/${id}/submit`,
       { method: "POST" },
     ),
-  acceptPythonRepeatTerms: (id: string) =>
+  acceptPythonRepeatTerms: ({
+    id,
+    ...payload
+  }: {
+    id: string;
+    accepted: true;
+    terms_version: number;
+    public_offer_revision: string;
+    public_offer_sha256: string;
+    acceptance_statement: string;
+  }) =>
     apiRequest<PythonRepeatDashboard>(
       `/api/v1/opportunities/python-repeat/applications/${id}/accept-terms`,
-      { method: "POST", body: JSON.stringify({ accepted: true }) },
+      { method: "POST", body: JSON.stringify(payload) },
     ),
   checkoutPythonRepeat: (id: string) =>
     apiRequest<OpportunityPaymentLink>(

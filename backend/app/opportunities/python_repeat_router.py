@@ -89,13 +89,15 @@ async def accept_python_repeat_terms(
     session: Session,
     student: StudentUser,
 ) -> PythonRepeatDashboard:
-    del payload
     return await accept_terms(
         session,
         student,
         application_id,
+        acceptance=payload,
         ip_address=request.client.host if request.client is not None else None,
         user_agent=request.headers.get("user-agent"),
+        accept_language=request.headers.get("accept-language"),
+        request_id=getattr(request.state, "request_id", None),
     )
 
 
