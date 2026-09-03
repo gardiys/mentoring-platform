@@ -38,8 +38,7 @@ class IntelligenceInterviewCreate(BaseModel):
             self.company_id is None or not self.company_alias_confirmed
         ):
             raise ValueError(
-                "An alternative company name requires a selected company "
-                "and explicit confirmation"
+                "An alternative company name requires a selected company and explicit confirmation"
             )
         if self.company_alias_confirmed and self.company_alias is None:
             raise ValueError("No alternative company name was provided")

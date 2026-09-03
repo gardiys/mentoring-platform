@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 from datetime import UTC, date, datetime, timedelta
 from math import ceil
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -12,9 +14,31 @@ from arq.connections import RedisSettings
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.career_packages.email import CareerPackageEmailError, CareerPackageEmailService
+from app.career_packages.models import (
+    CareerDeliveryChannel,
+    CareerDeliveryPurpose,
+    CareerDeliveryStatus,
+    CareerPackage,
+    CareerPackageDelivery,
+    CareerPackageObligation,
+    CareerPackageVersion,
+)
+from app.career_packages.service import (
+    _notification_text,
+    _obligation_notification_text,
+    version_pdf_upload,
+)
 from app.core.config import get_settings
 from app.db import models as _db_models  # noqa: F401
 from app.db.session import async_session_factory
+from app.employment_qualification.models import (
+    EmploymentContractPolicySnapshot,
+    EmploymentFollowUp,
+    EmploymentFollowUpStatus,
+    EmploymentFollowUpType,
+)
+from app.interviews.uploads import InterviewStorageReadError, InterviewUploadStore
 from app.mentors.models import (
     MentorStudent,
     StudentLearningStatus,
@@ -58,10 +82,136 @@ async def startup(ctx: dict[str, Any]) -> None:
         else None
     )
     ctx["telegram_client"] = httpx.AsyncClient(proxy=proxy, timeout=20)
+    ctx["brevo_client"] = httpx.AsyncClient(
+        base_url=settings.brevo_api_base_url.rstrip("/"),
+        timeout=settings.brevo_timeout_seconds,
+    )
+    ctx["upload_store"] = InterviewUploadStore(settings)
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
     await ctx["telegram_client"].aclose()
+    await ctx["brevo_client"].aclose()
+
+
+async def deliver_career_package_emails(ctx: dict[str, Any]) -> None:
+    if settings.brevo_api_key is None or not settings.brevo_from_email:
+        return
+    async with async_session_factory() as session:
+        delivery_ids = list(
+            await session.scalars(
+                select(CareerPackageDelivery.id)
+                .where(
+                    CareerPackageDelivery.channel == CareerDeliveryChannel.EMAIL,
+                    CareerPackageDelivery.status == CareerDeliveryStatus.PENDING,
+                )
+                .order_by(CareerPackageDelivery.created_at)
+                .limit(5)
+            )
+        )
+    for delivery_id in delivery_ids:
+        await _deliver_one_career_package_email(ctx, delivery_id)
+
+
+async def _deliver_one_career_package_email(ctx: dict[str, Any], delivery_id: object) -> None:
+    temp_path: Path | None = None
+    async with async_session_factory() as session:
+        delivery = await session.scalar(
+            select(CareerPackageDelivery)
+            .where(CareerPackageDelivery.id == delivery_id)
+            .with_for_update(skip_locked=True)
+        )
+        if delivery is None or delivery.status is not CareerDeliveryStatus.PENDING:
+            return
+        version = await session.get(CareerPackageVersion, delivery.package_version_id)
+        package = await session.get(CareerPackage, version.package_id) if version else None
+        student = await session.get(User, package.student_id) if package else None
+        obligation = (
+            await session.scalar(
+                select(CareerPackageObligation).where(
+                    CareerPackageObligation.package_id == package.id
+                )
+            )
+            if package is not None
+            and delivery.purpose is CareerDeliveryPurpose.PAYMENT_OBLIGATION
+            else None
+        )
+        if (
+            version is None
+            or package is None
+            or student is None
+            or (
+                delivery.purpose is CareerDeliveryPurpose.PAYMENT_OBLIGATION
+                and (
+                    obligation is None
+                    or obligation.notice_sent_at is None
+                    or obligation.due_at is None
+                )
+            )
+        ):
+            delivery.status = CareerDeliveryStatus.FAILED
+            delivery.failed_at = datetime.now(UTC)
+            delivery.safe_error_message = "Career package email data is incomplete"
+            await session.commit()
+            return
+        try:
+            if version.pdf_size > settings.interview_attachment_max_bytes:
+                raise CareerPackageEmailError("Career package PDF is too large for email")
+            with tempfile.NamedTemporaryFile(
+                prefix="career-package-email-", suffix=".pdf", delete=False
+            ) as file:
+                temp_path = Path(file.name)
+            await ctx["upload_store"].download_to_path(version_pdf_upload(version), temp_path)
+            pdf = temp_path.read_bytes()
+            if len(pdf) != version.pdf_size:
+                raise CareerPackageEmailError("Career package PDF size does not match metadata")
+            recipient_name = " ".join(
+                value for value in (student.first_name, student.last_name) if value
+            ) or delivery.recipient
+            action_url = (
+                f"{settings.web_frontend_url.rstrip('/')}/career-package?version={version.id}"
+            )
+            is_obligation = delivery.purpose is CareerDeliveryPurpose.PAYMENT_OBLIGATION
+            body = (
+                _obligation_notification_text(str(package.id), version, obligation)
+                if is_obligation and obligation is not None
+                else _notification_text(str(package.id), version)
+            )
+            message_id = await CareerPackageEmailService(
+                settings,
+                ctx["brevo_client"],
+            ).send_package(
+                recipient_email=delivery.recipient,
+                recipient_name=recipient_name,
+                package_number=str(package.id),
+                version_number=version.version_number,
+                body=body,
+                action_url=action_url,
+                pdf=pdf,
+                subject=(
+                    f"Уведомление об оплате Карьерного пакета № {package.id}"
+                    if is_obligation
+                    else None
+                ),
+            )
+        except (CareerPackageEmailError, InterviewStorageReadError, OSError) as error:
+            delivery.status = CareerDeliveryStatus.FAILED
+            delivery.failed_at = datetime.now(UTC)
+            delivery.safe_error_message = str(error)[:500]
+            logger.warning(
+                "Career package email delivery failed delivery_id=%s error=%s",
+                delivery.id,
+                type(error).__name__,
+            )
+        else:
+            delivery.status = CareerDeliveryStatus.DELIVERED
+            delivery.delivered_at = datetime.now(UTC)
+            delivery.external_message_id = message_id
+            delivery.safe_error_message = None
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+        await session.commit()
 
 
 async def deliver_telegram_outbox(ctx: dict[str, Any]) -> None:
@@ -119,9 +269,7 @@ async def _deliver_one(client: httpx.AsyncClient, outbox_id: object) -> None:
             payload["message_thread_id"] = row.message_thread_id
         if row.action_label and row.action_url:
             payload["reply_markup"] = {
-                "inline_keyboard": [
-                    [{"text": row.action_label, "url": row.action_url}]
-                ]
+                "inline_keyboard": [[{"text": row.action_label, "url": row.action_url}]]
             }
         token = settings.telegram_bot_token
         assert token is not None
@@ -237,9 +385,7 @@ async def schedule_payment_reminders(ctx: dict[str, Any]) -> None:
                 overdue_days = (today - installment.due_date).days
                 title = "Платёж просрочен"
                 body = f"Платёж {amount} ₽ просрочен на {overdue_days} дн."
-            event_key = (
-                f"payment-reminder:{installment.id}:{reminder_kind}:{today.isoformat()}"
-            )
+            event_key = f"payment-reminder:{installment.id}:{reminder_kind}:{today.isoformat()}"
             await create_notification(
                 session,
                 user_id=student.id,
@@ -264,15 +410,10 @@ async def schedule_payment_reminders(ctx: dict[str, Any]) -> None:
 
 async def schedule_group_call_reminders(ctx: dict[str, Any]) -> None:
     del ctx
-    if (
-        settings.telegram_bot_token is None
-        or not settings.telegram_group_call_reminders_enabled
-    ):
+    if settings.telegram_bot_token is None or not settings.telegram_group_call_reminders_enabled:
         return
     now = datetime.now(UTC)
-    reminder_deadline = now + timedelta(
-        minutes=settings.telegram_group_call_reminder_minutes
-    )
+    reminder_deadline = now + timedelta(minutes=settings.telegram_group_call_reminder_minutes)
     async with async_session_factory() as session:
         rows = (
             await session.execute(
@@ -315,9 +456,7 @@ async def schedule_group_call_reminders(ctx: dict[str, Any]) -> None:
                 text += f"\n\n{description[:1_000]}"
             occurrence_key = occurrence.isoformat()
             event_keys = {
-                student.id: (
-                    f"telegram:group-call:{event.id}:{occurrence_key}:{student.id}"
-                )
+                student.id: (f"telegram:group-call:{event.id}:{occurrence_key}:{student.id}")
                 for student in students
             }
             existing = set(
@@ -370,10 +509,15 @@ async def _event_students(session: AsyncSession, event: ScheduleEvent) -> list[U
     )
     if event.mentor_id is not None:
         mentor = await session.get(User, event.mentor_id)
-        if mentor is None or not mentor.is_active or mentor.role not in {
-            UserRole.MENTOR,
-            UserRole.ADMIN,
-        }:
+        if (
+            mentor is None
+            or not mentor.is_active
+            or mentor.role
+            not in {
+                UserRole.MENTOR,
+                UserRole.ADMIN,
+            }
+        ):
             return []
         statement = statement.join(
             MentorStudent,
@@ -433,6 +577,79 @@ async def schedule_daily_reminders(ctx: dict[str, Any]) -> None:
         await session.commit()
 
 
+async def schedule_employment_followups(ctx: dict[str, Any]) -> None:
+    """Deliver due actual-work requests through the existing notification worker."""
+    del ctx
+    today = date.today()
+    async with async_session_factory() as session:
+        rows = (
+            await session.execute(
+                select(EmploymentFollowUp, StudentEmployment, User)
+                .join(StudentEmployment, StudentEmployment.id == EmploymentFollowUp.employment_id)
+                .join(User, User.id == StudentEmployment.student_id)
+                .where(
+                    EmploymentFollowUp.status == EmploymentFollowUpStatus.OPEN,
+                    EmploymentFollowUp.due_at <= today,
+                    StudentEmployment.status == StudentEmploymentStatus.ACTIVE,
+                    User.is_active.is_(True),
+                )
+                .order_by(EmploymentFollowUp.due_at)
+                .limit(200)
+            )
+        ).all()
+        for followup, employment, student in rows:
+            policy = (
+                await session.get(EmploymentContractPolicySnapshot, employment.contract_policy_id)
+                if employment.contract_policy_id
+                else None
+            )
+            final_date = (
+                (policy.extension_ended_at or policy.control_period_ended_at)
+                if policy is not None
+                else None
+            )
+            if final_date is not None and today > final_date:
+                followup.status = EmploymentFollowUpStatus.CANCELLED
+                employment.monitoring_due_at = None
+                continue
+            monthly = followup.followup_type is EmploymentFollowUpType.MONTHLY_CHANGE_CHECK
+            title = (
+                "Изменились ли обязанности или стек?" if monthly else "Уточните фактическую работу"
+            )
+            body = (
+                "Сообщите, изменились ли должность, команда, проект, обязанности "
+                "или фактический стек."
+                if monthly
+                else "Нужно заполнить: " + ", ".join(followup.requested_fields)
+            )
+            event_key = f"employment-followup:{followup.id}:{today.isoformat()}"
+            await create_notification(
+                session,
+                user_id=student.id,
+                event_key=event_key,
+                kind=NotificationKind.EMPLOYMENT,
+                title=title,
+                body=body,
+                action_url="/payments",
+            )
+            if student.telegram_id is not None:
+                action_url = telegram_action_url("/payments")
+                await queue_telegram_message(
+                    session,
+                    event_key=f"telegram:{event_key}",
+                    chat_id=student.telegram_id,
+                    text=f"{title}\n\n{body}",
+                    action_label="Открыть данные о работе" if action_url else None,
+                    action_url=action_url,
+                )
+            if monthly:
+                next_due = today + timedelta(days=30)
+                if final_date is None or next_due <= final_date:
+                    followup.due_at = next_due
+                    employment.monitoring_due_at = next_due
+        await session.commit()
+
+
 def _reminder_kind(due_date: date, today: date) -> str | None:
     delta = (due_date - today).days
     if delta == 3:
@@ -449,6 +666,14 @@ def _reminder_kind(due_date: date, today: date) -> str | None:
 class NotificationWorkerSettings:
     functions: list[object] = []
     cron_jobs = [
+        cron(
+            deliver_career_package_emails,
+            minute=None,
+            second=10,
+            run_at_startup=True,
+            max_tries=1,
+            keep_result=0,
+        ),
         cron(
             deliver_telegram_outbox,
             second={0, 15, 30, 45},
@@ -474,6 +699,13 @@ class NotificationWorkerSettings:
         cron(
             schedule_daily_reminders,
             minute=0,
+            run_at_startup=True,
+            max_tries=1,
+            keep_result=0,
+        ),
+        cron(
+            schedule_employment_followups,
+            minute=15,
             run_at_startup=True,
             max_tries=1,
             keep_result=0,

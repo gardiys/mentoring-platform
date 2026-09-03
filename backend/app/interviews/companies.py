@@ -411,10 +411,7 @@ async def list_company_alias_proposals(
         )
 
     total = int(
-        await session.scalar(
-            select(func.count(CompanyAliasProposal.id)).where(*filters)
-        )
-        or 0
+        await session.scalar(select(func.count(CompanyAliasProposal.id)).where(*filters)) or 0
     )
     proposals = list(
         await session.scalars(
@@ -487,18 +484,14 @@ async def moderate_company_alias_proposal(
     # important: approving one alias updates other pending proposals with the
     # same key, so the inverse order could deadlock concurrent admin decisions.
     alias_lock_key = int.from_bytes(
-        hashlib.blake2b(
-            proposal_hint.normalized_name.encode("utf-8"), digest_size=8
-        ).digest(),
+        hashlib.blake2b(proposal_hint.normalized_name.encode("utf-8"), digest_size=8).digest(),
         "big",
         signed=True,
     )
     await session.scalar(select(func.pg_advisory_xact_lock(alias_lock_key)))
 
     proposal = await session.scalar(
-        select(CompanyAliasProposal)
-        .where(CompanyAliasProposal.id == proposal_id)
-        .with_for_update()
+        select(CompanyAliasProposal).where(CompanyAliasProposal.id == proposal_id).with_for_update()
     )
     if proposal is None:
         api_error(404, "company_alias_proposal_not_found", "Alias proposal was not found")

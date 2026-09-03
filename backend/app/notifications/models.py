@@ -20,6 +20,8 @@ class NotificationKind(StrEnum):
     STATUS_CHANGED = "status_changed"
     MENTOR_FEEDBACK = "mentor_feedback"
     PAYMENT_DUE = "payment_due"
+    CAREER_PACKAGE = "career_package"
+    EMPLOYMENT = "employment"
 
 
 class TelegramOutboxStatus(StrEnum):

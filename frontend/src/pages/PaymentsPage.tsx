@@ -14,6 +14,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
+import { EmploymentQualificationStudentPanel } from "../components/EmploymentQualificationPanel";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { PaymentSchedule } from "../components/PaymentSchedule";
@@ -103,6 +104,12 @@ export function PaymentsPage() {
         title="Мои платежи"
         description="График формируется после фиксации трудоустройства. Оплата проходит через защищённую страницу Точка Банка."
       />
+      <Card withBorder>
+        <Stack>
+          <Title order={2}>Работа и фактический технологический стек</Title>
+          <EmploymentQualificationStudentPanel />
+        </Stack>
+      </Card>
       {!me.data?.email && (
         <Alert color="orange" title="Укажите email перед оплатой">
           Точка отправляет электронный чек на почту, поэтому без сохранённого

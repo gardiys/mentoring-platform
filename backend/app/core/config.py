@@ -30,6 +30,17 @@ class Settings(BaseSettings):
     consultations_enabled: bool = True
     python_repeat_mentorship_enabled: bool = True
     python_to_go_enabled: bool = True
+    career_package_enabled: bool = False
+    career_package_ai_enabled: bool = False
+    career_package_auto_generate_on_final_resume: bool = False
+    brevo_api_key: SecretStr | None = None
+    brevo_api_base_url: str = "https://api.brevo.com/v3"
+    brevo_from_email: str | None = None
+    brevo_from_name: str = "Потрачено"
+    brevo_reply_to_email: str | None = None
+    brevo_reply_to_name: str = "Потрачено"
+    brevo_timeout_seconds: float = Field(default=15, ge=5, le=60)
+    employment_qualification_ai_enabled: bool = False
     api_max_request_body_bytes: int = Field(
         default=8_388_608,
         ge=1_024,
@@ -323,19 +334,19 @@ class Settings(BaseSettings):
             or parsed.password is not None
             or parsed.fragment
         ):
-            raise ValueError(
-                f"{field_name} must be an http(s) URL without credentials or fragment"
-            )
-        if info.field_name == "web_frontend_url" and (
-            parsed.path not in {"", "/"} or parsed.query
-        ):
+            raise ValueError(f"{field_name} must be an http(s) URL without credentials or fragment")
+        if info.field_name == "web_frontend_url" and (parsed.path not in {"", "/"} or parsed.query):
             raise ValueError("WEB_FRONTEND_URL must be an exact http(s) origin")
-        if info.field_name in {
-            "s3_endpoint_url",
-            "s3_public_endpoint_url",
-            "nexara_base_url",
-            "tochka_api_base_url",
-        } and parsed.query:
+        if (
+            info.field_name
+            in {
+                "s3_endpoint_url",
+                "s3_public_endpoint_url",
+                "nexara_base_url",
+                "tochka_api_base_url",
+            }
+            and parsed.query
+        ):
             raise ValueError(f"{field_name} must not contain a query string")
         return value
 
@@ -568,8 +579,7 @@ class Settings(BaseSettings):
                 raise ValueError(f"{name} contains a placeholder value")
 
         if (
-            self.database_url
-            == "postgresql+asyncpg://mentoring:mentoring@localhost:5432/mentoring"
+            self.database_url == "postgresql+asyncpg://mentoring:mentoring@localhost:5432/mentoring"
             or self._is_placeholder(self.database_url)
         ):
             raise ValueError("DATABASE_URL contains development or placeholder credentials")

@@ -200,9 +200,7 @@ async def finalize_automation_deletion(
             cluster.quality_score = 0.0
             cluster.cluster_confidence = 0.0
             cluster.version += 1
-            settings = settings or await session.get(
-                CardAutomationSettings, cluster.direction_id
-            )
+            settings = settings or await session.get(CardAutomationSettings, cluster.direction_id)
             if settings is not None:
                 await record_automation_decision(
                     session,
@@ -241,9 +239,7 @@ async def finalize_automation_deletion(
                     .limit(1)
                 )
             representative = (
-                await session.get(
-                    IntelligenceQuestion, cluster.representative_occurrence_id
-                )
+                await session.get(IntelligenceQuestion, cluster.representative_occurrence_id)
                 if cluster.representative_occurrence_id is not None
                 else None
             )

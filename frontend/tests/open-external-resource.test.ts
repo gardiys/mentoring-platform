@@ -42,6 +42,19 @@ describe("openExternalResource", () => {
     expect(popup.close).not.toHaveBeenCalled();
   });
 
+  it("allows an HTTP MinIO URL on localhost in development", async () => {
+    const popup = mockPopup();
+
+    await openExternalResource(
+      Promise.resolve("http://localhost:9000/private/resume.pdf?signature=test"),
+    );
+
+    expect(popup.location.replace).toHaveBeenCalledWith(
+      "http://localhost:9000/private/resume.pdf?signature=test",
+    );
+    expect(popup.close).not.toHaveBeenCalled();
+  });
+
   it.each([
     "/relative/file.pdf",
     "http://files.example.test/file.pdf",

@@ -14,9 +14,14 @@ from arq.connections import RedisSettings
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.career_packages.jobs import (
+    expire_career_objection_periods,
+    generate_career_package,
+)
 from app.core.config import get_settings
 from app.db import models as _db_models  # noqa: F401
 from app.db.session import async_session_factory
+from app.employment_qualification.jobs import generate_employment_ai_suggestion
 from app.interviews.card_automation_jobs import (
     assign_question_cluster,
     backfill_existing_questions,
@@ -132,6 +137,7 @@ async def transcription_shutdown(ctx: dict[str, Any]) -> None:
 
 async def ai_startup(ctx: dict[str, Any]) -> None:
     ctx["ai_provider"] = build_ai_provider(settings)
+    ctx["upload_store"] = InterviewUploadStore(settings)
 
 
 async def ai_shutdown(ctx: dict[str, Any]) -> None:
@@ -1360,6 +1366,8 @@ class TranscriptionWorkerSettings:
 
 class AIWorkerSettings:
     functions = [
+        generate_employment_ai_suggestion,
+        generate_career_package,
         extract_interview_structure,
         refresh_interview_question_embeddings,
         generate_answer_reviews,
@@ -1376,6 +1384,13 @@ class AIWorkerSettings:
         refresh_interview_card_duplicate_cache,
     ]
     cron_jobs = [
+        cron(
+            expire_career_objection_periods,
+            hour=2,
+            minute=17,
+            max_tries=1,
+            keep_result=0,
+        ),
         cron(
             reconcile_card_automation_jobs,
             minute=RECONCILIATION_MINUTES,

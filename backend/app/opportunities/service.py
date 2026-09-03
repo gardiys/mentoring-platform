@@ -440,26 +440,32 @@ async def opportunities_dashboard(session: AsyncSession, student: User) -> Oppor
     elif overdue:
         transition_reason = "Сначала погасите просроченные обязательства"
 
-    opportunity_items = [
-        OpportunityRead(
-            code="ALUMNI_CONSULTATION",
-            available=consultation_available,
-            title="Консультация с ментором",
-            unavailable_reason=(
-                None
-                if consultation_available
-                else (
-                    "Сейчас нет доступных менторов для консультации"
-                    if consultation_eligible
-                    else "Платная консультация доступна выпускникам без активной программы"
-                )
-            ),
-            price=MoneyRead(amount_kopecks=min(item.price_kopecks for item in consultation_types)),
-            comparison_price=MoneyRead(
-                amount_kopecks=min(item.comparison_price_kopecks for item in consultation_types)
-            ),
-        )
-    ] if settings.consultations_enabled and settings.opportunities_enabled else []
+    opportunity_items = (
+        [
+            OpportunityRead(
+                code="ALUMNI_CONSULTATION",
+                available=consultation_available,
+                title="Консультация с ментором",
+                unavailable_reason=(
+                    None
+                    if consultation_available
+                    else (
+                        "Сейчас нет доступных менторов для консультации"
+                        if consultation_eligible
+                        else "Платная консультация доступна выпускникам без активной программы"
+                    )
+                ),
+                price=MoneyRead(
+                    amount_kopecks=min(item.price_kopecks for item in consultation_types)
+                ),
+                comparison_price=MoneyRead(
+                    amount_kopecks=min(item.comparison_price_kopecks for item in consultation_types)
+                ),
+            )
+        ]
+        if settings.consultations_enabled and settings.opportunities_enabled
+        else []
+    )
     if settings.python_repeat_mentorship_enabled and settings.opportunities_enabled:
         # Imported lazily because the detailed product service reuses helpers from this module.
         from app.opportunities.python_repeat_service import python_repeat_eligibility
@@ -772,9 +778,7 @@ async def approve_opportunity_payment(
     if enrollment is None:
         session.add(LearningTrackEnrollment(user_id=transition.student_id, track_id=go_track.id))
     source_enrollment = await session.scalar(
-        select(GoTransitionEnrollment).where(
-            GoTransitionEnrollment.application_id == transition.id
-        )
+        select(GoTransitionEnrollment).where(GoTransitionEnrollment.application_id == transition.id)
     )
     if source_enrollment is None:
         session.add(
@@ -1119,9 +1123,7 @@ async def admin_decide_transition(
         item.success_fee_percent = ALUMNI_GO_SUCCESS_FEE_PERCENT
         item.terms_version = GO_TRANSITION_TERMS_VERSION
         item.terms_snapshot = _go_transition_terms_snapshot()
-        item.terms_expires_at = item.approved_at + timedelta(
-            days=GO_TRANSITION_OFFER_VALID_DAYS
-        )
+        item.terms_expires_at = item.approved_at + timedelta(days=GO_TRANSITION_OFFER_VALID_DAYS)
     await session.commit()
     return await admin_dashboard(session)
 

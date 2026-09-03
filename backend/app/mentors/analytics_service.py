@@ -529,14 +529,11 @@ async def mentor_efficiency_analytics(
         }
         active_ids = interviewing_ids.intersection(stage_by_student)
         recording_ids = {
-            student_id
-            for student_id in active_ids
-            if stage_by_student[student_id][1] > 0
+            student_id for student_id in active_ids if stage_by_student[student_id][1] > 0
         }
         assigned_ids = {student_id for student_id, _ in assigned}
         interview_count = sum(
-            stage_by_student.get(student_id, (0, 0, None))[0]
-            for student_id in assigned_ids
+            stage_by_student.get(student_id, (0, 0, None))[0] for student_id in assigned_ids
         )
         active_interview_count = sum(stage_by_student[student_id][0] for student_id in active_ids)
         last_interviews = [
@@ -558,8 +555,7 @@ async def mentor_efficiency_analytics(
                 inactive_interviewing_students=len(interviewing_ids - active_ids),
                 interview_count=interview_count,
                 recording_count=sum(
-                    stage_by_student.get(student_id, (0, 0, None))[1]
-                    for student_id in assigned_ids
+                    stage_by_student.get(student_id, (0, 0, None))[1] for student_id in assigned_ids
                 ),
                 ai_analysis_count=sum(
                     ai_by_student.get(student_id, 0) for student_id in assigned_ids

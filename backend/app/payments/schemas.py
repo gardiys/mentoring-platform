@@ -92,8 +92,8 @@ class EmploymentRead(BaseModel):
     id: UUID
     company_id: UUID | None
     company_name: str
-    start_date: date
-    net_salary_kopecks: int
+    start_date: date | None
+    net_salary_kopecks: int | None
     repayment_percent: Decimal
     status: StudentEmploymentStatus
     ended_at: date | None

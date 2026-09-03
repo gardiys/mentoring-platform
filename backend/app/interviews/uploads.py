@@ -743,6 +743,24 @@ class InterviewUploadStore:
         except (BotoCoreError, ClientError) as error:
             self._storage_unavailable(error)
 
+    async def sha256(self, upload: StoredUpload, *, max_bytes: int) -> str:
+        """Hash a bounded private object without exposing it through a public endpoint."""
+        try:
+            response = await anyio.to_thread.run_sync(
+                lambda: self.client.get_object(Bucket=self.bucket, Key=upload.storage_key)
+            )
+            body = response["Body"]
+            try:
+                content = await anyio.to_thread.run_sync(lambda: body.read(max_bytes + 1))
+            finally:
+                body.close()
+        except (BotoCoreError, ClientError, KeyError) as error:
+            self._storage_unavailable(error)
+        if len(content) != upload.size or len(content) > max_bytes:
+            await self.delete(upload.storage_key)
+            api_error(422, "invalid_interview_upload", "Uploaded file metadata does not match")
+        return hashlib.sha256(content).hexdigest()
+
     async def download_to_path(self, upload: StoredUpload, destination: Path) -> None:
         external_location = self._external_media_location(upload.storage_key)
         client = self.legacy_client if external_location is not None else self.client

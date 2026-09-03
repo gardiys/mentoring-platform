@@ -61,11 +61,7 @@ async def admin_company_alias_proposals(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> AdminCompanyAliasProposalPage:
-    selected_status = (
-        None
-        if status_filter == "all"
-        else CompanyAliasProposalStatus(status_filter)
-    )
+    selected_status = None if status_filter == "all" else CompanyAliasProposalStatus(status_filter)
     views, total = await list_company_alias_proposals(
         session,
         selected_status,

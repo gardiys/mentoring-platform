@@ -384,9 +384,7 @@ async def list_interview_questions(
         InterviewCard.deck_id == deck.id,
         InterviewCard.is_published.is_(True),
     ]
-    normalized_categories = {
-        category.strip() for category in categories or [] if category.strip()
-    }
+    normalized_categories = {category.strip() for category in categories or [] if category.strip()}
     if normalized_categories:
         filters.append(InterviewCard.category.in_(normalized_categories))
     if frequent_only:
@@ -432,9 +430,7 @@ async def list_interview_questions(
             effective_frequent_predicate().desc()
             if descending
             else effective_frequent_predicate().asc(),
-            InterviewCard.asked_count.desc()
-            if descending
-            else InterviewCard.asked_count.asc(),
+            InterviewCard.asked_count.desc() if descending else InterviewCard.asked_count.asc(),
         )
     else:
         sort_expression = {

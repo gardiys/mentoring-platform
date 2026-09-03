@@ -21,7 +21,19 @@ export async function openExternalResource(
     } catch {
       throw new Error("Разрешены только абсолютные HTTPS-ссылки");
     }
-    if (url.protocol !== "https:" || url.username || url.password) {
+    const isLoopback = ["localhost", "127.0.0.1", "[::1]"].includes(
+      url.hostname,
+    );
+    const isLocalDevelopmentUrl =
+      import.meta.env.DEV &&
+      !isTelegram &&
+      url.protocol === "http:" &&
+      isLoopback;
+    if (
+      (url.protocol !== "https:" && !isLocalDevelopmentUrl) ||
+      url.username ||
+      url.password
+    ) {
       throw new Error("Разрешены только абсолютные HTTPS-ссылки");
     }
 

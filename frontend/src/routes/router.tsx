@@ -607,6 +607,13 @@ export const router = createBrowserRouter([
                       "MyMentorPage",
                     ),
                   },
+                  {
+                    path: "/career-package",
+                    lazy: lazyPage(
+                      () => import("../pages/CareerPackagePage"),
+                      "CareerPackagePage",
+                    ),
+                  },
                 ],
               },
               {

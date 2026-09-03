@@ -302,9 +302,7 @@ async def reassign_student(session: AsyncSession, student_id: UUID, mentor_id: U
             "Ментор должен вести все направления выбранного ученика",
         )
     relation = await session.scalar(
-        select(MentorStudent)
-        .where(MentorStudent.student_id == student.id)
-        .with_for_update()
+        select(MentorStudent).where(MentorStudent.student_id == student.id).with_for_update()
     )
     if relation is None:
         session.add(MentorStudent(mentor_id=mentor.id, student_id=student.id))

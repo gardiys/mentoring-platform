@@ -28,6 +28,8 @@ import { PageHeader } from "../components/PageHeader";
 import { ProgressBar } from "../components/ProgressBar";
 import { TelegramChatLink } from "../components/TelegramChatLink";
 import { StudentPaymentsPanel } from "../components/StudentPaymentsPanel";
+import { CareerPackageStaffPanel } from "../components/CareerPackageStaffPanel";
+import { EmploymentQualificationStaffPanel } from "../components/EmploymentQualificationPanel";
 import { TopicStatusBadge } from "../components/TopicStatusBadge";
 import { UploadProgressPanel } from "../components/UploadProgressPanel";
 import {
@@ -548,6 +550,8 @@ export function MentorStudentPage() {
             <Tabs.Tab value="documents">Резюме и легенда</Tabs.Tab>
             <Tabs.Tab value="notes">Заметки ({student.notes.length})</Tabs.Tab>
             <Tabs.Tab value="payments">Платежи</Tabs.Tab>
+            <Tabs.Tab value="employment">Работа и стек</Tabs.Tab>
+            <Tabs.Tab value="career-package">Карьерный пакет</Tabs.Tab>
           </Tabs.List>
         </ScrollArea>
 
@@ -701,6 +705,14 @@ export function MentorStudentPage() {
               ))
             )}
           </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="career-package" pt="lg">
+          <CareerPackageStaffPanel studentId={studentId} />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="employment" pt="lg">
+          <EmploymentQualificationStaffPanel studentId={studentId} />
         </Tabs.Panel>
 
         <Tabs.Panel value="mocks" pt="lg">

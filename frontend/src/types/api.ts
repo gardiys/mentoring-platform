@@ -2289,3 +2289,398 @@ export interface AdminPythonRepeatDashboard {
   applications: AdminPythonRepeatApplication[];
   mentors: AdminOpportunityStudent[];
 }
+
+export type CareerPackageStatus =
+  | "not_started"
+  | "collecting_data"
+  | "generating"
+  | "draft"
+  | "review_required"
+  | "ready_to_publish"
+  | "delivery_pending"
+  | "provided"
+  | "revision_requested"
+  | "cancelled";
+
+export interface CareerTrackOption {
+  id: string;
+  slug: string;
+  title: string;
+}
+
+export interface CareerSourceData {
+  target_positions: string[];
+  target_seniority: string;
+  primary_stack: string[];
+  employment_formats: string[];
+  geography: string[];
+  remote_preferences: string;
+  relocation_preferences: string;
+  salary_min: number;
+  salary_target: number;
+  salary_currency: "RUB" | "USD" | "EUR";
+  search_start_date: string;
+  applications_per_week: number;
+  preparation_priorities: string[];
+  mentor_context: string | null;
+}
+
+export interface CareerSelfPresentationCard {
+  target_position: string;
+  target_seniority: string;
+  short_positioning: string;
+  self_presentation_structure: string[];
+  key_experience_points: string[];
+  key_projects: string[];
+  achievements_to_highlight: string[];
+  technologies_to_highlight: string[];
+  personal_contribution_points: string[];
+  difficult_or_risky_topics: string[];
+  questions_to_prepare: string[];
+  inconsistencies_or_missing_facts: string[];
+  preparation_checklist: string[];
+  additional_notes: string | null;
+}
+
+export interface CareerActiveSearchParameters {
+  target_positions: string[];
+  target_seniority: string;
+  primary_technology_stack: string[];
+  secondary_technology_stack: string[];
+  employment_formats: string[];
+  work_schedule_preferences: string[];
+  geography: string[];
+  remote_preferences: string;
+  relocation_preferences: string;
+  salary_min: number;
+  salary_target: number;
+  salary_currency: "RUB" | "USD" | "EUR";
+  search_channels: string[];
+  applications_per_workday: number;
+  applications_per_week: number;
+  resume_refresh_schedule: string;
+  inbound_processing_rules: string[];
+  interview_logging_rules: string[];
+  interview_preparation_priorities: string[];
+  funnel_control_points: string[];
+  resume_revision_threshold: string;
+  strategy_revision_threshold: string;
+  start_date: string;
+  additional_notes: string | null;
+}
+
+export interface CareerVersion {
+  id: string;
+  version_number: number;
+  snapshot: Record<string, unknown>;
+  snapshot_sha256: string;
+  pdf_sha256: string;
+  published_at: string;
+  provided_at: string | null;
+  objection_deadline_at: string | null;
+  payment_due_at: string | null;
+}
+
+export interface CareerObjection {
+  id: string;
+  package_version_id: string;
+  component:
+    | "resume"
+    | "self_presentation_card"
+    | "active_search_parameters"
+    | "completeness"
+    | "other";
+  reason: string;
+  expected_result: string;
+  submitted_at: string;
+  deadline_at: string | null;
+  is_late: boolean;
+  status:
+    | "submitted"
+    | "under_review"
+    | "accepted"
+    | "partially_accepted"
+    | "rejected"
+    | "resolved";
+  resolution_comment: string | null;
+  resolved_at: string | null;
+}
+
+export interface CareerReview {
+  id: string;
+  held_at: string;
+  reviewer_id: string | null;
+  strengths: string;
+  improvements: string;
+  preparation_for_next_attempt: string;
+  additional_notes: string | null;
+  sent_to_student_at: string | null;
+  created_at: string;
+}
+
+export interface CareerPackage {
+  id: string;
+  student_id: string;
+  track_id: string;
+  direction: string;
+  status: CareerPackageStatus;
+  lock_version: number;
+  source_resume_version: null | {
+    id: string;
+    version_number: number;
+    filename: string | null;
+    content_sha256: string;
+    finalized_at: string;
+    finalized_by_user_id: string | null;
+  };
+  source_data: CareerSourceData | null;
+  self_presentation_card: CareerSelfPresentationCard | null;
+  active_search_parameters: CareerActiveSearchParameters | null;
+  missing_data: { field: string; reason: string; blocking: boolean }[];
+  warnings: { code: string; message: string; staff_only: boolean }[];
+  is_stale: boolean;
+  readiness: {
+    complete: boolean;
+    missing: string[];
+    blocking_missing_data: {
+      field: string;
+      reason: string;
+      blocking: boolean;
+    }[];
+  };
+  generation_runs: {
+    id: string;
+    status: "queued" | "running" | "completed" | "failed" | "cancelled";
+    component: "all" | "self_presentation" | "active_search";
+    provider: string;
+    model: string;
+    prompt_version: string;
+    started_at: string | null;
+    finished_at: string | null;
+    safe_error_message: string | null;
+    token_usage: Record<string, unknown> | null;
+    created_at: string;
+  }[];
+  versions: CareerVersion[];
+  deliveries: {
+    id: string;
+    channel: "platform" | "telegram" | "email";
+    status: "pending" | "delivered" | "failed";
+    purpose: "package_provided" | "payment_obligation";
+    attempted_at: string;
+    delivered_at: string | null;
+    safe_error_message: string | null;
+  }[];
+  obligation: null | {
+    id: string;
+    amount_kopecks: number;
+    currency: string;
+    due_at: string | null;
+    status: "awaiting_notice" | "active" | "hold" | "paid" | "cancelled";
+    offer_accepted_on: string | null;
+    accrued_at: string | null;
+    recorded_at: string | null;
+    recorded_by_user_id: string | null;
+    record_comment: string | null;
+    notice_sent_at: string | null;
+  };
+  objections: CareerObjection[];
+  reviews: CareerReview[];
+  audit_timeline:
+    | null
+    | {
+        id: string;
+        event_type: string;
+        actor_role: string | null;
+        version_id: string | null;
+        metadata: Record<string, unknown>;
+        created_at: string;
+      }[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CareerStudentPackage {
+  id: string;
+  direction: string;
+  status: CareerPackageStatus;
+  current_version: CareerVersion;
+  versions: CareerVersion[];
+  obligation: CareerPackage["obligation"];
+  objections: CareerObjection[];
+  reviews: CareerReview[];
+}
+
+export type EmploymentCaseStatus =
+  | "reported"
+  | "awaiting_initial_documents"
+  | "awaiting_actual_duties"
+  | "awaiting_staff_review"
+  | "monitoring_non_profile"
+  | "profile_confirmed"
+  | "non_profile_confirmed"
+  | "disputed"
+  | "ended"
+  | "closed";
+
+export type EmploymentProfileClassification =
+  | "profile"
+  | "mixed_profile"
+  | "non_profile"
+  | "insufficient_data"
+  | "disputed";
+
+export interface EmploymentTrackOption {
+  id: string;
+  slug: "python" | "go";
+  title: string;
+}
+
+export interface EmploymentAISuggestion {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  provider: string;
+  model: string;
+  prompt_version: string;
+  output: null | {
+    suggested_classification:
+      "profile" | "mixed_profile" | "non_profile" | "insufficient_data";
+    suggested_profile_started_at: string | null;
+    qualifying_criteria: Array<Record<string, unknown>>;
+    non_qualifying_signals: Array<Record<string, unknown>>;
+    contradictions: Array<Record<string, unknown>>;
+    missing_data: Array<{ field: string; question: string }>;
+    confidence: number;
+    summary: string;
+  };
+  evidence_ids: string[];
+  started_at: string | null;
+  finished_at: string | null;
+  safe_error_message: string | null;
+  created_at: string;
+}
+
+export interface EmploymentCase {
+  id: string;
+  student_id: string;
+  track_id: string | null;
+  direction: "python" | "go" | null;
+  company_name: string;
+  vacancy_title: string | null;
+  official_job_title: string | null;
+  activity_type: string | null;
+  offer_received_at: string | null;
+  offer_accepted_at: string | null;
+  contract_signed_at: string | null;
+  expected_start_date: string | null;
+  employment_started_at: string | null;
+  employment_ended_at: string | null;
+  vacancy_stack: string[];
+  offer_stack: string[];
+  actual_stack: string[];
+  actual_duties: string | null;
+  project_description: string | null;
+  team_description: string | null;
+  differences_description: string | null;
+  net_salary_kopecks: number | null;
+  case_status: EmploymentCaseStatus | null;
+  employment_status: "active" | "terminated";
+  profile_activity_started_at: string | null;
+  profile_activity_ended_at: string | null;
+  billing_on_hold: boolean;
+  lock_version: number;
+  policy_version: string | null;
+  policy_is_legacy: boolean;
+  policy_control_period_started_at: string | null;
+  policy_control_period_ended_at: string | null;
+  policy_extension_ended_at: string | null;
+  events: {
+    id: string;
+    event_type: string;
+    effective_at: string;
+    recorded_at: string;
+    source: "student" | "staff" | "system";
+    payload: Record<string, unknown>;
+    evidence_ids: string[];
+  }[];
+  technology_usages: {
+    id: string;
+    normalized_name: string;
+    usage_type: string;
+    frequency: string;
+    part_of_official_duties: "yes" | "no" | "unknown";
+    part_of_project: "yes" | "no" | "unknown";
+    started_at: string | null;
+    ended_at: string | null;
+    description: string | null;
+    confirmed_by_student: boolean;
+    confirmed_by_staff: boolean;
+    evidence_ids: string[];
+  }[];
+  assessments: {
+    id: string;
+    classification: EmploymentProfileClassification;
+    direction: "python" | "go";
+    direction_language: string;
+    effective_profile_started_at: string | null;
+    effective_profile_ended_at: string | null;
+    rationale: string;
+    qualifying_criteria: Record<string, unknown>[];
+    non_qualifying_reasons: string[];
+    evidence_ids: string[];
+    ai_suggestion: Record<string, unknown> | null;
+    reviewed_by_user_id: string;
+    reviewed_at: string;
+    supersedes_assessment_id: string | null;
+  }[];
+  qualification_window: null | {
+    classification: string;
+    control_period_started_at: string | null;
+    control_period_ended_at: string | null;
+    extension_ended_at: string | null;
+    billing_trigger_allowed: boolean;
+    evaluation_reason: string;
+    policy_version: string;
+  };
+  evidence: {
+    id: string;
+    evidence_type: string;
+    filename: string | null;
+    content_type: string | null;
+    size: number | null;
+    checksum_sha256: string | null;
+    text_extract: string | null;
+    source_url: string | null;
+    source_date: string | null;
+    collected_at: string;
+    verification_status: string;
+  }[];
+  followups: {
+    id: string;
+    followup_type: string;
+    status: "open" | "answered" | "cancelled";
+    due_at: string;
+    requested_fields: string[];
+  }[];
+  disputes: {
+    id: string;
+    disputed_conclusion: string;
+    reason: string;
+    alternative_started_at: string | null;
+    status: "open" | "under_review" | "resolved" | "rejected";
+    resolution: string | null;
+    created_at: string;
+    resolved_at: string | null;
+  }[];
+  billing_status:
+    "awaiting_compensation" | "processed" | "hold" | "not_applicable" | null;
+  ai_suggestions: EmploymentAISuggestion[];
+  expected_information: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmploymentCaseList {
+  items: EmploymentCase[];
+  total: number;
+}

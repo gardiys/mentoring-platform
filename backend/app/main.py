@@ -6,11 +6,22 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.health import router as health_router
 from app.auth.web_router import router as web_auth_router
+from app.career_packages.router import staff_router as career_package_staff_router
+from app.career_packages.router import student_router as career_package_student_router
 from app.core.config import Settings, get_settings
 from app.core.middleware import (
     CookieCSRFMiddleware,
     RequestBodyLimitMiddleware,
     RequestContextMiddleware,
+)
+from app.employment_qualification.router import (
+    admin_router as employment_admin_router,
+)
+from app.employment_qualification.router import (
+    staff_router as employment_staff_router,
+)
+from app.employment_qualification.router import (
+    student_router as employment_student_router,
 )
 from app.integrations.router import router as integrations_router
 from app.interviews.admin_process_router import router as admin_interview_processes_router
@@ -109,6 +120,11 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
 
     application.include_router(health_router)
     application.include_router(web_auth_router, prefix="/api/v1")
+    application.include_router(career_package_staff_router, prefix="/api/v1")
+    application.include_router(career_package_student_router, prefix="/api/v1")
+    application.include_router(employment_student_router, prefix="/api/v1")
+    application.include_router(employment_staff_router, prefix="/api/v1")
+    application.include_router(employment_admin_router, prefix="/api/v1")
     application.include_router(integrations_router, prefix="/api/v1")
     application.include_router(interviews_router, prefix="/api/v1")
     application.include_router(interview_catalog_router, prefix="/api/v1")

@@ -249,6 +249,16 @@ export function AppLayout() {
               />
               <NavLink
                 component={Link}
+                to="/career-package"
+                label="Карьерный пакет"
+                description="Резюме и стратегия поиска"
+                leftSection={<span className="nav-index">CP</span>}
+                className="brand-nav-link"
+                active={location.pathname.startsWith("/career-package")}
+                onClick={close}
+              />
+              <NavLink
+                component={Link}
                 to="/payments"
                 label="Мои платежи"
                 description="График и оплата"

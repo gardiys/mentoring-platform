@@ -129,9 +129,7 @@ STAGE_TO_TYPE = {
 
 
 def _mentor_interview_access(user: User) -> ColumnElement[bool]:
-    assigned_students = select(MentorStudent.student_id).where(
-        MentorStudent.mentor_id == user.id
-    )
+    assigned_students = select(MentorStudent.student_id).where(MentorStudent.mentor_id == user.id)
     accessible_stages = (
         select(InterviewProcessStage.id)
         .join(InterviewProcess, InterviewProcess.id == InterviewProcessStage.process_id)
@@ -142,7 +140,7 @@ def _mentor_interview_access(user: User) -> ColumnElement[bool]:
                 select(MentorTrackAssignment.track_id).where(
                     MentorTrackAssignment.mentor_id == user.id
                 )
-            )
+            ),
         )
     )
     return or_(
@@ -408,9 +406,7 @@ async def get_intelligence_interview(
         )
         track = (
             await session.scalar(
-                select(LearningTrack)
-                .where(LearningTrack.id == track_id)
-                .with_for_update()
+                select(LearningTrack).where(LearningTrack.id == track_id).with_for_update()
             )
             if track_id is not None
             else None

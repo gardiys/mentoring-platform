@@ -2415,7 +2415,7 @@ async def _reviewed_duplicate_pair(
                 InterviewCardDuplicateReview.left_card_id == left,
                 InterviewCardDuplicateReview.right_card_id == right,
             )
-        )
+        ),
     )
 
 
@@ -2501,24 +2501,17 @@ async def _merge_card_progress(
                 )
             )
         else:
-            source_is_latest = (
-                progress.last_reviewed_at is not None
-                and (
-                    target_progress.last_reviewed_at is None
-                    or progress.last_reviewed_at > target_progress.last_reviewed_at
-                )
+            source_is_latest = progress.last_reviewed_at is not None and (
+                target_progress.last_reviewed_at is None
+                or progress.last_reviewed_at > target_progress.last_reviewed_at
             )
             if source_is_latest:
                 target_progress.last_rating = progress.last_rating
-            target_progress.repetitions = max(
-                target_progress.repetitions, progress.repetitions
-            )
+            target_progress.repetitions = max(target_progress.repetitions, progress.repetitions)
             target_progress.interval_days = max(
                 target_progress.interval_days, progress.interval_days
             )
-            target_progress.ease_factor = max(
-                target_progress.ease_factor, progress.ease_factor
-            )
+            target_progress.ease_factor = max(target_progress.ease_factor, progress.ease_factor)
             target_progress.lapses = max(target_progress.lapses, progress.lapses)
             target_progress.due_at = max(target_progress.due_at, progress.due_at)
             target_progress.first_learned_at = _min_datetime(
@@ -2679,12 +2672,8 @@ async def merge_interview_card_duplicate(
             item.replaced_by_card_id = primary.card.id
         item.version += 1
 
-    merged_progress_records = await _merge_card_progress(
-        session, source.card, primary.card
-    )
-    preserved_topic_selections = await _preserve_topic_access(
-        session, source.card, primary.card
-    )
+    merged_progress_records = await _merge_card_progress(session, source.card, primary.card)
+    preserved_topic_selections = await _preserve_topic_access(session, source.card, primary.card)
     source.card.is_published = False
     await session.flush()
     await _refresh_card_stats(session, [source.card.id, primary.card.id])

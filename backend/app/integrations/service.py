@@ -117,11 +117,7 @@ async def provision_telegram_student(
                         reward_percent=(
                             payload.mentor_reward_percent
                             if payload.mentor_reward_percent is not None
-                            else (
-                                Decimal("45")
-                                if track.slug.casefold() == "go"
-                                else Decimal("60")
-                            )
+                            else (Decimal("45") if track.slug.casefold() == "go" else Decimal("60"))
                         ),
                     )
                 )

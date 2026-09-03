@@ -178,6 +178,7 @@ async def set_employment(
             company_id=company.id,
             company_name=company.name,
             start_date=payload.start_date,
+            billing_started_at=payload.start_date,
             net_salary_kopecks=salary_kopecks,
             repayment_percent=remaining_percent,
             status=StudentEmploymentStatus.ACTIVE,
@@ -212,6 +213,7 @@ async def set_employment(
         employment.company_id = company.id
         employment.company_name = company.name
         employment.start_date = payload.start_date
+        employment.billing_started_at = employment.billing_started_at or payload.start_date
         employment.net_salary_kopecks = salary_kopecks
         employment.recorded_by_user_id = actor.id
         if paid_count and previous_salary_kopecks != salary_kopecks:
@@ -255,6 +257,8 @@ async def terminate_employment(
     employment = await _active_employment_for_update(session, student.id)
     if employment is None:
         api_error(409, "active_employment_not_found", "The student has no active employment")
+    if employment.start_date is None:
+        api_error(409, "employment_not_started", "Employment has not started yet")
     if payload.ended_at < employment.start_date:
         api_error(422, "invalid_employment_end_date", "End date cannot precede start date")
 
@@ -274,7 +278,7 @@ async def terminate_active_employment_for_student(
     employment = await _active_employment_for_update(session, student_id)
     if employment is None:
         return False
-    effective_end_date = max(ended_at, employment.start_date)
+    effective_end_date = max(ended_at, employment.start_date or ended_at)
     await _terminate_employment_model(session, employment, effective_end_date, reason)
     return True
 
@@ -499,6 +503,7 @@ async def payment_dashboard(
             ),
             can_pay=(
                 actor.id == student_id
+                and not employment_by_id[item.employment_id].billing_on_hold
                 and item.status
                 in {
                     PaymentInstallmentStatus.SCHEDULED,
@@ -1953,6 +1958,11 @@ async def _payout_reads(
 async def _regenerate_unpaid_installments(
     session: AsyncSession, employment: StudentEmployment
 ) -> None:
+    if employment.net_salary_kopecks is None:
+        api_error(409, "employment_compensation_missing", "Net salary must be confirmed first")
+    billing_start = employment.billing_started_at or employment.start_date
+    if billing_start is None:
+        api_error(409, "employment_start_missing", "Billing start date must be confirmed first")
     paid_count = int(
         await session.scalar(
             select(func.count(PaymentInstallment.id)).where(
@@ -1973,7 +1983,7 @@ async def _regenerate_unpaid_installments(
     )
     salary_percents = calculate_installment_percents(employment.repayment_percent)
     due_dates = calculate_due_dates(
-        employment.start_date,
+        billing_start,
         (employment.payment_day_first, employment.payment_day_second),
         len(amounts),
     )
@@ -1993,10 +2003,32 @@ async def _regenerate_unpaid_installments(
     )
 
 
+async def ensure_profile_billing_installments(
+    session: AsyncSession,
+    employment: StudentEmployment,
+) -> None:
+    """Hand a reviewed profile-employment case to the existing result-fee schedule.
+
+    The existing installment table remains the single source of payment obligations.
+    Replaying an assessment therefore cannot create a second schedule.
+    """
+    existing = await session.scalar(
+        select(PaymentInstallment.id).where(PaymentInstallment.employment_id == employment.id)
+    )
+    if existing is not None:
+        return
+    await _regenerate_unpaid_installments(session, employment)
+
+
 async def _recalculate_installments_after_salary_correction(
     session: AsyncSession,
     employment: StudentEmployment,
 ) -> None:
+    if employment.net_salary_kopecks is None:
+        api_error(409, "employment_compensation_missing", "Net salary must be confirmed first")
+    billing_start = employment.billing_started_at or employment.start_date
+    if billing_start is None:
+        api_error(409, "employment_start_missing", "Billing start date must be confirmed first")
     installments = await _installments(session, employment.id)
     paid = [item for item in installments if item.status is PaymentInstallmentStatus.PAID]
     outstanding = [
@@ -2087,7 +2119,7 @@ async def _recalculate_installments_after_salary_correction(
         return
     last_due_date = max(
         (item.due_date for item in installments),
-        default=_add_month(employment.start_date) - timedelta(days=1),
+        default=_add_month(billing_start) - timedelta(days=1),
     )
     due_dates = _payment_dates_on_or_after(
         last_due_date + timedelta(days=1),
@@ -2130,7 +2162,10 @@ async def _reschedule_unpaid_installments(
     movable = [item for item in installments if item not in fixed]
     if not movable:
         return
-    eligible = max(_add_month(employment.start_date), today)
+    billing_start = employment.billing_started_at or employment.start_date
+    if billing_start is None:
+        api_error(409, "employment_start_missing", "Billing start date must be confirmed first")
+    eligible = max(_add_month(billing_start), today)
     if fixed:
         eligible = max(eligible, max(item.due_date for item in fixed) + timedelta(days=1))
     due_dates = _payment_dates_on_or_after(
@@ -2211,7 +2246,11 @@ def _employment_read(employment: StudentEmployment) -> EmploymentRead:
         ended_at=employment.ended_at,
         end_reason=employment.end_reason,
         payment_days=[employment.payment_day_first, employment.payment_day_second],
-        total_owed_kopecks=_percent_of(employment.net_salary_kopecks, employment.repayment_percent),
+        total_owed_kopecks=(
+            _percent_of(employment.net_salary_kopecks, employment.repayment_percent)
+            if employment.net_salary_kopecks is not None
+            else 0
+        ),
         created_at=employment.created_at,
         updated_at=employment.updated_at,
     )

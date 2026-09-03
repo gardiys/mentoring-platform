@@ -47,7 +47,9 @@ RUN pip install --no-cache-dir --no-index --find-links=/wheels --no-deps \
 COPY certs/russian_trusted_root_ca.crt /usr/local/share/ca-certificates/russian_trusted_root_ca.crt
 COPY certs/russian_trusted_sub_ca.crt /usr/local/share/ca-certificates/russian_trusted_sub_ca.crt
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        fonts-dejavu-core \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

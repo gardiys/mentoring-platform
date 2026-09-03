@@ -176,6 +176,18 @@ import type {
   PythonRepeatDashboard,
   AdminPythonRepeatDashboard,
   PythonRepeatApplicationStatus,
+  CareerPackage,
+  CareerStudentPackage,
+  CareerTrackOption,
+  EmploymentCase,
+  EmploymentAISuggestion,
+  EmploymentCaseList,
+  EmploymentProfileClassification,
+  EmploymentTrackOption,
+  CareerSourceData,
+  CareerSelfPresentationCard,
+  CareerActiveSearchParameters,
+  CareerObjection,
 } from "../types/api";
 import {
   ApiError,
@@ -2429,6 +2441,260 @@ export const api = {
   adminPythonRepeat: () =>
     apiRequest<AdminPythonRepeatDashboard>(
       "/api/v1/admin/opportunities/python-repeat",
+    ),
+  careerPackagesForStudent: (studentId: string) =>
+    apiRequest<CareerPackage[]>(
+      `/api/v1/mentor/students/${studentId}/career-packages`,
+    ),
+  careerPackageTrackOptions: (studentId: string) =>
+    apiRequest<CareerTrackOption[]>(
+      `/api/v1/mentor/students/${studentId}/career-package-track-options`,
+    ),
+  createCareerPackage: (studentId: string, trackId: string) =>
+    apiRequest<CareerPackage>(
+      `/api/v1/mentor/students/${studentId}/career-packages`,
+      { method: "POST", body: JSON.stringify({ track_id: trackId }) },
+    ),
+  finalizeCareerResume: (packageId: string) =>
+    apiRequest<CareerPackage>(
+      `/api/v1/career-packages/${packageId}/final-resume`,
+      {
+        method: "POST",
+      },
+    ),
+  updateCareerDraft: (
+    packageId: string,
+    payload: {
+      lock_version: number;
+      source_data?: CareerSourceData;
+      self_presentation_card?: CareerSelfPresentationCard;
+      active_search_parameters?: CareerActiveSearchParameters;
+    },
+  ) =>
+    apiRequest<CareerPackage>(`/api/v1/career-packages/${packageId}/draft`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+  generateCareerPackage: (
+    packageId: string,
+    component: "all" | "self_presentation" | "active_search" = "all",
+  ) =>
+    apiRequest<CareerPackage["generation_runs"][number]>(
+      `/api/v1/career-packages/${packageId}/generate`,
+      { method: "POST", body: JSON.stringify({ component }) },
+    ),
+  validateCareerPackage: (packageId: string) =>
+    apiRequest<CareerPackage>(`/api/v1/career-packages/${packageId}/validate`, {
+      method: "POST",
+    }),
+  publishCareerPackage: (packageId: string) =>
+    apiRequest<CareerPackage>(`/api/v1/career-packages/${packageId}/publish`, {
+      method: "POST",
+    }),
+  recordCareerPackageObligation: (
+    packageId: string,
+    payload: {
+      offer_accepted_on: string;
+      record_comment: string | null;
+      eligibility_confirmed: true;
+    },
+  ) =>
+    apiRequest<CareerPackage>(
+      `/api/v1/career-packages/${packageId}/obligation`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  sendCareerPackageObligationNotice: (packageId: string) =>
+    apiRequest<CareerPackage>(
+      `/api/v1/career-packages/${packageId}/obligation/notice`,
+      {
+        method: "POST",
+        body: JSON.stringify({ delivery_confirmed: true }),
+      },
+    ),
+  retryCareerPackageEmail: (packageId: string) =>
+    apiRequest<CareerPackage>(
+      `/api/v1/career-packages/${packageId}/deliveries/email/retry`,
+      { method: "POST" },
+    ),
+  retryCareerPackageObligationEmail: (packageId: string) =>
+    apiRequest<CareerPackage>(
+      `/api/v1/career-packages/${packageId}/obligation/deliveries/email/retry`,
+      { method: "POST" },
+    ),
+  resolveCareerObjection: (
+    packageId: string,
+    objectionId: string,
+    payload: {
+      status: "accepted" | "partially_accepted" | "rejected" | "resolved";
+      resolution_comment: string;
+      create_revision: boolean;
+    },
+  ) =>
+    apiRequest<CareerPackage>(
+      `/api/v1/career-packages/${packageId}/objections/${objectionId}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+  saveCareerReview: (
+    packageId: string,
+    payload: {
+      held_at: string;
+      strengths: string;
+      improvements: string;
+      preparation_for_next_attempt: string;
+      additional_notes: string | null;
+      send_to_student: boolean;
+      create_draft_from_review: boolean;
+    },
+  ) =>
+    apiRequest<CareerPackage>(
+      `/api/v1/career-packages/${packageId}/self-presentation-reviews`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  myCareerPackages: () =>
+    apiRequest<CareerStudentPackage[]>("/api/v1/career-packages/me"),
+  createCareerObjection: (payload: {
+    package_version_id: string;
+    component: CareerObjection["component"];
+    reason: string;
+    expected_result: string;
+  }) =>
+    apiRequest<CareerObjection>("/api/v1/career-packages/me/objections", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  acknowledgeCareerVersion: (versionId: string) =>
+    apiRequest<{ acknowledged_at: string }>(
+      `/api/v1/career-packages/versions/${versionId}/acknowledge`,
+      { method: "POST" },
+    ),
+  careerPackagePdfUrl: async (versionId: string) =>
+    (
+      await apiRequest<{ url: string }>(
+        `/api/v1/career-packages/versions/${versionId}/pdf`,
+      )
+    ).url,
+  careerPackageResumeUrl: async (versionId: string) =>
+    (
+      await apiRequest<{ url: string }>(
+        `/api/v1/career-packages/versions/${versionId}/resume`,
+      )
+    ).url,
+  myEmploymentCases: () =>
+    apiRequest<EmploymentCaseList>("/api/v1/employment-cases/me"),
+  myEmploymentTrackOptions: () =>
+    apiRequest<EmploymentTrackOption[]>(
+      "/api/v1/employment-cases/me/track-options",
+    ),
+  reportEmploymentOffer: (payload: Record<string, unknown>) =>
+    apiRequest<EmploymentCase>("/api/v1/employment-cases/me/report-offer", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  reportEmploymentOfferStatus: (
+    caseId: string,
+    payload: Record<string, unknown>,
+  ) =>
+    apiRequest<EmploymentCase>(
+      `/api/v1/employment-cases/${caseId}/offer-status`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  reportEmploymentWorkStart: (
+    caseId: string,
+    payload: Record<string, unknown>,
+  ) =>
+    apiRequest<EmploymentCase>(
+      `/api/v1/employment-cases/${caseId}/work-start`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  reportEmploymentActualDuties: (
+    caseId: string,
+    payload: Record<string, unknown>,
+  ) =>
+    apiRequest<EmploymentCase>(
+      `/api/v1/employment-cases/${caseId}/actual-duties`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  reportEmploymentChange: (caseId: string, payload: Record<string, unknown>) =>
+    apiRequest<EmploymentCase>(`/api/v1/employment-cases/${caseId}/changes`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  reportEmploymentEnd: (caseId: string, payload: Record<string, unknown>) =>
+    apiRequest<EmploymentCase>(`/api/v1/employment-cases/${caseId}/end`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  openEmploymentDispute: (caseId: string, payload: Record<string, unknown>) =>
+    apiRequest<EmploymentCase>(`/api/v1/employment-cases/${caseId}/disputes`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  employmentCasesForStudent: (studentId: string) =>
+    apiRequest<EmploymentCaseList>(
+      `/api/v1/mentor/students/${studentId}/employment-cases`,
+    ),
+  assessEmploymentCase: (
+    studentId: string,
+    caseId: string,
+    payload: {
+      classification: EmploymentProfileClassification;
+      effective_profile_started_at: string | null;
+      rationale: string;
+      qualifying_criteria: Record<string, unknown>[];
+      non_qualifying_reasons: string[];
+      evidence_ids: string[];
+      expected_lock_version: number;
+      idempotency_key: string;
+    },
+  ) =>
+    apiRequest<EmploymentCase>(
+      `/api/v1/mentor/students/${studentId}/employment-cases/${caseId}/assessments`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  requestEmploymentInformation: (
+    studentId: string,
+    caseId: string,
+    payload: {
+      requested_fields: string[];
+      due_at: string;
+      idempotency_key: string;
+    },
+  ) =>
+    apiRequest<EmploymentCase>(
+      `/api/v1/mentor/students/${studentId}/employment-cases/${caseId}/request-information`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  requestEmploymentAISuggestion: (
+    studentId: string,
+    caseId: string,
+    payload: { evidence_ids: string[]; idempotency_key: string },
+  ) =>
+    apiRequest<EmploymentAISuggestion>(
+      `/api/v1/mentor/students/${studentId}/employment-cases/${caseId}/ai-suggestions`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  resolveEmploymentDispute: (
+    studentId: string,
+    caseId: string,
+    disputeId: string,
+    payload: { resolution: string; outcome: "resolved" | "rejected" },
+  ) =>
+    apiRequest<EmploymentCase>(
+      `/api/v1/mentor/students/${studentId}/employment-cases/${caseId}/disputes/${disputeId}/resolve`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  uploadEmploymentEvidence: (
+    caseId: string,
+    evidenceType: string,
+    file: File,
+    options?: UploadOptions,
+  ) =>
+    uploadFile<EmploymentCase>(
+      `/api/v1/employment-cases/${caseId}/evidence/upload`,
+      `/api/v1/employment-cases/${caseId}/evidence/complete?evidence_type=${encodeURIComponent(evidenceType)}`,
+      file,
+      {},
+      options,
     ),
   transitionAdminPythonRepeat: (
     id: string,

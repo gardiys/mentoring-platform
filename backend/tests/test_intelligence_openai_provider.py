@@ -9,6 +9,7 @@ from openai import RateLimitError
 from openai.lib._pydantic import to_strict_json_schema
 from pydantic import BaseModel, ValidationError
 
+from app.career_packages.schemas import CareerPackageAIOutput
 from app.interviews.card_automation_schemas import AnswerContract, AnswerValidationResult
 from app.interviews.card_automation_types import (
     LearningObjectType,
@@ -122,6 +123,7 @@ def test_review_output_uses_only_closed_json_objects() -> None:
         PairwiseCardMatchResult,
         AnswerContract,
         AnswerValidationResult,
+        CareerPackageAIOutput,
     ],
 )
 def test_card_automation_outputs_use_only_closed_json_objects(
@@ -302,6 +304,36 @@ async def test_openai_question_routing_uses_cheap_model_and_isolates_untrusted_t
     assert result.usage.provider_request_id == "route-123"
     assert result.prompt_version == QUESTION_ROUTING_PROMPT_VERSION
     assert result.schema_version == QUESTION_ROUTING_SCHEMA_VERSION
+
+
+@pytest.mark.asyncio
+async def test_openai_career_package_uses_supported_responses_parameters() -> None:
+    output = CareerPackageAIOutput()
+    parse = AsyncMock(
+        return_value=SimpleNamespace(
+            id="career-123",
+            model="gpt-5-mini",
+            output_parsed=output,
+            usage=SimpleNamespace(input_tokens=35, output_tokens=21),
+        )
+    )
+    provider = object.__new__(OpenAIInterviewAIProvider)
+    provider.light_review_model = "gpt-5-mini"
+    provider.summary_max_output_tokens = 4_000
+    provider.client = SimpleNamespace(responses=SimpleNamespace(parse=parse))
+
+    result = await provider.generate_career_package(
+        resume_text="Python backend developer",
+        source_data={"target_positions": ["Python backend developer"]},
+        component="all",
+    )
+
+    request = parse.await_args.kwargs
+    assert request["model"] == "gpt-5-mini"
+    assert request["max_output_tokens"] == 8_000
+    assert request["reasoning"] == {"effort": "low"}
+    assert "verbosity" not in request
+    assert result.output is output
 
 
 @pytest.mark.asyncio

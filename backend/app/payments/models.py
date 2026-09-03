@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -20,6 +21,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -50,6 +52,31 @@ class StudentEmploymentStatus(StrEnum):
     TERMINATED = "terminated"
 
 
+class EmploymentCaseStatus(StrEnum):
+    REPORTED = "reported"
+    AWAITING_INITIAL_DOCUMENTS = "awaiting_initial_documents"
+    AWAITING_ACTUAL_DUTIES = "awaiting_actual_duties"
+    AWAITING_STAFF_REVIEW = "awaiting_staff_review"
+    MONITORING_NON_PROFILE = "monitoring_non_profile"
+    PROFILE_CONFIRMED = "profile_confirmed"
+    NON_PROFILE_CONFIRMED = "non_profile_confirmed"
+    DISPUTED = "disputed"
+    ENDED = "ended"
+    CLOSED = "closed"
+
+
+class EmploymentActivityType(StrEnum):
+    EMPLOYMENT_CONTRACT = "employment_contract"
+    CIVIL_CONTRACT = "civil_contract"
+    SELF_EMPLOYED = "self_employed"
+    INDIVIDUAL_ENTREPRENEUR = "individual_entrepreneur"
+    FOREIGN_CONTRACT = "foreign_contract"
+    CONTROLLED_LEGAL_ENTITY = "controlled_legal_entity"
+    INTERNAL_TRANSFER = "internal_transfer"
+    ACTUAL_ADMISSION = "actual_admission"
+    OTHER = "other"
+
+
 class MentorRewardKind(StrEnum):
     EMPLOYMENT_PAYMENT = "employment_payment"
     ENTRY_PAYMENT = "entry_payment"
@@ -74,7 +101,10 @@ class MentorPayoutOrigin(StrEnum):
 class StudentEmployment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "student_employments"
     __table_args__ = (
-        CheckConstraint("net_salary_kopecks > 0", name="net_salary_positive"),
+        CheckConstraint(
+            "net_salary_kopecks IS NULL OR net_salary_kopecks > 0",
+            name="net_salary_positive",
+        ),
         CheckConstraint(
             "repayment_percent > 0 AND repayment_percent <= 1000",
             name="repayment_percent_range",
@@ -92,6 +122,10 @@ class StudentEmployment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="payment_days_ordered",
         ),
         Index("ix_student_employments_start_date", "start_date"),
+        Index("ix_student_employments_case_status", "case_status", "updated_at"),
+        Index("ix_student_employments_student_track", "student_id", "track_id", "created_at"),
+        Index("ix_student_employments_profile_started", "profile_activity_started_at"),
+        Index("ix_student_employments_monitoring", "monitoring_due_at", "case_status"),
         Index(
             "uq_student_employments_active_student",
             "student_id",
@@ -107,8 +141,17 @@ class StudentEmployment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True
     )
     company_name: Mapped[str] = mapped_column(String(240), nullable=False)
-    start_date: Mapped[date] = mapped_column(Date, nullable=False)
-    net_salary_kopecks: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    track_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("learning_tracks.id", ondelete="RESTRICT"), nullable=True
+    )
+    contract_policy_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("employment_contract_policy_snapshots.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expected_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    net_salary_kopecks: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     repayment_percent: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
     status: Mapped[StudentEmploymentStatus] = mapped_column(
         Enum(
@@ -126,6 +169,58 @@ class StudentEmployment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     recorded_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    official_job_title: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    vacancy_title: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    activity_type: Mapped[EmploymentActivityType | None] = mapped_column(
+        Enum(
+            EmploymentActivityType,
+            name="employment_activity_type",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=True,
+    )
+    offer_received_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    offer_accepted_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    contract_signed_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    vacancy_duties: Mapped[str | None] = mapped_column(Text, nullable=True)
+    initial_vacancy_stack: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    offer_stack: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    actual_stack: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    actual_duties: Mapped[str | None] = mapped_column(Text, nullable=True)
+    project_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    team_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    student_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    differences_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    case_status: Mapped[EmploymentCaseStatus | None] = mapped_column(
+        Enum(
+            EmploymentCaseStatus,
+            name="employment_case_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=True,
+    )
+    current_assessment_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "employment_profile_assessments.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_student_employments_current_assessment",
+        ),
+        nullable=True,
+    )
+    profile_activity_started_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    profile_activity_ended_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    billing_started_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    billing_on_hold: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
+    monitoring_due_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lock_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
+    legacy_policy_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
 
 class StudentEmploymentSalaryRevision(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -28,9 +28,7 @@ async def notifications_page(
     status_code=status.HTTP_204_NO_CONTENT,
     response_class=Response,
 )
-async def notification_read(
-    notification_id: UUID, session: Session, user: CurrentUser
-) -> Response:
+async def notification_read(notification_id: UUID, session: Session, user: CurrentUser) -> Response:
     await mark_read(session, user, notification_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
