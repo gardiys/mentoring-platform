@@ -421,9 +421,10 @@ services:
       test:
         [
           "CMD",
-          "arq",
-          "app.notifications.jobs.NotificationWorkerSettings",
-          "--check",
+          "python",
+          "-m",
+          "app.arq_healthcheck",
+          "arq:queue:health-check",
         ]
       interval: 15s
       timeout: 5s
