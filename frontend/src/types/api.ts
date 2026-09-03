@@ -1846,8 +1846,32 @@ export interface IntelligenceCommunicationDimension {
   confidence: number;
 }
 
+export interface IntelligenceTechnicalTopic {
+  topic: string;
+  score: number | null;
+  summary: string;
+  strengths: string[];
+  gaps: string[];
+  next_step: string;
+  evidence_question_numbers: number[];
+  questions_count: number;
+  confidence: number;
+}
+
+export interface IntelligencePriorityAction {
+  title: string;
+  reason: string;
+  steps: string[];
+  success_criterion: string;
+  related_topics: string[];
+}
+
 export interface IntelligenceInterviewOverview {
   overall_summary: string;
+  technical_score: number | null;
+  technical_summary: string;
+  technical_topics: IntelligenceTechnicalTopic[];
+  priority_actions: IntelligencePriorityAction[];
   key_topics: string[];
   communication_summary: string;
   communication_score: number | null;

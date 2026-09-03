@@ -184,8 +184,32 @@ class IntelligenceCommunicationDimensionRead(BaseModel):
     confidence: float
 
 
+class IntelligenceTechnicalTopicRead(BaseModel):
+    topic: str
+    score: float | None
+    summary: str
+    strengths: list[str]
+    gaps: list[str]
+    next_step: str
+    evidence_question_numbers: list[int]
+    questions_count: int
+    confidence: float
+
+
+class IntelligencePriorityActionRead(BaseModel):
+    title: str
+    reason: str
+    steps: list[str]
+    success_criterion: str
+    related_topics: list[str]
+
+
 class IntelligenceInterviewOverviewRead(BaseModel):
     overall_summary: str
+    technical_score: float | None = None
+    technical_summary: str = ""
+    technical_topics: list[IntelligenceTechnicalTopicRead] = Field(default_factory=list)
+    priority_actions: list[IntelligencePriorityActionRead] = Field(default_factory=list)
     key_topics: list[str]
     communication_summary: str
     communication_score: float | None

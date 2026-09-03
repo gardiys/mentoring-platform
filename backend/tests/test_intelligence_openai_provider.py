@@ -29,18 +29,33 @@ from app.interviews.intelligence_ai import (
     QUESTION_ROUTING_PROMPT,
     QUESTION_ROUTING_PROMPT_VERSION,
     QUESTION_ROUTING_SCHEMA_VERSION,
+    SUMMARY_PROMPT,
     TECHNICAL_REVIEW_PROMPT,
     ExtractedQuestionRoutingResult,
     FakeInterviewAIProvider,
     InterviewAIError,
+    InterviewPriorityAction,
+    InterviewSummaryOutput,
     OpenAIInterviewAIProvider,
     PairwiseCardMatchResult,
     ReviewOutput,
+    TechnicalTopicAssessment,
     TrustedAnswerSource,
     transcript_chunks,
 )
-from app.interviews.intelligence_jobs import _retry_delay, _will_retry
-from app.interviews.intelligence_models import IntelligenceQuestionKind
+from app.interviews.intelligence_jobs import (
+    _ground_technical_assessment,
+    _retry_delay,
+    _will_retry,
+)
+from app.interviews.intelligence_models import (
+    IntelligenceAssessment,
+    IntelligenceQuestionKind,
+    IntelligenceReviewSource,
+    IntelligenceReviewStatus,
+)
+from app.interviews.intelligence_schemas import IntelligenceInterviewOverviewRead
+from app.interviews.intelligence_service import _derived_technical_report
 
 
 def _rate_limit_error(*, error_type: str, error_code: str | None) -> RateLimitError:
@@ -124,6 +139,7 @@ def test_review_output_uses_only_closed_json_objects() -> None:
         AnswerContract,
         AnswerValidationResult,
         CareerPackageAIOutput,
+        InterviewSummaryOutput,
     ],
 )
 def test_card_automation_outputs_use_only_closed_json_objects(
@@ -174,6 +190,164 @@ def test_automation_prompts_separate_trusted_and_untrusted_content() -> None:
     for prompt in (ANSWER_CONTRACT_PROMPT, ANSWER_VALIDATION_PROMPT):
         assert "allowed_source_ids" in prompt
         assert "outside" in prompt
+
+    assert "untrusted evidence" in SUMMARY_PROMPT
+    assert "Technical assessment is primary" in SUMMARY_PROMPT
+    assert "at most three priority_actions" in SUMMARY_PROMPT
+
+
+def test_summary_technical_scores_and_evidence_are_grounded_in_review_rows() -> None:
+    overview = InterviewSummaryOutput(
+        overall_summary="Краткий учебный вердикт.",
+        technical_score=0.1,
+        technical_summary="Технический итог.",
+        technical_topics=[
+            TechnicalTopicAssessment(
+                topic="Python",
+                score=0.1,
+                summary="Итог по теме.",
+                strengths=[],
+                gaps=["Нужно уточнить GIL"],
+                next_step="Повторить GIL.",
+                evidence_question_numbers=[1, 999],
+                questions_count=99,
+                confidence=0.1,
+            )
+        ],
+        priority_actions=[
+            InterviewPriorityAction(
+                title="Повторить GIL",
+                reason="Не хватило деталей.",
+                steps=["Проговорить ответ."],
+                success_criterion="Дать ответ за минуту.",
+                related_topics=["Python"],
+            )
+        ],
+        key_topics=["Python"],
+        communication_summary="Коммуникация оценена отдельно.",
+        communication_score=None,
+        communication_dimensions=[],
+        communication_strengths=[],
+        communication_growth_areas=[],
+        caveats=[],
+    )
+    rows = [
+        (
+            SimpleNamespace(
+                question_kind=IntelligenceQuestionKind.TECHNICAL,
+                sequence_number=1,
+                confidence=0.9,
+            ),
+            SimpleNamespace(),
+            SimpleNamespace(
+                score=0.8,
+                assessment=IntelligenceAssessment.MOSTLY_CORRECT,
+            ),
+        ),
+        (
+            SimpleNamespace(
+                question_kind=IntelligenceQuestionKind.HR,
+                sequence_number=2,
+                confidence=1.0,
+            ),
+            SimpleNamespace(),
+            SimpleNamespace(score=0.0, assessment=IntelligenceAssessment.INCORRECT),
+        ),
+    ]
+
+    grounded = _ground_technical_assessment(overview, rows)
+
+    assert grounded.technical_score == 0.8
+    assert grounded.technical_topics[0].score == 0.8
+    assert grounded.technical_topics[0].questions_count == 1
+    assert grounded.technical_topics[0].evidence_question_numbers == [1]
+    assert grounded.technical_topics[0].confidence == 0.9
+
+
+def test_legacy_interview_overview_remains_readable() -> None:
+    legacy = IntelligenceInterviewOverviewRead.model_validate(
+        {
+            "overall_summary": "Старое резюме.",
+            "key_topics": ["Python"],
+            "communication_summary": "Ответы понятны.",
+            "communication_score": 0.7,
+            "communication_dimensions": [],
+            "communication_strengths": [],
+            "communication_growth_areas": [],
+            "caveats": [],
+            "model_name": "legacy-model",
+            "prompt_version": "interview-summary-v1",
+        }
+    )
+
+    assert legacy.technical_score is None
+    assert legacy.technical_summary == ""
+    assert legacy.technical_topics == []
+    assert legacy.priority_actions == []
+
+
+def test_derived_report_ignores_rejected_ai_and_prefers_mentor_edit() -> None:
+    def review(
+        *,
+        source: IntelligenceReviewSource,
+        status: IntelligenceReviewStatus,
+        score: float,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            source=source,
+            status=status,
+            score=score,
+            summary="Проверенный итог.",
+            strengths=[],
+            missing_points=["Уточнить механизм"],
+            problems=[],
+            suggested_better_answer="Уточнённый ответ.",
+        )
+
+    rejected = SimpleNamespace(
+        question_kind=IntelligenceQuestionKind.TECHNICAL,
+        sequence_number=1,
+        category="Python",
+        confidence=0.9,
+        answer=SimpleNamespace(
+            reviews=[
+                review(
+                    source=IntelligenceReviewSource.AI,
+                    status=IntelligenceReviewStatus.REJECTED,
+                    score=0.1,
+                )
+            ]
+        ),
+    )
+    edited = SimpleNamespace(
+        question_kind=IntelligenceQuestionKind.TECHNICAL,
+        sequence_number=2,
+        category="Базы данных",
+        confidence=0.95,
+        answer=SimpleNamespace(
+            reviews=[
+                review(
+                    source=IntelligenceReviewSource.AI,
+                    status=IntelligenceReviewStatus.EDITED,
+                    score=0.2,
+                ),
+                review(
+                    source=IntelligenceReviewSource.MENTOR,
+                    status=IntelligenceReviewStatus.APPROVED,
+                    score=0.9,
+                ),
+            ]
+        ),
+    )
+
+    report = _derived_technical_report([rejected, edited])
+
+    assert report["technical_score"] == 0.9
+    topics = report["technical_topics"]
+    assert topics[0]["topic"] == "Базы данных"
+    assert topics[0]["score"] == 0.9
+    assert topics[1]["topic"] == "Python"
+    assert topics[1]["score"] is None
 
 
 def test_transcript_chunks_enforce_a_character_budget_and_keep_progressing() -> None:

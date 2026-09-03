@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from functools import partial
@@ -43,7 +44,9 @@ from app.interviews.intelligence_ai import (
     CommunicationDimension,
     InterviewAIError,
     InterviewAIProvider,
+    InterviewPriorityAction,
     InterviewSummaryOutput,
+    TechnicalTopicAssessment,
     build_ai_provider,
     transcript_chunks,
 )
@@ -51,6 +54,7 @@ from app.interviews.intelligence_models import (
     IntelligenceAIUsage,
     IntelligenceAnswer,
     IntelligenceAnswerReview,
+    IntelligenceAssessment,
     IntelligenceAttemptStage,
     IntelligenceAttemptStatus,
     IntelligenceInterview,
@@ -801,22 +805,61 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                     )
                 )
             if interview.ai_summary_payload is None:
-                blocks = [
-                    _utterance_block(
-                        item,
-                        "Candidate"
-                        if item.speaker_id == interview.candidate_speaker_id
-                        else f"Speaker {speakers[item.speaker_id].provider_speaker_key}",
+                # The student-facing report is synthesized from the already reviewed
+                # questions. This keeps technical conclusions aligned with the
+                # question-level evaluation and avoids making soft-skill observations
+                # the centre of the report.
+                await session.flush()
+                summary_rows = (
+                    await session.execute(
+                        select(
+                            IntelligenceQuestion,
+                            IntelligenceAnswer,
+                            IntelligenceAnswerReview,
+                        )
+                        .join(
+                            IntelligenceAnswer,
+                            IntelligenceAnswer.question_id == IntelligenceQuestion.id,
+                        )
+                        .join(
+                            IntelligenceAnswerReview,
+                            IntelligenceAnswerReview.answer_id == IntelligenceAnswer.id,
+                        )
+                        .where(
+                            IntelligenceQuestion.interview_id == interview.id,
+                        )
+                        .order_by(
+                            IntelligenceQuestion.sequence_number,
+                            IntelligenceAnswerReview.created_at.desc(),
+                        )
                     )
-                    for item in utterances
-                ]
+                ).all()
+                summary_rows = _effective_summary_rows(summary_rows)
+                blocks = _summary_evidence_blocks(summary_rows)
+                if not blocks:
+                    blocks = [
+                        _utterance_block(
+                            item,
+                            "Candidate"
+                            if item.speaker_id == interview.candidate_speaker_id
+                            else f"Speaker {speakers[item.speaker_id].provider_speaker_key}",
+                        )
+                        for item in utterances
+                    ]
                 summary_results = [
-                    await _ai(ctx).summarize(chunk) for chunk in transcript_chunks(blocks)
+                    await _ai(ctx).summarize(chunk)
+                    for chunk in transcript_chunks(
+                        blocks,
+                        size=20,
+                        overlap=0,
+                        max_chars=45_000,
+                    )
                 ]
                 if summary_results:
                     overview = _merge_interview_summaries(
                         [result.output for result in summary_results]
                     )
+                    overview = _ground_technical_assessment(overview, summary_rows)
                     summary_usages = [result.usage for result in summary_results]
                     interview.ai_summary_payload = overview.model_dump(mode="json")
                     interview.ai_summary_model = summary_usages[-1].model
@@ -907,45 +950,30 @@ async def _upsert_ai_stage_comment(session: AsyncSession, interview: Intelligenc
     parts = ["AI-разбор собеседования"]
     overall_summary = str(overview.get("overall_summary") or "").strip()
     if overall_summary:
-        parts.extend(["", "Общее резюме", overall_summary])
+        parts.extend(["", "Вердикт", overall_summary])
+    technical_score = overview.get("technical_score")
+    technical_summary = str(overview.get("technical_summary") or "").strip()
+    if isinstance(technical_score, float | int):
+        parts.extend(["", f"Техническая оценка: {round(float(technical_score) * 100)}%"])
+    if technical_summary:
+        parts.append(technical_summary)
+
+    priority_actions = overview.get("priority_actions")
+    if isinstance(priority_actions, list) and priority_actions:
+        parts.extend(["", "Что улучшить в первую очередь"])
+        for index, action in enumerate(priority_actions[:3], start=1):
+            if not isinstance(action, dict):
+                continue
+            title = str(action.get("title") or "").strip()
+            reason = str(action.get("reason") or "").strip()
+            if title:
+                parts.append(f"{index}. {title}")
+            if reason:
+                parts.append(reason)
+
     communication_summary = str(overview.get("communication_summary") or "").strip()
     if communication_summary:
-        parts.extend(["", "Коммуникация и soft skills", communication_summary])
-
-    rows = (
-        await session.execute(
-            select(IntelligenceQuestion, IntelligenceAnswer, IntelligenceAnswerReview)
-            .outerjoin(
-                IntelligenceAnswer,
-                IntelligenceAnswer.question_id == IntelligenceQuestion.id,
-            )
-            .outerjoin(
-                IntelligenceAnswerReview,
-                (IntelligenceAnswerReview.answer_id == IntelligenceAnswer.id)
-                & (IntelligenceAnswerReview.source == IntelligenceReviewSource.AI),
-            )
-            .where(IntelligenceQuestion.interview_id == interview.id)
-            .order_by(
-                IntelligenceQuestion.sequence_number,
-                IntelligenceAnswerReview.created_at.desc(),
-            )
-        )
-    ).all()
-    seen: set[UUID] = set()
-    question_lines: list[str] = []
-    for question, answer, review in rows:
-        if question.id in seen:
-            continue
-        seen.add(question.id)
-        question_lines.append(f"{question.sequence_number}. {question.question_text}")
-        if answer is None or not answer.answer_text.strip():
-            question_lines.append("Ответ кандидата не найден.")
-        if review is not None:
-            feedback = (review.summary or review.suggested_better_answer or "").strip()
-            if feedback:
-                question_lines.append(feedback)
-    if question_lines:
-        parts.extend(["", "Вопросы и ответы", *question_lines])
+        parts.extend(["", "Коммуникация", communication_summary])
 
     body = "\n".join(parts).strip()[:50_000]
     comment = await session.scalar(
@@ -1122,6 +1150,136 @@ def _retry_delay(ctx: dict[str, Any], base_seconds: int) -> int:
     return max(1, int(capped_delay * (0.5 + jitter_fraction / 2)))
 
 
+def _effective_summary_rows(rows: list[Any]) -> list[Any]:
+    grouped: dict[UUID, list[Any]] = {}
+    order: list[UUID] = []
+    for row in rows:
+        question = row[0]
+        if question.id not in grouped:
+            order.append(question.id)
+        grouped.setdefault(question.id, []).append(row)
+
+    result: list[Any] = []
+    for question_id in order:
+        candidates = grouped[question_id]
+        mentor = next(
+            (
+                row
+                for row in candidates
+                if row[2].source is IntelligenceReviewSource.MENTOR
+                and row[2].status is IntelligenceReviewStatus.APPROVED
+            ),
+            None,
+        )
+        ai = next(
+            (
+                row
+                for row in candidates
+                if row[2].source is IntelligenceReviewSource.AI
+                and row[2].status
+                in {
+                    IntelligenceReviewStatus.SUGGESTED,
+                    IntelligenceReviewStatus.APPROVED,
+                }
+            ),
+            None,
+        )
+        if selected := mentor or ai:
+            result.append(selected)
+    return result
+
+
+def _summary_evidence_blocks(rows: list[Any]) -> list[str]:
+    blocks: list[str] = []
+    seen_questions: set[UUID] = set()
+    for question, answer, review in rows:
+        if question.id in seen_questions:
+            continue
+        seen_questions.add(question.id)
+        payload = {
+            "question_number": question.sequence_number,
+            "question_kind": question.question_kind.value,
+            "topic": question.category,
+            "subcategory": question.subcategory,
+            "question": question.question_text[:2_000],
+            "candidate_answer": answer.answer_text[:6_000],
+            "extraction_confidence": question.confidence,
+            "preliminary_review": {
+                "assessment": review.assessment.value,
+                "score": review.score,
+                "summary": (review.summary or "")[:1_500] or None,
+                "strengths": review.strengths[:3],
+                "problems": review.problems[:3],
+                "missing_points": review.missing_points[:5],
+                "incorrect_statements": review.incorrect_statements[:3],
+                "suggested_better_answer": (
+                    (review.suggested_better_answer or "")[:4_000] or None
+                ),
+            },
+        }
+        blocks.append(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+    return blocks
+
+
+def _join_unique(values: Any, *, max_length: int) -> str:
+    result = " ".join(_unique(values))
+    if len(result) <= max_length:
+        return result
+    shortened = result[: max_length - 1].rstrip(" ,;:-")
+    return f"{shortened}…"
+
+
+def _ground_technical_assessment(
+    overview: InterviewSummaryOutput,
+    rows: list[Any],
+) -> InterviewSummaryOutput:
+    evidence: dict[int, tuple[float | None, float]] = {}
+    for question, _answer, review in rows:
+        if question.question_kind is not IntelligenceQuestionKind.TECHNICAL:
+            continue
+        evidence.setdefault(
+            question.sequence_number,
+            (
+                review.score
+                if review.assessment is not IntelligenceAssessment.UNABLE_TO_ASSESS
+                else None,
+                question.confidence,
+            ),
+        )
+
+    grounded_topics: list[TechnicalTopicAssessment] = []
+    for topic in overview.technical_topics:
+        question_numbers = sorted(
+            {number for number in topic.evidence_question_numbers if number in evidence}
+        )
+        if not question_numbers:
+            continue
+        scores = [
+            score
+            for number in question_numbers
+            if (score := evidence[number][0]) is not None
+        ]
+        grounded_topics.append(
+            topic.model_copy(
+                update={
+                    "score": sum(scores) / len(scores) if scores else None,
+                    "evidence_question_numbers": question_numbers,
+                    "questions_count": len(question_numbers),
+                    "confidence": sum(evidence[number][1] for number in question_numbers)
+                    / len(question_numbers),
+                }
+            )
+        )
+
+    all_scores = [score for score, _confidence in evidence.values() if score is not None]
+    return overview.model_copy(
+        update={
+            "technical_score": sum(all_scores) / len(all_scores) if all_scores else None,
+            "technical_topics": grounded_topics,
+        }
+    )
+
+
 def _merge_interview_summaries(
     summaries: list[InterviewSummaryOutput],
 ) -> InterviewSummaryOutput:
@@ -1148,15 +1306,92 @@ def _merge_interview_summaries(
             )
         )
 
+    topic_rows: dict[str, list[TechnicalTopicAssessment]] = {}
+    topic_order: list[str] = []
+    for summary in summaries:
+        for topic in summary.technical_topics:
+            key = topic.topic.casefold()
+            if key not in topic_rows:
+                topic_order.append(key)
+            topic_rows.setdefault(key, []).append(topic)
+
+    technical_topics: list[TechnicalTopicAssessment] = []
+    for key in topic_order:
+        rows = topic_rows[key]
+        scored_rows = [row for row in rows if row.score is not None]
+        scored_question_count = sum(row.questions_count for row in scored_rows)
+        score = (
+            sum(cast(float, row.score) * row.questions_count for row in scored_rows)
+            / scored_question_count
+            if scored_question_count
+            else None
+        )
+        technical_topics.append(
+            TechnicalTopicAssessment(
+                topic=rows[0].topic,
+                score=score,
+                summary=_join_unique((row.summary for row in rows), max_length=600),
+                strengths=_unique(value for row in rows for value in row.strengths)[:3],
+                gaps=_unique(value for row in rows for value in row.gaps)[:3],
+                next_step=_join_unique((row.next_step for row in rows), max_length=600),
+                evidence_question_numbers=sorted(
+                    {
+                        number
+                        for row in rows
+                        for number in row.evidence_question_numbers
+                        if number > 0
+                    }
+                )[:20],
+                questions_count=sum(row.questions_count for row in rows),
+                confidence=(
+                    sum(row.confidence * row.questions_count for row in rows)
+                    / sum(row.questions_count for row in rows)
+                ),
+            )
+        )
+
+    scored_topics = [topic for topic in technical_topics if topic.score is not None]
+    scored_questions = sum(topic.questions_count for topic in scored_topics)
+    technical_score = (
+        sum(cast(float, topic.score) * topic.questions_count for topic in scored_topics)
+        / scored_questions
+        if scored_questions
+        else None
+    )
+
+    priority_actions: list[InterviewPriorityAction] = []
+    seen_actions: set[str] = set()
+    for summary in summaries:
+        for action in summary.priority_actions:
+            key = action.title.casefold()
+            if key in seen_actions:
+                continue
+            seen_actions.add(key)
+            priority_actions.append(action)
+            if len(priority_actions) == 3:
+                break
+        if len(priority_actions) == 3:
+            break
+
     communication_scores = [
         summary.communication_score
         for summary in summaries
         if summary.communication_score is not None
     ]
     return InterviewSummaryOutput(
-        overall_summary="\n\n".join(_unique(item.overall_summary for item in summaries)),
-        key_topics=_unique(topic for item in summaries for topic in item.key_topics),
-        communication_summary=" ".join(_unique(item.communication_summary for item in summaries)),
+        overall_summary=_join_unique(
+            (item.overall_summary for item in summaries), max_length=1_200
+        ),
+        technical_score=technical_score,
+        technical_summary=_join_unique(
+            (item.technical_summary for item in summaries), max_length=1_000
+        ),
+        technical_topics=technical_topics[:20],
+        priority_actions=priority_actions,
+        key_topics=_unique(topic for item in summaries for topic in item.key_topics)[:20],
+        communication_summary=_join_unique(
+            (item.communication_summary for item in summaries), max_length=800
+        ),
         communication_score=(
             sum(communication_scores) / len(communication_scores) if communication_scores else None
         ),

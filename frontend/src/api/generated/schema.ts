@@ -6572,6 +6572,14 @@ export interface components {
         IntelligenceInterviewOverviewRead: {
             /** Overall Summary */
             overall_summary: string;
+            /** Technical Score */
+            technical_score?: number | null;
+            /** Technical Summary */
+            technical_summary?: string;
+            /** Technical Topics */
+            technical_topics?: components["schemas"]["IntelligenceTechnicalTopicRead"][];
+            /** Priority Actions */
+            priority_actions?: components["schemas"]["IntelligencePriorityActionRead"][];
             /** Key Topics */
             key_topics: string[];
             /** Communication Summary */
@@ -6590,6 +6598,40 @@ export interface components {
             model_name: string | null;
             /** Prompt Version */
             prompt_version: string | null;
+        };
+        /** IntelligencePriorityActionRead */
+        IntelligencePriorityActionRead: {
+            /** Title */
+            title: string;
+            /** Reason */
+            reason: string;
+            /** Steps */
+            steps: string[];
+            /** Success Criterion */
+            success_criterion: string;
+            /** Related Topics */
+            related_topics: string[];
+        };
+        /** IntelligenceTechnicalTopicRead */
+        IntelligenceTechnicalTopicRead: {
+            /** Topic */
+            topic: string;
+            /** Score */
+            score: number | null;
+            /** Summary */
+            summary: string;
+            /** Strengths */
+            strengths: string[];
+            /** Gaps */
+            gaps: string[];
+            /** Next Step */
+            next_step: string;
+            /** Evidence Question Numbers */
+            evidence_question_numbers: number[];
+            /** Questions Count */
+            questions_count: number;
+            /** Confidence */
+            confidence: number;
         };
         /** IntelligenceInterviewSummary */
         IntelligenceInterviewSummary: {

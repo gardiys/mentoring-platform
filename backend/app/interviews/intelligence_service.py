@@ -35,6 +35,7 @@ from app.interviews.intelligence_models import (
     IntelligenceProcessingAttempt,
     IntelligenceProcessingStatus,
     IntelligenceQuestion,
+    IntelligenceQuestionKind,
     IntelligenceQuestionModerationStatus,
     IntelligenceReviewSource,
     IntelligenceReviewStatus,
@@ -126,6 +127,261 @@ STAGE_TO_TYPE = {
     InterviewStageType.FINAL_INTERVIEW: IntelligenceInterviewType.FINAL,
     InterviewStageType.OTHER: IntelligenceInterviewType.OTHER,
 }
+
+
+def _display_topic(value: str) -> str:
+    normalized = " ".join(value.replace("_", " ").replace("-", " ").split())
+    if not normalized:
+        return "Технические вопросы"
+    return normalized[0].upper() + normalized[1:]
+
+
+def _review_text_items(items: list[dict[str, object]], key: str) -> list[str]:
+    return [
+        text
+        for item in items
+        if (text := str(item.get(key) or "").strip())
+    ]
+
+
+def _derived_technical_report(
+    questions: list[IntelligenceQuestionRead],
+) -> dict[str, object]:
+    grouped: dict[str, dict[str, object]] = {}
+    total_technical = 0
+    assessed_answers = 0
+    all_scores: list[float] = []
+
+    for question in questions:
+        if question.question_kind is not IntelligenceQuestionKind.TECHNICAL:
+            continue
+        total_technical += 1
+        topic = _display_topic(question.category)
+        key = topic.casefold()
+        row = grouped.setdefault(
+            key,
+            {
+                "topic": topic,
+                "scores": [],
+                "summaries": [],
+                "strengths": [],
+                "gaps": [],
+                "better_answers": [],
+                "question_numbers": [],
+                "confidences": [],
+            },
+        )
+        row["question_numbers"].append(question.sequence_number)  # type: ignore[union-attr]
+        row["confidences"].append(question.confidence)  # type: ignore[union-attr]
+        if question.answer is None or not question.answer.reviews:
+            continue
+        mentor_reviews = [
+            review
+            for review in question.answer.reviews
+            if review.source is IntelligenceReviewSource.MENTOR
+            and review.status is IntelligenceReviewStatus.APPROVED
+        ]
+        ai_reviews = [
+            review
+            for review in question.answer.reviews
+            if review.source is IntelligenceReviewSource.AI
+            and review.status
+            in {
+                IntelligenceReviewStatus.SUGGESTED,
+                IntelligenceReviewStatus.APPROVED,
+            }
+        ]
+        if not mentor_reviews and not ai_reviews:
+            continue
+        review = (mentor_reviews or ai_reviews)[-1]
+        if review.score is not None:
+            row["scores"].append(review.score)  # type: ignore[union-attr]
+            all_scores.append(review.score)
+            assessed_answers += 1
+        if review.summary:
+            row["summaries"].append(review.summary)  # type: ignore[union-attr]
+        row["strengths"].extend(  # type: ignore[union-attr]
+            _review_text_items(review.strengths, "point")
+        )
+        row["gaps"].extend(  # type: ignore[union-attr]
+            str(item).strip() for item in review.missing_points if str(item).strip()
+        )
+        row["gaps"].extend(  # type: ignore[union-attr]
+            _review_text_items(review.problems, "problem")
+        )
+        if review.suggested_better_answer:
+            row["better_answers"].append(review.suggested_better_answer)  # type: ignore[union-attr]
+
+    def unique(values: list[object], limit: int) -> list[str]:
+        result: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            text = str(value).strip()
+            key = text.casefold()
+            if text and key not in seen:
+                result.append(text)
+                seen.add(key)
+            if len(result) == limit:
+                break
+        return result
+
+    topics: list[dict[str, object]] = []
+    for row in grouped.values():
+        scores = row["scores"]
+        score = sum(scores) / len(scores) if scores else None  # type: ignore[arg-type]
+        gaps = unique(row["gaps"], 3)  # type: ignore[arg-type]
+        summaries = unique(row["summaries"], 2)  # type: ignore[arg-type]
+        if summaries:
+            topic_summary = " ".join(summaries)
+        elif score is None:
+            topic_summary = "Недостаточно данных, чтобы надежно оценить ответы по этой теме."
+        elif score >= 0.8:
+            topic_summary = "Ответы по теме в целом уверенные и технически точные."
+        elif score >= 0.6:
+            topic_summary = "Базовое понимание есть, но отдельные части ответа нужно уточнить."
+        else:
+            topic_summary = "В ответах есть заметные технические пробелы."
+        if gaps:
+            next_step = (
+                f"Закройте пробелы: {'; '.join(gaps[:2])}. Пересоберите ответ по схеме "
+                "«определение → как работает → ограничения → практический пример» "
+                "и проговорите его."
+            )
+        elif score is None:
+            next_step = "Разберите вопросы темы и повторно проверьте себя на устном ответе."
+        else:
+            next_step = "Закрепите тему на 2–3 новых вопросах и одном практическом примере."
+        confidences = row["confidences"]
+        question_numbers = sorted(set(row["question_numbers"]))  # type: ignore[arg-type]
+        topics.append(
+            {
+                "topic": row["topic"],
+                "score": score,
+                "summary": topic_summary[:600],
+                "strengths": unique(row["strengths"], 3),  # type: ignore[arg-type]
+                "gaps": gaps,
+                "next_step": next_step[:600],
+                "evidence_question_numbers": question_numbers[:20],
+                "questions_count": len(question_numbers),
+                "confidence": (
+                    sum(confidences) / len(confidences) if confidences else 0.0  # type: ignore[arg-type]
+                ),
+            }
+        )
+
+    topics.sort(key=lambda item: item["score"] if item["score"] is not None else 2.0)
+    technical_score = sum(all_scores) / len(all_scores) if all_scores else None
+    if total_technical == 0:
+        technical_summary = "В записи не найдено технических вопросов для оценки."
+    elif technical_score is None:
+        technical_summary = (
+            f"Найдено {total_technical} технических вопросов, но ответы нельзя надежно оценить."
+        )
+    else:
+        assessed_topics = [item for item in topics if item["score"] is not None]
+        weakest = assessed_topics[0] if assessed_topics else None
+        strongest = assessed_topics[-1] if assessed_topics else None
+        focus = (
+            f" Главный приоритет — «{weakest['topic']}»."
+            if weakest is not None and weakest["score"] < 0.8
+            else ""
+        )
+        strength = (
+            f" Лучше всего пройдена тема «{strongest['topic']}»."
+            if strongest is not None
+            and strongest is not weakest
+            and strongest["score"] >= 0.7
+            else ""
+        )
+        technical_summary = (
+            f"Оценено {assessed_answers} из {total_technical} технических ответов."
+            f"{strength}{focus}"
+        )
+
+    priority_actions: list[dict[str, object]] = []
+    for topic in topics:
+        gaps = topic["gaps"]
+        score = topic["score"]
+        if not gaps and (score is None or score >= 0.8):
+            continue
+        first_gap = str(gaps[0]) if gaps else str(topic["summary"])
+        question_numbers = ", ".join(
+            f"№{number}" for number in topic["evidence_question_numbers"]
+        )
+        steps = []
+        if gaps:
+            steps.append(f"Повторить: {'; '.join(str(item) for item in gaps[:2])}.")
+        steps.extend(
+            [
+                "Собрать ответ по схеме: определение, механизм, ограничения и практический пример.",
+                (
+                    f"Повторно ответить вслух на вопросы {question_numbers} за 1–2 минуты."
+                    if question_numbers
+                    else "Повторно ответить вслух на 2–3 вопроса по теме за 1–2 минуты."
+                ),
+            ]
+        )
+        priority_actions.append(
+            {
+                "title": f"Подтянуть тему «{topic['topic']}»",
+                "reason": first_gap[:500],
+                "steps": steps[:3],
+                "success_criterion": (
+                    "Дать точный структурированный ответ за 1–2 минуты и подтвердить его примером."
+                ),
+                "related_topics": [str(topic["topic"])],
+            }
+        )
+        if len(priority_actions) == 3:
+            break
+
+    return {
+        "technical_score": technical_score,
+        "technical_summary": technical_summary,
+        "technical_topics": topics,
+        "priority_actions": priority_actions,
+    }
+
+
+def _merge_topic_narratives(
+    derived_topics: list[dict[str, object]],
+    stored_topics: object,
+    changed_question_numbers: set[int],
+) -> list[dict[str, object]]:
+    if not isinstance(stored_topics, list):
+        return derived_topics
+    candidates = [item for item in stored_topics if isinstance(item, dict)]
+    merged: list[dict[str, object]] = []
+    for topic in derived_topics:
+        numbers = {
+            int(number)
+            for number in topic.get("evidence_question_numbers", [])
+            if isinstance(number, int)
+        }
+        if numbers & changed_question_numbers:
+            merged.append(topic)
+            continue
+        best: dict[str, object] | None = None
+        best_overlap = 0
+        for candidate in candidates:
+            candidate_numbers = {
+                int(number)
+                for number in candidate.get("evidence_question_numbers", [])
+                if isinstance(number, int)
+            }
+            overlap = len(numbers & candidate_numbers)
+            if overlap > best_overlap:
+                best = candidate
+                best_overlap = overlap
+        if best is None:
+            merged.append(topic)
+            continue
+        enriched = dict(topic)
+        for field in ("summary", "strengths", "gaps", "next_step"):
+            if best.get(field):
+                enriched[field] = best[field]
+        merged.append(enriched)
+    return merged
 
 
 def _mentor_interview_access(user: User) -> ColumnElement[bool]:
@@ -741,6 +997,37 @@ async def intelligence_detail(
                 ),
             )
         )
+
+    overview_payload: dict[str, object] | None = None
+    if interview.ai_summary_payload is not None:
+        overview_payload = dict(interview.ai_summary_payload)
+        # Scores and topic groups are always rebuilt from the current effective
+        # question reviews. Card routing and mentor edits happen after the AI
+        # summary snapshot, so serving persisted aggregates would make the report
+        # stale or let a rejected review continue to affect the student.
+        derived_report = _derived_technical_report(question_reads)
+        changed_question_numbers = {
+            question.sequence_number
+            for question in question_reads
+            if question.question_kind is IntelligenceQuestionKind.TECHNICAL
+            and question.answer is not None
+            and any(
+                review.source is IntelligenceReviewSource.MENTOR
+                or review.status is IntelligenceReviewStatus.REJECTED
+                for review in question.answer.reviews
+            )
+        }
+        overview_payload["technical_score"] = derived_report["technical_score"]
+        overview_payload["technical_topics"] = _merge_topic_narratives(
+            derived_report["technical_topics"],  # type: ignore[arg-type]
+            overview_payload.get("technical_topics"),
+            changed_question_numbers,
+        )
+        if changed_question_numbers or not overview_payload.get("technical_summary"):
+            overview_payload["technical_summary"] = derived_report["technical_summary"]
+        if changed_question_numbers or not overview_payload.get("priority_actions"):
+            overview_payload["priority_actions"] = derived_report["priority_actions"]
+
     return IntelligenceInterviewDetail(
         **summary.model_dump(),
         media_filename=stage.media_filename,
@@ -775,12 +1062,12 @@ async def intelligence_detail(
         overview=(
             IntelligenceInterviewOverviewRead.model_validate(
                 {
-                    **interview.ai_summary_payload,
+                    **overview_payload,
                     "model_name": interview.ai_summary_model,
                     "prompt_version": interview.ai_summary_prompt_version,
                 }
             )
-            if interview.ai_summary_payload is not None
+            if overview_payload is not None
             else None
         ),
         processing=IntelligenceProcessingRead(

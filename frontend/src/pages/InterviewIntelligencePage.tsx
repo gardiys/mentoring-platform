@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Group,
+  Progress,
   Radio,
   SimpleGrid,
   Stack,
@@ -13,7 +14,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/endpoints";
@@ -41,6 +42,7 @@ import {
 } from "../features/interviews/intelligencePresentation";
 import type {
   IntelligenceAssessment,
+  IntelligenceInterviewOverview,
   IntelligenceQuestion,
 } from "../types/api";
 import { mediaKind } from "../utils/media";
@@ -64,17 +66,321 @@ function timestamp(milliseconds: number | null) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+function scorePercent(score: number | null) {
+  return score === null ? null : Math.round(score * 100);
+}
+
+function scorePresentation(score: number | null) {
+  if (score === null) {
+    return { color: "gray", label: "Недостаточно данных" };
+  }
+  if (score >= 0.8) return { color: "green", label: "Сильный результат" };
+  if (score >= 0.6) return { color: "blue", label: "Хорошая база" };
+  if (score >= 0.4) return { color: "yellow", label: "Есть пробелы" };
+  return { color: "orange", label: "Нужна проработка" };
+}
+
+function OverviewSummary({
+  overview,
+}: {
+  overview: IntelligenceInterviewOverview;
+}) {
+  const technicalScore = overview.technical_score ?? null;
+  const technical = scorePresentation(technicalScore);
+  const technicalPercent = scorePercent(technicalScore);
+  const communicationPercent = scorePercent(overview.communication_score);
+  const priorityActions = (overview.priority_actions ?? []).slice(0, 3);
+
+  return (
+    <Card withBorder className="analysis-verdict-card">
+      <Stack gap="lg">
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+          <div className="analysis-verdict-copy">
+            <Text className="technical-label">Итог AI-разбора</Text>
+            <Title order={2}>Вердикт</Title>
+          </div>
+          <Badge
+            color={technical.color}
+            variant="light"
+            size="lg"
+            className="analysis-verdict-badge"
+          >
+            {technical.label}
+            {technicalPercent !== null ? ` · ${technicalPercent}%` : ""}
+          </Badge>
+        </Group>
+
+        <Text className="analysis-overall-summary">
+          {overview.overall_summary}
+        </Text>
+
+        <div className="analysis-score-strip">
+          <div className="analysis-score-item">
+            <Text className="technical-label">Техническая оценка</Text>
+            <Text fw={800} size="xl">
+              {technicalPercent === null ? "—" : `${technicalPercent}%`}
+            </Text>
+          </div>
+          <div className="analysis-score-item">
+            <Text className="technical-label">Коммуникация</Text>
+            <Text fw={800} size="xl">
+              {communicationPercent === null ? "—" : `${communicationPercent}%`}
+            </Text>
+          </div>
+        </div>
+
+        {priorityActions.length > 0 && (
+          <section aria-labelledby="analysis-priority-actions-title">
+            <Group justify="space-between" align="baseline" mb="sm">
+              <Title order={3} id="analysis-priority-actions-title">
+                Приоритетные улучшения
+              </Title>
+              <Text size="sm" c="dimmed">
+                Приоритетов: {priorityActions.length}
+              </Text>
+            </Group>
+            <SimpleGrid
+              cols={{ base: 1, md: Math.min(priorityActions.length, 3) }}
+              spacing="sm"
+            >
+              {priorityActions.map((action, index) => (
+                <div
+                  key={`${action.title}-${index}`}
+                  className="analysis-priority-action"
+                >
+                  <Group gap="sm" wrap="nowrap" align="flex-start">
+                    <span className="analysis-priority-number">
+                      {index + 1}
+                    </span>
+                    <div className="min-width-zero">
+                      <Text fw={800}>{action.title}</Text>
+                      <Text size="sm" c="dimmed" mt={4}>
+                        {action.reason}
+                      </Text>
+                    </div>
+                  </Group>
+                  {action.steps.length > 0 && (
+                    <ol className="analysis-action-steps">
+                      {action.steps.map((step) => (
+                        <li key={step}>{step}</li>
+                      ))}
+                    </ol>
+                  )}
+                  {action.success_criterion && (
+                    <Text size="xs" className="analysis-success-criterion">
+                      <b>Готово, когда:</b> {action.success_criterion}
+                    </Text>
+                  )}
+                </div>
+              ))}
+            </SimpleGrid>
+          </section>
+        )}
+
+        <Text size="xs" c="dimmed">
+          Это учебная AI-оценка качества ответов, а не решение о найме.
+        </Text>
+      </Stack>
+    </Card>
+  );
+}
+
+function TechnicalTopics({
+  overview,
+  questions,
+  onQuestionNavigate,
+}: {
+  overview: IntelligenceInterviewOverview;
+  questions: IntelligenceQuestion[];
+  onQuestionNavigate: (questionId: string) => void;
+}) {
+  const technicalScore = overview.technical_score ?? null;
+  const technicalPercent = scorePercent(technicalScore);
+
+  return (
+    <Card withBorder className="analysis-technical-card">
+      <Stack gap="md">
+        <Group justify="space-between" align="flex-start" wrap="wrap">
+          <div>
+            <Text className="technical-label">Знания и точность ответов</Text>
+            <Title order={2}>Техническая оценка по темам</Title>
+          </div>
+          <Badge
+            color={scorePresentation(technicalScore).color}
+            variant="light"
+            size="lg"
+          >
+            {technicalPercent === null
+              ? "Без общей оценки"
+              : `Общая оценка · ${technicalPercent}%`}
+          </Badge>
+        </Group>
+
+        {overview.technical_summary && (
+          <Text c="dimmed">{overview.technical_summary}</Text>
+        )}
+
+        {overview.key_topics.length > 0 && (
+          <Group gap="xs">
+            {overview.key_topics.map((topic) => (
+              <Badge key={topic} variant="light">
+                {topic}
+              </Badge>
+            ))}
+          </Group>
+        )}
+
+        {(overview.technical_topics ?? []).length > 0 ? (
+          <Accordion
+            multiple
+            variant="separated"
+            radius="md"
+            chevronPosition="right"
+            className="brand-accordion analysis-topic-accordion"
+          >
+            {(overview.technical_topics ?? []).map((topic, index) => {
+              const percent = scorePercent(topic.score);
+              const presentation = scorePresentation(topic.score);
+              return (
+                <Accordion.Item
+                  key={`${topic.topic}-${index}`}
+                  value={`${index}-${topic.topic}`}
+                >
+                  <Accordion.Control>
+                    <div className="analysis-topic-control">
+                      <Group
+                        justify="space-between"
+                        align="center"
+                        wrap="nowrap"
+                        gap="sm"
+                      >
+                        <div className="min-width-zero">
+                          <Text fw={800} className="analysis-topic-name">
+                            {topic.topic}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {topic.questions_count} вопросов
+                          </Text>
+                        </div>
+                        <Badge
+                          color={presentation.color}
+                          variant="light"
+                          className="analysis-topic-score"
+                        >
+                          {percent === null ? "Нет оценки" : `${percent}%`}
+                        </Badge>
+                      </Group>
+                      {percent !== null && (
+                        <Progress
+                          value={percent}
+                          color={presentation.color}
+                          size="sm"
+                          radius="xl"
+                          mt="xs"
+                          aria-label={`Оценка темы ${topic.topic}: ${percent}%`}
+                        />
+                      )}
+                    </div>
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    <Stack gap="sm">
+                      <Text size="sm">{topic.summary}</Text>
+                      {(topic.strengths.length > 0 ||
+                        topic.gaps.length > 0) && (
+                        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                          {topic.strengths.length > 0 && (
+                            <div className="analysis-topic-points is-strength">
+                              <Text fw={700} size="sm">
+                                Что получилось
+                              </Text>
+                              <ul>
+                                {topic.strengths.map((strength) => (
+                                  <li key={strength}>{strength}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {topic.gaps.length > 0 && (
+                            <div className="analysis-topic-points is-gap">
+                              <Text fw={700} size="sm">
+                                Что подтянуть
+                              </Text>
+                              <ul>
+                                {topic.gaps.map((gap) => (
+                                  <li key={gap}>{gap}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </SimpleGrid>
+                      )}
+                      {topic.next_step && (
+                        <div className="analysis-topic-next-step">
+                          <Text className="technical-label">Следующий шаг</Text>
+                          <Text size="sm">{topic.next_step}</Text>
+                        </div>
+                      )}
+                      {topic.evidence_question_numbers.length > 0 && (
+                        <Group gap="xs">
+                          <Text size="xs" c="dimmed">
+                            Основано на вопросах:
+                          </Text>
+                          {topic.evidence_question_numbers.map((number) => {
+                            const question = questions.find(
+                              (item) => item.sequence_number === number,
+                            );
+                            if (!question) {
+                              return (
+                                <Badge key={number} size="sm" variant="outline">
+                                  №{number}
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <a
+                                key={number}
+                                href={`#question-${question.id}`}
+                                className="analysis-evidence-link"
+                                aria-label={`Открыть вопрос №${number}`}
+                                onClick={() => onQuestionNavigate(question.id)}
+                              >
+                                №{number}
+                              </a>
+                            );
+                          })}
+                        </Group>
+                      )}
+                    </Stack>
+                  </Accordion.Panel>
+                </Accordion.Item>
+              );
+            })}
+          </Accordion>
+        ) : (
+          <Text size="sm" c="dimmed">
+            По этой записи пока недостаточно данных для оценки отдельных тем.
+          </Text>
+        )}
+      </Stack>
+    </Card>
+  );
+}
+
 function AnalysisSection({
   title,
   eyebrow,
   summary,
   defaultOpened = false,
+  opened,
+  onOpenedChange,
   children,
 }: {
   title: string;
   eyebrow?: string;
   summary?: string;
   defaultOpened?: boolean;
+  opened?: boolean;
+  onOpenedChange?: (opened: boolean) => void;
   children: ReactNode;
 }) {
   return (
@@ -83,7 +389,9 @@ function AnalysisSection({
       radius="md"
       chevronPosition="right"
       className="brand-accordion analysis-accordion"
-      defaultValue={defaultOpened ? "content" : null}
+      defaultValue={opened === undefined && defaultOpened ? "content" : null}
+      value={opened === undefined ? undefined : opened ? "content" : null}
+      onChange={(value) => onOpenedChange?.(value === "content")}
     >
       <Accordion.Item value="content">
         <Accordion.Control>
@@ -338,11 +646,32 @@ export function InterviewIntelligencePage() {
     content_type: string;
   } | null>(null);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
+  const [pendingSeekMs, setPendingSeekMs] = useState<number | null>(null);
+  const [questionsOpened, setQuestionsOpened] = useState(false);
   const mediaRef = useRef<HTMLMediaElement>(null);
   const operations = useAdminIntelligenceOperations(me.data?.role === "admin");
   const intelligenceMediaKind = media
     ? mediaKind(media.content_type, query.data?.media_filename)
     : null;
+
+  useEffect(() => {
+    const element = mediaRef.current;
+    if (!element || pendingSeekMs === null) return;
+
+    const seekAndPlay = () => {
+      element.currentTime = pendingSeekMs / 1_000;
+      void element.play().catch(() => undefined);
+      setPendingSeekMs(null);
+    };
+
+    if (element.readyState >= 1) {
+      seekAndPlay();
+      return;
+    }
+
+    element.addEventListener("loadedmetadata", seekAndPlay, { once: true });
+    return () => element.removeEventListener("loadedmetadata", seekAndPlay);
+  }, [media, pendingSeekMs]);
 
   if (query.isPending || me.isPending)
     return <LoadingState label="Загружаем разбор…" />;
@@ -380,6 +709,7 @@ export function InterviewIntelligencePage() {
 
   const openMedia = async () => {
     if (media) {
+      setPendingSeekMs(null);
       setMedia(null);
       return;
     }
@@ -387,6 +717,7 @@ export function InterviewIntelligencePage() {
     try {
       setMedia(await api.intelligenceMedia(interview.id));
     } catch (error) {
+      setPendingSeekMs(null);
       notifications.show({
         color: "red",
         message:
@@ -397,7 +728,29 @@ export function InterviewIntelligencePage() {
     }
   };
 
+  const playFromTranscript = async (milliseconds: number) => {
+    if (mediaRef.current) {
+      mediaRef.current.currentTime = milliseconds / 1_000;
+      await mediaRef.current.play().catch(() => undefined);
+      return;
+    }
+    if (!interview.media_filename) return;
+    setPendingSeekMs(milliseconds);
+    await openMedia();
+  };
+
+  const revealQuestion = (questionId: string) => {
+    setQuestionsOpened(true);
+    window.setTimeout(() => {
+      document.getElementById(`question-${questionId}`)?.scrollIntoView?.({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 0);
+  };
+
   const handleMediaError = () => {
+    setPendingSeekMs(null);
     setMedia(null);
     notifications.show({
       color: "yellow",
@@ -505,57 +858,6 @@ export function InterviewIntelligencePage() {
         </Alert>
       )}
 
-      {interview.media_filename && (
-        <Card withBorder>
-          <Stack>
-            <Group justify="space-between">
-              <div>
-                <Title order={3}>Запись</Title>
-                <Text size="sm" c="dimmed">
-                  {interview.media_filename}
-                </Text>
-              </div>
-              <Button
-                variant="light"
-                loading={isMediaLoading}
-                onClick={() => void openMedia()}
-              >
-                {media ? "Скрыть запись" : "Открыть запись"}
-              </Button>
-            </Group>
-            {media && intelligenceMediaKind === "video" && (
-              <video
-                ref={mediaRef as React.RefObject<HTMLVideoElement>}
-                controls
-                controlsList="nodownload noremoteplayback"
-                playsInline
-                preload="metadata"
-                src={media.url}
-                onError={handleMediaError}
-                style={{ width: "100%", maxHeight: 640, borderRadius: 12 }}
-              />
-            )}
-            {media && intelligenceMediaKind === "audio" && (
-              <audio
-                ref={mediaRef}
-                controls
-                controlsList="nodownload noremoteplayback"
-                preload="metadata"
-                src={media.url}
-                onError={handleMediaError}
-                style={{ width: "100%" }}
-              />
-            )}
-            {media && !intelligenceMediaKind && (
-              <Alert color="yellow" title="Формат записи не распознан">
-                Не удалось определить, это аудио или видео. Проверьте имя и
-                формат исходного файла.
-              </Alert>
-            )}
-          </Stack>
-        </Card>
-      )}
-
       {interview.processing_status === "awaiting_candidate_speaker" && (
         <Card withBorder>
           <Stack>
@@ -612,132 +914,100 @@ export function InterviewIntelligencePage() {
         </Card>
       )}
 
-      {interview.transcript.length > 0 && (
-        <AnalysisSection
-          title="Расшифровка"
-          summary={`Реплик: ${interview.transcript.length}`}
-        >
-          <Stack gap={0}>
-            {interview.transcript.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="transcript-line"
-                onClick={() => {
-                  if (mediaRef.current) {
-                    mediaRef.current.currentTime = item.start_ms / 1_000;
-                    void mediaRef.current.play();
-                  }
-                }}
-              >
-                <span>{timestamp(item.start_ms)}</span>
-                <b>
-                  {item.speaker_role === "candidate"
-                    ? "Кандидат"
-                    : `Спикер ${item.speaker_key}`}
-                </b>
-                <span>{item.text}</span>
-              </button>
-            ))}
-          </Stack>
-        </AnalysisSection>
-      )}
-
       {interview.overview && (
-        <AnalysisSection
-          eyebrow="Итог AI-разбора"
-          title="Общее резюме"
-          defaultOpened
-        >
-          <Stack gap="md">
-            <Text style={{ whiteSpace: "pre-wrap" }}>
-              {interview.overview.overall_summary}
-            </Text>
-            {interview.overview.key_topics.length > 0 && (
-              <Group gap="xs">
-                {interview.overview.key_topics.map((topic) => (
-                  <Badge key={topic} variant="light">
-                    {topic}
-                  </Badge>
-                ))}
-              </Group>
-            )}
+        <>
+          <OverviewSummary overview={interview.overview} />
+          <TechnicalTopics
+            overview={interview.overview}
+            questions={interview.questions}
+            onQuestionNavigate={revealQuestion}
+          />
+          <AnalysisSection
+            eyebrow="Soft skills"
+            title="Коммуникация и подача"
+            summary={
+              interview.overview.communication_score === null
+                ? "Без оценки"
+                : `${Math.round(interview.overview.communication_score * 100)}%`
+            }
+          >
+            <Stack gap="md">
+              <Text c="dimmed">
+                Оценка основана только на наблюдаемом тексте разговора.
+              </Text>
+              <Text>{interview.overview.communication_summary}</Text>
 
-            <Group justify="space-between" align="flex-start">
-              <div>
-                <Title order={3}>Коммуникация и soft skills</Title>
-                <Text c="dimmed">
-                  Оценка основана только на наблюдаемом тексте разговора.
-                </Text>
-              </div>
-              {interview.overview.communication_score !== null && (
-                <Badge size="lg">
-                  {Math.round(interview.overview.communication_score * 100)}%
-                </Badge>
+              {interview.overview.communication_dimensions.length > 0 && (
+                <SimpleGrid
+                  cols={{ base: 1, md: 2 }}
+                  className="analysis-communication-grid"
+                >
+                  {interview.overview.communication_dimensions.map(
+                    (dimension) => (
+                      <div
+                        key={dimension.name}
+                        className="analysis-communication-dimension"
+                      >
+                        <Group justify="space-between" wrap="nowrap">
+                          <Text fw={700}>{dimension.name}</Text>
+                          {dimension.score !== null && (
+                            <Badge variant="outline">
+                              {Math.round(dimension.score * 100)}%
+                            </Badge>
+                          )}
+                        </Group>
+                        <Text size="sm" mt="xs">
+                          {dimension.summary}
+                        </Text>
+                      </div>
+                    ),
+                  )}
+                </SimpleGrid>
               )}
-            </Group>
-            <Text>{interview.overview.communication_summary}</Text>
 
-            {interview.overview.communication_dimensions.length > 0 && (
               <SimpleGrid cols={{ base: 1, md: 2 }}>
-                {interview.overview.communication_dimensions.map(
-                  (dimension) => (
-                    <Card key={dimension.name} withBorder padding="sm">
-                      <Group justify="space-between">
-                        <Text fw={700}>{dimension.name}</Text>
-                        {dimension.score !== null && (
-                          <Badge variant="outline">
-                            {Math.round(dimension.score * 100)}%
-                          </Badge>
-                        )}
-                      </Group>
-                      <Text size="sm" mt="xs">
-                        {dimension.summary}
-                      </Text>
-                    </Card>
-                  ),
-                )}
+                <div className="analysis-topic-points is-strength">
+                  <Text fw={700}>Сильные стороны</Text>
+                  {interview.overview.communication_strengths.length > 0 ? (
+                    <ul>
+                      {interview.overview.communication_strengths.map(
+                        (item) => (
+                          <li key={item}>{item}</li>
+                        ),
+                      )}
+                    </ul>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      Недостаточно данных
+                    </Text>
+                  )}
+                </div>
+                <div className="analysis-topic-points is-gap">
+                  <Text fw={700}>Что можно улучшить</Text>
+                  {interview.overview.communication_growth_areas.length > 0 ? (
+                    <ul>
+                      {interview.overview.communication_growth_areas.map(
+                        (item) => (
+                          <li key={item}>{item}</li>
+                        ),
+                      )}
+                    </ul>
+                  ) : (
+                    <Text size="sm" c="dimmed">
+                      Недостаточно данных
+                    </Text>
+                  )}
+                </div>
               </SimpleGrid>
-            )}
 
-            <SimpleGrid cols={{ base: 1, md: 2 }}>
-              <div>
-                <Text fw={700}>Сильные стороны коммуникации</Text>
-                {interview.overview.communication_strengths.length > 0 ? (
-                  interview.overview.communication_strengths.map((item) => (
-                    <Text key={item} size="sm">
-                      • {item}
-                    </Text>
-                  ))
-                ) : (
-                  <Text size="sm" c="dimmed">
-                    Недостаточно данных
-                  </Text>
-                )}
-              </div>
-              <div>
-                <Text fw={700}>Что можно улучшить</Text>
-                {interview.overview.communication_growth_areas.length > 0 ? (
-                  interview.overview.communication_growth_areas.map((item) => (
-                    <Text key={item} size="sm">
-                      • {item}
-                    </Text>
-                  ))
-                ) : (
-                  <Text size="sm" c="dimmed">
-                    Недостаточно данных
-                  </Text>
-                )}
-              </div>
-            </SimpleGrid>
-
-            {interview.overview.caveats.length > 0 && (
-              <Alert color="yellow" title="Ограничения оценки">
-                {interview.overview.caveats.join(" ")}
-              </Alert>
-            )}
-          </Stack>
-        </AnalysisSection>
+              {interview.overview.caveats.length > 0 && (
+                <Alert color="yellow" title="Ограничения оценки">
+                  {interview.overview.caveats.join(" ")}
+                </Alert>
+              )}
+            </Stack>
+          </AnalysisSection>
+        </>
       )}
 
       {canReview &&
@@ -766,24 +1036,6 @@ export function InterviewIntelligencePage() {
           </Alert>
         )}
 
-      {interview.questions.length > 0 && (
-        <AnalysisSection
-          title="Вопросы и ответы"
-          summary={`Вопросов: ${interview.questions.length}`}
-        >
-          <Stack>
-            {interview.questions.map((question) => (
-              <QuestionCard
-                key={question.id}
-                question={question}
-                reviewerRole={me.data.role}
-                interviewId={interview.id}
-              />
-            ))}
-          </Stack>
-        </AnalysisSection>
-      )}
-
       {interview.mentor_comments.length > 0 && (
         <AnalysisSection
           title="Фидбек ментора"
@@ -807,6 +1059,142 @@ export function InterviewIntelligencePage() {
             ))}
           </Stack>
         </AnalysisSection>
+      )}
+
+      {interview.questions.length > 0 && (
+        <AnalysisSection
+          title="Вопросы и ответы"
+          summary={`Вопросов: ${interview.questions.length}`}
+          opened={questionsOpened}
+          onOpenedChange={setQuestionsOpened}
+        >
+          <Stack>
+            {interview.questions.map((question) => (
+              <QuestionCard
+                key={question.id}
+                question={question}
+                reviewerRole={me.data.role}
+                interviewId={interview.id}
+              />
+            ))}
+          </Stack>
+        </AnalysisSection>
+      )}
+
+      {(interview.media_filename || interview.transcript.length > 0) && (
+        <section
+          className="analysis-materials"
+          aria-labelledby="analysis-materials-title"
+        >
+          <div className="analysis-materials-heading">
+            <Text className="technical-label">Материалы разбора</Text>
+            <Title order={2} id="analysis-materials-title">
+              Запись и расшифровка
+            </Title>
+            <Text c="dimmed" size="sm">
+              Откройте запись или расшифровку, когда понадобится проверить
+              конкретный вывод AI.
+            </Text>
+          </div>
+
+          {interview.media_filename && (
+            <Card withBorder className="analysis-media-card">
+              <Stack>
+                <Group
+                  justify="space-between"
+                  align="center"
+                  className="responsive-card-header"
+                >
+                  <div className="min-width-zero">
+                    <Title order={3}>Запись собеседования</Title>
+                    <Text
+                      size="sm"
+                      c="dimmed"
+                      className="analysis-media-filename"
+                    >
+                      {interview.media_filename}
+                    </Text>
+                  </div>
+                  <Button
+                    variant="light"
+                    loading={isMediaLoading}
+                    onClick={() => void openMedia()}
+                  >
+                    {media ? "Скрыть запись" : "Открыть запись"}
+                  </Button>
+                </Group>
+                {media && intelligenceMediaKind === "video" && (
+                  <video
+                    ref={mediaRef as React.RefObject<HTMLVideoElement>}
+                    controls
+                    controlsList="nodownload noremoteplayback"
+                    playsInline
+                    preload="metadata"
+                    src={media.url}
+                    onError={handleMediaError}
+                    className="analysis-media-player"
+                  />
+                )}
+                {media && intelligenceMediaKind === "audio" && (
+                  <audio
+                    ref={mediaRef}
+                    controls
+                    controlsList="nodownload noremoteplayback"
+                    preload="metadata"
+                    src={media.url}
+                    onError={handleMediaError}
+                    className="analysis-audio-player"
+                  />
+                )}
+                {media && !intelligenceMediaKind && (
+                  <Alert color="yellow" title="Формат записи не распознан">
+                    Не удалось определить, это аудио или видео. Проверьте имя и
+                    формат исходного файла.
+                  </Alert>
+                )}
+              </Stack>
+            </Card>
+          )}
+
+          {interview.transcript.length > 0 && (
+            <AnalysisSection
+              title="Расшифровка"
+              summary={`Реплик: ${interview.transcript.length}`}
+            >
+              <Stack gap="xs">
+                {interview.media_filename && (
+                  <Text size="sm" c="dimmed">
+                    Нажмите на реплику — запись откроется на нужном месте.
+                  </Text>
+                )}
+                <Stack gap={0}>
+                  {interview.transcript.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="transcript-line"
+                      disabled={!interview.media_filename}
+                      title={
+                        interview.media_filename
+                          ? "Открыть запись на этом месте"
+                          : "Для этой расшифровки запись недоступна"
+                      }
+                      onClick={() => void playFromTranscript(item.start_ms)}
+                    >
+                      <span>{timestamp(item.start_ms)}</span>
+                      <b>
+                        {item.speaker_role === "candidate"
+                          ? "Кандидат"
+                          : `Спикер ${item.speaker_key}`}
+                      </b>
+                      <span>{item.text}</span>
+                    </button>
+                  ))}
+                </Stack>
+              </Stack>
+            </AnalysisSection>
+          )}
+        </section>
       )}
 
       {canReview && (
