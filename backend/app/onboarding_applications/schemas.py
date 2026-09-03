@@ -66,6 +66,12 @@ class OnboardingPayment(BaseModel):
     amount: str
     currency: str
     payment_url: str | None
+    offer_email: str | None = None
+    offer_email_status: str | None = None
+    offer_email_sent_at: str | None = None
+    offer_email_delivered_at: str | None = None
+    offer_viewed_at: str | None = None
+    offer_accepted_at: str | None = None
     approved_at: str | None
     created_at: str
 

@@ -174,6 +174,45 @@ it("показывает подробную анкету, полноту и за
   ).toHaveAttribute("href", "https://files.example/passport.jpg");
 });
 
+it("показывает доставку письма и принятие оферты", async () => {
+  const paymentApplication: OnboardingApplicationDetail = {
+    ...application,
+    status: "PAYMENT_PENDING",
+    payment_status: "PENDING",
+    available_actions: ["resend_payment", "confirm_payment"],
+    payments: [
+      {
+        status: "PENDING",
+        amount: "1000.00",
+        currency: "RUB",
+        payment_url: "https://secure.tochka.example/payment",
+        offer_email: "student@example.com",
+        offer_email_status: "DELIVERED",
+        offer_email_sent_at: "2026-08-18T11:00:00Z",
+        offer_email_delivered_at: "2026-08-18T11:01:00Z",
+        offer_viewed_at: "2026-08-18T11:02:00Z",
+        offer_accepted_at: "2026-08-18T11:03:00Z",
+        approved_at: null,
+        created_at: "2026-08-18T11:00:00Z",
+      },
+    ],
+  };
+  vi.spyOn(api, "adminApplications").mockResolvedValue({
+    ...page,
+    items: [paymentApplication],
+  });
+  vi.spyOn(api, "adminApplication").mockResolvedValue(paymentApplication);
+
+  renderPage(<AdminApplicationsPage />);
+  await userEvent.click(await screen.findByRole("button", { name: "Открыть" }));
+
+  expect(await screen.findByText("Письмо: Доставлено")).toBeInTheDocument();
+  expect(screen.getAllByText("student@example.com")).toHaveLength(2);
+  expect(
+    screen.getByRole("button", { name: "Отправить новое письмо" }),
+  ).toBeInTheDocument();
+});
+
 it("возвращает заявку на предыдущий статус с подтверждением", async () => {
   vi.spyOn(api, "adminApplications").mockResolvedValue(page);
   vi.spyOn(api, "adminApplication").mockResolvedValue(application);

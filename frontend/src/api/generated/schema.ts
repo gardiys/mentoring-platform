@@ -9034,6 +9034,18 @@ export interface components {
             currency: string;
             /** Payment Url */
             payment_url: string | null;
+            /** Offer Email */
+            offer_email?: string | null;
+            /** Offer Email Status */
+            offer_email_status?: string | null;
+            /** Offer Email Sent At */
+            offer_email_sent_at?: string | null;
+            /** Offer Email Delivered At */
+            offer_email_delivered_at?: string | null;
+            /** Offer Viewed At */
+            offer_viewed_at?: string | null;
+            /** Offer Accepted At */
+            offer_accepted_at?: string | null;
             /** Approved At */
             approved_at: string | null;
             /** Created At */

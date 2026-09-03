@@ -1961,6 +1961,12 @@ export interface OnboardingApplicationPayment {
   amount: string;
   currency: string;
   payment_url: string | null;
+  offer_email?: string | null;
+  offer_email_status?: string | null;
+  offer_email_sent_at?: string | null;
+  offer_email_delivered_at?: string | null;
+  offer_viewed_at?: string | null;
+  offer_accepted_at?: string | null;
   approved_at: string | null;
   created_at: string;
 }

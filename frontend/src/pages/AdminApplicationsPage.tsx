@@ -56,7 +56,7 @@ const STATUS_LABELS: Record<string, string> = {
   APPLICATION_FORM_STARTED: "Заполняет подробную анкету",
   APPLICATION_FORM_SUBMITTED: "Подробная анкета получена",
   PAYMENT_LINK_CREATED: "Ссылка на оплату создана",
-  PAYMENT_LINK_SENT: "Ссылка на оплату отправлена",
+  PAYMENT_LINK_SENT: "Письмо с офертой отправлено",
   PAYMENT_PENDING: "Ожидаем оплату",
   PAYMENT_APPROVED: "Оплата подтверждена",
   PAYMENT_FAILED: "Ошибка оплаты",
@@ -65,6 +65,23 @@ const STATUS_LABELS: Record<string, string> = {
   ONBOARDING_COMPLETED: "Онбординг завершён",
   ACTIVE_STUDENT: "Активный ученик",
   ARCHIVED: "В архиве",
+};
+
+const EMAIL_STATUS_LABELS: Record<string, string> = {
+  SENT: "Принято почтовым сервисом",
+  DELIVERED: "Доставлено",
+  OPENED: "Открыто",
+  UNIQUE_OPENED: "Открыто",
+  CLICK: "Переход из письма",
+  CLICKED: "Переход из письма",
+  DEFERRED: "Доставка отложена",
+  SOFT_BOUNCE: "Временная ошибка доставки",
+  HARD_BOUNCE: "Адрес недоступен",
+  BLOCKED: "Заблокировано",
+  INVALID: "Некорректный адрес",
+  SPAM: "Отмечено как спам",
+  UNSUBSCRIBED: "Получатель отписался",
+  FAILED: "Не отправлено",
 };
 
 const STAGES = [
@@ -149,7 +166,7 @@ const ACTIONS: Record<
     color: "green",
     confirmation: "Подтвердить оплату вручную и запустить онбординг?",
   },
-  resend_payment: { label: "Отправить новую ссылку", color: "blue" },
+  resend_payment: { label: "Отправить новое письмо", color: "blue" },
   complete_onboarding: { label: "Завершить онбординг", color: "green" },
   confirm_access: { label: "Доступы получены", color: "green" },
   access_missing: { label: "Письмо не найдено", color: "orange" },
@@ -177,6 +194,7 @@ const FORM_LABELS: Record<string, string> = {
   registration_address: "Адрес регистрации",
   phone: "Телефон",
   email: "Email",
+  email_verified_at: "Email подтверждён",
   telegram_username: "Telegram",
   personal_data_consent: "Согласие на обработку данных",
   personal_data_consent_accepted_at: "Согласие принято",
@@ -192,6 +210,7 @@ const FORM_FIELD_ORDER = [
   "registration_address",
   "phone",
   "email",
+  "email_verified_at",
   "telegram_username",
   "personal_data_consent",
   "personal_data_consent_accepted_at",
@@ -212,6 +231,7 @@ const FORM_STATE_LABELS: Record<string, string> = {
   registration_address: "адрес регистрации",
   phone: "телефон",
   email: "email",
+  email_verification: "подтверждение email",
   passport_main_page_file: "главная страница паспорта",
   passport_registration_page_file: "страница с регистрацией",
   personal_data_consent: "согласие на обработку данных",
@@ -219,6 +239,11 @@ const FORM_STATE_LABELS: Record<string, string> = {
 
 function statusLabel(status: string) {
   return STATUS_LABELS[status] ?? status;
+}
+
+function emailStatusLabel(status: string | null | undefined) {
+  if (!status) return "Не отправлено";
+  return EMAIL_STATUS_LABELS[status] ?? status;
 }
 
 function statusColor(status: string) {
@@ -233,7 +258,7 @@ function statusColor(status: string) {
   return "blue";
 }
 
-function formatDate(value: string | null, withTime = false) {
+function formatDate(value: string | null | undefined, withTime = false) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("ru-RU", {
     day: "2-digit",
@@ -530,7 +555,7 @@ function ApplicationDetails({
           )}
           {application.payments[0] && (
             <Card withBorder padding="md">
-              <Group justify="space-between">
+              <Group justify="space-between" align="flex-start">
                 <div>
                   <Text fw={600}>
                     Платёж · {application.payments[0].status}
@@ -538,6 +563,23 @@ function ApplicationDetails({
                   <Text size="sm">
                     {application.payments[0].amount}{" "}
                     {application.payments[0].currency}
+                  </Text>
+                  <Text size="sm" mt="xs">
+                    Письмо:{" "}
+                    {emailStatusLabel(application.payments[0].offer_email_status)}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {application.payments[0].offer_email ?? application.email ?? "—"}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Отправлено: {formatDate(application.payments[0].offer_email_sent_at, true)}
+                    {" · "}Доставлено:{" "}
+                    {formatDate(application.payments[0].offer_email_delivered_at, true)}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Оферта открыта: {formatDate(application.payments[0].offer_viewed_at, true)}
+                    {" · "}Принята:{" "}
+                    {formatDate(application.payments[0].offer_accepted_at, true)}
                   </Text>
                 </div>
                 {application.payments[0].payment_url && (
