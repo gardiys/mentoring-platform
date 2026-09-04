@@ -136,11 +136,28 @@ def _display_topic(value: str) -> str:
     return normalized[0].upper() + normalized[1:]
 
 
+def _contains_english_prose(value: str) -> bool:
+    without_code = re.sub(r"```.*?```|`[^`]+`", "", value, flags=re.DOTALL)
+    for segment in re.split(r"(?<=[.!?])\s+|\n+", without_code):
+        if re.search(r"[А-Яа-яЁё]", segment):
+            continue
+        if len(re.findall(r"\b[A-Za-z][A-Za-z'-]{2,}\b", segment)) >= 4:
+            return True
+    return False
+
+
+def _usable_russian_feedback(value: object) -> str | None:
+    text = str(value or "").strip()
+    if not text or _contains_english_prose(text) or text.endswith(("…", "...")):
+        return None
+    return text
+
+
 def _review_text_items(items: list[dict[str, object]], key: str) -> list[str]:
     return [
         text
         for item in items
-        if (text := str(item.get(key) or "").strip())
+        if (text := _usable_russian_feedback(item.get(key))) is not None
     ]
 
 
@@ -198,19 +215,21 @@ def _derived_technical_report(
             row["scores"].append(review.score)  # type: ignore[union-attr]
             all_scores.append(review.score)
             assessed_answers += 1
-        if review.summary:
-            row["summaries"].append(review.summary)  # type: ignore[union-attr]
+        if summary := _usable_russian_feedback(review.summary):
+            row["summaries"].append(summary)  # type: ignore[union-attr]
         row["strengths"].extend(  # type: ignore[union-attr]
             _review_text_items(review.strengths, "point")
         )
         row["gaps"].extend(  # type: ignore[union-attr]
-            str(item).strip() for item in review.missing_points if str(item).strip()
+            text
+            for item in review.missing_points
+            if (text := _usable_russian_feedback(item)) is not None
         )
         row["gaps"].extend(  # type: ignore[union-attr]
             _review_text_items(review.problems, "problem")
         )
-        if review.suggested_better_answer:
-            row["better_answers"].append(review.suggested_better_answer)  # type: ignore[union-attr]
+        if better_answer := _usable_russian_feedback(review.suggested_better_answer):
+            row["better_answers"].append(better_answer)  # type: ignore[union-attr]
 
     def unique(values: list[object], limit: int) -> list[str]:
         result: list[str] = []
@@ -332,7 +351,7 @@ def _derived_technical_report(
                 "related_topics": [str(topic["topic"])],
             }
         )
-        if len(priority_actions) == 3:
+        if len(priority_actions) == 6:
             break
 
     return {
@@ -341,6 +360,69 @@ def _derived_technical_report(
         "technical_topics": topics,
         "priority_actions": priority_actions,
     }
+
+
+def _derived_overall_summary(report: dict[str, object]) -> str:
+    score = report.get("technical_score")
+    topics = report.get("technical_topics")
+    assessed_topics = (
+        [
+            item
+            for item in topics
+            if isinstance(item, dict) and isinstance(item.get("score"), int | float)
+        ]
+        if isinstance(topics, list)
+        else []
+    )
+    if not isinstance(score, int | float):
+        return (
+            "В записи недостаточно надёжных технических ответов для итоговой оценки. "
+            "Разберите вопросы по отдельности и повторите ответы после подготовки."
+        )
+    if score >= 0.8:
+        result = "Техническая часть собеседования пройдена уверенно."
+    elif score >= 0.6:
+        result = "Техническая база заметна, но отдельным ответам не хватило точности и полноты."
+    elif score >= 0.4:
+        result = "Технический результат неоднородный: часть основ усвоена, но есть важные пробелы."
+    else:
+        result = "В технических ответах обнаружены существенные пробелы, требующие проработки."
+    if not assessed_topics:
+        return result
+    weakest = min(assessed_topics, key=lambda item: float(item["score"]))
+    topic = str(weakest.get("topic") or "приоритетная техническая тема")
+    return f"{result} В первую очередь проработайте тему «{topic}» и повторите связанные вопросы."
+
+
+def _merge_priority_actions(
+    stored_actions: object,
+    derived_actions: object,
+) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    seen: set[str] = set()
+    sources = [stored_actions, derived_actions]
+    for source in sources:
+        if not isinstance(source, list):
+            continue
+        for item in source:
+            if not isinstance(item, dict):
+                continue
+            text_values = [
+                item.get("title"),
+                item.get("reason"),
+                item.get("success_criterion"),
+                *(item.get("steps") if isinstance(item.get("steps"), list) else []),
+            ]
+            if any(_usable_russian_feedback(value) is None for value in text_values):
+                continue
+            key = str(item.get("title")).strip().casefold()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            result.append(item)
+            if len(result) == 6:
+                return result
+    return result
 
 
 def _merge_topic_narratives(
@@ -377,9 +459,20 @@ def _merge_topic_narratives(
             merged.append(topic)
             continue
         enriched = dict(topic)
-        for field in ("summary", "strengths", "gaps", "next_step"):
-            if best.get(field):
-                enriched[field] = best[field]
+        for field in ("summary", "next_step"):
+            if value := _usable_russian_feedback(best.get(field)):
+                enriched[field] = value
+        for field in ("strengths", "gaps"):
+            raw_values = best.get(field)
+            if not isinstance(raw_values, list):
+                continue
+            values = [
+                text
+                for value in raw_values
+                if (text := _usable_russian_feedback(value)) is not None
+            ]
+            if values:
+                enriched[field] = values[:3]
         merged.append(enriched)
     return merged
 
@@ -1023,10 +1116,48 @@ async def intelligence_detail(
             overview_payload.get("technical_topics"),
             changed_question_numbers,
         )
-        if changed_question_numbers or not overview_payload.get("technical_summary"):
+        if (
+            changed_question_numbers
+            or _usable_russian_feedback(overview_payload.get("technical_summary")) is None
+        ):
             overview_payload["technical_summary"] = derived_report["technical_summary"]
-        if changed_question_numbers or not overview_payload.get("priority_actions"):
-            overview_payload["priority_actions"] = derived_report["priority_actions"]
+        if _usable_russian_feedback(overview_payload.get("overall_summary")) is None:
+            overview_payload["overall_summary"] = _derived_overall_summary(derived_report)
+        overview_payload["priority_actions"] = _merge_priority_actions(
+            overview_payload.get("priority_actions"),
+            derived_report["priority_actions"],
+        )
+        communication_summary = _usable_russian_feedback(
+            overview_payload.get("communication_summary")
+        )
+        if communication_summary is None:
+            overview_payload["communication_summary"] = (
+                "Для этого разбора корректный русскоязычный комментарий по коммуникации "
+                "недоступен. Ориентируйтесь на технический разбор и проверенные ответы."
+            )
+        for field in (
+            "communication_strengths",
+            "communication_growth_areas",
+            "caveats",
+        ):
+            raw_values = overview_payload.get(field)
+            overview_payload[field] = (
+                [
+                    text
+                    for value in raw_values
+                    if (text := _usable_russian_feedback(value)) is not None
+                ]
+                if isinstance(raw_values, list)
+                else []
+            )
+        raw_dimensions = overview_payload.get("communication_dimensions")
+        if isinstance(raw_dimensions, list):
+            overview_payload["communication_dimensions"] = [
+                item
+                for item in raw_dimensions
+                if isinstance(item, dict)
+                and _usable_russian_feedback(item.get("summary")) is not None
+            ]
 
     return IntelligenceInterviewDetail(
         **summary.model_dump(),

@@ -45,7 +45,9 @@ from app.interviews.intelligence_ai import (
 )
 from app.interviews.intelligence_jobs import (
     _ground_technical_assessment,
+    _join_unique,
     _retry_delay,
+    _summary_rollup_payload,
     _will_retry,
 )
 from app.interviews.intelligence_models import (
@@ -55,7 +57,11 @@ from app.interviews.intelligence_models import (
     IntelligenceReviewStatus,
 )
 from app.interviews.intelligence_schemas import IntelligenceInterviewOverviewRead
-from app.interviews.intelligence_service import _derived_technical_report
+from app.interviews.intelligence_service import (
+    _derived_technical_report,
+    _merge_priority_actions,
+    _usable_russian_feedback,
+)
 
 
 def _rate_limit_error(*, error_type: str, error_code: str | None) -> RateLimitError:
@@ -193,7 +199,92 @@ def test_automation_prompts_separate_trusted_and_untrusted_content() -> None:
 
     assert "untrusted evidence" in SUMMARY_PROMPT
     assert "Technical assessment is primary" in SUMMARY_PROMPT
-    assert "at most three priority_actions" in SUMMARY_PROMPT
+    assert "at most six priority_actions" in SUMMARY_PROMPT
+    assert "OUTPUT LANGUAGE IS RUSSIAN" in SUMMARY_PROMPT
+    assert "Russian only" in TECHNICAL_REVIEW_PROMPT
+    assert "Russian only" in LIGHT_REVIEW_PROMPT
+
+
+def test_summary_rejects_untranslated_english_feedback() -> None:
+    with pytest.raises(ValidationError, match="must be written in Russian"):
+        InterviewSummaryOutput(
+            overall_summary="The candidate gave an incomplete technical answer.",
+            technical_summary="Техническая оценка.",
+            technical_topics=[],
+            priority_actions=[],
+            key_topics=[],
+            communication_summary="Коммуникация оценена отдельно.",
+            communication_score=None,
+            communication_dimensions=[],
+            communication_strengths=[],
+            communication_growth_areas=[],
+            caveats=[],
+        )
+
+
+def test_summary_rollup_is_complete_and_preserves_six_priorities() -> None:
+    actions = [
+        InterviewPriorityAction(
+            title=f"Приоритет {index}",
+            reason="Нужно закрыть технический пробел.",
+            steps=["Повторить материал."],
+            success_criterion="Дать полный ответ.",
+            related_topics=["Python"],
+        )
+        for index in range(1, 7)
+    ]
+    overview = InterviewSummaryOutput(
+        overall_summary="Краткий итог.",
+        technical_score=0.5,
+        technical_summary="Технический итог.",
+        technical_topics=[],
+        priority_actions=actions,
+        key_topics=["Python"],
+        communication_summary="Коммуникация оценена отдельно.",
+        communication_score=None,
+        communication_dimensions=[],
+        communication_strengths=[],
+        communication_growth_areas=[],
+        caveats=[],
+    )
+
+    payload = json.loads(_summary_rollup_payload(overview))
+
+    assert len(payload["partial_report"]["priority_actions"]) == 6
+    assert "только по-русски" in payload["instruction"]
+    assert not _join_unique(["Первое полное предложение. " * 10], max_length=80).endswith("…")
+
+
+def test_saved_english_and_truncated_feedback_is_not_exposed() -> None:
+    assert _usable_russian_feedback("Полный русский комментарий.") is not None
+    assert _usable_russian_feedback("The candidate gave an incomplete answer.") is None
+    assert _usable_russian_feedback("Русское начало. The answer was incomplete.") is None
+    assert _usable_russian_feedback("Оборванное предложение…") is None
+
+    derived = [
+        {
+            "title": f"Русский приоритет {index}",
+            "reason": "Нужно закрыть технический пробел.",
+            "steps": ["Повторить тему."],
+            "success_criterion": "Дать полный ответ.",
+            "related_topics": ["Python"],
+        }
+        for index in range(1, 7)
+    ]
+    stored = [
+        {
+            "title": "Review Python internals",
+            "reason": "The candidate did not explain the mechanism.",
+            "steps": ["Read the documentation and practise the answer."],
+            "success_criterion": "Give a complete answer in two minutes.",
+            "related_topics": ["Python"],
+        }
+    ]
+
+    merged = _merge_priority_actions(stored, derived)
+
+    assert len(merged) == 6
+    assert all(str(item["title"]).startswith("Русский") for item in merged)
 
 
 def test_summary_technical_scores_and_evidence_are_grounded_in_review_rows() -> None:

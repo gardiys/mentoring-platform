@@ -89,7 +89,7 @@ function OverviewSummary({
   const technical = scorePresentation(technicalScore);
   const technicalPercent = scorePercent(technicalScore);
   const communicationPercent = scorePercent(overview.communication_score);
-  const priorityActions = (overview.priority_actions ?? []).slice(0, 3);
+  const priorityActions = (overview.priority_actions ?? []).slice(0, 6);
 
   return (
     <Card withBorder className="analysis-verdict-card">
@@ -140,7 +140,7 @@ function OverviewSummary({
               </Text>
             </Group>
             <SimpleGrid
-              cols={{ base: 1, md: Math.min(priorityActions.length, 3) }}
+              cols={{ base: 1, md: 2, xl: 3 }}
               spacing="sm"
             >
               {priorityActions.map((action, index) => (

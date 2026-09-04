@@ -859,6 +859,15 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                     overview = _merge_interview_summaries(
                         [result.output for result in summary_results]
                     )
+                    # Long interviews are split into bounded chunks. Their partial
+                    # summaries must become one coherent verdict, not a concatenated
+                    # wall of text that eventually gets truncated.
+                    if len(summary_results) > 1:
+                        final_summary = await _ai(ctx).summarize(
+                            _summary_rollup_payload(overview)
+                        )
+                        summary_results.append(final_summary)
+                        overview = final_summary.output
                     overview = _ground_technical_assessment(overview, summary_rows)
                     summary_usages = [result.usage for result in summary_results]
                     interview.ai_summary_payload = overview.model_dump(mode="json")
@@ -961,7 +970,7 @@ async def _upsert_ai_stage_comment(session: AsyncSession, interview: Intelligenc
     priority_actions = overview.get("priority_actions")
     if isinstance(priority_actions, list) and priority_actions:
         parts.extend(["", "Что улучшить в первую очередь"])
-        for index, action in enumerate(priority_actions[:3], start=1):
+        for index, action in enumerate(priority_actions[:6], start=1):
             if not isinstance(action, dict):
                 continue
             title = str(action.get("title") or "").strip()
@@ -1225,8 +1234,33 @@ def _join_unique(values: Any, *, max_length: int) -> str:
     result = " ".join(_unique(values))
     if len(result) <= max_length:
         return result
-    shortened = result[: max_length - 1].rstrip(" ,;:-")
-    return f"{shortened}…"
+    shortened = result[:max_length].rstrip()
+    sentence_end = max(
+        shortened.rfind(". "),
+        shortened.rfind("! "),
+        shortened.rfind("? "),
+    )
+    if sentence_end >= max_length // 2:
+        return shortened[: sentence_end + 1].rstrip()
+    words = shortened.rsplit(maxsplit=1)
+    complete = (words[0] if len(words) > 1 else shortened).rstrip(" ,;:-.!?")
+    return f"{complete}."
+
+
+def _summary_rollup_payload(overview: InterviewSummaryOutput) -> str:
+    return json.dumps(
+        {
+            "input_kind": "partial_interview_reports_to_consolidate",
+            "instruction": (
+                "Соберите один окончательный краткий отчёт. Не склеивайте исходные резюме "
+                "последовательно, не повторяйтесь, пишите только по-русски и завершайте каждое "
+                "предложение полностью. Сохраните подтверждённые номера вопросов."
+            ),
+            "partial_report": overview.model_dump(mode="json"),
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
 
 def _ground_technical_assessment(
@@ -1368,9 +1402,9 @@ def _merge_interview_summaries(
                 continue
             seen_actions.add(key)
             priority_actions.append(action)
-            if len(priority_actions) == 3:
+            if len(priority_actions) == 6:
                 break
-        if len(priority_actions) == 3:
+        if len(priority_actions) == 6:
             break
 
     communication_scores = [

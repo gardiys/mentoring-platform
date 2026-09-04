@@ -150,10 +150,24 @@ const detail: IntelligenceInterviewDetail = {
         related_topics: ["Python"],
       },
       {
-        title: "Лишнее приоритетное действие 4",
-        reason: "Этот элемент не должен попасть в интерфейс",
-        steps: ["Лишний шаг"],
-        success_criterion: "Лишний критерий",
+        title: "Приоритетное действие 4",
+        reason: "Причина 4",
+        steps: ["Шаг 4"],
+        success_criterion: "Критерий 4",
+        related_topics: ["Python"],
+      },
+      {
+        title: "Приоритетное действие 5",
+        reason: "Причина 5",
+        steps: ["Шаг 5"],
+        success_criterion: "Критерий 5",
+        related_topics: ["Python"],
+      },
+      {
+        title: "Приоритетное действие 6",
+        reason: "Причина 6",
+        steps: ["Шаг 6"],
+        success_criterion: "Критерий 6",
         related_topics: ["Python"],
       },
     ],
@@ -214,9 +228,9 @@ it("показывает компактный AI-отчёт до soft skills и 
   expect(screen.getByText("Приоритетное действие 1")).toBeVisible();
   expect(screen.getByText("Приоритетное действие 2")).toBeVisible();
   expect(screen.getByText("Приоритетное действие 3")).toBeVisible();
-  expect(
-    screen.queryByText("Лишнее приоритетное действие 4"),
-  ).not.toBeInTheDocument();
+  expect(screen.getByText("Приоритетное действие 4")).toBeVisible();
+  expect(screen.getByText("Приоритетное действие 5")).toBeVisible();
+  expect(screen.getByText("Приоритетное действие 6")).toBeVisible();
 
   await userEvent.click(
     screen.getByRole("button", { name: /Python: многопоточность/i }),
