@@ -56,7 +56,19 @@ function todayInputValue() {
   return now.toISOString().slice(0, 10);
 }
 
+function defaultFinancialTerms(
+  tracks: Array<{ slug: string }>,
+): Pick<StudentFormState, "repayment_percent" | "mentor_reward_percent"> {
+  const goOnly =
+    tracks.length > 0 &&
+    tracks.every((track) => track.slug.trim().toLowerCase() === "go");
+  return goOnly
+    ? { repayment_percent: 150, mentor_reward_percent: 45 }
+    : { repayment_percent: 200, mentor_reward_percent: 60 };
+}
+
 function initialForm(student?: AdminStudentDetail): StudentFormState {
+  const defaults = defaultFinancialTerms(student?.tracks ?? []);
   return {
     telegram_id: student?.telegram_id ?? "",
     telegram_username: student?.telegram_username ?? null,
@@ -66,8 +78,9 @@ function initialForm(student?: AdminStudentDetail): StudentFormState {
     learning_start_date: student?.learning_start_date ?? todayInputValue(),
     mentor_id: student?.mentor?.id ?? null,
     track_ids: student?.tracks.map((track) => track.id) ?? [],
-    repayment_percent: student?.repayment_percent ?? 200,
-    mentor_reward_percent: student?.mentor_reward_percent ?? 60,
+    repayment_percent: student?.repayment_percent ?? defaults.repayment_percent,
+    mentor_reward_percent:
+      student?.mentor_reward_percent ?? defaults.mentor_reward_percent,
     entry_payment_rubles: student
       ? student.entry_payment_kopecks / 100
       : 45_000,
@@ -117,6 +130,7 @@ export function AdminStudentForm({ options, student }: Props) {
     isValidTelegramUsername(form.telegram_username) &&
     Boolean(form.learning_start_date) &&
     Boolean(form.mentor_id) &&
+    (editing || form.track_ids.length > 0) &&
     form.repayment_percent > 0 &&
     form.entry_payment_rubles >= 0 &&
     !student?.personal_data_erased_at;
@@ -132,17 +146,16 @@ export function AdminStudentForm({ options, student }: Props) {
       const selectedTracks = options.tracks.filter((track) =>
         trackIds.includes(track.id),
       );
-      const goOnly =
-        selectedTracks.length > 0 &&
-        selectedTracks.every((track) => track.slug.toLowerCase() === "go");
+      const defaults = defaultFinancialTerms(selectedTracks);
       return {
         ...current,
         track_ids: trackIds,
+        repayment_percent: student
+          ? current.repayment_percent
+          : defaults.repayment_percent,
         mentor_reward_percent: student
           ? current.mentor_reward_percent
-          : goOnly
-            ? 45
-            : 60,
+          : defaults.mentor_reward_percent,
       };
     });
   };
@@ -756,10 +769,16 @@ export function AdminStudentForm({ options, student }: Props) {
             <div>
               <Title order={2}>Треки обучения</Title>
               <Text c="dimmed" size="sm" mt={4}>
-                Можно назначить несколько направлений. Изменения применяются
-                сразу после сохранения.
+                Выберите минимум одно направление. Оно определяет доступ к
+                роадмапам и карточкам, а также финансовые значения по умолчанию.
               </Text>
             </div>
+            {!editing && form.track_ids.length === 0 && (
+              <Alert color="brandYellow" title="Направление не выбрано">
+                Без учебного трека ученик не получит доступ к карточкам с
+                вопросами.
+              </Alert>
+            )}
             <Divider />
             {options.tracks.length === 0 ? (
               <Text c="dimmed">Сначала создайте хотя бы один трек.</Text>

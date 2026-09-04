@@ -254,7 +254,7 @@ it("создаёт ученика с выбранным треком и адми
     email: "maria@example.com",
     learning_start_date: expect.any(String),
     mentor_id: adminMentor.id,
-    repayment_percent: 200,
+    repayment_percent: 150,
     mentor_reward_percent: 45,
     entry_payment_rubles: 45_000,
     entry_payment_paid: false,
@@ -262,6 +262,58 @@ it("создаёт ученика с выбранным треком и адми
     program_exclusion_reason: null,
     track_ids: [options.tracks[1]!.id],
   });
+});
+
+it("не создаёт ученика без трека и подставляет условия Go", async () => {
+  const create = vi
+    .spyOn(api, "createAdminStudent")
+    .mockReturnValue(new Promise(() => undefined));
+  renderPage(<AdminStudentForm options={options} />);
+
+  await userEvent.type(screen.getByLabelText(/^Имя/), "Мария");
+  await userEvent.type(screen.getByLabelText(/Telegram ID/), "777000111");
+  await userEvent.click(screen.getByRole("textbox", { name: /^Ментор/ }));
+  await userEvent.click(screen.getByText("Антон Менторов"));
+
+  expect(
+    screen.getByRole("button", { name: "Добавить ученика" }),
+  ).toBeDisabled();
+  expect(screen.getByText("Направление не выбрано")).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("checkbox", { name: /Go/ }));
+
+  expect(screen.getByLabelText(/^Выплачивает по программе, %/)).toHaveValue(
+    "150%",
+  );
+  expect(screen.getByLabelText(/^Доля ментора, %/)).toHaveValue("45%");
+  expect(
+    screen.getByRole("button", { name: "Добавить ученика" }),
+  ).toBeEnabled();
+});
+
+
+it("показывает 45% при назначении ментора существующему Go-ученику", () => {
+  renderPage(
+    <AdminStudentForm
+      options={options}
+      student={{
+        ...student,
+        mentor: null,
+        mentor_reward_percent: null,
+        repayment_percent: 150,
+        tracks: [
+          {
+            ...student.tracks[0]!,
+            id: options.tracks[1]!.id,
+            slug: "go",
+            title: "Go",
+          },
+        ],
+      }}
+    />,
+  );
+
+  expect(screen.getByLabelText(/^Доля ментора, %/)).toHaveValue("45%");
 });
 
 it("редактирует данные и закрывает доступ без удаления ученика", async () => {

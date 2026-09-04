@@ -89,6 +89,66 @@ async def test_admin_creates_student_with_track_access(
     assert detail.json()["telegram_username"] == "maria_dev"
 
 
+async def test_admin_creates_go_student_with_cards_access_and_go_mentor_default(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    deck = await client.post(
+        "/api/v1/admin/interviews/decks",
+        headers=auth(seeded.admin_id),
+        json={
+            "track_id": str(seeded.go_track_id),
+            "slug": "go-core-for-new-students",
+            "title": "Go Core",
+            "description": "Вопросы по Go",
+            "position": 0,
+            "is_published": True,
+            "cards": [
+                {
+                    "slug": "go-new-student-goroutine",
+                    "category": "Конкурентность",
+                    "question_markdown": "Что такое goroutine?",
+                    "answer_markdown": "Легковесная конкурентная задача Go.",
+                    "frequency": "frequent",
+                    "position": 0,
+                    "is_published": True,
+                }
+            ],
+        },
+    )
+    assert deck.status_code == 201, deck.text
+
+    created = await client.post(
+        "/api/v1/admin/students",
+        headers=auth(seeded.admin_id),
+        json=student_payload(seeded, track_ids=[str(seeded.go_track_id)])
+        | {"mentor_id": str(seeded.other_mentor_id)},
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["mentor_reward_percent"] == "45.00"
+
+    available_decks = await client.get(
+        "/api/v1/interviews/decks",
+        headers=auth(UUID(created.json()["id"])),
+    )
+    assert available_decks.status_code == 200, available_decks.text
+    assert [item["slug"] for item in available_decks.json()] == [
+        "go-core-for-new-students"
+    ]
+
+
+async def test_admin_cannot_create_student_without_learning_track(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    response = await client.post(
+        "/api/v1/admin/students",
+        headers=auth(seeded.admin_id),
+        json=student_payload(seeded, track_ids=[]),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "student_track_required"
+
+
 async def test_admin_edits_student_data_and_track_access(
     client: AsyncClient, seeded: SeededData
 ) -> None:

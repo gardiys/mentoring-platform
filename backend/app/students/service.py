@@ -498,6 +498,12 @@ async def _set_learning_start_date(
 async def create_student(
     session: AsyncSession, payload: AdminStudentMutation
 ) -> AdminStudentDetail:
+    if not payload.track_ids:
+        api_error(
+            422,
+            "student_track_required",
+            "At least one learning track is required when creating a student",
+        )
     await _validate_student_payload(session, payload, student_id=None)
     now = datetime.now(UTC)
     mentor_reward_percent = await _effective_mentor_reward_percent(session, payload)
