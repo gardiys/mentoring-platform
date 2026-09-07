@@ -205,21 +205,214 @@ def test_automation_prompts_separate_trusted_and_untrusted_content() -> None:
     assert "Russian only" in LIGHT_REVIEW_PROMPT
 
 
-def test_summary_rejects_untranslated_english_feedback() -> None:
-    with pytest.raises(ValidationError, match="must be written in Russian"):
-        InterviewSummaryOutput(
-            overall_summary="The candidate gave an incomplete technical answer.",
-            technical_summary="Техническая оценка.",
-            technical_topics=[],
-            priority_actions=[],
-            key_topics=[],
-            communication_summary="Коммуникация оценена отдельно.",
-            communication_score=None,
-            communication_dimensions=[],
-            communication_strengths=[],
-            communication_growth_areas=[],
-            caveats=[],
+def test_summary_language_validation_rejects_untranslated_english_feedback() -> None:
+    summary = InterviewSummaryOutput(
+        overall_summary=(
+            "The candidate gave an incomplete technical answer and failed to explain several "
+            "important implementation details, practical tradeoffs, limitations, and concrete "
+            "examples from previous production experience."
+        ),
+        technical_summary="Техническая оценка.",
+        technical_topics=[],
+        priority_actions=[],
+        key_topics=[],
+        communication_summary="Коммуникация оценена отдельно.",
+        communication_score=None,
+        communication_dimensions=[],
+        communication_strengths=[],
+        communication_growth_areas=[],
+        caveats=[],
+    )
+
+    with pytest.raises(ValueError, match="predominantly written in Russian"):
+        summary.validate_user_facing_language()
+
+
+def test_summary_language_validation_allows_small_english_fragment() -> None:
+    summary = InterviewSummaryOutput(
+        overall_summary=(
+            "Кандидат уверенно объяснил основную идею. "
+            "The final answer needs one concrete example."
+        ),
+        technical_summary=(
+            "Техническая база достаточная, но некоторые формулировки стоит сделать точнее."
+        ),
+        priority_actions=[
+            InterviewPriorityAction(
+                title="Добавить практический пример",
+                reason="Сейчас ответ звучит слишком абстрактно.",
+                steps=["Подготовить один короткий пример из рабочего проекта."],
+                success_criterion="Объяснение укладывается в две минуты.",
+            )
+        ],
+        communication_summary="Коммуникация понятная и последовательная.",
+        communication_score=None,
+    )
+
+    summary.validate_user_facing_language()
+
+
+@pytest.mark.asyncio
+async def test_openai_summary_does_not_retry_small_english_fragment() -> None:
+    summary = InterviewSummaryOutput(
+        overall_summary=(
+            "Кандидат уверенно объяснил основную идею. "
+            "The final answer needs one concrete example."
+        ),
+        technical_summary="Техническая оценка сформирована.",
+        communication_summary="Коммуникация оценена отдельно.",
+        communication_score=None,
+    )
+    parse = AsyncMock(
+        return_value=SimpleNamespace(
+            id="summary-mixed",
+            model="cheap-review",
+            output_parsed=summary,
+            usage=SimpleNamespace(input_tokens=20, output_tokens=20),
         )
+    )
+    provider = object.__new__(OpenAIInterviewAIProvider)
+    provider.light_review_model = "cheap-review"
+    provider.summary_max_output_tokens = 4_000
+    provider.client = SimpleNamespace(responses=SimpleNamespace(parse=parse))
+
+    result = await provider.summarize("Данные собеседования")
+
+    assert result.output is summary
+    assert parse.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_openai_summary_recovers_from_non_russian_response() -> None:
+    english = InterviewSummaryOutput(
+        overall_summary=(
+            "The candidate gave an incomplete technical answer and failed to explain several "
+            "important implementation details, practical tradeoffs, limitations, and concrete "
+            "examples from previous production experience."
+        ),
+        technical_summary="Техническая оценка.",
+        communication_summary="Коммуникация оценена отдельно.",
+        communication_score=None,
+    )
+    russian = InterviewSummaryOutput(
+        overall_summary="Кандидат дал неполный технический ответ.",
+        technical_summary="Техническая оценка сформирована.",
+        communication_summary="Коммуникация оценена отдельно.",
+        communication_score=None,
+    )
+    parse = AsyncMock(
+        side_effect=[
+            SimpleNamespace(
+                id="summary-english",
+                model="cheap-review",
+                output_parsed=english,
+                usage=SimpleNamespace(input_tokens=20, output_tokens=20),
+            ),
+            SimpleNamespace(
+                id="summary-russian",
+                model="cheap-review",
+                output_parsed=russian,
+                usage=SimpleNamespace(input_tokens=20, output_tokens=20),
+            ),
+        ]
+    )
+    provider = object.__new__(OpenAIInterviewAIProvider)
+    provider.light_review_model = "cheap-review"
+    provider.summary_max_output_tokens = 4_000
+    provider.client = SimpleNamespace(responses=SimpleNamespace(parse=parse))
+
+    result = await provider.summarize("Данные собеседования")
+
+    assert result.output is russian
+    assert parse.await_count == 2
+    recovery_request = parse.await_args_list[1].kwargs
+    assert recovery_request["max_output_tokens"] == 8_000
+    assert "RETRY REQUIREMENTS" in recovery_request["input"][0]["content"]
+
+
+@pytest.mark.asyncio
+async def test_openai_summary_recovers_from_output_length_limit() -> None:
+    russian = InterviewSummaryOutput(
+        overall_summary="Кандидат дал содержательные ответы.",
+        technical_summary="Техническая оценка сформирована.",
+        communication_summary="Коммуникация оценена отдельно.",
+        communication_score=None,
+    )
+    parse = AsyncMock(
+        side_effect=[
+            SimpleNamespace(
+                id="summary-truncated",
+                model="cheap-review",
+                output_parsed=None,
+                incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+                usage=SimpleNamespace(input_tokens=20, output_tokens=4_000),
+            ),
+            SimpleNamespace(
+                id="summary-complete",
+                model="cheap-review",
+                output_parsed=russian,
+                incomplete_details=None,
+                usage=SimpleNamespace(input_tokens=20, output_tokens=200),
+            ),
+        ]
+    )
+    provider = object.__new__(OpenAIInterviewAIProvider)
+    provider.light_review_model = "cheap-review"
+    provider.summary_max_output_tokens = 4_000
+    provider.client = SimpleNamespace(responses=SimpleNamespace(parse=parse))
+
+    result = await provider.summarize("Длинное собеседование")
+
+    assert result.output is russian
+    assert parse.await_count == 2
+    assert parse.await_args_list[1].kwargs["max_output_tokens"] == 8_000
+
+
+@pytest.mark.asyncio
+async def test_openai_answer_review_recovers_from_non_russian_response() -> None:
+    english = ReviewOutput(
+        assessment=IntelligenceAssessment.MOSTLY_CORRECT,
+        score=0.7,
+        summary="The answer is mostly correct but misses an important detail.",
+    )
+    russian = ReviewOutput(
+        assessment=IntelligenceAssessment.MOSTLY_CORRECT,
+        score=0.7,
+        summary="Ответ в основном верный, но не хватает важной детали.",
+    )
+    parse = AsyncMock(
+        side_effect=[
+            SimpleNamespace(
+                id="review-english",
+                model="strong-analysis",
+                output_parsed=english,
+                usage=SimpleNamespace(input_tokens=30, output_tokens=20),
+            ),
+            SimpleNamespace(
+                id="review-russian",
+                model="strong-analysis",
+                output_parsed=russian,
+                usage=SimpleNamespace(input_tokens=30, output_tokens=20),
+            ),
+        ]
+    )
+    provider = object.__new__(OpenAIInterviewAIProvider)
+    provider.analysis_model = "strong-analysis"
+    provider.light_review_model = "cheap-review"
+    provider.review_max_output_tokens = 4_000
+    provider.client = SimpleNamespace(responses=SimpleNamespace(parse=parse))
+
+    result = await provider.review(
+        question="Что такое GIL?",
+        answer="Глобальная блокировка интерпретатора.",
+        category="Python",
+        question_kind=IntelligenceQuestionKind.TECHNICAL,
+        context="",
+    )
+
+    assert result.output is russian
+    assert parse.await_count == 2
+    assert parse.await_args_list[1].kwargs["max_output_tokens"] == 8_000
 
 
 def test_summary_rollup_is_complete_and_preserves_six_priorities() -> None:

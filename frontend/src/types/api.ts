@@ -456,7 +456,9 @@ export type MentorRewardKind =
   | "entry_payment"
   | "program_exclusion"
   | "legacy_fixed"
-  | "consultation";
+  | "consultation"
+  | "python_repeat_fixed"
+  | "python_repeat_success_fee";
 export type MentorPayoutStatus = "requested" | "paid" | "cancelled";
 export type MentorPayoutOrigin = "mentor_request" | "admin_direct";
 
@@ -643,6 +645,20 @@ export interface MentorPayoutRead {
   receipt_content_type: string | null;
   receipt_size: number | null;
   receipt_uploaded_at: string | null;
+  allocations: MentorPayoutAllocationRead[];
+}
+
+export interface MentorPayoutAllocationRead {
+  reward_id: string;
+  student_id: string;
+  student_name: string;
+  student_telegram_username: string | null;
+  kind: MentorRewardKind;
+  company_name: string | null;
+  basis_kopecks: number | null;
+  reward_percent: number | null;
+  reward_amount_kopecks: number;
+  amount_kopecks: number;
 }
 
 export interface AdminMentorPayoutBalanceRead {

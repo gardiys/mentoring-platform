@@ -50,6 +50,7 @@ from app.payments.schemas import (
     EmploymentMutation,
     EmploymentRead,
     EmploymentTerminationMutation,
+    MentorPayoutAllocationRead,
     MentorPayoutRead,
     MentorRewardRead,
     MentorRewardSummary,
@@ -1930,6 +1931,58 @@ async def _payout_reads(
     if mentor_id is not None:
         statement = statement.where(MentorPayout.mentor_id == mentor_id)
     rows = (await session.execute(statement)).all()
+    payout_ids = [
+        payout.id
+        for payout, _ in rows
+        if payout.status is MentorPayoutStatus.REQUESTED
+    ]
+    allocations_by_payout: dict[UUID, list[MentorPayoutAllocationRead]] = {
+        payout_id: [] for payout_id in payout_ids
+    }
+    if payout_ids:
+        student_user = aliased(User)
+        allocation_rows = (
+            await session.execute(
+                select(
+                    MentorPayoutAllocation,
+                    MentorReward,
+                    student_user,
+                    StudentEmployment,
+                )
+                .join(MentorReward, MentorReward.id == MentorPayoutAllocation.reward_id)
+                .join(student_user, student_user.id == MentorReward.student_id)
+                .outerjoin(
+                    PaymentInstallment,
+                    PaymentInstallment.id == MentorReward.installment_id,
+                )
+                .outerjoin(
+                    StudentEmployment,
+                    StudentEmployment.id == PaymentInstallment.employment_id,
+                )
+                .where(MentorPayoutAllocation.payout_id.in_(payout_ids))
+                .order_by(
+                    MentorPayoutAllocation.created_at,
+                    MentorPayoutAllocation.id,
+                )
+            )
+        ).all()
+        for allocation, reward, student, employment in allocation_rows:
+            allocations_by_payout[allocation.payout_id].append(
+                MentorPayoutAllocationRead(
+                    reward_id=reward.id,
+                    student_id=student.id,
+                    student_name=" ".join(
+                        filter(None, (student.first_name, student.last_name))
+                    ),
+                    student_telegram_username=student.telegram_username,
+                    kind=reward.kind,
+                    company_name=employment.company_name if employment else None,
+                    basis_kopecks=reward.basis_kopecks,
+                    reward_percent=reward.reward_percent,
+                    reward_amount_kopecks=reward.amount_kopecks,
+                    amount_kopecks=allocation.amount_kopecks,
+                )
+            )
     return [
         MentorPayoutRead(
             id=payout.id,
@@ -1950,6 +2003,7 @@ async def _payout_reads(
             receipt_content_type=payout.receipt_content_type,
             receipt_size=payout.receipt_size,
             receipt_uploaded_at=payout.receipt_uploaded_at,
+            allocations=allocations_by_payout.get(payout.id, []),
         )
         for payout, mentor in rows
     ]

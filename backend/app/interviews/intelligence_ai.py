@@ -5,9 +5,9 @@ import json
 import logging
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Literal, Protocol, TypeVar, cast
 
 import httpx
 from openai import (
@@ -15,9 +15,10 @@ from openai import (
     APIStatusError,
     AsyncOpenAI,
     AuthenticationError,
+    LengthFinishReasonError,
     RateLimitError,
 )
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.career_packages.schemas import (
     ActiveSearchParameters,
@@ -39,9 +40,9 @@ from app.interviews.intelligence_models import (
 )
 
 EXTRACTION_PROMPT_VERSION = "interview-extraction-classification-v2"
-TECHNICAL_REVIEW_PROMPT_VERSION = "technical-answer-review-v3-ru"
-LIGHT_REVIEW_PROMPT_VERSION = "nontechnical-answer-review-v2-ru"
-SUMMARY_PROMPT_VERSION = "interview-coaching-report-v3-ru"
+TECHNICAL_REVIEW_PROMPT_VERSION = "technical-answer-review-v4-ru-recovery"
+LIGHT_REVIEW_PROMPT_VERSION = "nontechnical-answer-review-v3-ru-recovery"
+SUMMARY_PROMPT_VERSION = "interview-coaching-report-v4-ru-recovery"
 QUESTION_ROUTING_PROMPT_VERSION = "question-routing-v2"
 QUESTION_ROUTING_SCHEMA_VERSION = "question-routing-result-v2"
 PAIRWISE_CARD_MATCH_PROMPT_VERSION = "pairwise-card-match-v1"
@@ -56,20 +57,60 @@ logger = logging.getLogger(__name__)
 
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 _LATIN_PROSE_WORD_RE = re.compile(r"\b[A-Za-z][A-Za-z'-]{2,}\b")
+_NATURAL_LANGUAGE_WORD_RE = re.compile(r"\b[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё'-]{1,}\b")
 _CODE_BLOCK_RE = re.compile(r"```.*?```|`[^`]+`", re.DOTALL)
+_ENGLISH_PROSE_MIN_WORDS_PER_SEGMENT = 4
+_ENGLISH_PROSE_BASE_ALLOWANCE = 12
+_ENGLISH_PROSE_MAX_ALLOWANCE = 30
+_ENGLISH_PROSE_RELATIVE_ALLOWANCE = 0.08
+_UserFacingOutput = TypeVar("_UserFacingOutput", bound=BaseModel)
+
+_STRUCTURED_OUTPUT_RECOVERY_INSTRUCTION = """
+
+RETRY REQUIREMENTS
+The previous response could not be accepted. Return the same requested JSON schema again, but make
+the response shorter and complete. Populate every required field, respect every list and string
+limit, and never end a field mid-sentence. Every user-facing sentence and list item must be in
+Russian. English is allowed only for established technical terms, identifiers, API and library
+names, and code examples. Do not add commentary outside the structured response.
+"""
 
 
 def _assert_no_english_prose(values: Sequence[str | None]) -> None:
-    """Reject untranslated English sentences while allowing technical tokens and code."""
+    """Reject substantially untranslated feedback while tolerating a small language leak.
+
+    OpenAI occasionally leaves one short English phrase in an otherwise Russian report. Rejecting
+    the whole structured response for that costs another full request and does not materially
+    improve the student-facing result. Purely English feedback and sizeable English fragments are
+    still rejected; technical tokens and code remain unrestricted.
+    """
+    total_words = 0
+    english_prose_words = 0
+    has_cyrillic = False
     for value in values:
         if not value:
             continue
         text = _CODE_BLOCK_RE.sub("", value)
+        total_words += len(_NATURAL_LANGUAGE_WORD_RE.findall(text))
+        has_cyrillic = has_cyrillic or bool(_CYRILLIC_RE.search(text))
         for segment in re.split(r"(?<=[.!?])\s+|\n+", text):
             if _CYRILLIC_RE.search(segment):
                 continue
-            if len(_LATIN_PROSE_WORD_RE.findall(segment)) >= 4:
-                raise ValueError("user-facing AI feedback must be written in Russian")
+            latin_words = len(_LATIN_PROSE_WORD_RE.findall(segment))
+            if latin_words >= _ENGLISH_PROSE_MIN_WORDS_PER_SEGMENT:
+                english_prose_words += latin_words
+
+    if not english_prose_words:
+        return
+    allowed_words = min(
+        _ENGLISH_PROSE_MAX_ALLOWANCE,
+        max(
+            _ENGLISH_PROSE_BASE_ALLOWANCE,
+            math.ceil(total_words * _ENGLISH_PROSE_RELATIVE_ALLOWANCE),
+        ),
+    )
+    if not has_cyrillic or english_prose_words > allowed_words:
+        raise ValueError("user-facing AI feedback must be predominantly written in Russian")
 
 EXTRACTION_PROMPT = """Extract every meaningful question asked to the candidate in an interview
 and classify it before any answer review. Use only utterance IDs present in the input. Exclude only
@@ -387,8 +428,7 @@ class ReviewOutput(BaseModel):
     incorrect_statements: list[ReviewIncorrectStatement] = Field(default_factory=list)
     suggested_better_answer: str | None = None
 
-    @model_validator(mode="after")
-    def feedback_must_be_in_russian(self) -> ReviewOutput:
+    def validate_user_facing_language(self) -> None:
         _assert_no_english_prose(
             [
                 self.summary,
@@ -400,7 +440,6 @@ class ReviewOutput(BaseModel):
                 self.suggested_better_answer,
             ]
         )
-        return self
 
 
 class CommunicationDimension(BaseModel):
@@ -460,8 +499,7 @@ class InterviewSummaryOutput(BaseModel):
     communication_growth_areas: list[str] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
 
-    @model_validator(mode="after")
-    def feedback_must_be_in_russian(self) -> InterviewSummaryOutput:
+    def validate_user_facing_language(self) -> None:
         _assert_no_english_prose(
             [
                 self.overall_summary,
@@ -481,7 +519,6 @@ class InterviewSummaryOutput(BaseModel):
                 *self.caveats,
             ]
         )
-        return self
 
 
 @dataclass(frozen=True)
@@ -1136,22 +1173,15 @@ class OpenAIInterviewAIProvider:
         )
         model, prompt = self._review_route(question_kind)
         try:
-            response = await self.client.responses.parse(
+            response, parsed = await self._parse_user_facing_response(
                 model=model,
-                input=[
-                    {"role": "developer", "content": prompt},
-                    {"role": "user", "content": request},
-                ],
+                prompt=prompt,
+                user_content=request,
                 text_format=ReviewOutput,
                 max_output_tokens=self.review_max_output_tokens,
+                validate=lambda value: value.validate_user_facing_language(),
+                operation="answer review",
             )
-            parsed = response.output_parsed
-            if parsed is None:
-                raise InterviewAIError(
-                    "OPENAI_INVALID_RESPONSE",
-                    "OpenAI returned no structured review",
-                    retryable=True,
-                )
             return AIReviewResult(parsed, self._usage(response, model))
         except InterviewAIError:
             raise
@@ -1160,27 +1190,122 @@ class OpenAIInterviewAIProvider:
 
     async def summarize(self, transcript: str) -> AISummaryResult:
         try:
-            response = await self.client.responses.parse(
+            response, parsed = await self._parse_user_facing_response(
                 model=self.light_review_model,
-                input=[
-                    {"role": "developer", "content": SUMMARY_PROMPT},
-                    {"role": "user", "content": transcript},
-                ],
+                prompt=SUMMARY_PROMPT,
+                user_content=transcript,
                 text_format=InterviewSummaryOutput,
                 max_output_tokens=self.summary_max_output_tokens,
+                validate=lambda value: value.validate_user_facing_language(),
+                operation="interview summary",
             )
-            parsed = response.output_parsed
-            if parsed is None:
-                raise InterviewAIError(
-                    "OPENAI_INVALID_RESPONSE",
-                    "OpenAI returned no structured interview summary",
-                    retryable=True,
-                )
             return AISummaryResult(parsed, self._usage(response, self.light_review_model))
         except InterviewAIError:
             raise
         except Exception as error:
             raise self._translate_error(error) from error
+
+    async def _parse_user_facing_response(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        user_content: str,
+        text_format: type[_UserFacingOutput],
+        max_output_tokens: int,
+        validate: Callable[[_UserFacingOutput], None],
+        operation: str,
+    ) -> tuple[object, _UserFacingOutput]:
+        response: object | None = None
+        recovery_reason = "missing_structured_output"
+        try:
+            response = await self.client.responses.parse(
+                model=model,
+                input=[
+                    {"role": "developer", "content": prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                text_format=text_format,
+                max_output_tokens=max_output_tokens,
+            )
+            parsed = cast(_UserFacingOutput | None, getattr(response, "output_parsed", None))
+            if parsed is not None:
+                try:
+                    validate(parsed)
+                except ValueError:
+                    recovery_reason = "non_russian_user_facing_text"
+                else:
+                    return response, parsed
+            else:
+                recovery_reason = _incomplete_response_reason(response)
+        except LengthFinishReasonError:
+            recovery_reason = "max_output_tokens"
+        except ValidationError as error:
+            recovery_reason = "schema_validation"
+            _log_structured_validation_failure(error, operation=operation, recovery=True)
+
+        recovery_tokens = min(max(max_output_tokens * 2, max_output_tokens + 1_000), 16_000)
+        logger.warning(
+            "Retrying invalid OpenAI structured response operation=%s reason=%s "
+            "max_output_tokens=%s recovery_max_output_tokens=%s",
+            operation,
+            recovery_reason,
+            max_output_tokens,
+            recovery_tokens,
+        )
+        try:
+            response = await self.client.responses.parse(
+                model=model,
+                input=[
+                    {
+                        "role": "developer",
+                        "content": prompt + _STRUCTURED_OUTPUT_RECOVERY_INSTRUCTION,
+                    },
+                    {"role": "user", "content": user_content},
+                ],
+                text_format=text_format,
+                max_output_tokens=recovery_tokens,
+            )
+        except LengthFinishReasonError as error:
+            raise InterviewAIError(
+                "OPENAI_OUTPUT_TRUNCATED",
+                "OpenAI response reached its output length limit",
+                retryable=True,
+            ) from error
+        except ValidationError as error:
+            _log_structured_validation_failure(error, operation=operation, recovery=False)
+            raise InterviewAIError(
+                "OPENAI_INVALID_RESPONSE",
+                "OpenAI returned a structured response with invalid fields after recovery",
+                retryable=True,
+            ) from error
+
+        parsed = cast(_UserFacingOutput | None, getattr(response, "output_parsed", None))
+        if parsed is None:
+            reason = _incomplete_response_reason(response)
+            code = (
+                "OPENAI_OUTPUT_TRUNCATED"
+                if reason == "max_output_tokens"
+                else "OPENAI_INVALID_RESPONSE"
+            )
+            raise InterviewAIError(
+                code,
+                (
+                    "OpenAI response reached its output length limit"
+                    if code == "OPENAI_OUTPUT_TRUNCATED"
+                    else "OpenAI returned no structured response after recovery"
+                ),
+                retryable=True,
+            )
+        try:
+            validate(parsed)
+        except ValueError as error:
+            raise InterviewAIError(
+                "OPENAI_INVALID_RESPONSE",
+                "OpenAI returned non-Russian user-facing feedback after recovery",
+                retryable=True,
+            ) from error
+        return response, parsed
 
     async def route_question(
         self,
@@ -1505,17 +1630,16 @@ class OpenAIInterviewAIProvider:
     @staticmethod
     def _translate_error(error: Exception) -> InterviewAIError:
         if isinstance(error, ValidationError):
-            fields = [
-                {
-                    "location": ".".join(str(part) for part in item["loc"]),
-                    "type": item["type"],
-                }
-                for item in error.errors(include_url=False, include_input=False)
-            ]
-            logger.warning("OpenAI structured response validation failed fields=%s", fields[:20])
+            _log_structured_validation_failure(error, operation="unknown", recovery=False)
             return InterviewAIError(
                 "OPENAI_INVALID_RESPONSE",
                 "OpenAI returned a structured response with invalid fields",
+                retryable=True,
+            )
+        if isinstance(error, LengthFinishReasonError):
+            return InterviewAIError(
+                "OPENAI_OUTPUT_TRUNCATED",
+                "OpenAI response reached its output length limit",
                 retryable=True,
             )
         if isinstance(error, APIStatusError):
@@ -1561,6 +1685,36 @@ class OpenAIInterviewAIProvider:
         return InterviewAIError(
             "OPENAI_INVALID_RESPONSE", "OpenAI returned an invalid response", retryable=False
         )
+
+
+def _incomplete_response_reason(response: object) -> str:
+    details = getattr(response, "incomplete_details", None)
+    reason = getattr(details, "reason", None)
+    if reason is None and isinstance(details, Mapping):
+        reason = details.get("reason")
+    normalized = str(reason or "missing_structured_output")
+    return normalized if len(normalized) <= 80 else "unknown"
+
+
+def _log_structured_validation_failure(
+    error: ValidationError,
+    *,
+    operation: str,
+    recovery: bool,
+) -> None:
+    fields = [
+        {
+            "location": ".".join(str(part) for part in item["loc"]),
+            "type": item["type"],
+        }
+        for item in error.errors(include_url=False, include_input=False)
+    ]
+    logger.warning(
+        "OpenAI structured response validation failed operation=%s recovery=%s fields=%s",
+        operation,
+        recovery,
+        fields[:20],
+    )
 
 
 def _openai_error_metadata(error: APIStatusError) -> tuple[str | None, str | None]:

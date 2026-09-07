@@ -863,11 +863,25 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                     # summaries must become one coherent verdict, not a concatenated
                     # wall of text that eventually gets truncated.
                     if len(summary_results) > 1:
-                        final_summary = await _ai(ctx).summarize(
-                            _summary_rollup_payload(overview)
-                        )
-                        summary_results.append(final_summary)
-                        overview = final_summary.output
+                        try:
+                            final_summary = await _ai(ctx).summarize(
+                                _summary_rollup_payload(overview)
+                            )
+                        except InterviewAIError as error:
+                            if error.code not in {
+                                "OPENAI_INVALID_RESPONSE",
+                                "OPENAI_OUTPUT_TRUNCATED",
+                            }:
+                                raise
+                            logger.warning(
+                                "Using deterministic interview summary rollup after invalid "
+                                "final AI response interview_id=%s code=%s",
+                                interview.id,
+                                error.code,
+                            )
+                        else:
+                            summary_results.append(final_summary)
+                            overview = final_summary.output
                     overview = _ground_technical_assessment(overview, summary_rows)
                     summary_usages = [result.usage for result in summary_results]
                     interview.ai_summary_payload = overview.model_dump(mode="json")

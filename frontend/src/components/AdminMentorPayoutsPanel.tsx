@@ -33,6 +33,7 @@ import { openExternalResource } from "../utils/openExternalResource";
 import { ErrorState } from "./ErrorState";
 import { LoadingState } from "./LoadingState";
 import { AdminMentorPayoutActions } from "./AdminMentorPayoutActions";
+import { MentorPayoutBreakdown } from "./MentorPayoutBreakdown";
 
 const payoutStatus = {
   requested: { label: "Запрошена", color: "yellow" },
@@ -414,6 +415,7 @@ function PendingPayoutCard({
           Ожидает выплаты
         </Badge>
       </Group>
+      <MentorPayoutBreakdown payout={payout} />
       <TextInput
         mt="md"
         label="Номер акта / комментарий"

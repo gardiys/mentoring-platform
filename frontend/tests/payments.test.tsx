@@ -438,6 +438,20 @@ const payoutDashboard: AdminMentorPayoutDashboard = {
       receipt_content_type: null,
       receipt_size: null,
       receipt_uploaded_at: null,
+      allocations: [
+        {
+          reward_id: "50000000-0000-4000-8000-000000000001",
+          student_id: dashboard.student_id,
+          student_name: dashboard.student_name,
+          student_telegram_username: "ivan",
+          kind: "employment_payment",
+          company_name: "Яндекс",
+          basis_kopecks: 5_000_000,
+          reward_percent: 60,
+          reward_amount_kopecks: 1_000_000,
+          amount_kopecks: 500_000,
+        },
+      ],
     },
   ],
 };
@@ -451,6 +465,12 @@ it("администратор выплачивает часть общего б
 
   renderPage(<AdminMentorPayoutsPanel />);
   expect(await screen.findByText("Доступно")).toBeInTheDocument();
+  expect(screen.getByText("Состав запроса")).toBeInTheDocument();
+  expect(screen.getByText("Иван Иванов")).toBeInTheDocument();
+  expect(
+    screen.getByText("Платёж ученика после трудоустройства · Яндекс"),
+  ).toBeInTheDocument();
+  expect(screen.getAllByText("5 000 ₽").length).toBeGreaterThanOrEqual(2);
   await userEvent.type(
     screen.getByLabelText("Сумма частичной выплаты, ₽"),
     "12000",
@@ -499,6 +519,7 @@ const mentorSummary: MentorRewardSummary = {
       receipt_content_type: null,
       receipt_size: null,
       receipt_uploaded_at: null,
+      allocations: [],
     },
   ],
 };

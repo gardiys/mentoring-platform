@@ -338,7 +338,30 @@ async def test_mentor_request_reserves_balance_until_admin_pays_it(
     summary = requested.json()
     assert summary["reserved_kopecks"] == 2_000_000
     assert summary["available_kopecks"] == 1_000_000
-    payout_id = summary["payouts"][0]["id"]
+    payout_read = summary["payouts"][0]
+    payout_id = payout_read["id"]
+    expected_allocations = [
+        {
+            "reward_id": summary["rewards"][0]["id"],
+            "student_id": str(seeded.student_id),
+            "student_name": "Иван",
+            "student_telegram_username": None,
+            "kind": "employment_payment",
+            "company_name": None,
+            "basis_kopecks": None,
+            "reward_percent": None,
+            "reward_amount_kopecks": 3_000_000,
+            "amount_kopecks": 2_000_000,
+        }
+    ]
+    assert payout_read["allocations"] == expected_allocations
+
+    admin_dashboard = await client.get(
+        "/api/v1/admin/payments/mentor-payouts",
+        headers=auth(seeded.admin_id),
+    )
+    assert admin_dashboard.status_code == 200, admin_dashboard.text
+    assert admin_dashboard.json()["payouts"][0]["allocations"] == expected_allocations
 
     duplicate = await client.post(
         "/api/v1/mentor/payouts",

@@ -23,6 +23,7 @@ import { AdminPaymentsNavigation } from "../components/AdminPaymentsNavigation";
 import { AdminMentorPayoutActions } from "../components/AdminMentorPayoutActions";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
+import { MentorPayoutBreakdown } from "../components/MentorPayoutBreakdown";
 import { PageHeader } from "../components/PageHeader";
 import {
   useAdminMentorPayoutDetail,
@@ -123,10 +124,13 @@ export function AdminMentorPaymentDetailPage() {
       </SimpleGrid>
 
       {openRequest && (
-        <Alert color="yellow" variant="light" title="Есть запрос на выплату">
-          Ментор запросил {formatRubles(openRequest.amount_kopecks)}. Эта сумма
-          уже зарезервирована и не входит в доступный баланс.
-        </Alert>
+        <Card withBorder>
+          <Alert color="yellow" variant="light" title="Есть запрос на выплату">
+            Ментор запросил {formatRubles(openRequest.amount_kopecks)}. Эта
+            сумма уже зарезервирована и не входит в доступный баланс.
+          </Alert>
+          <MentorPayoutBreakdown payout={openRequest} />
+        </Card>
       )}
 
       <Card withBorder>

@@ -256,6 +256,19 @@ class MentorPayoutEditMutation(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class MentorPayoutAllocationRead(BaseModel):
+    reward_id: UUID
+    student_id: UUID
+    student_name: str
+    student_telegram_username: str | None
+    kind: MentorRewardKind
+    company_name: str | None
+    basis_kopecks: int | None
+    reward_percent: Decimal | None
+    reward_amount_kopecks: int
+    amount_kopecks: int
+
+
 class MentorPayoutRead(BaseModel):
     id: UUID
     mentor_id: UUID
@@ -275,6 +288,7 @@ class MentorPayoutRead(BaseModel):
     receipt_content_type: str | None
     receipt_size: int | None
     receipt_uploaded_at: datetime | None
+    allocations: list[MentorPayoutAllocationRead]
 
 
 class AdminMentorPayoutBalanceRead(BaseModel):

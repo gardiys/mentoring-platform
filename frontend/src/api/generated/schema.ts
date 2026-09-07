@@ -8392,6 +8392,28 @@ export interface components {
          * @enum {string}
          */
         MentorPayoutOrigin: "mentor_request" | "admin_direct";
+        /** MentorPayoutAllocationRead */
+        MentorPayoutAllocationRead: {
+            /** Format: uuid */
+            reward_id: string;
+            /** Format: uuid */
+            student_id: string;
+            /** Student Name */
+            student_name: string;
+            /** Student Telegram Username */
+            student_telegram_username: string | null;
+            kind: components["schemas"]["MentorRewardKind"];
+            /** Company Name */
+            company_name: string | null;
+            /** Basis Kopecks */
+            basis_kopecks: number | null;
+            /** Reward Percent */
+            reward_percent: string | number | null;
+            /** Reward Amount Kopecks */
+            reward_amount_kopecks: number;
+            /** Amount Kopecks */
+            amount_kopecks: number;
+        };
         /** MentorPayoutRead */
         MentorPayoutRead: {
             /**
@@ -8437,6 +8459,8 @@ export interface components {
             receipt_size: number | null;
             /** Receipt Uploaded At */
             receipt_uploaded_at: string | null;
+            /** Allocations */
+            allocations: components["schemas"]["MentorPayoutAllocationRead"][];
         };
         /**
          * MentorPayoutStatus
@@ -8474,7 +8498,7 @@ export interface components {
          * MentorRewardKind
          * @enum {string}
          */
-        MentorRewardKind: "employment_payment" | "entry_payment" | "program_exclusion" | "legacy_fixed";
+        MentorRewardKind: "employment_payment" | "entry_payment" | "program_exclusion" | "legacy_fixed" | "consultation" | "python_repeat_fixed" | "python_repeat_success_fee";
         /** MentorRewardRead */
         MentorRewardRead: {
             /**

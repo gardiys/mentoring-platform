@@ -2340,6 +2340,9 @@ def safe_processing_message(code: str) -> str:
         "OPENAI_QUOTA_EXCEEDED": "Квота сервиса анализа исчерпана. Обратитесь к администратору.",
         "OPENAI_RATE_LIMIT": "Сервис анализа перегружен. Повторите позднее.",
         "OPENAI_INVALID_RESPONSE": "Не удалось разобрать результат AI-анализа.",
+        "OPENAI_OUTPUT_TRUNCATED": (
+            "Ответ AI оказался слишком длинным и оборвался. Повторите обработку."
+        ),
         "STORAGE_ERROR": "Не удалось прочитать запись из хранилища.",
     }
     return messages.get(code, "Не удалось обработать интервью.")
