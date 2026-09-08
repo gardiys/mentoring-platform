@@ -189,8 +189,12 @@ const FORM_LABELS: Record<string, string> = {
   last_name: "Фамилия",
   first_name: "Имя",
   patronymic: "Отчество",
+  identity_document_type: "Документы для договора",
   passport_series: "Серия паспорта",
   passport_number: "Номер паспорта",
+  foreign_passport_details: "Серия и номер иностранного паспорта",
+  residence_permit_series: "Серия ВНЖ РФ",
+  residence_permit_number: "Номер ВНЖ РФ",
   registration_address: "Адрес регистрации",
   phone: "Телефон",
   email: "Email",
@@ -200,13 +204,22 @@ const FORM_LABELS: Record<string, string> = {
   personal_data_consent_accepted_at: "Согласие принято",
 };
 
-const FORM_FIELD_ORDER = [
+const COMMON_FORM_FIELD_PREFIX = [
   "direction",
   "last_name",
   "first_name",
   "patronymic",
-  "passport_series",
-  "passport_number",
+] as const;
+
+const PASSPORT_FORM_FIELDS = ["passport_series", "passport_number"] as const;
+
+const RESIDENCE_PERMIT_FORM_FIELDS = [
+  "foreign_passport_details",
+  "residence_permit_series",
+  "residence_permit_number",
+] as const;
+
+const COMMON_FORM_FIELD_SUFFIX = [
   "registration_address",
   "phone",
   "email",
@@ -219,21 +232,42 @@ const FORM_FIELD_ORDER = [
 const FORM_DOCUMENT_LABELS: Record<string, string> = {
   passport_main_page_file: "Главная страница паспорта",
   passport_registration_page_file: "Страница с регистрацией",
+  foreign_passport_main_page_file: "Главная страница иностранного паспорта",
+  residence_permit_main_page_file: "Основной разворот ВНЖ РФ",
+  residence_permit_registration_page_file: "Страница ВНЖ с регистрацией",
 };
+
+const PASSPORT_DOCUMENT_KEYS = [
+  "passport_main_page_file",
+  "passport_registration_page_file",
+] as const;
+
+const RESIDENCE_PERMIT_DOCUMENT_KEYS = [
+  "foreign_passport_main_page_file",
+  "residence_permit_main_page_file",
+  "residence_permit_registration_page_file",
+] as const;
 
 const FORM_STATE_LABELS: Record<string, string> = {
   direction: "выбор направления",
   last_name: "фамилия",
   first_name: "имя",
   patronymic: "отчество",
+  identity_document_type: "выбор документов для договора",
   passport_series: "серия паспорта",
   passport_number: "номер паспорта",
+  foreign_passport_details: "реквизиты иностранного паспорта",
+  residence_permit_series: "серия ВНЖ РФ",
+  residence_permit_number: "номер ВНЖ РФ",
   registration_address: "адрес регистрации",
   phone: "телефон",
   email: "email",
   email_verification: "подтверждение email",
   passport_main_page_file: "главная страница паспорта",
   passport_registration_page_file: "страница с регистрацией",
+  foreign_passport_main_page_file: "главная страница иностранного паспорта",
+  residence_permit_main_page_file: "основной разворот ВНЖ РФ",
+  residence_permit_registration_page_file: "страница ВНЖ с регистрацией",
   personal_data_consent: "согласие на обработку данных",
 };
 
@@ -283,6 +317,14 @@ function formStateLabel(value: string | null) {
 
 function formValue(application: OnboardingApplicationDetail, key: string) {
   const value = application.form_answers[key];
+  if (key === "identity_document_type") {
+    if (value === "foreign_passport_with_residence_permit") {
+      return "Иностранный паспорт + ВНЖ РФ";
+    }
+    if (value === "passport" || application.form_answers.passport_series) {
+      return "Паспорт РФ или РБ";
+    }
+  }
   if (
     key === "personal_data_consent_accepted_at" &&
     typeof value === "string"
@@ -290,6 +332,30 @@ function formValue(application: OnboardingApplicationDetail, key: string) {
     return formatDate(value, true);
   }
   return value;
+}
+
+function isResidencePermitForm(application: OnboardingApplicationDetail) {
+  return (
+    application.form_answers.identity_document_type ===
+    "foreign_passport_with_residence_permit"
+  );
+}
+
+function formFieldOrder(application: OnboardingApplicationDetail) {
+  return [
+    ...COMMON_FORM_FIELD_PREFIX,
+    "identity_document_type",
+    ...(isResidencePermitForm(application)
+      ? RESIDENCE_PERMIT_FORM_FIELDS
+      : PASSPORT_FORM_FIELDS),
+    ...COMMON_FORM_FIELD_SUFFIX,
+  ];
+}
+
+function formDocumentKeys(application: OnboardingApplicationDetail) {
+  return isResidencePermitForm(application)
+    ? RESIDENCE_PERMIT_DOCUMENT_KEYS
+    : PASSPORT_DOCUMENT_KEYS;
 }
 
 function countStatuses(
@@ -455,7 +521,7 @@ function ApplicationDetails({
           </Card>
 
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-            {FORM_FIELD_ORDER.map((key) => (
+            {formFieldOrder(application).map((key) => (
               <Value
                 key={key}
                 label={FORM_LABELS[key] ?? key}
@@ -465,7 +531,8 @@ function ApplicationDetails({
           </SimpleGrid>
 
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-            {Object.entries(FORM_DOCUMENT_LABELS).map(([key, label]) => {
+            {formDocumentKeys(application).map((key) => {
+              const label = FORM_DOCUMENT_LABELS[key];
               const document = application.form_documents[key];
               const missing = application.form_missing_fields.includes(key);
               return (
@@ -566,20 +633,35 @@ function ApplicationDetails({
                   </Text>
                   <Text size="sm" mt="xs">
                     Письмо:{" "}
-                    {emailStatusLabel(application.payments[0].offer_email_status)}
+                    {emailStatusLabel(
+                      application.payments[0].offer_email_status,
+                    )}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    {application.payments[0].offer_email ?? application.email ?? "—"}
+                    {application.payments[0].offer_email ??
+                      application.email ??
+                      "—"}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Отправлено: {formatDate(application.payments[0].offer_email_sent_at, true)}
+                    Отправлено:{" "}
+                    {formatDate(
+                      application.payments[0].offer_email_sent_at,
+                      true,
+                    )}
                     {" · "}Доставлено:{" "}
-                    {formatDate(application.payments[0].offer_email_delivered_at, true)}
+                    {formatDate(
+                      application.payments[0].offer_email_delivered_at,
+                      true,
+                    )}
                   </Text>
                   <Text size="xs" c="dimmed">
-                    Оферта открыта: {formatDate(application.payments[0].offer_viewed_at, true)}
+                    Оферта открыта:{" "}
+                    {formatDate(application.payments[0].offer_viewed_at, true)}
                     {" · "}Принята:{" "}
-                    {formatDate(application.payments[0].offer_accepted_at, true)}
+                    {formatDate(
+                      application.payments[0].offer_accepted_at,
+                      true,
+                    )}
                   </Text>
                 </div>
                 {application.payments[0].payment_url && (

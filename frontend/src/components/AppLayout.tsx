@@ -70,6 +70,7 @@ export function AppLayout() {
     const rootRoute =
       location.pathname === "/roadmaps" ||
       location.pathname === "/knowledge" ||
+      location.pathname === "/copilot" ||
       location.pathname === "/interviews" ||
       location.pathname === "/interviews/personal-review" ||
       location.pathname === "/my-mentor" ||
@@ -212,6 +213,18 @@ export function AppLayout() {
             active={location.pathname.startsWith("/knowledge")}
             onClick={close}
           />
+          {admin && (
+            <NavLink
+              component={Link}
+              to="/copilot"
+              label="Copilot"
+              description="AI-помощник · закрытый доступ"
+              leftSection={<span className="nav-index">AI</span>}
+              className="brand-nav-link"
+              active={location.pathname === "/copilot"}
+              onClick={close}
+            />
+          )}
           <NavLink
             component={Link}
             to="/interviews"

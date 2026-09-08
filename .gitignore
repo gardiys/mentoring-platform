@@ -30,3 +30,6 @@ backend/migrations/data/legacy_offers.csv
 backend/migrations/data/legacy_student_payments.csv
 backend/migrations/data/mentor_payouts_*.csv
 backend/migrations/data/mentorship_associations.csv
+
+# Copilot installers are served only by the authenticated API.
+.local/copilot-releases/

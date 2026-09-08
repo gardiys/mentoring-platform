@@ -207,6 +207,7 @@ class NexaraTranscriptionProvider:
                 job = await self.client.transcriptions.create_job(
                     file=file_path,
                     task="diarize",
+                    diarization_setting="telephonic",
                     language=language,
                     response_format="verbose_json",
                     timestamp_granularities=["segment"],
@@ -216,6 +217,7 @@ class NexaraTranscriptionProvider:
                 job = await self.client.transcriptions.create_job(
                     url=file_url,
                     task="diarize",
+                    diarization_setting="telephonic",
                     language=language,
                     response_format="verbose_json",
                     timestamp_granularities=["segment"],

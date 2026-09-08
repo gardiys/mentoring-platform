@@ -597,3 +597,67 @@ function uploadPresignedPostWithProgress(
     }
   });
 }
+
+// Downloads use the same cookie / Telegram / local credentials as JSON requests.
+// Files never need a public URL or an access token in the query string.
+export async function apiDownload(
+  path: string,
+  signal: AbortSignal,
+  onProgress: (percent: number) => void,
+): Promise<Blob> {
+  const headers = authenticatedHeaders();
+  headers.set("Accept", "application/octet-stream");
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      headers,
+      credentials: "include",
+      signal,
+    });
+  } catch (error) {
+    throw networkError(
+      "Не удалось скачать файл. Проверьте подключение и повторите попытку.",
+      error,
+    );
+  }
+  if (!response.ok) {
+    const payload: unknown = await response.json().catch(() => null);
+    if (isErrorDetail(payload))
+      throw new ApiError(
+        response.status,
+        payload.detail.code,
+        payload.detail.message,
+      );
+    throw new ApiError(
+      response.status,
+      "download_failed",
+      "Не удалось скачать файл. Повторите попытку.",
+    );
+  }
+  try {
+    if (!response.body) return await response.blob();
+    const total = Number(response.headers.get("Content-Length"));
+    const reader = response.body.getReader();
+    const chunks: BlobPart[] = [];
+    let loaded = 0;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        chunks.push(new Uint8Array(value));
+        loaded += value.byteLength;
+        if (total > 0)
+          onProgress(Math.min(100, Math.round((loaded / total) * 100)));
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    onProgress(100);
+    return new Blob(chunks, { type: "application/octet-stream" });
+  } catch (error) {
+    throw networkError(
+      "Скачивание прервалось. Проверьте подключение и повторите попытку.",
+      error,
+    );
+  }
+}

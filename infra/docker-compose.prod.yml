@@ -15,6 +15,7 @@ x-common-environment: &common-environment
   TRANSCRIPTION_POLL_DEADLINE_SECONDS: ${TRANSCRIPTION_POLL_DEADLINE_SECONDS:-21600}
 
 x-backend-environment: &backend-environment
+  COPILOT_RELEASES_DIR: /var/lib/mentoring/copilot-releases
   <<: *common-environment
   CORS_ORIGINS: https://${DOMAIN:?Set DOMAIN in .env.production}
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env.production}
@@ -43,6 +44,8 @@ x-backend-environment: &backend-environment
   WEB_FRONTEND_URL: https://${DOMAIN:?Set DOMAIN in .env.production}
   WEB_SESSION_SECRET: ${WEB_SESSION_SECRET:?Set WEB_SESSION_SECRET in .env.production}
   WEB_SESSION_TTL_SECONDS: ${WEB_SESSION_TTL_SECONDS:-2592000}
+  DESKTOP_AUTH_ENABLED: ${DESKTOP_AUTH_ENABLED:-true}
+  DESKTOP_ACCESS_TOKEN_TTL_SECONDS: ${DESKTOP_ACCESS_TOKEN_TTL_SECONDS:-86400}
   TOCHKA_CLIENT_ID: ${TOCHKA_CLIENT_ID:-}
   TOCHKA_JWT_TOKEN: ${TOCHKA_JWT_TOKEN:-}
   TOCHKA_API_BASE_URL: ${TOCHKA_API_BASE_URL:-https://enter.tochka.com/uapi}
@@ -148,6 +151,8 @@ x-ai-environment: &ai-environment
   OPENAI_EMBEDDING_DIMENSIONS: ${OPENAI_EMBEDDING_DIMENSIONS:-256}
   OPENAI_PROXY_URL: ${OPENAI_PROXY_URL:-}
   OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-120}
+  OPENAI_BACKGROUND_SERVICE_TIER: ${OPENAI_BACKGROUND_SERVICE_TIER:-default}
+  OPENAI_FLEX_TIMEOUT_SECONDS: ${OPENAI_FLEX_TIMEOUT_SECONDS:-900}
   OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-0}
   OPENAI_MAX_CONCURRENCY: ${OPENAI_MAX_CONCURRENCY:-4}
   OPENAI_JOB_TIMEOUT_SECONDS: ${OPENAI_JOB_TIMEOUT_SECONDS:-3600}
@@ -329,6 +334,7 @@ services:
       - /tmp:size=64m,mode=1777
     volumes:
       - interview_legacy_transcode:/var/lib/mentoring/interview-legacy-transcode
+      - ${COPILOT_RELEASES_HOST_DIR:-../.local/copilot-releases}:/var/lib/mentoring/copilot-releases:ro
     environment: *backend-environment
     command:
       [

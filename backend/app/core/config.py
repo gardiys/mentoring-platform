@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     consultations_enabled: bool = True
     python_repeat_mentorship_enabled: bool = True
     python_to_go_enabled: bool = True
+    copilot_releases_dir: Path = Path("../.local/copilot-releases")
     career_package_enabled: bool = False
     career_package_ai_enabled: bool = False
     career_package_auto_generate_on_final_resume: bool = False
@@ -75,6 +76,8 @@ class Settings(BaseSettings):
     telegram_oidc_proxy_url: SecretStr | None = None
     web_frontend_url: str = _DEVELOPMENT_FRONTEND_URL
     web_session_secret: SecretStr | None = None
+    desktop_auth_enabled: bool = True
+    desktop_access_token_ttl_seconds: int = Field(default=86_400, ge=3_600, le=604_800)
     web_session_ttl_seconds: int = Field(default=2_592_000, ge=3_600, le=31_536_000)
     web_oauth_state_ttl_seconds: int = Field(default=600, ge=300, le=1_800)
     s3_bucket: str = "mentoring-platform"
@@ -201,6 +204,8 @@ class Settings(BaseSettings):
     openai_embedding_dimensions: int = Field(default=256, ge=1, le=3_072)
     openai_proxy_url: SecretStr | None = None
     openai_timeout_seconds: float = Field(default=120, ge=10, le=600)
+    openai_background_service_tier: Literal["default", "flex"] = "default"
+    openai_flex_timeout_seconds: float = Field(default=900, ge=120, le=1_800)
     # ARQ owns observable retries and persists every attempt; avoid nested SDK retries.
     openai_max_retries: int = Field(default=0, ge=0, le=5)
     openai_max_concurrency: int = Field(default=4, ge=1, le=32)

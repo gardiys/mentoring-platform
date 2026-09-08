@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from nexara import AsyncJob, RateLimitError
@@ -74,12 +75,20 @@ def provider_with_job(job: AsyncJob) -> tuple[NexaraTranscriptionProvider, StubC
 
 
 @pytest.mark.asyncio
-async def test_nexara_submit_uses_async_diarization_without_persisting_media_url() -> None:
+@pytest.mark.parametrize("source", ["url", "file"])
+async def test_nexara_submit_uses_async_diarization_without_persisting_media_url(
+    source: str,
+) -> None:
     provider, client = provider_with_job(completed_job())
+    media_source = (
+        {"url": "https://s3.example/private.mp3?secret=signed"}
+        if source == "url"
+        else {"file": Path("private.mp3")}
+    )
 
     job = await provider.submit(
-        file_url="https://s3.example/private.mp3?secret=signed",
-        file_path=None,
+        file_url="https://s3.example/private.mp3?secret=signed" if source == "url" else None,
+        file_path=Path("private.mp3") if source == "file" else None,
         language=None,
         diarization=True,
         timestamps=True,
@@ -88,8 +97,9 @@ async def test_nexara_submit_uses_async_diarization_without_persisting_media_url
     assert job.provider_job_id == "nexara-job-1"
     assert job.status is TranscriptionJobState.COMPLETED
     assert client.transcriptions.submitted == {
-        "url": "https://s3.example/private.mp3?secret=signed",
+        **media_source,
         "task": "diarize",
+        "diarization_setting": "telephonic",
         "language": None,
         "response_format": "verbose_json",
         "timestamp_granularities": ["segment"],

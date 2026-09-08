@@ -1,5 +1,6 @@
 """Import all models so SQLAlchemy and Alembic discover their metadata."""
 
+from app.auth.desktop import DesktopGrant  # noqa: F401
 from app.career_packages.models import (
     CareerDeliveryChannel,
     CareerDeliveryStatus,

@@ -203,16 +203,13 @@ def ensure_occurrence_transition(
         raise ValueError(f"Invalid occurrence transition: {current.value} -> {target.value}")
 
 
-def match_gate(
+def semantic_match_precheck(
     *,
     learning_object_type: LearningObjectType,
     quality_flags: Collection[str],
     semantic_score: float,
     second_score: float | None,
     semantic_threshold: float,
-    judge_decision: PairwiseCardMatchDecision,
-    judge_confidence: float,
-    judge_threshold: float,
     score_gap_threshold: float,
     direction_matches: bool,
 ) -> MatchGate:
@@ -227,6 +224,33 @@ def match_gate(
         return MatchGate(False, "Semantic score is below threshold")
     if second_score is not None and semantic_score - second_score < score_gap_threshold:
         return MatchGate(False, "Top candidates are ambiguous")
+    return MatchGate(True, "Deterministic semantic checks passed")
+
+
+def match_gate(
+    *,
+    learning_object_type: LearningObjectType,
+    quality_flags: Collection[str],
+    semantic_score: float,
+    second_score: float | None,
+    semantic_threshold: float,
+    judge_decision: PairwiseCardMatchDecision,
+    judge_confidence: float,
+    judge_threshold: float,
+    score_gap_threshold: float,
+    direction_matches: bool,
+) -> MatchGate:
+    precheck = semantic_match_precheck(
+        learning_object_type=learning_object_type,
+        quality_flags=quality_flags,
+        semantic_score=semantic_score,
+        second_score=second_score,
+        semantic_threshold=semantic_threshold,
+        score_gap_threshold=score_gap_threshold,
+        direction_matches=direction_matches,
+    )
+    if not precheck.accepted:
+        return precheck
     if judge_decision is not PairwiseCardMatchDecision.SAME_CARD:
         return MatchGate(False, f"Pairwise judge returned {judge_decision.value}")
     if judge_confidence < judge_threshold:

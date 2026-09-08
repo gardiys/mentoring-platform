@@ -50,6 +50,7 @@ from app.interviews.intelligence_ai import (
     build_ai_provider,
     transcript_chunks,
 )
+from app.interviews.intelligence_checkpoints import InterviewAICheckpoints
 from app.interviews.intelligence_models import (
     IntelligenceAIUsage,
     IntelligenceAnswer,
@@ -86,6 +87,7 @@ from app.interviews.intelligence_recovery import (
     intelligence_recovery_job_name as _recovery_job_name,
 )
 from app.interviews.intelligence_service import safe_processing_message
+from app.interviews.intelligence_transcript_context import ground_annotations
 from app.interviews.media_guardrails import (
     MediaGuardrailError,
     StagingCapacityError,
@@ -106,6 +108,7 @@ from app.interviews.uploads import (
     InterviewUploadStore,
     StoredUpload,
 )
+from app.tracks.models import LearningTrack
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -550,12 +553,13 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
             for item in utterances
         ]
         extracted = []
-        usages = []
+        checkpoints = InterviewAICheckpoints(async_session_factory, interview.id, _ai(ctx))
+        track = await session.get(LearningTrack, process.track_id)
+        direction = track.slug if track else None
         try:
             for chunk in transcript_chunks(blocks):
-                result = await _ai(ctx).extract(chunk)
+                result = await checkpoints.extract(chunk, direction=direction)
                 extracted.extend(result.output.questions)
-                usages.append(result.usage)
         except InterviewAIError as error:
             will_retry = _will_retry(ctx, error.retryable)
             await _ai_failure(session, interview, attempt, error, retryable=will_retry)
@@ -582,6 +586,17 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
             answer_utterances = [
                 row for row in answer_utterances if row.speaker_id == interview.candidate_speaker_id
             ]
+            question_utterances.sort(key=lambda row: row.sequence_number)
+            answer_utterances.sort(key=lambda row: row.sequence_number)
+            annotations = ground_annotations(
+                direction,
+                {
+                    f"U{row.sequence_number:03d}": row.text
+                    for row in [*question_utterances, *answer_utterances]
+                },
+                item.transcription_corrections,
+                item.uncertain_utterance_ids,
+            )
             sequence += 1
             seen_ranges.add(range_key)
             question = IntelligenceQuestion(
@@ -604,7 +619,12 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
                 question_kind=item.question_kind,
                 subcategory=item.subcategory,
                 difficulty=item.difficulty,
-                confidence=item.confidence,
+                confidence=(
+                    min(item.confidence, 0.5)
+                    if annotations.uncertain_utterance_ids
+                    else item.confidence
+                ),
+                transcription_annotations=annotations.model_dump(mode="json"),
             )
             session.add(question)
             await session.flush()
@@ -615,18 +635,6 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
                     answer_text="\n".join(row.text for row in answer_utterances),
                     start_ms=question.answer_start_ms,
                     end_ms=question.answer_end_ms,
-                )
-            )
-        for usage in usages:
-            session.add(
-                IntelligenceAIUsage(
-                    interview_id=interview.id,
-                    provider=_ai(ctx).name,
-                    model=usage.model,
-                    operation="extraction",
-                    input_tokens=usage.input_tokens,
-                    output_tokens=usage.output_tokens,
-                    provider_request_id=usage.provider_request_id,
                 )
             )
         interview.processing_status = IntelligenceProcessingStatus.ANALYZING
@@ -736,7 +744,14 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                 select(IntelligenceSpeaker).where(IntelligenceSpeaker.interview_id == interview.id)
             )
         }
-        summary_usages = []
+        checkpoints = InterviewAICheckpoints(async_session_factory, interview.id, _ai(ctx))
+        direction_ids = {question.direction_id for question, _ in rows if question.direction_id}
+        directions = {
+            track.id: track.slug
+            for track in await session.scalars(
+                select(LearningTrack).where(LearningTrack.id.in_(direction_ids))
+            )
+        }
         try:
             for question, answer in rows:
                 exists = await session.scalar(
@@ -757,12 +772,22 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                     if question.question_kind is IntelligenceQuestionKind.TECHNICAL
                     else ""
                 )
-                result = await _ai(ctx).review(
+                if question.transcription_annotations and (
+                    question.transcription_annotations.get("corrections")
+                    or question.transcription_annotations.get("uncertain_utterance_ids")
+                ):
+                    context += (
+                        "\nTranscription interpretation hints (source text is unchanged):\n"
+                        + json.dumps(question.transcription_annotations, ensure_ascii=False)
+                    )
+                result = await checkpoints.review(
+                    question_id=question.id,
                     question=question.question_text,
                     answer=answer.answer_text,
                     category=question.category,
                     question_kind=question.question_kind,
                     context=context,
+                    direction=directions.get(question.direction_id),
                 )
                 review = result.output
                 session.add(
@@ -786,22 +811,6 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                             if question.question_kind is IntelligenceQuestionKind.TECHNICAL
                             else LIGHT_REVIEW_PROMPT_VERSION
                         ),
-                    )
-                )
-                session.add(
-                    IntelligenceAIUsage(
-                        interview_id=interview.id,
-                        question_id=question.id,
-                        provider=_ai(ctx).name,
-                        model=result.usage.model,
-                        operation=(
-                            "technical_evaluation"
-                            if question.question_kind is IntelligenceQuestionKind.TECHNICAL
-                            else "light_evaluation"
-                        ),
-                        input_tokens=result.usage.input_tokens,
-                        output_tokens=result.usage.output_tokens,
-                        provider_request_id=result.usage.provider_request_id,
                     )
                 )
             if interview.ai_summary_payload is None:
@@ -847,7 +856,7 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                         for item in utterances
                     ]
                 summary_results = [
-                    await _ai(ctx).summarize(chunk)
+                    await checkpoints.summarize(chunk)
                     for chunk in transcript_chunks(
                         blocks,
                         size=20,
@@ -864,7 +873,7 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                     # wall of text that eventually gets truncated.
                     if len(summary_results) > 1:
                         try:
-                            final_summary = await _ai(ctx).summarize(
+                            final_summary = await checkpoints.summarize(
                                 _summary_rollup_payload(overview)
                             )
                         except InterviewAIError as error:
@@ -883,9 +892,8 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                             summary_results.append(final_summary)
                             overview = final_summary.output
                     overview = _ground_technical_assessment(overview, summary_rows)
-                    summary_usages = [result.usage for result in summary_results]
                     interview.ai_summary_payload = overview.model_dump(mode="json")
-                    interview.ai_summary_model = summary_usages[-1].model
+                    interview.ai_summary_model = summary_results[-1].usage.model
                     interview.ai_summary_prompt_version = SUMMARY_PROMPT_VERSION
         except InterviewAIError as error:
             will_retry = _will_retry(ctx, error.retryable)
@@ -893,18 +901,6 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
             if will_retry:
                 raise Retry(defer=_retry_delay(ctx, 60)) from error
             return
-        for usage in summary_usages:
-            session.add(
-                IntelligenceAIUsage(
-                    interview_id=interview.id,
-                    provider=_ai(ctx).name,
-                    model=usage.model,
-                    operation="summary",
-                    input_tokens=usage.input_tokens,
-                    output_tokens=usage.output_tokens,
-                    provider_request_id=usage.provider_request_id,
-                )
-            )
         interview.processing_status = IntelligenceProcessingStatus.READY
         interview.failed_stage = None
         interview.processing_error_code = None
@@ -937,11 +933,18 @@ def _neighbor_context(
     included_positions = [
         index for index, utterance in enumerate(utterances) if utterance.id in included_ids
     ]
-    if not included_positions:
+    if not included_positions or limit <= 0:
         return ""
     first = min(included_positions)
     last = max(included_positions)
-    selected: list[int] = []
+    # Hints and interruptions inside a resumed answer are more relevant than
+    # speech outside its span. They remain labelled interviewer context only.
+    selected = [
+        index
+        for index in range(first, last + 1)
+        if utterances[index].id not in included_ids
+        and utterances[index].speaker_id != candidate_speaker_id
+    ][-limit:]
     distance = 1
     while len(selected) < limit and (first - distance >= 0 or last + distance < len(utterances)):
         left = first - distance
@@ -1235,9 +1238,7 @@ def _summary_evidence_blocks(rows: list[Any]) -> list[str]:
                 "problems": review.problems[:3],
                 "missing_points": review.missing_points[:5],
                 "incorrect_statements": review.incorrect_statements[:3],
-                "suggested_better_answer": (
-                    (review.suggested_better_answer or "")[:4_000] or None
-                ),
+                "suggested_better_answer": ((review.suggested_better_answer or "")[:4_000] or None),
             },
         }
         blocks.append(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
@@ -1303,9 +1304,7 @@ def _ground_technical_assessment(
         if not question_numbers:
             continue
         scores = [
-            score
-            for number in question_numbers
-            if (score := evidence[number][0]) is not None
+            score for number in question_numbers if (score := evidence[number][0]) is not None
         ]
         grounded_topics.append(
             topic.model_copy(
@@ -1508,7 +1507,8 @@ async def _interview(
 ) -> IntelligenceInterview:
     statement = select(IntelligenceInterview).where(IntelligenceInterview.id == interview_id)
     if lock:
-        statement = statement.with_for_update()
+        # Serialize interview workers while allowing independent checkpoint FK inserts.
+        statement = statement.with_for_update(key_share=True)
     interview = await session.scalar(statement)
     if interview is None:
         raise RuntimeError(f"Interview {interview_id} no longer exists")

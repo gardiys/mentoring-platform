@@ -66,6 +66,7 @@ from app.interviews.intelligence_schemas import (
     IntelligenceSpeakerRead,
     IntelligenceUtteranceRead,
 )
+from app.interviews.intelligence_transcript_context import TranscriptAnnotations
 from app.interviews.models import (
     InterviewCard,
     InterviewCardFrequencyMode,
@@ -1063,6 +1064,11 @@ async def intelligence_detail(
                 id=question.id,
                 sequence_number=question.sequence_number,
                 question_text=question.question_text,
+                transcription_annotations=(
+                    TranscriptAnnotations.model_validate(question.transcription_annotations)
+                    if question.transcription_annotations
+                    else None
+                ),
                 question_start_ms=question.question_start_ms,
                 question_end_ms=question.question_end_ms,
                 answer_start_ms=question.answer_start_ms,

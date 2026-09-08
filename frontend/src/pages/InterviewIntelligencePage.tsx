@@ -494,6 +494,28 @@ function QuestionCard({
             {question.answer?.answer_text || "Ответ не найден"}
           </Text>
         </div>
+        {!!question.transcription_annotations?.corrections.length && (
+          <Alert color="blue" title="Уточнения терминов от AI">
+            <Text size="sm">
+              Исходный ответ сохранён. При разборе AI предложил прочитать:
+            </Text>
+            {question.transcription_annotations.corrections.map((item) => (
+              <Text size="sm" key={`${item.utterance_id}:${item.original}`}>
+                {item.utterance_id}: «{item.original}» → «{item.replacement}»
+              </Text>
+            ))}
+          </Alert>
+        )}
+        {!!question.transcription_annotations?.uncertain_utterance_ids
+          .length && (
+          <Alert color="yellow" title="Есть неуверенно распознанные реплики">
+            Проверьте по записи:{" "}
+            {question.transcription_annotations.uncertain_utterance_ids.join(
+              ", ",
+            )}
+            . Неясная речь сама по себе не означает ошибку кандидата.
+          </Alert>
+        )}
         {review && (
           <Card withBorder bg="var(--mantine-color-default-hover)">
             <Stack gap="xs">

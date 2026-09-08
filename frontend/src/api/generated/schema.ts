@@ -6885,6 +6885,31 @@ export interface components {
          * @enum {string}
          */
         IntelligenceQuestionModerationStatus: "pending" | "mentor_approved" | "approved" | "rejected";
+        /** TranscriptAnnotations */
+        TranscriptAnnotations: {
+            /**
+             * Glossary Version
+             * @default interview-terms-v1
+             */
+            glossary_version: string;
+            /** Direction */
+            direction?: string | null;
+            /** Corrections */
+            corrections?: components["schemas"]["TranscriptCorrection"][];
+            /** Uncertain Utterance Ids */
+            uncertain_utterance_ids?: string[];
+        };
+        /** TranscriptCorrection */
+        TranscriptCorrection: {
+            /** Utterance Id */
+            utterance_id: string;
+            /** Original */
+            original: string;
+            /** Replacement */
+            replacement: string;
+            /** Confidence */
+            confidence: number;
+        };
         /** IntelligenceQuestionRead */
         IntelligenceQuestionRead: {
             /**
@@ -6896,6 +6921,7 @@ export interface components {
             sequence_number: number;
             /** Question Text */
             question_text: string;
+            transcription_annotations?: components["schemas"]["TranscriptAnnotations"] | null;
             /** Question Start Ms */
             question_start_ms: number;
             /** Question End Ms */

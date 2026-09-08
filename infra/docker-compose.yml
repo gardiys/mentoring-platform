@@ -89,6 +89,7 @@ services:
   backend:
     build: ../backend
     environment:
+      COPILOT_RELEASES_DIR: /var/lib/mentoring/copilot-releases
       APP_ENV: development
       APP_DEBUG: "true"
       DEV_AUTH_ENABLED: "true"
@@ -196,6 +197,8 @@ services:
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       OPENAI_EMBEDDING_DIMENSIONS: ${OPENAI_EMBEDDING_DIMENSIONS:-256}
       OPENAI_PROXY_URL: ${OPENAI_PROXY_URL:-}
+      OPENAI_BACKGROUND_SERVICE_TIER: ${OPENAI_BACKGROUND_SERVICE_TIER:-default}
+      OPENAI_FLEX_TIMEOUT_SECONDS: ${OPENAI_FLEX_TIMEOUT_SECONDS:-900}
       OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-0}
       OPENAI_MAX_CONCURRENCY: ${OPENAI_MAX_CONCURRENCY:-4}
       OPENAI_JOB_TIMEOUT_SECONDS: ${OPENAI_JOB_TIMEOUT_SECONDS:-3600}
@@ -218,6 +221,7 @@ services:
     volumes:
       - ../backend:/app
       - interview_legacy_transcode:/var/lib/mentoring/interview-legacy-transcode
+      - ${COPILOT_RELEASES_HOST_DIR:-../.local/copilot-releases}:/var/lib/mentoring/copilot-releases:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -253,6 +257,8 @@ services:
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       OPENAI_EMBEDDING_DIMENSIONS: ${OPENAI_EMBEDDING_DIMENSIONS:-256}
       OPENAI_PROXY_URL: ${OPENAI_PROXY_URL:-}
+      OPENAI_BACKGROUND_SERVICE_TIER: ${OPENAI_BACKGROUND_SERVICE_TIER:-default}
+      OPENAI_FLEX_TIMEOUT_SECONDS: ${OPENAI_FLEX_TIMEOUT_SECONDS:-900}
       OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-0}
       OPENAI_MAX_CONCURRENCY: ${OPENAI_MAX_CONCURRENCY:-4}
       OPENAI_JOB_TIMEOUT_SECONDS: ${OPENAI_JOB_TIMEOUT_SECONDS:-3600}

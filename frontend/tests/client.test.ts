@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import {
   apiRequest,
+  apiDownload,
   uploadPresignedPost,
   uploadStorageIntent,
 } from "../src/api/client";
@@ -342,4 +343,28 @@ it("повторяет только неуспешную multipart-часть", 
     }),
   );
   expect(attempts).toBe(2);
+});
+
+it("скачивает приватный файл с авторизацией и прогрессом", async () => {
+  setDevUserId("admin-id");
+  const fetchMock = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(
+      new Response(new Uint8Array([1, 2, 3]), {
+        headers: { "Content-Length": "3" },
+      }),
+    );
+  const progress = vi.fn();
+  const controller = new AbortController();
+  const blob = await apiDownload(
+    "/api/v1/copilot/releases/win-x64/download",
+    controller.signal,
+    progress,
+  );
+  expect(blob.size).toBe(3);
+  const options = fetchMock.mock.calls[0]?.[1];
+  expect((options?.headers as Headers).get("X-Dev-User-Id")).toBe("admin-id");
+  expect(options?.credentials).toBe("include");
+  expect(options?.signal).toBe(controller.signal);
+  expect(progress).toHaveBeenLastCalledWith(100);
 });

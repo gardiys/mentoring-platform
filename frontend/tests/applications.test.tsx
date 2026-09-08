@@ -174,6 +174,66 @@ it("показывает подробную анкету, полноту и за
   ).toHaveAttribute("href", "https://files.example/passport.jpg");
 });
 
+it("показывает реквизиты и документы российского ВНЖ", async () => {
+  const storedDocument = {
+    uploaded: true,
+    url: "https://files.example/document.jpg",
+    content_type: "image/jpeg",
+    size: 2048,
+  };
+  const detailedApplication: OnboardingApplicationDetail = {
+    ...application,
+    status: "APPLICATION_FORM_SUBMITTED",
+    form_answer_source: "database",
+    form_state: null,
+    form_complete: true,
+    form_missing_fields: [],
+    form_answers: {
+      direction: "Python",
+      last_name: "Valiyev",
+      first_name: "Ali",
+      patronymic: "",
+      identity_document_type: "foreign_passport_with_residence_permit",
+      foreign_passport_details: "AA 1234567",
+      residence_permit_series: "82",
+      residence_permit_number: "1234567",
+      registration_address: "г. Москва, ул. Ленина, д. 1",
+      phone: "+79999999999",
+      email: "student@example.com",
+      personal_data_consent: true,
+    },
+    form_documents: {
+      foreign_passport_main_page_file: storedDocument,
+      residence_permit_main_page_file: storedDocument,
+      residence_permit_registration_page_file: {
+        uploaded: false,
+        url: null,
+        content_type: null,
+        size: null,
+      },
+    },
+  };
+  vi.spyOn(api, "adminApplications").mockResolvedValue({
+    ...page,
+    items: [detailedApplication],
+  });
+  vi.spyOn(api, "adminApplication").mockResolvedValue(detailedApplication);
+
+  renderPage(<AdminApplicationsPage />);
+  await userEvent.click(await screen.findByRole("button", { name: "Открыть" }));
+
+  expect(
+    await screen.findByText("Иностранный паспорт + ВНЖ РФ"),
+  ).toBeInTheDocument();
+  expect(screen.getByText("AA 1234567")).toBeInTheDocument();
+  expect(screen.getByText("Серия ВНЖ РФ")).toBeInTheDocument();
+  expect(screen.getByText("Номер ВНЖ РФ")).toBeInTheDocument();
+  expect(screen.getByText("Основной разворот ВНЖ РФ")).toBeInTheDocument();
+  expect(
+    screen.queryByText("Главная страница паспорта"),
+  ).not.toBeInTheDocument();
+});
+
 it("показывает доставку письма и принятие оферты", async () => {
   const paymentApplication: OnboardingApplicationDetail = {
     ...application,

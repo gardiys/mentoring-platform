@@ -17,6 +17,7 @@ from app.interviews.intelligence_models import (
     IntelligenceReviewStatus,
     IntelligenceSpeakerRole,
 )
+from app.interviews.intelligence_transcript_context import TranscriptAnnotations
 from app.interviews.models import InterviewCardFrequency, InterviewCardFrequencyMode
 
 
@@ -125,6 +126,7 @@ class IntelligenceQuestionRead(BaseModel):
     id: UUID
     sequence_number: int
     question_text: str
+    transcription_annotations: TranscriptAnnotations | None = None
     question_start_ms: int
     question_end_ms: int | None
     answer_start_ms: int | None

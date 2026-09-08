@@ -5,9 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.health import router as health_router
+from app.auth.desktop_router import router as desktop_auth_router
 from app.auth.web_router import router as web_auth_router
 from app.career_packages.router import staff_router as career_package_staff_router
 from app.career_packages.router import student_router as career_package_student_router
+from app.copilot.preparation import router as copilot_preparation_router
+from app.copilot.rag import router as copilot_rag_router
+from app.copilot.router import router as copilot_router
 from app.core.config import Settings, get_settings
 from app.core.middleware import (
     CookieCSRFMiddleware,
@@ -118,8 +122,12 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     application.add_middleware(TrustedHostMiddleware, allowed_hosts=configured.trusted_hosts)
     application.add_middleware(RequestContextMiddleware)
 
+    application.include_router(copilot_router, prefix="/api/v1")
+    application.include_router(copilot_preparation_router, prefix="/api/v1")
+    application.include_router(copilot_rag_router, prefix="/api/v1")
     application.include_router(health_router)
     application.include_router(web_auth_router, prefix="/api/v1")
+    application.include_router(desktop_auth_router, prefix="/api/v1")
     application.include_router(career_package_staff_router, prefix="/api/v1")
     application.include_router(career_package_student_router, prefix="/api/v1")
     application.include_router(employment_student_router, prefix="/api/v1")

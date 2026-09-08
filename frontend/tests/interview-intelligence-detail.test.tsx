@@ -196,6 +196,48 @@ const detail: IntelligenceInterviewDetail = {
 
 afterEach(() => vi.restoreAllMocks());
 
+it("показывает уточнения терминов отдельно от исходного ответа", async () => {
+  const question = detail.questions[0]!;
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "intelligenceInterview").mockResolvedValue({
+    ...detail,
+    questions: [
+      {
+        ...question,
+        answer: {
+          ...question.answer!,
+          answer_text: "гил не устраняет все гонки",
+        },
+        transcription_annotations: {
+          glossary_version: "interview-terms-v1",
+          direction: "python",
+          corrections: [
+            {
+              utterance_id: "U001",
+              original: "гил",
+              replacement: "GIL",
+              confidence: 0.99,
+            },
+          ],
+          uncertain_utterance_ids: ["U002"],
+        },
+      },
+    ],
+  });
+  renderPage(
+    <InterviewIntelligencePage />,
+    `/interviews/analysis/${interviewId}`,
+    "/interviews/analysis/:interviewId",
+  );
+  expect(
+    await screen.findByText("гил не устраняет все гонки"),
+  ).toBeInTheDocument();
+  expect(screen.getByText("U001: «гил» → «GIL»")).toBeInTheDocument();
+  expect(
+    screen.getByText("Есть неуверенно распознанные реплики"),
+  ).toBeInTheDocument();
+});
+
 function expectBefore(first: HTMLElement, second: HTMLElement) {
   expect(
     first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
+from app.interviews.ai_accounting import estimated_cost
 from app.interviews.card_automation_domain import (
     audit_sample,
     ensure_occurrence_transition,
@@ -21,6 +23,7 @@ from app.interviews.card_automation_domain import (
     match_gate,
     priority_score,
     promotion_result,
+    semantic_match_precheck,
 )
 from app.interviews.card_automation_models import (
     AutomationDecision,
@@ -55,6 +58,7 @@ from app.interviews.intelligence_models import (
     IntelligenceAssessment,
     IntelligenceInterview,
     IntelligenceQuestion,
+    IntelligenceQuestionKind,
     IntelligenceQuestionModerationStatus,
     IntelligenceReviewSource,
     IntelligenceReviewStatus,
@@ -103,6 +107,9 @@ class OccurrenceSnapshot:
     extraction_confidence: float
     sensitive_values: tuple[str, ...]
     available_broad_topics: tuple[str, ...]
+    quality_flags: tuple[str, ...] = ()
+    is_real_interviewer_question: bool | None = None
+    is_standalone: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +233,31 @@ async def process_question_occurrence(
         if semantic and semantic[0].score >= settings.semantic_similarity_threshold:
             top = semantic[0]
             second_score = semantic[1].score if len(semantic) > 1 else None
+            precheck = semantic_match_precheck(
+                learning_object_type=routing.learning_object_type,
+                quality_flags=routing.quality_flags,
+                semantic_score=top.score,
+                second_score=second_score,
+                semantic_threshold=settings.semantic_similarity_threshold,
+                score_gap_threshold=settings.candidate_score_gap_threshold,
+                direction_matches=True,
+            )
+            if not precheck.accepted:
+                await _record_card_match(
+                    session_factory,
+                    snapshot,
+                    top,
+                    semantic,
+                    settings,
+                    decision_type=AutomationDecisionType.SEMANTIC_CARD_MATCH,
+                    decision_source=AutomationDecisionSource.RULE,
+                    reason=precheck.reason,
+                    confidence=0.0,
+                    apply_link=False,
+                    finalize_proposal=False,
+                )
+                await _cluster_occurrence(session_factory, snapshot, settings)
+                return
             ai_stage = "pairwise_card_match"
             judged = await _cached_or_judged_match(
                 session_factory,
@@ -394,6 +426,9 @@ async def _claim_occurrence(
             extraction_confidence=question.confidence,
             sensitive_values=sensitive_values,
             available_broad_topics=available_broad_topics,
+            quality_flags=tuple(question.quality_flags or ()),
+            is_real_interviewer_question=question.is_real_interviewer_question,
+            is_standalone=question.is_standalone,
         )
 
 
@@ -405,20 +440,21 @@ async def _route(
     safe_question = redact_untrusted_text(
         snapshot.question_text,
         snapshot.sensitive_values,
-    )
+    )[:4_000]
     safe_answer = redact_untrusted_text(
         snapshot.answer_text,
         snapshot.sensitive_values,
-    )
+    )[:6_000]
     safe_context = redact_untrusted_text(
         snapshot.source_context,
         snapshot.sensitive_values,
-    )
+    )[:6_000]
     input_hash = _hash(
-        safe_question,
-        safe_answer,
-        safe_context,
-        "\n".join(snapshot.available_broad_topics),
+        str(snapshot.direction_id),
+        json.dumps(
+            [safe_question, safe_answer, safe_context, snapshot.available_broad_topics],
+            ensure_ascii=False,
+        ),
         QUESTION_ROUTING_PROMPT_VERSION,
         QUESTION_ROUTING_SCHEMA_VERSION,
         _provider_model_name(ai, "light"),
@@ -450,6 +486,41 @@ async def _route(
             input_hash,
             None,
         )
+    # Only unambiguous, high-confidence technical questions may reuse a trusted
+    # wording. The deterministic exclusions above still take precedence.
+    if (
+        snapshot.question_kind is IntelligenceQuestionKind.TECHNICAL
+        and snapshot.extraction_confidence >= 0.95
+        and fallback.is_standalone
+        and not fallback.quality_flags
+        and not snapshot.quality_flags
+        and snapshot.is_real_interviewer_question is not False
+        and snapshot.is_standalone is not False
+        and await _has_interviewer_source(session_factory, snapshot)
+    ):
+        candidates, _ = await _card_candidates(session_factory, snapshot)
+        exact = [item for item in candidates if item.match_type == "exact"]
+        if len(exact) == 1:
+            card = exact[0]
+            return RoutingData(
+                LearningObjectType.FLASHCARD,
+                True,
+                True,
+                card.question,
+                (),
+                card.category,
+                None,
+                (card.category,),
+                (),
+                snapshot.extraction_confidence,
+                "High-confidence technical question matches a trusted published wording",
+                AutomationDecisionSource.RULE,
+                None,
+                None,
+                None,
+                _hash(input_hash, str(card.card_id), card.question, card.category),
+                None,
+            )
     async with session_factory() as session:
         cached = await session.scalar(
             select(AutomationDecision)
@@ -501,9 +572,9 @@ async def _route(
             )
     started_at = time.perf_counter()
     result = await ai.route_question(
-        question=safe_question[:4_000],
-        candidate_answer=safe_answer[:6_000],
-        context=safe_context[:6_000],
+        question=safe_question,
+        candidate_answer=safe_answer,
+        context=safe_context,
         available_broad_topics=list(snapshot.available_broad_topics),
     )
     latency_ms = _elapsed_ms(started_at)
@@ -547,6 +618,28 @@ async def _route(
         input_hash,
         latency_ms,
     )
+
+
+async def _has_interviewer_source(
+    session_factory: async_sessionmaker[AsyncSession], snapshot: OccurrenceSnapshot
+) -> bool:
+    """A trusted wording alone cannot prove who asked the question."""
+    async with session_factory() as session:
+        interview = await session.get(IntelligenceInterview, snapshot.interview_id)
+        question = await session.get(IntelligenceQuestion, snapshot.question_id)
+        if interview is None or interview.candidate_speaker_id is None or question is None:
+            return False
+        ids = set(question.question_utterance_ids or ())
+        if not ids:
+            return False
+        count = await session.scalar(
+            select(func.count(IntelligenceUtterance.id)).where(
+                IntelligenceUtterance.interview_id == snapshot.interview_id,
+                IntelligenceUtterance.id.in_(ids),
+                IntelligenceUtterance.speaker_id != interview.candidate_speaker_id,
+            )
+        )
+        return count == len(ids)
 
 
 async def _store_routing(
@@ -724,24 +817,25 @@ async def _cached_or_judged_match(
     safe_question = redact_untrusted_text(
         snapshot.question_text,
         snapshot.sensitive_values,
-    )
+    )[:4_000]
     safe_scope = [
-        redact_untrusted_text(item, snapshot.sensitive_values)
-        for item in await _answer_scope(session_factory, snapshot.question_id)
+        redact_untrusted_text(item, snapshot.sensitive_values)[:1_000]
+        for item in (await _answer_scope(session_factory, snapshot.question_id))[:50]
     ]
     safe_candidate_question = redact_untrusted_text(
         candidate.question,
         snapshot.sensitive_values,
-    )
+    )[:4_000]
     safe_candidate_answer = redact_untrusted_text(
         candidate.answer,
         snapshot.sensitive_values,
-    )
+    )[:8_000]
     input_hash = _hash(
-        safe_question,
-        "\n".join(safe_scope),
-        safe_candidate_question,
-        safe_candidate_answer,
+        str(snapshot.direction_id),
+        json.dumps(
+            [safe_question, safe_scope, safe_candidate_question, safe_candidate_answer],
+            ensure_ascii=False,
+        ),
         PAIRWISE_CARD_MATCH_PROMPT_VERSION,
         PAIRWISE_CARD_MATCH_SCHEMA_VERSION,
         _provider_model_name(ai, "light"),
@@ -775,10 +869,10 @@ async def _cached_or_judged_match(
         )
     started_at = time.perf_counter()
     result = await ai.judge_card_match(
-        question=safe_question[:4_000],
-        answer_scope=[item[:1_000] for item in safe_scope[:50]],
-        candidate_question=safe_candidate_question[:4_000],
-        candidate_answer=safe_candidate_answer[:8_000],
+        question=safe_question,
+        answer_scope=safe_scope,
+        candidate_question=safe_candidate_question,
+        candidate_answer=safe_candidate_answer,
     )
     return JudgedMatch(
         result=result,
@@ -1789,7 +1883,14 @@ def _estimated_ai_cost(
         input_price = configured.openai_light_input_price_per_million_usd
         output_price = configured.openai_light_output_price_per_million_usd
     if input_price <= 0 and output_price <= 0:
-        return None
+        input_tokens = max(int(getattr(usage, "input_tokens", 0) or 0), 0)
+        return estimated_cost(
+            str(getattr(usage, "model", "")),
+            str(getattr(usage, "service_tier", "default")),
+            input_tokens,
+            min(max(int(getattr(usage, "cached_input_tokens", 0) or 0), 0), input_tokens),
+            max(int(getattr(usage, "output_tokens", 0) or 0), 0),
+        )
     input_tokens = max(int(getattr(usage, "input_tokens", 0) or 0), 0)
     output_tokens = max(int(getattr(usage, "output_tokens", 0) or 0), 0)
     cost = (Decimal(input_tokens) * input_price + Decimal(output_tokens) * output_price) / Decimal(

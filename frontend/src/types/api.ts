@@ -1799,6 +1799,17 @@ export interface IntelligenceQuestion {
   id: string;
   sequence_number: number;
   question_text: string;
+  transcription_annotations?: {
+    glossary_version: string;
+    direction: string | null;
+    corrections: Array<{
+      utterance_id: string;
+      original: string;
+      replacement: string;
+      confidence: number;
+    }>;
+    uncertain_utterance_ids: string[];
+  } | null;
   question_start_ms: number;
   question_end_ms: number | null;
   answer_start_ms: number | null;

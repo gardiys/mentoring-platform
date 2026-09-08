@@ -42,6 +42,7 @@ from app.interviews.intelligence_providers import (
     TranscriptionJobState,
 )
 from app.interviews.intelligence_service import select_candidate_speaker
+from app.interviews.intelligence_transcript_context import TranscriptCorrection
 from app.interviews.media_guardrails import MediaProbe, MediaStreamProbe, StagingGuard
 from app.interviews.models import (
     InterviewCard,
@@ -819,6 +820,25 @@ async def test_fake_processing_pipeline_reaches_ready(
     monkeypatch.setattr(intelligence_jobs, "async_session_factory", TestSession)
     queue = RecordingRedis()
     fake_ai = FakeInterviewAIProvider()
+    original_extract = fake_ai.extract
+
+    async def extract_with_terminology(transcript: str, *, direction: str | None = None):
+        result = await original_extract(transcript, direction=direction)
+        result.output.questions[0].transcription_corrections = [
+            TranscriptCorrection(
+                utterance_id="U001", original="гил", replacement="GIL", confidence=0.99
+            ),
+            TranscriptCorrection(
+                utterance_id="U002", original="не", replacement="да", confidence=0.99
+            ),
+        ]
+        # The resumed candidate answer is deliberately returned out of order;
+        # the interviewer interjection must never become candidate evidence.
+        result.output.questions[0].answer_utterance_ids = ["U006", "U005", "U002"]
+        result.output.questions[0].uncertain_utterance_ids = ["U006", "U999"]
+        return result
+
+    monkeypatch.setattr(fake_ai, "extract", extract_with_terminology)
     context: dict[str, Any] = {
         "redis": queue,
         "transcription_provider": FakeTranscriptionProvider(),
@@ -839,6 +859,35 @@ async def test_fake_processing_pipeline_reaches_ready(
         )
         student = await session.get(User, seeded.student_id)
         assert candidate is not None and student is not None
+        source_question = await session.scalar(
+            select(IntelligenceUtterance).where(
+                IntelligenceUtterance.interview_id == interview_id,
+                IntelligenceUtterance.sequence_number == 1,
+            )
+        )
+        assert source_question is not None
+        source_question.text = "Что такое гил?"
+        session.add_all(
+            [
+                IntelligenceUtterance(
+                    interview_id=interview_id,
+                    speaker_id=source_question.speaker_id,
+                    sequence_number=5,
+                    start_ms=36_000,
+                    end_ms=38_000,
+                    text="Подсказка интервьюера",
+                ),
+                IntelligenceUtterance(
+                    interview_id=interview_id,
+                    speaker_id=candidate.id,
+                    sequence_number=6,
+                    start_ms=37_000,
+                    end_ms=41_000,
+                    text="Не уверен, продолжу ответ",
+                ),
+            ]
+        )
+        await session.commit()
         await select_candidate_speaker(session, student, interview_id, candidate.id)
 
     duplicate_candidate = await client.put(
@@ -870,7 +919,27 @@ async def test_fake_processing_pipeline_reaches_ready(
     assert response.status_code == 200
     detail = response.json()
     assert detail["processing_status"] == "ready"
-    assert len(detail["transcript"]) == 4
+    assert len(detail["transcript"]) == 6
+    assert detail["transcript"][0]["text"] == "Что такое гил?"
+    annotations = detail["questions"][0]["transcription_annotations"]
+    assert annotations["direction"] == "python"
+    assert annotations["corrections"] == [
+        {
+            "utterance_id": "U001",
+            "original": "гил",
+            "replacement": "GIL",
+            "confidence": 0.99,
+        }
+    ]
+    assert annotations["uncertain_utterance_ids"] == ["U006"]
+    assert detail["questions"][0]["is_low_confidence"] is True
+    answer_text = detail["questions"][0]["answer"]["answer_text"]
+    assert answer_text.endswith("Не уверен, продолжу ответ")
+    assert "Подсказка интервьюера" not in answer_text
+    assert fake_ai.review_calls[0]["answer"] == answer_text
+    assert '"replacement": "GIL"' in fake_ai.review_calls[0]["context"]
+    assert fake_ai.extraction_calls[0]["direction"] == "python"
+    assert fake_ai.review_calls[0]["direction"] == "python"
     assert len(detail["questions"]) == 2
     assert [question["question_kind"] for question in detail["questions"]] == [
         "technical",
@@ -889,6 +958,7 @@ async def test_fake_processing_pipeline_reaches_ready(
         IntelligenceQuestionKind.HR,
     ]
     assert "U003" in str(fake_ai.review_calls[0]["context"])
+    assert "Подсказка интервьюера" in str(fake_ai.review_calls[0]["context"])
     assert fake_ai.review_calls[1]["context"] == ""
     async with TestSession() as session:
         operations = list(

@@ -1,10 +1,11 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Cookie, Depends, Header
+from fastapi import Cookie, Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.desktop import desktop_user
 from app.auth.telegram import (
     TelegramInitDataError,
     TelegramInitDataExpiredError,
@@ -65,11 +66,15 @@ async def _telegram_user(session: AsyncSession, init_data: str) -> User:
 
 
 async def get_current_user(
+    request: Request,
     session: Annotated[AsyncSession, Depends(get_db_session)],
     authorization: Annotated[str | None, Header()] = None,
     x_dev_user_id: Annotated[UUID | None, Header()] = None,
     browser_session: Annotated[str | None, Cookie(alias=BROWSER_SESSION_COOKIE)] = None,
 ) -> User:
+    if authorization and authorization.startswith("Bearer copilot_"):
+        return await desktop_user(session, authorization[7:], request)
+
     if authorization and authorization.lower().startswith("tma "):
         return await _telegram_user(session, authorization[4:])
 

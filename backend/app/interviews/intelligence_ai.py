@@ -7,7 +7,7 @@ import math
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Annotated, Literal, Protocol, TypeVar, cast
+from typing import Annotated, Any, Literal, Protocol, TypeVar, cast
 
 import httpx
 from openai import (
@@ -28,6 +28,7 @@ from app.career_packages.schemas import (
 )
 from app.core.config import Settings
 from app.employment_qualification.schemas import EmploymentAIOutput
+from app.interviews.ai_accounting import AIRequestRecorder
 from app.interviews.card_automation_schemas import AnswerContract, AnswerValidationResult
 from app.interviews.card_automation_types import (
     LearningObjectType,
@@ -38,10 +39,14 @@ from app.interviews.intelligence_models import (
     IntelligenceDifficulty,
     IntelligenceQuestionKind,
 )
+from app.interviews.intelligence_transcript_context import (
+    TranscriptCorrection,
+    transcript_context,
+)
 
-EXTRACTION_PROMPT_VERSION = "interview-extraction-classification-v2"
-TECHNICAL_REVIEW_PROMPT_VERSION = "technical-answer-review-v4-ru-recovery"
-LIGHT_REVIEW_PROMPT_VERSION = "nontechnical-answer-review-v3-ru-recovery"
+EXTRACTION_PROMPT_VERSION = "interview-extraction-terms-v3"
+TECHNICAL_REVIEW_PROMPT_VERSION = "technical-answer-review-v5-terms"
+LIGHT_REVIEW_PROMPT_VERSION = "nontechnical-answer-review-v4-terms"
 SUMMARY_PROMPT_VERSION = "interview-coaching-report-v4-ru-recovery"
 QUESTION_ROUTING_PROMPT_VERSION = "question-routing-v2"
 QUESTION_ROUTING_SCHEMA_VERSION = "question-routing-result-v2"
@@ -112,6 +117,7 @@ def _assert_no_english_prose(values: Sequence[str | None]) -> None:
     if not has_cyrillic or english_prose_words > allowed_words:
         raise ValueError("user-facing AI feedback must be predominantly written in Russian")
 
+
 EXTRACTION_PROMPT = """Extract every meaningful question asked to the candidate in an interview
 and classify it before any answer review. Use only utterance IDs present in the input. Exclude only
 greetings, connection checks, and small talk that do not expect a meaningful candidate answer.
@@ -129,7 +135,12 @@ Set question_kind using these strict definitions:
 Return the interviewer utterance IDs that form each question and candidate utterance IDs that form
 its logical answer. Never invent timestamps or speech. Keep category as a narrow topic label and do
 not use it for routing. Lower confidence when transcription, classification,
-or boundaries are ambiguous."""
+or boundaries are ambiguous.
+For each question, list transcription_corrections for unambiguous glossary spelling changes in
+its question or answer utterances: utterance_id, exact original substring, canonical replacement,
+and confidence. Only use pronunciation variants from the supplied glossary; do not propose factual
+corrections. List uncertain_utterance_ids when words or attribution are unclear. Keep the wording
+uncertain and lower confidence if its interpretation is uncertain. Empty lists are valid."""
 
 TECHNICAL_REVIEW_PROMPT = """You review a candidate's answer to one technical interview question.
 This is a preliminary recommendation for a human mentor, never a hiring verdict.
@@ -383,6 +394,10 @@ class ExtractedQuestion(BaseModel):
     subcategory: str | None = Field(default=None, max_length=160)
     difficulty: IntelligenceDifficulty = IntelligenceDifficulty.UNKNOWN
     confidence: float = Field(ge=0, le=1)
+    transcription_corrections: list[TranscriptCorrection] = Field(
+        default_factory=list, max_length=30
+    )
+    uncertain_utterance_ids: list[str] = Field(default_factory=list, max_length=100)
 
 
 class ExtractionOutput(BaseModel):
@@ -527,6 +542,9 @@ class AIUsageResult:
     model: str
     input_tokens: int
     output_tokens: int
+    cached_input_tokens: int = 0
+    reasoning_tokens: int = 0
+    service_tier: str = "default"
 
 
 @dataclass(frozen=True)
@@ -612,7 +630,9 @@ class InterviewAIProvider(Protocol):
     embedding_model: str
     embedding_dimensions: int
 
-    async def extract(self, transcript: str) -> AIExtractionResult: ...
+    async def extract(
+        self, transcript: str, *, direction: str | None = None
+    ) -> AIExtractionResult: ...
 
     async def review(
         self,
@@ -622,6 +642,7 @@ class InterviewAIProvider(Protocol):
         category: str,
         question_kind: IntelligenceQuestionKind,
         context: str,
+        direction: str | None = None,
     ) -> AIReviewResult: ...
 
     async def summarize(self, transcript: str) -> AISummaryResult: ...
@@ -678,14 +699,15 @@ class FakeInterviewAIProvider:
     embedding_dimensions = 64
 
     def __init__(self) -> None:
+        self.extraction_calls: list[dict[str, object]] = []
         self.review_calls: list[dict[str, object]] = []
         self.routing_calls: list[dict[str, object]] = []
         self.card_match_calls: list[dict[str, object]] = []
         self.answer_contract_calls: list[dict[str, object]] = []
         self.answer_validation_calls: list[dict[str, object]] = []
 
-    async def extract(self, transcript: str) -> AIExtractionResult:
-        del transcript
+    async def extract(self, transcript: str, *, direction: str | None = None) -> AIExtractionResult:
+        self.extraction_calls.append({"transcript": transcript, "direction": direction})
         return AIExtractionResult(
             output=ExtractionOutput(
                 questions=[
@@ -722,6 +744,7 @@ class FakeInterviewAIProvider:
         category: str,
         question_kind: IntelligenceQuestionKind,
         context: str,
+        direction: str | None = None,
     ) -> AIReviewResult:
         self.review_calls.append(
             {
@@ -729,6 +752,7 @@ class FakeInterviewAIProvider:
                 "answer": answer,
                 "category": category,
                 "question_kind": question_kind,
+                "direction": direction,
                 "context": context,
             }
         )
@@ -1119,6 +1143,18 @@ class OpenAIInterviewAIProvider:
         self.extraction_max_output_tokens = settings.openai_extraction_max_output_tokens
         self.review_max_output_tokens = settings.openai_review_max_output_tokens
         self.summary_max_output_tokens = settings.openai_summary_max_output_tokens
+        self.request_recorder = AIRequestRecorder()
+        self.background_service_tier = settings.openai_background_service_tier
+        self.flex_timeout_seconds = settings.openai_flex_timeout_seconds
+        if (
+            self.background_service_tier == "flex"
+            and settings.openai_job_timeout_seconds < 2 * self.flex_timeout_seconds + 60
+        ):
+            raise InterviewAIError(
+                "OPENAI_CONFIG_ERROR",
+                "OpenAI worker timeout must allow two Flex requests plus 60 seconds",
+                retryable=False,
+            )
         http_client = httpx.AsyncClient(
             proxy=(
                 settings.openai_proxy_url.get_secret_value()
@@ -1134,12 +1170,66 @@ class OpenAIInterviewAIProvider:
             http_client=http_client,
         )
 
-    async def extract(self, transcript: str) -> AIExtractionResult:
+    async def _request(
+        self,
+        *,
+        operation: str,
+        recovery: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Capture usage before SDK structured parsing, including failed recovery attempts."""
+        background = operation in {
+            "route_question",
+            "judge_card_match",
+            "generate_answer_contract",
+            "validate_answer_contract",
+            "generate_career_package",
+            "assess_employment_profile",
+        }
+        tier = getattr(self, "background_service_tier", "default") if background else "default"
+        if operation != "embed":
+            kwargs["service_tier"] = tier
+            if tier == "flex":
+                kwargs["timeout"] = self.flex_timeout_seconds
+        recorder = getattr(self, "request_recorder", None)
+        # Also supports lightweight injected providers used by offline tests.
+        if recorder is None:
+            method = (
+                self.client.embeddings.create
+                if operation == "embed"
+                else self.client.responses.parse
+            )
+            return await method(**kwargs)
+        call_id = await recorder.start(operation, kwargs["model"], tier, recovery)
         try:
-            response = await self.client.responses.parse(
+            raw_method = (
+                self.client.embeddings.with_raw_response.create
+                if operation == "embed"
+                else self.client.responses.with_raw_response.parse
+            )
+            raw = await raw_method(**kwargs)
+            await recorder.received(
+                call_id,
+                raw.http_response.json(),
+                raw.request_id,
+                kwargs["model"],
+                tier,
+            )
+            return raw.parse()
+        except Exception as error:
+            await recorder.failed(call_id, type(error).__name__)
+            raise
+
+    async def extract(self, transcript: str, *, direction: str | None = None) -> AIExtractionResult:
+        try:
+            response = await self._request(
+                operation="extract",
                 model=self.extraction_model,
                 input=[
-                    {"role": "developer", "content": EXTRACTION_PROMPT},
+                    {
+                        "role": "developer",
+                        "content": EXTRACTION_PROMPT + transcript_context(direction),
+                    },
                     {"role": "user", "content": transcript},
                 ],
                 text_format=ExtractionOutput,
@@ -1166,12 +1256,14 @@ class OpenAIInterviewAIProvider:
         category: str,
         question_kind: IntelligenceQuestionKind,
         context: str,
+        direction: str | None = None,
     ) -> AIReviewResult:
         request = (
             f"Question:\n{question}\n\nCandidate answer:\n{answer}\n\n"
             f"Category: {category}\n\nLimited context:\n{context}"
         )
         model, prompt = self._review_route(question_kind)
+        prompt += transcript_context(direction)
         try:
             response, parsed = await self._parse_user_facing_response(
                 model=model,
@@ -1219,7 +1311,8 @@ class OpenAIInterviewAIProvider:
         response: object | None = None
         recovery_reason = "missing_structured_output"
         try:
-            response = await self.client.responses.parse(
+            response = await self._request(
+                operation=operation,
                 model=model,
                 input=[
                     {"role": "developer", "content": prompt},
@@ -1254,7 +1347,8 @@ class OpenAIInterviewAIProvider:
             recovery_tokens,
         )
         try:
-            response = await self.client.responses.parse(
+            response = await self._request(
+                operation=operation,
                 model=model,
                 input=[
                     {
@@ -1265,6 +1359,7 @@ class OpenAIInterviewAIProvider:
                 ],
                 text_format=text_format,
                 max_output_tokens=recovery_tokens,
+                recovery=True,
             )
         except LengthFinishReasonError as error:
             raise InterviewAIError(
@@ -1324,7 +1419,8 @@ class OpenAIInterviewAIProvider:
             }
         )
         try:
-            response = await self.client.responses.parse(
+            response = await self._request(
+                operation="route_question",
                 model=self.light_review_model,
                 input=[
                     {"role": "developer", "content": QUESTION_ROUTING_PROMPT},
@@ -1366,7 +1462,8 @@ class OpenAIInterviewAIProvider:
             }
         )
         try:
-            response = await self.client.responses.parse(
+            response = await self._request(
+                operation="judge_card_match",
                 model=self.light_review_model,
                 input=[
                     {"role": "developer", "content": PAIRWISE_CARD_MATCH_PROMPT},
@@ -1406,7 +1503,8 @@ class OpenAIInterviewAIProvider:
             }
         )
         try:
-            response = await self.client.responses.parse(
+            response = await self._request(
+                operation="generate_answer_contract",
                 model=self.analysis_model,
                 input=[
                     {"role": "developer", "content": ANSWER_CONTRACT_PROMPT},
@@ -1451,7 +1549,8 @@ class OpenAIInterviewAIProvider:
             }
         )
         try:
-            response = await self.client.responses.parse(
+            response = await self._request(
+                operation="validate_answer_contract",
                 model=self.analysis_model,
                 input=[
                     {"role": "developer", "content": ANSWER_VALIDATION_PROMPT},
@@ -1487,30 +1586,33 @@ class OpenAIInterviewAIProvider:
                 embeddings=[],
                 usage=AIUsageResult(None, self.embedding_model, 0, 0),
             )
+        unique_texts = list(dict.fromkeys(texts))
         try:
-            response = await self.client.embeddings.create(
+            response = await self._request(
+                operation="embed",
                 model=self.embedding_model,
-                input=texts,
+                input=unique_texts,
                 dimensions=self.embedding_dimensions,
                 encoding_format="float",
             )
             ordered = sorted(response.data, key=lambda item: item.index)
-            if [item.index for item in ordered] != list(range(len(texts))):
+            if [item.index for item in ordered] != list(range(len(unique_texts))):
                 raise InterviewAIError(
                     "OPENAI_INVALID_RESPONSE",
                     "OpenAI returned invalid embedding indexes",
                     retryable=True,
                 )
             embeddings = [list(item.embedding) for item in ordered]
-            if len(embeddings) != len(texts):
+            if len(embeddings) != len(unique_texts):
                 raise InterviewAIError(
                     "OPENAI_INVALID_RESPONSE",
                     "OpenAI returned an incomplete embedding batch",
                     retryable=True,
                 )
             usage = response.usage
+            by_text = dict(zip(unique_texts, embeddings, strict=True))
             return AIEmbeddingResult(
-                embeddings=embeddings,
+                embeddings=[list(by_text[text]) for text in texts],
                 usage=AIUsageResult(
                     provider_request_id=getattr(response, "id", None),
                     model=str(getattr(response, "model", None) or self.embedding_model),
@@ -1534,7 +1636,8 @@ class OpenAIInterviewAIProvider:
             }
         )
         try:
-            response = await self.client.responses.parse(
+            response = await self._request(
+                operation="generate_career_package",
                 model=self.light_review_model,
                 input=[
                     {"role": "developer", "content": CAREER_PACKAGE_PROMPT},
@@ -1565,7 +1668,8 @@ class OpenAIInterviewAIProvider:
     ) -> AIEmploymentProfileResult:
         request = _untrusted_json_payload(dict(evidence))
         try:
-            response = await self.client.responses.parse(
+            response = await self._request(
+                operation="assess_employment_profile",
                 model=self.light_review_model,
                 input=[
                     {"role": "developer", "content": EMPLOYMENT_PROFILE_PROMPT},
@@ -1625,6 +1729,13 @@ class OpenAIInterviewAIProvider:
             model=str(getattr(response, "model", None) or model),
             input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
             output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+            cached_input_tokens=int(
+                getattr(getattr(usage, "input_tokens_details", None), "cached_tokens", 0) or 0
+            ),
+            reasoning_tokens=int(
+                getattr(getattr(usage, "output_tokens_details", None), "reasoning_tokens", 0) or 0
+            ),
+            service_tier=str(getattr(response, "service_tier", None) or "default"),
         )
 
     @staticmethod

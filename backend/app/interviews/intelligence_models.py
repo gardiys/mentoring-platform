@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
@@ -14,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -288,6 +290,9 @@ class IntelligenceUtterance(UUIDPrimaryKeyMixin, Base):
 
 class IntelligenceQuestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "intelligence_questions"
+    transcription_annotations: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     __table_args__ = (
         UniqueConstraint(
             "interview_id", "sequence_number", name="uq_intelligence_question_sequence"
@@ -611,6 +616,57 @@ class IntelligenceAIUsage(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class IntelligenceAICheckpoint(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "intelligence_ai_checkpoints"
+    __table_args__ = (
+        UniqueConstraint("interview_id", "operation", "input_hash", name="uq_ai_checkpoint_input"),
+    )
+
+    interview_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("intelligence_interviews.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    operation: Mapped[str] = mapped_column(String(40), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    output: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    model: Mapped[str] = mapped_column(String(160), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+class AIRequestLog(UUIDPrimaryKeyMixin, Base):
+    """Financial metadata survives business rollback/deletion; no prompts or answers."""
+
+    __tablename__ = "ai_request_logs"
+    __table_args__ = (Index("ix_ai_request_logs_created_operation", "created_at", "operation"),)
+
+    operation: Mapped[str] = mapped_column(String(60), nullable=False)
+    model: Mapped[str] = mapped_column(String(160), nullable=False)
+    service_tier: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    recovery: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    provider_request_id: Mapped[str | None] = mapped_column(String(500))
+    response_id: Mapped[str | None] = mapped_column(String(500))
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    cached_input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
+    estimated_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(16, 10))
+    pricing_version: Mapped[str | None] = mapped_column(String(80))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class IntelligenceTranscriptionUsage(UUIDPrimaryKeyMixin, Base):
