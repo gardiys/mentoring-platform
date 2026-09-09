@@ -11,8 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import AdminUser, CurrentUser, StudentUser
-from app.copilot.access import eligibility, ensure_copilot_student
+from app.auth.dependencies import AdminUser, CurrentUser
+from app.copilot.access import eligibility, ensure_copilot_user
 from app.copilot.models import CopilotSession
 from app.core.config import get_settings
 from app.core.errors import api_error
@@ -46,12 +46,12 @@ Session = Annotated[AsyncSession, Depends(get_db_session)]
 Tenant = Annotated[str, Header(alias="X-Copilot-Tenant", min_length=1, max_length=100)]
 
 
-async def permitted_student(session: Session, user: StudentUser) -> User:
-    await ensure_copilot_student(session, user)
+async def permitted_user(session: Session, user: CurrentUser) -> User:
+    await ensure_copilot_user(session, user)
     return user
 
 
-CopilotUser = Annotated[User, Depends(permitted_student)]
+CopilotUser = Annotated[User, Depends(permitted_user)]
 
 
 @router.get("/access")
@@ -219,7 +219,7 @@ async def sync_usage(
     if not expected or not hmac.compare_digest(authorization, "Bearer " + expected):
         api_error(403, "copilot_integration_denied", "Server credential required")
     user = await session.get(User, payload.student_id)
-    if user is None or user.role is not UserRole.STUDENT:
+    if user is None or user.role not in {UserRole.STUDENT, UserRole.ADMIN}:
         api_error(404, "student_not_found", "Student not found")
     if payload.process_id:
         await get_process_model(session, user, payload.process_id)

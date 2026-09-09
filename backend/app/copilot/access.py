@@ -28,13 +28,14 @@ async def eligibility(session: AsyncSession, user: User) -> dict[str, object]:
         and enabled
         and status is StudentLearningStatus.INTERVIEWING
     )
+    admin_allowed = user.role is UserRole.ADMIN and user.is_active
     return {
-        "allowed": user.role is UserRole.ADMIN or student_allowed,
+        "allowed": admin_allowed or student_allowed,
         "student_allowed": student_allowed,
         "learning_status": status.value if status else "learning",
         "students_enabled": enabled,
         "reason": ""
-        if student_allowed or user.role is UserRole.ADMIN
+        if student_allowed or admin_allowed
         else (
             "Copilot пока закрыт для учеников."
             if not enabled
@@ -43,7 +44,7 @@ async def eligibility(session: AsyncSession, user: User) -> dict[str, object]:
     }
 
 
-async def ensure_copilot_student(session: AsyncSession, user: User) -> None:
+async def ensure_copilot_user(session: AsyncSession, user: User) -> None:
     access = await eligibility(session, user)
-    if not access["student_allowed"]:
+    if not access["allowed"]:
         api_error(403, "copilot_access_denied", str(access["reason"]))

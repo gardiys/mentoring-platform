@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.copilot.access import ensure_copilot_student
+from app.copilot.access import ensure_copilot_user
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.base import Base, UUIDPrimaryKeyMixin
@@ -79,11 +79,11 @@ async def desktop_user(session: AsyncSession, token: str, request: Request) -> U
     user = await session.get(User, grant.user_id)
     if (
         user is None
-        or user.role is not UserRole.STUDENT
+        or user.role not in {UserRole.STUDENT, UserRole.ADMIN}
         or not user.is_active
         or user.session_version != grant.session_version
     ):
         api_error(401, "desktop_access_revoked", "Copilot access has been revoked")
     if request.url.path != "/api/v1/auth/desktop/logout":
-        await ensure_copilot_student(session, user)
+        await ensure_copilot_user(session, user)
     return user

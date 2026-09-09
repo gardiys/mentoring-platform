@@ -6,11 +6,11 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
-from sqlalchemy import select
+from sqlalchemy import false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import StudentUser
 from app.career_packages.models import CareerPackage, CareerPackageVersion
+from app.copilot.dependencies import CopilotMaterialUser
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
@@ -67,9 +67,9 @@ async def materials(
                     KnowledgeTopicTrack.track_id.in_(track_ids),
                     KnowledgeEntry.is_published.is_(True),
                     KnowledgeTopic.is_published.is_(True),
-                    True
+                    true()
                     if key is None
-                    else (KnowledgeEntry.id == key[1] if key[0] == "kb" else False),
+                    else (KnowledgeEntry.id == key[1] if key[0] == "kb" else false()),
                 )
                 .limit(1001)
             )
@@ -84,9 +84,9 @@ async def materials(
                     InterviewDeck.track_id.in_(track_ids),
                     InterviewDeck.is_published.is_(True),
                     InterviewCard.is_published.is_(True),
-                    True
+                    true()
                     if key is None
-                    else (InterviewCard.id == key[1] if key[0] == "card" else False),
+                    else (InterviewCard.id == key[1] if key[0] == "card" else false()),
                 )
                 .limit(1001)
             )
@@ -145,7 +145,9 @@ async def materials(
                 path=f"/interviews/{deck.slug}/questions",
                 provenance="canonical_card",
                 review_status="human_reviewed" if decision else "published",
-                reviewed_at=decision.reviewed_at.isoformat() if decision else None,
+                reviewed_at=decision.reviewed_at.isoformat()
+                if decision and decision.reviewed_at
+                else None,
                 cluster_id=str(decision.entity_id) if decision else None,
                 question=card.question_markdown,
                 answer=card.answer_markdown,
@@ -160,7 +162,7 @@ async def materials(
                     CareerPackage.student_id == student.id,
                     CareerPackage.track_id.in_(track_ids),
                     CareerPackageVersion.provided_at.is_not(None),
-                    True if key is None else CareerPackageVersion.id == key[1],
+                    true() if key is None else CareerPackageVersion.id == key[1],
                 )
                 .limit(1001)
             )
@@ -189,7 +191,11 @@ async def materials(
 
 @router.get("/manifest")
 async def manifest(
-    session: Session, student: StudentUser, response: Response, track: Track, resume: bool = False
+    session: Session,
+    student: CopilotMaterialUser,
+    response: Response,
+    track: Track,
+    resume: bool = False,
 ) -> dict[str, Any]:
     response.headers["Cache-Control"] = "private, no-store"
     items = await materials(session, student, track, resume)
@@ -205,7 +211,7 @@ async def read_source(
     kind: Kind,
     source_id: UUID,
     session: Session,
-    student: StudentUser,
+    student: CopilotMaterialUser,
     response: Response,
     track: Track,
 ) -> dict[str, Any]:

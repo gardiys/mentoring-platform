@@ -6,12 +6,12 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response
-from sqlalchemy import select
+from sqlalchemy import literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import StudentUser
 from app.career_packages.models import CareerPackage, CareerPackageVersion
 from app.career_packages.service import authorized_version
+from app.copilot.dependencies import CopilotMaterialUser
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
@@ -40,7 +40,9 @@ def source(kind: str, source_id: UUID, title: str, text: str, **meta: Any) -> di
 
 
 @router.get("/options")
-async def options(session: Session, student: StudentUser, response: Response) -> dict[str, Any]:
+async def options(
+    session: Session, student: CopilotMaterialUser, response: Response
+) -> dict[str, Any]:
     response.headers["Cache-Control"] = "private, no-store"
     items: list[dict[str, Any]] = []
     docs = await session.scalars(
@@ -68,7 +70,7 @@ async def options(session: Session, student: StudentUser, response: Response) ->
         .where(
             CareerPackage.student_id == student.id,
             CareerPackageVersion.provided_at.is_not(None),
-            get_settings().career_package_enabled,
+            literal(get_settings().career_package_enabled),
         )
         .order_by(CareerPackageVersion.published_at.desc())
         .limit(100)
@@ -117,7 +119,7 @@ async def options(session: Session, student: StudentUser, response: Response) ->
 
 @router.get("/sources/{kind}/{source_id}")
 async def read_source(
-    kind: Kind, source_id: UUID, session: Session, student: StudentUser, response: Response
+    kind: Kind, source_id: UUID, session: Session, student: CopilotMaterialUser, response: Response
 ) -> dict[str, Any]:
     response.headers["Cache-Control"] = "private, no-store"
     if kind == "profile":
@@ -156,6 +158,8 @@ async def read_source(
         version = await authorized_version(session, student, source_id)
         package = await session.get(CareerPackage, version.package_id)
         assert package is not None
+        if package.student_id != student.id:
+            api_error(404, "source_not_found", "Source not found")
         track = await session.get(LearningTrack, package.track_id)
         assert track is not None
         if kind == "resume":

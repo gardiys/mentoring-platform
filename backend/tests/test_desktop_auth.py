@@ -160,3 +160,77 @@ async def test_desktop_token_respects_global_session_revocation(
         user.session_version += 1
         await session.commit()
     assert (await client.get("/api/v1/me", headers=headers)).status_code == 401
+
+
+async def test_admin_desktop_pilot_and_own_materials_with_students_disabled(
+    client, seeded, monkeypatch
+):
+    from dataclasses import replace
+
+    from app.users.models import UserRole
+    from tests.conftest import auth
+
+    await configure(monkeypatch)
+    monkeypatch.setattr(get_settings(), "copilot_students_enabled", False)
+    admin = replace(seeded, student_id=seeded.admin_id)
+    grant = (await client.post("/api/v1/auth/desktop/start")).json()
+    await approve(client, admin, grant)
+    result = await client.post(
+        "/api/v1/auth/desktop/token",
+        json={"request_id": grant["request_id"], "device_code": grant["device_code"]},
+    )
+    assert result.json()["status"] == "approved"
+    headers = {"Authorization": "Bearer " + result.json()["access_token"]}
+    access = await client.get("/api/v1/copilot/access", headers=headers)
+    assert access.status_code == 200 and access.json()["role"] == "admin"
+    assert access.json()["allowed"] and not access.json()["student_allowed"]
+    options = await client.get("/api/v1/copilot/preparation/options", headers=headers)
+    assert options.status_code == 200 and options.json()["sources"] == []
+    own = await client.get(
+        f"/api/v1/copilot/preparation/sources/profile/{seeded.admin_id}", headers=headers
+    )
+    assert own.status_code == 200
+    other = await client.get(
+        f"/api/v1/copilot/preparation/sources/profile/{seeded.student_id}", headers=headers
+    )
+    assert other.status_code == 404
+    assert (
+        await client.get("/api/v1/copilot/rag/manifest?track=python", headers=headers)
+    ).status_code == 200
+    tracks = await client.get("/api/v1/copilot/tracks", headers=headers)
+    assert tracks.status_code == 200 and tracks.json()["tracks"] == []
+    created = await client.post(
+        "/api/v1/copilot/tracks",
+        headers=headers,
+        json={"company_name": "Admin pilot", "track_id": str(seeded.python_track_id)},
+    )
+    assert created.status_code == 201, created.text
+    assert (
+        await client.get(f"/api/v1/copilot/tracks/{created.json()['id']}/context", headers=headers)
+    ).status_code == 200
+    assert (await client.get("/api/v1/copilot/usage", headers=headers)).status_code == 403
+    assert (
+        await client.get("/api/v1/copilot/tracks", headers=auth(seeded.student_id))
+    ).status_code == 403
+    async with TestSession() as session:
+        user = await session.get(User, seeded.admin_id)
+        user.role = UserRole.MENTOR
+        await session.commit()
+    assert (await client.get("/api/v1/copilot/access", headers=headers)).status_code == 401
+
+
+async def test_inactive_admin_cannot_approve_desktop_login(client, seeded, monkeypatch):
+    await configure(monkeypatch)
+    async with TestSession() as session:
+        user = await session.get(User, seeded.admin_id)
+        user.is_active = False
+        await session.commit()
+    grant = (await client.post("/api/v1/auth/desktop/start")).json()
+    client.cookies.set(
+        "mentoring_session", create_browser_session(seeded.admin_id, 1, SECRET, 3600)
+    )
+    response = await client.get(
+        "/api/v1/auth/desktop/authorize", params={"request_id": grant["request_id"]}
+    )
+    assert response.status_code == 403
+    client.cookies.clear()
