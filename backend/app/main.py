@@ -9,6 +9,7 @@ from app.auth.desktop_router import router as desktop_auth_router
 from app.auth.web_router import router as web_auth_router
 from app.career_packages.router import staff_router as career_package_staff_router
 from app.career_packages.router import student_router as career_package_student_router
+from app.copilot.interviews import router as copilot_interviews_router
 from app.copilot.preparation import router as copilot_preparation_router
 from app.copilot.rag import router as copilot_rag_router
 from app.copilot.router import router as copilot_router
@@ -123,6 +124,7 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     application.add_middleware(RequestContextMiddleware)
 
     application.include_router(copilot_router, prefix="/api/v1")
+    application.include_router(copilot_interviews_router, prefix="/api/v1")
     application.include_router(copilot_preparation_router, prefix="/api/v1")
     application.include_router(copilot_rag_router, prefix="/api/v1")
     application.include_router(health_router)

@@ -1,10 +1,9 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
 import { AppLayout } from "../src/components/AppLayout";
-import { RoleGuard } from "../src/components/RoleGuard";
 import { copilotApi, type CopilotRelease } from "../src/features/copilot/api";
 import { CopilotPage } from "../src/pages/CopilotPage";
 import { renderPage } from "./render";
@@ -29,6 +28,17 @@ const release: CopilotRelease = {
   sha256: "a".repeat(64),
   signed: false,
 };
+beforeEach(() => {
+  vi.spyOn(api, "me").mockResolvedValue(user);
+  vi.spyOn(copilotApi, "access").mockResolvedValue({
+    allowed: true,
+    student_allowed: false,
+    students_enabled: false,
+    learning_status: "learning",
+    reason: "",
+  });
+  vi.spyOn(copilotApi, "usage").mockResolvedValue({ students: [], total: 0 });
+});
 afterEach(() => vi.restoreAllMocks());
 
 it("показывает описание и варианты скачивания для трёх платформ", async () => {
@@ -49,9 +59,7 @@ it("показывает описание и варианты скачивани
   expect(
     screen.getByRole("button", { name: "Скачать для Mac · Intel" }),
   ).toBeInTheDocument();
-  expect(
-    screen.getByText(/Для учеников Copilot ещё не открыт/),
-  ).toBeInTheDocument();
+  expect(screen.getByText(/Доступ учеников пока выключен/)).toBeInTheDocument();
   expect(
     screen.getByRole("heading", { name: "Как начать" }),
   ).toBeInTheDocument();
@@ -85,21 +93,38 @@ it("объясняет отсутствие загруженных сборок"
   ).not.toBeInTheDocument();
 });
 
-it.each(["student", "mentor"] as const)(
-  "не пускает роль %s по прямому адресу",
-  async (role) => {
-    vi.spyOn(api, "me").mockResolvedValue({ ...user, role });
-    const listing = vi.spyOn(copilotApi, "releases");
-    renderPage(
-      <RoleGuard roles={["admin"]} />,
-      "/copilot",
-      "/copilot",
-      <CopilotPage />,
-    );
-    expect(await screen.findByText("Раздел недоступен")).toBeInTheDocument();
-    expect(listing).not.toHaveBeenCalled();
-  },
-);
+it("закрывает страницу ученику без нужного статуса и не запрашивает сборки", async () => {
+  vi.spyOn(api, "me").mockResolvedValue({ ...user, role: "student" });
+  vi.spyOn(copilotApi, "access").mockResolvedValue({
+    allowed: false,
+    student_allowed: false,
+    students_enabled: true,
+    learning_status: "learning",
+    reason: "Нужен статус «Ходит на собеседования»",
+  });
+  const listing = vi.spyOn(copilotApi, "releases");
+  renderPage(<CopilotPage />);
+  expect(
+    await screen.findByText("Нужен статус «Ходит на собеседования»"),
+  ).toBeInTheDocument();
+  expect(listing).not.toHaveBeenCalled();
+});
+it("открывает сборки ученику на собеседованиях и скрывает аналитику", async () => {
+  vi.spyOn(api, "me").mockResolvedValue({ ...user, role: "student" });
+  vi.spyOn(copilotApi, "access").mockResolvedValue({
+    allowed: true,
+    student_allowed: true,
+    students_enabled: true,
+    learning_status: "interviewing",
+    reason: "",
+  });
+  vi.spyOn(copilotApi, "releases").mockResolvedValue({ releases: [release] });
+  renderPage(<CopilotPage />);
+  expect(
+    await screen.findByRole("button", { name: "Скачать для Windows" }),
+  ).toBeInTheDocument();
+  expect(copilotApi.usage).not.toHaveBeenCalled();
+});
 
 it.each(["student", "admin"] as const)(
   "показывает пункт меню только администратору (%s)",

@@ -213,6 +213,9 @@ def _summary(
     return InterviewProcessSummary(
         id=process.id,
         company_name=process.company_name,
+        team_name=process.team_name,
+        position_name=process.position_name,
+        company_notes=process.company_notes,
         recruiter_telegram_usernames=process.recruiter_telegram_usernames,
         track_id=track.id,
         track_slug=track.slug,
@@ -630,6 +633,9 @@ async def create_process(
         track_id=track.id,
         company_id=company.id,
         company_name=company.name,
+        team_name=payload.team_name or None,
+        position_name=payload.position_name or None,
+        company_notes=payload.company_notes or None,
         recruiter_telegram_usernames=payload.recruiter_telegram_usernames or [],
     )
     session.add(process)
@@ -657,6 +663,12 @@ async def update_process(
     )
     process.company_id = company.id
     process.company_name = company.name
+    if "team_name" in payload.model_fields_set:
+        process.team_name = payload.team_name or None
+    if "position_name" in payload.model_fields_set:
+        process.position_name = payload.position_name or None
+    if "company_notes" in payload.model_fields_set:
+        process.company_notes = payload.company_notes or None
     process.track_id = track.id
     if payload.recruiter_telegram_usernames is not None:
         process.recruiter_telegram_usernames = payload.recruiter_telegram_usernames

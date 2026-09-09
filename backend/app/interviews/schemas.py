@@ -398,6 +398,9 @@ class InterviewProcessMutation(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     company_name: str = Field(min_length=1, max_length=240)
+    team_name: str | None = Field(default=None, max_length=240)
+    position_name: str | None = Field(default=None, max_length=240)
+    company_notes: str | None = Field(default=None, max_length=10_000)
     track_id: UUID
     company_id: UUID | None = None
     company_alias: str | None = Field(default=None, min_length=1, max_length=240)
@@ -500,6 +503,9 @@ class InterviewProcessStageRead(BaseModel):
 class InterviewProcessSummary(BaseModel):
     id: UUID
     company_name: str
+    team_name: str | None = None
+    position_name: str | None = None
+    company_notes: str | None = None
     recruiter_telegram_usernames: list[str]
     track_id: UUID
     track_slug: str

@@ -15,6 +15,8 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { copilotApi } from "../features/copilot/api";
 import {
   Link,
   Outlet,
@@ -48,6 +50,12 @@ export function AppLayout() {
   const student = me.data?.role === "student";
   const mentor = me.data?.role === "mentor" || me.data?.role === "admin";
   const admin = me.data?.role === "admin";
+  const copilot = useQuery({
+    queryKey: ["copilot-access"],
+    queryFn: copilotApi.access,
+    enabled: student || admin,
+    refetchInterval: 60000,
+  });
 
   const handleLogout = async () => {
     try {
@@ -213,12 +221,14 @@ export function AppLayout() {
             active={location.pathname.startsWith("/knowledge")}
             onClick={close}
           />
-          {admin && (
+          {(admin || copilot.data?.student_allowed) && (
             <NavLink
               component={Link}
               to="/copilot"
               label="Copilot"
-              description="AI-помощник · закрытый доступ"
+              description={
+                admin ? "AI-помощник · статистика" : "AI-помощник на интервью"
+              }
               leftSection={<span className="nav-index">AI</span>}
               className="brand-nav-link"
               active={location.pathname === "/copilot"}

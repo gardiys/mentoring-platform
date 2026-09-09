@@ -311,3 +311,4 @@ __all__ = [
     "User",
     "UserRole",
 ]
+from app.copilot.models import CopilotSession  # noqa: F401

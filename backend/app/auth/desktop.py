@@ -1,4 +1,4 @@
-"""Revocable, read-only credentials for Interview Copilot; browser sessions stay in the browser."""
+"""Revocable Copilot credentials with explicit read and upload scopes."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.copilot.access import ensure_copilot_student
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.base import Base, UUIDPrimaryKeyMixin
@@ -44,9 +45,14 @@ def desktop_scope(request: Request) -> bool:
     path = request.url.path
     if request.method == "POST" and path == "/api/v1/auth/desktop/logout":
         return True
+    if request.method == "POST" and re.fullmatch(
+        r"/api/v1/(?:copilot/tracks|copilot/sessions/[a-f0-9-]{36}/(?:stage|media/(?:upload|complete))|uploads/multipart/abort)",
+        path,
+    ):
+        return True
     return request.method == "GET" and bool(
         re.fullmatch(
-            r"/api/v1/(?:me|knowledge/topics(?:/[^/]+)?|knowledge/entries/[^/]+|"
+            r"/api/v1/(?:me|copilot/(?:access|tracks|companies|tracks/[a-f0-9-]{36}/context)|knowledge/topics(?:/[^/]+)?|knowledge/entries/[^/]+|"
             r"interviews/decks(?:/[^/]+/questions)?|career-packages/me|"
             r"copilot/rag/(?:manifest|sources/(?:kb|card|resume)/[a-f0-9-]{36})|"
             r"copilot/preparation/(?:options|sources/(?:profile|document|resume|conditions|interview)/[a-f0-9-]{36}))",
@@ -59,7 +65,7 @@ async def desktop_user(session: AsyncSession, token: str, request: Request) -> U
     if not get_settings().desktop_auth_enabled:
         api_error(503, "desktop_auth_unavailable", "Desktop authentication is disabled")
     if not desktop_scope(request):
-        api_error(403, "desktop_scope_denied", "Copilot has read-only access to interview context")
+        api_error(403, "desktop_scope_denied", "This operation is outside Copilot access")
     grant = await session.scalar(
         select(DesktopGrant).where(DesktopGrant.token_hash == token_hash(token))
     )
@@ -78,4 +84,6 @@ async def desktop_user(session: AsyncSession, token: str, request: Request) -> U
         or user.session_version != grant.session_version
     ):
         api_error(401, "desktop_access_revoked", "Copilot access has been revoked")
+    if request.url.path != "/api/v1/auth/desktop/logout":
+        await ensure_copilot_student(session, user)
     return user

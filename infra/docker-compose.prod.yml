@@ -16,6 +16,8 @@ x-common-environment: &common-environment
 
 x-backend-environment: &backend-environment
   COPILOT_RELEASES_DIR: /var/lib/mentoring/copilot-releases
+  COPILOT_STUDENTS_ENABLED: ${COPILOT_STUDENTS_ENABLED:-false}
+  COPILOT_INTEGRATION_TOKEN: ${COPILOT_INTEGRATION_TOKEN:-}
   <<: *common-environment
   CORS_ORIGINS: https://${DOMAIN:?Set DOMAIN in .env.production}
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in .env.production}

@@ -5,18 +5,26 @@ from html import unescape
 from httpx import AsyncClient
 from pydantic import SecretStr
 from pytest import MonkeyPatch
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.auth import dependencies, desktop_router
 from app.auth.desktop import DesktopGrant
 from app.auth.web_session import create_browser_session
+from app.core.config import get_settings
+from app.mentors.models import MentorStudent, StudentLearningStatus
 from app.users.models import User
 from tests.conftest import SeededData, TestSession
 
 SECRET = "synthetic-desktop-session-secret-at-least-32-bytes"
 
 
-def configure(monkeypatch: MonkeyPatch) -> None:
+async def configure(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(get_settings(), "copilot_students_enabled", True)
+    async with TestSession() as session:
+        await session.execute(
+            update(MentorStudent).values(learning_status=StudentLearningStatus.INTERVIEWING)
+        )
+        await session.commit()
     for cfg in (desktop_router.settings, dependencies.settings):
         monkeypatch.setattr(cfg, "desktop_auth_enabled", True)
         monkeypatch.setattr(cfg, "web_session_secret", SecretStr(SECRET))
@@ -46,7 +54,7 @@ async def approve(client, seeded, grant):
 async def test_desktop_login_scope_one_time_and_logout(
     client: AsyncClient, seeded: SeededData, monkeypatch: MonkeyPatch
 ):
-    configure(monkeypatch)
+    await configure(monkeypatch)
     grant = (await client.post("/api/v1/auth/desktop/start")).json()
     poll = {"request_id": grant["request_id"], "device_code": grant["device_code"]}
     pending = await client.post("/api/v1/auth/desktop/token", json=poll)
@@ -95,7 +103,7 @@ async def test_desktop_login_scope_one_time_and_logout(
 async def test_desktop_denies_csrf_expiry_and_suspended_student(
     client: AsyncClient, seeded: SeededData, monkeypatch: MonkeyPatch
 ):
-    configure(monkeypatch)
+    await configure(monkeypatch)
     grant = (await client.post("/api/v1/auth/desktop/start")).json()
     client.cookies.set(
         "mentoring_session", create_browser_session(seeded.student_id, 1, SECRET, 3600)
@@ -139,7 +147,7 @@ async def test_desktop_denies_csrf_expiry_and_suspended_student(
 async def test_desktop_token_respects_global_session_revocation(
     client: AsyncClient, seeded: SeededData, monkeypatch: MonkeyPatch
 ):
-    configure(monkeypatch)
+    await configure(monkeypatch)
     grant = (await client.post("/api/v1/auth/desktop/start")).json()
     await approve(client, seeded, grant)
     result = await client.post(

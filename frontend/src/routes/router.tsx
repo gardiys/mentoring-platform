@@ -9,6 +9,10 @@ import { lazyPage } from "./lazyRoute";
 
 const studentRoutes = [
   {
+    path: "/copilot",
+    lazy: lazyPage(() => import("../pages/CopilotPage"), "CopilotPage"),
+  },
+  {
     path: "/opportunities",
     lazy: lazyPage(
       () => import("../pages/OpportunitiesPage"),
@@ -234,10 +238,6 @@ const mentorRoutes = [
 ];
 
 const adminRoutes = [
-  {
-    path: "/copilot",
-    lazy: lazyPage(() => import("../pages/CopilotPage"), "CopilotPage"),
-  },
   {
     path: "/admin/opportunities/python-repeat",
     lazy: lazyPage(

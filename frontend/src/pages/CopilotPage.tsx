@@ -11,6 +11,7 @@ import {
   Stack,
   Text,
   Title,
+  Table,
 } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +20,7 @@ import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { copilotApi, type CopilotRelease } from "../features/copilot/api";
+import { useMe } from "../features/auth/queries";
 
 const labels = {
   "mac-arm64": {
@@ -143,10 +145,36 @@ function ReleaseCard({ release }: { release: CopilotRelease }) {
 }
 
 export function CopilotPage() {
+  const me = useMe();
+  const access = useQuery({
+    queryKey: ["copilot-access"],
+    queryFn: copilotApi.access,
+    refetchInterval: 60000,
+  });
+  const [offset, setOffset] = useState(0);
+  const usage = useQuery({
+    queryKey: ["copilot-usage", offset],
+    queryFn: () => copilotApi.usage(offset),
+    enabled: me.data?.role === "admin",
+    refetchInterval: 30000,
+  });
   const query = useQuery({
     queryKey: ["copilot-releases"],
     queryFn: copilotApi.releases,
+    enabled: access.data?.allowed === true,
   });
+  if (access.isPending)
+    return <LoadingState label="Проверяем доступ к Copilot…" />;
+  if (access.isError)
+    return (
+      <ErrorState error={access.error} retry={() => void access.refetch()} />
+    );
+  if (!access.data.allowed)
+    return (
+      <Alert title="Copilot пока недоступен" color="brandYellow">
+        {access.data.reason}
+      </Alert>
+    );
   return (
     <Stack gap="xl">
       <PageHeader
@@ -154,10 +182,110 @@ export function CopilotPage() {
         title="Помощник на собеседовании"
         description="Interview Copilot — приложение для компьютера, которое помогает разбирать вопросы и формулировать ответы во время тренировочного интервью."
       />
-      <Alert color="brandYellow" title="Закрытый доступ">
-        Раздел и скачивание пока доступны только администраторам. Для учеников
-        Copilot ещё не открыт.
+      <Alert
+        color="brandYellow"
+        title={
+          access.data.students_enabled
+            ? "Доступ для проходящих собеседования"
+            : "Закрытый доступ"
+        }
+      >
+        {access.data.students_enabled
+          ? "Copilot доступен активным ученикам со статусом «Ходит на собеседования»."
+          : "Доступ учеников пока выключен. После открытия он будет доступен только активным ученикам со статусом «Ходит на собеседования»."}
       </Alert>
+      {me.data?.role === "admin" && (
+        <Card withBorder>
+          <Stack>
+            <Group justify="space-between">
+              <Title order={2}>Использование Copilot учениками</Title>
+              <Button variant="light" onClick={() => void usage.refetch()}>
+                Обновить статистику
+              </Button>
+            </Group>
+            <Text size="sm" c="dimmed">
+              Серверное активное время без пауз и отключений. Учитываются все
+              сессии, даже если ученик не загрузил запись. Обновление — примерно
+              раз в минуту.
+            </Text>
+            {usage.isPending && <LoadingState label="Загружаем статистику…" />}
+            {usage.isError && (
+              <ErrorState
+                error={usage.error}
+                retry={() => void usage.refetch()}
+              />
+            )}
+            {usage.data && (
+              <>
+                <Table.ScrollContainer minWidth={750}>
+                  <Table
+                    striped
+                    highlightOnHover
+                    aria-label="Статистика Copilot"
+                  >
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Ученик</Table.Th>
+                        <Table.Th>Доступ</Table.Th>
+                        <Table.Th>Завершено</Table.Th>
+                        <Table.Th>Реальных / тренировок</Table.Th>
+                        <Table.Th>Время</Table.Th>
+                        <Table.Th>Последнее интервью</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {usage.data.students.map((student) => (
+                        <Table.Tr key={student.student_id}>
+                          <Table.Td>{student.name}</Table.Td>
+                          <Table.Td>
+                            {student.student_allowed ? "Открыт" : "Закрыт"}
+                          </Table.Td>
+                          <Table.Td>{student.interviews_completed}</Table.Td>
+                          <Table.Td>
+                            {student.real_completed} / {student.mock_completed}
+                          </Table.Td>
+                          <Table.Td>
+                            {Math.floor(student.active_ms / 3600000)} ч{" "}
+                            {Math.floor(student.active_ms / 60000) % 60} мин
+                          </Table.Td>
+                          <Table.Td>
+                            {student.last_interview_at
+                              ? new Date(
+                                  student.last_interview_at,
+                                ).toLocaleString("ru-RU")
+                              : "—"}
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </Table.ScrollContainer>
+                <Group justify="center">
+                  <Button
+                    variant="light"
+                    disabled={!offset}
+                    onClick={() => setOffset(Math.max(0, offset - 50))}
+                  >
+                    Назад
+                  </Button>
+                  <Text>
+                    {Math.min(offset + 1, usage.data.total)}–
+                    {Math.min(offset + 50, usage.data.total)} из{" "}
+                    {usage.data.total}
+                  </Text>
+                  <Button
+                    variant="light"
+                    disabled={offset + 50 >= usage.data.total}
+                    onClick={() => setOffset(offset + 50)}
+                  >
+                    Далее
+                  </Button>
+                </Group>
+              </>
+            )}
+          </Stack>
+        </Card>
+      )}
       <SimpleGrid
         style={{
           gridTemplateColumns:

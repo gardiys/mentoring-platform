@@ -9,6 +9,8 @@ import {
   Stack,
   TagsInput,
   Text,
+  TextInput,
+  Textarea,
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
@@ -38,6 +40,9 @@ interface CompanyMatchConfirmation {
 export function InterviewProcessCreatePage() {
   const [trackId, setTrackId] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("");
+  const [teamName, setTeamName] = useState("");
+  const [positionName, setPositionName] = useState("");
+  const [companyNotes, setCompanyNotes] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(
     null,
   );
@@ -64,6 +69,9 @@ export function InterviewProcessCreatePage() {
       {
         ...payload,
         track_id: trackId,
+        team_name: teamName.trim() || null,
+        position_name: positionName.trim() || null,
+        company_notes: companyNotes.trim() || null,
         recruiter_telegram_usernames: recruiterUsernames,
       },
       {
@@ -210,6 +218,27 @@ export function InterviewProcessCreatePage() {
               администратором. Если ничего не выбрать, перед созданием будут ещё
               раз показаны возможные совпадения.
             </Text>
+            <TextInput
+              label="Команда / подразделение"
+              value={teamName}
+              maxLength={240}
+              onChange={(event) => setTeamName(event.currentTarget.value)}
+              placeholder="Важно для разных команд одной компании"
+            />
+            <TextInput
+              label="Позиция / вакансия"
+              value={positionName}
+              maxLength={240}
+              onChange={(event) => setPositionName(event.currentTarget.value)}
+            />
+            <Textarea
+              label="Что известно о компании и отборе"
+              value={companyNotes}
+              maxLength={10000}
+              autosize
+              minRows={3}
+              onChange={(event) => setCompanyNotes(event.currentTarget.value)}
+            />
             <TagsInput
               label="Telegram рекрутеров"
               placeholder="@recruiter_name"

@@ -21,6 +21,7 @@ from app.auth.web_session import (
     sign_payload,
     verify_payload,
 )
+from app.copilot.access import ensure_copilot_student
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
@@ -51,6 +52,7 @@ async def browser_user(request: Request, session: AsyncSession) -> User | None:
         return None
     if user.role is not UserRole.STUDENT or not user.is_active:
         api_error(403, "desktop_access_denied", "An active student account is required")
+    await ensure_copilot_student(session, user)
     return user
 
 
@@ -260,6 +262,7 @@ async def poll(body: Poll, session: Session) -> JSONResponse:
         or user.session_version != grant.session_version
     ):
         return JSONResponse({"status": "denied"}, headers=HEADERS)
+    await ensure_copilot_student(session, user)
     token = "copilot_" + secrets.token_urlsafe(48)
     grant.token_hash = token_hash(token)
     grant.token_expires_at = now + timedelta(seconds=settings.desktop_access_token_ttl_seconds)

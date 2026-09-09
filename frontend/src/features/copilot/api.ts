@@ -12,6 +12,31 @@ export type CopilotRelease = {
 };
 
 export const copilotApi = {
+  access: () =>
+    apiRequest<{
+      allowed: boolean;
+      student_allowed: boolean;
+      students_enabled: boolean;
+      learning_status: string;
+      reason: string;
+    }>("/api/v1/copilot/access"),
+  usage: (offset = 0) =>
+    apiRequest<{
+      total: number;
+      students: {
+        student_id: string;
+        name: string;
+        is_active: boolean;
+        learning_status: string;
+        student_allowed: boolean;
+        interviews_completed: number;
+        real_completed: number;
+        mock_completed: number;
+        sessions_started: number;
+        active_ms: number;
+        last_interview_at: string | null;
+      }[];
+    }>(`/api/v1/copilot/usage?offset=${offset}&limit=50`),
   releases: () =>
     apiRequest<{ releases: CopilotRelease[] }>("/api/v1/copilot/releases"),
   download: (

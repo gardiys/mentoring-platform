@@ -1,3 +1,4 @@
+import { InterviewTrackContext } from "../features/interviews/InterviewTrackContext";
 import {
   Alert,
   Badge,
@@ -1346,6 +1347,7 @@ export function InterviewProcessPage() {
           </Stack>
         </SimpleGrid>
       )}
+      <InterviewTrackContext key={process.id} process={process} />
 
       {process.status === "offer" && !process.offer && (
         <Card withBorder>

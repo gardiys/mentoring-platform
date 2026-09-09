@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     python_repeat_mentorship_enabled: bool = True
     python_to_go_enabled: bool = True
     copilot_releases_dir: Path = Path("../.local/copilot-releases")
+    copilot_students_enabled: bool = False
+    copilot_integration_token: SecretStr | None = None
     career_package_enabled: bool = False
     career_package_ai_enabled: bool = False
     career_package_auto_generate_on_final_resume: bool = False

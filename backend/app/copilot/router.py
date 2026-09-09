@@ -1,17 +1,29 @@
 """Private desktop releases. Students cannot list or download builds during the pilot."""
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_admin
+from app.auth.dependencies import CurrentUser
+from app.copilot.access import eligibility
 from app.core.config import get_settings
 from app.core.errors import api_error
+from app.db.session import get_db_session
 
-router = APIRouter(prefix="/copilot", tags=["copilot"], dependencies=[Depends(require_admin)])
+
+async def release_access(
+    user: CurrentUser, session: Annotated[AsyncSession, Depends(get_db_session)]
+) -> None:
+    access = await eligibility(session, user)
+    if not access["allowed"]:
+        api_error(403, "copilot_access_denied", str(access["reason"]))
+
+
+router = APIRouter(prefix="/copilot", tags=["copilot"], dependencies=[Depends(release_access)])
 AssetId = Literal["mac-arm64", "mac-x64", "win-x64"]
 PRIVATE_HEADERS = {"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
 

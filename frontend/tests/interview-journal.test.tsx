@@ -132,10 +132,25 @@ it("создаёт новый трек компании", async () => {
     screen.getByRole("textbox", { name: "Telegram рекрутеров" }),
     "@avito_hr{Enter}",
   );
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "Команда / подразделение" }),
+    "Payments",
+  );
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "Позиция / вакансия" }),
+    "Backend",
+  );
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "Что известно о компании и отборе" }),
+    "B2B payments",
+  );
   await userEvent.click(screen.getByRole("button", { name: "Создать трек" }));
 
   await waitFor(() =>
     expect(create).toHaveBeenCalledWith({
+      team_name: "Payments",
+      position_name: "Backend",
+      company_notes: "B2B payments",
       company_name: "Avito",
       track_id: pythonDirection.id,
       company_id: null,
@@ -172,6 +187,9 @@ it("предлагает связать свободный ввод с найд�
   );
 
   expect(create).toHaveBeenCalledWith({
+    team_name: null,
+    position_name: null,
+    company_notes: null,
     company_name: "Wildberries",
     track_id: pythonDirection.id,
     company_id: "72000000-0000-4000-8000-000000000001",
@@ -206,6 +224,9 @@ it("создаёт новую компанию после отказа от на
   );
 
   expect(create).toHaveBeenCalledWith({
+    team_name: null,
+    position_name: null,
+    company_notes: null,
     company_name: "Wildberries Lab",
     track_id: pythonDirection.id,
     company_id: null,
@@ -244,6 +265,9 @@ it("запоминает введённое название как алиас �
   await userEvent.click(screen.getByRole("button", { name: "Создать трек" }));
 
   expect(create).toHaveBeenCalledWith({
+    team_name: null,
+    position_name: null,
+    company_notes: null,
     company_name: "Wildberries",
     track_id: pythonDirection.id,
     company_id: "72000000-0000-4000-8000-000000000001",
@@ -275,6 +299,9 @@ it("не связывает незавершённый ввод с выбран�
   await userEvent.click(screen.getByRole("button", { name: "Создать трек" }));
 
   expect(create).toHaveBeenCalledWith({
+    team_name: null,
+    position_name: null,
+    company_notes: null,
     company_name: "Wildberries",
     track_id: pythonDirection.id,
     company_id: "72000000-0000-4000-8000-000000000001",

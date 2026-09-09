@@ -390,6 +390,9 @@ class InterviewProcess(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     company_name: Mapped[str] = mapped_column(String(240), nullable=False)
+    team_name: Mapped[str | None] = mapped_column(String(240))
+    position_name: Mapped[str | None] = mapped_column(String(240))
+    company_notes: Mapped[str | None] = mapped_column(Text)
     recruiter_telegram_usernames: Mapped[list[str]] = mapped_column(
         ARRAY(String(32)), default=list, server_default="{}", nullable=False
     )
