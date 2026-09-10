@@ -12,6 +12,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.interviews.intelligence_ai import (
+    ANSWER_RECOVERY_PROMPT,
+    ANSWER_RECOVERY_PROMPT_VERSION,
     EXTRACTION_PROMPT,
     EXTRACTION_PROMPT_VERSION,
     LIGHT_REVIEW_PROMPT,
@@ -20,10 +22,12 @@ from app.interviews.intelligence_ai import (
     SUMMARY_PROMPT_VERSION,
     TECHNICAL_REVIEW_PROMPT,
     TECHNICAL_REVIEW_PROMPT_VERSION,
+    AIAnswerRecoveryResult,
     AIExtractionResult,
     AIReviewResult,
     AISummaryResult,
     AIUsageResult,
+    AnswerRecoveryOutput,
     ExtractionOutput,
     InterviewAIProvider,
     InterviewSummaryOutput,
@@ -143,6 +147,21 @@ class InterviewAICheckpoints:
             call=lambda: self.ai.extract(transcript, direction=direction),
         )
         return AIExtractionResult(output, usage)
+
+    async def recover_answers(
+        self, content: str, *, direction: str | None
+    ) -> AIAnswerRecoveryResult:
+        output, usage = await self._run(
+            operation="answer_recovery",
+            inputs={"content": content, "direction": direction},
+            prompt=ANSWER_RECOVERY_PROMPT + transcript_context(direction),
+            prompt_version=ANSWER_RECOVERY_PROMPT_VERSION,
+            model=getattr(self.ai, "extraction_model", self.ai.name),
+            max_output_tokens=getattr(self.ai, "extraction_max_output_tokens", 8_000),
+            schema=AnswerRecoveryOutput,
+            call=lambda: self.ai.recover_answers(content, direction=direction),
+        )
+        return AIAnswerRecoveryResult(output, usage)
 
     async def review(
         self,

@@ -37,6 +37,7 @@ def ground_question(
 ) -> GroundedQuestion | None:
     question_ids = set(item.question_utterance_ids)
     answer_ids = set(item.answer_utterance_ids)
+    whole_answer_ids = set(item.whole_answer_utterance_ids)
     if not question_ids or not question_ids <= by_label.keys():
         return None
     questions = sorted((by_label[key] for key in question_ids), key=lambda row: row.sequence_number)
@@ -54,7 +55,11 @@ def ground_question(
     question_bounds: dict[str, list[tuple[int, int]]] = {}
     answer_bounds: dict[str, list[tuple[int, int]]] = {}
     invalid_answer_ids: set[str] = set()
-    unreliable = item.answer_attribution == "uncertain" or not answer_ids <= by_label.keys()
+    unreliable = (
+        item.answer_attribution == "uncertain"
+        or not answer_ids <= by_label.keys()
+        or not whole_answer_ids <= answer_ids
+    )
     for extracted_spans, ids, bounds in (
         (item.question_spans, question_ids, question_bounds),
         (item.answer_spans, answer_ids, answer_bounds),
@@ -75,10 +80,17 @@ def ground_question(
     for key in sorted(answer_ids & by_label.keys(), key=lambda key: by_label[key].sequence_number):
         row = by_label[key]
         spans = sorted(set(answer_bounds.get(key, [])))
-        # Mixed or relabelled answers require explicit source anchors. Otherwise
-        # an interviewer's explanation could silently become the candidate's answer.
-        needs_spans = key in shared or row.speaker_id != candidate_speaker_id
-        invalid = key in invalid_answer_ids or (needs_spans and not spans)
+        # Pure speech can be explicitly selected by ID despite a wrong speaker
+        # label. Mixed speech always needs precise, non-overlapping boundaries.
+        needs_spans = key in shared or (
+            row.speaker_id != candidate_speaker_id and key not in whole_answer_ids
+        )
+        invalid = (
+            key in invalid_answer_ids
+            or (needs_spans and not spans)
+            or row.sequence_number < questions[0].sequence_number
+            or (key in shared and key in whole_answer_ids)
+        )
         if key in shared and not question_bounds.get(key):
             invalid = True
         if not spans and not invalid:

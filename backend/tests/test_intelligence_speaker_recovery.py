@@ -202,3 +202,44 @@ def test_unanchored_answer_from_another_speaker_cannot_be_credited() -> None:
     assert result.questions
     assert result.answer_text == ""
     assert result.answer_unreliable
+
+
+def test_explicit_whole_answer_survives_wrong_speaker_label_without_fragile_quotes() -> None:
+    candidate = uuid4()
+    answer = "А-а, моя задача была сделать общий интерфейс для LMмоделей. Я изменил API."
+    result = ground_question(
+        question(whole_answer_utterance_ids=["U002"]),
+        {
+            "U001": source("Какие были интересные задачи и фейлы?", candidate, 1),
+            "U002": source(answer, uuid4(), 2),
+        },
+        candidate,
+    )
+    assert result is not None
+    assert result.answer_text == answer
+    assert not result.answer_unreliable
+    assert result.speaker_conflict
+    assert result.answer_spans == [
+        {"utterance_id": "U002", "start_char": 0, "end_char": len(answer)}
+    ]
+
+
+def test_whole_answer_cannot_include_question_or_precede_it() -> None:
+    candidate = uuid4()
+    rows = {
+        "U001": source("Предыдущая тема.", candidate, 1),
+        "U002": source("Что делает флаг? Отключает проверку.", candidate, 2),
+    }
+    for answer_id in rows:
+        result = ground_question(
+            question(
+                question_utterance_ids=["U002"],
+                answer_utterance_ids=[answer_id],
+                whole_answer_utterance_ids=[answer_id],
+            ),
+            rows,
+            candidate,
+        )
+        assert result is not None
+        assert result.answer_unreliable
+        assert result.answer_text == ""

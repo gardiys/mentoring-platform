@@ -489,7 +489,8 @@ function QuestionCard({
         <div>
           <Text fw={700}>Ответ кандидата</Text>
           <Text style={{ whiteSpace: "pre-wrap" }}>
-            {question.answer?.answer_text || "Ответ не найден"}
+            {question.answer?.answer_text ||
+              "Ответ не удалось выделить из транскрибации"}
           </Text>
         </div>
         {!!question.transcription_annotations?.corrections.length && (

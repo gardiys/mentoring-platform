@@ -313,6 +313,7 @@ it("объясняет конфликт спикеров и отсутствие
       {
         ...detail.questions[0]!,
         is_low_confidence: true,
+        answer: { ...detail.questions[0]!.answer!, answer_text: "" },
         transcription_annotations: {
           glossary_version: "interview-terms-v1",
           direction: "python",
@@ -336,6 +337,10 @@ it("объясняет конфликт спикеров и отсутствие
     screen.getByText("Недостаточно данных для оценки ответа"),
   ).toBeInTheDocument();
   expect(screen.getByText("Как работает GIL?")).toBeInTheDocument();
+  expect(
+    screen.getByText("Ответ не удалось выделить из транскрибации"),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Ответ не найден")).not.toBeInTheDocument();
 });
 
 it("показывает компактный AI-отчёт до soft skills и материалов", async () => {

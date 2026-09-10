@@ -52,6 +52,7 @@ from app.interviews.intelligence_ai import (
     build_ai_provider,
     transcript_chunks,
 )
+from app.interviews.intelligence_answer_recovery import recover_missing_answers
 from app.interviews.intelligence_checkpoints import InterviewAICheckpoints
 from app.interviews.intelligence_extraction_grounding import ground_question
 from app.interviews.intelligence_models import (
@@ -598,6 +599,9 @@ async def extract_interview_structure(
                 previous.answer_utterance_ids = sorted(
                     set(previous.answer_utterance_ids) | set(item.answer_utterance_ids)
                 )
+                previous.whole_answer_utterance_ids = sorted(
+                    set(previous.whole_answer_utterance_ids) | set(item.whole_answer_utterance_ids)
+                )
                 previous.question_spans.extend(item.question_spans)
                 previous.answer_spans.extend(item.answer_spans)
                 previous.transcription_corrections.extend(item.transcription_corrections)
@@ -607,8 +611,23 @@ async def extract_interview_structure(
                     previous.answer_attribution = "uncertain"
             else:
                 by_range[range_key] = item.model_copy(deep=True)
+        try:
+            questions_to_save = await recover_missing_answers(
+                checkpoints,
+                list(by_range.values()),
+                utterances,
+                blocks,
+                interview.candidate_speaker_id,
+                direction=direction,
+            )
+        except InterviewAIError as error:
+            will_retry = _will_retry(ctx, error.retryable)
+            await _ai_failure(session, interview, attempt, error, retryable=will_retry)
+            if will_retry:
+                raise Retry(defer=_retry_delay(ctx, 60)) from error
+            return
         sequence = 0
-        for item in by_range.values():
+        for item in questions_to_save:
             grounded = ground_question(item, by_label, interview.candidate_speaker_id)
             if grounded is None:
                 continue
