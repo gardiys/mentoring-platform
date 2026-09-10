@@ -1809,6 +1809,13 @@ export interface IntelligenceQuestion {
       confidence: number;
     }>;
     uncertain_utterance_ids: string[];
+    speaker_attribution_conflict?: boolean;
+    answer_unreliable?: boolean;
+    answer_spans?: Array<{
+      utterance_id: string;
+      start_char: number;
+      end_char: number;
+    }>;
   } | null;
   question_start_ms: number;
   question_end_ms: number | null;
@@ -1911,6 +1918,12 @@ export interface IntelligenceInterviewOverview {
 }
 
 export interface IntelligenceInterviewDetail extends IntelligenceInterviewSummary {
+  analysis_revision?: number;
+  analysis_archives?: Array<{
+    id: string;
+    revision: number;
+    created_at: string;
+  }>;
   media_filename: string | null;
   media_content_type: string | null;
   media_size: number | null;

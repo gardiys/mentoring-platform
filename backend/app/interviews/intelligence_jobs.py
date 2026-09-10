@@ -42,15 +42,18 @@ from app.interviews.intelligence_ai import (
     SUMMARY_PROMPT_VERSION,
     TECHNICAL_REVIEW_PROMPT_VERSION,
     CommunicationDimension,
+    ExtractedQuestion,
     InterviewAIError,
     InterviewAIProvider,
     InterviewPriorityAction,
     InterviewSummaryOutput,
+    ReviewOutput,
     TechnicalTopicAssessment,
     build_ai_provider,
     transcript_chunks,
 )
 from app.interviews.intelligence_checkpoints import InterviewAICheckpoints
+from app.interviews.intelligence_extraction_grounding import ground_question
 from app.interviews.intelligence_models import (
     IntelligenceAIUsage,
     IntelligenceAnswer,
@@ -177,6 +180,7 @@ async def reconcile_intelligence_jobs(ctx: dict[str, Any]) -> None:
                     IntelligenceInterview.processing_status,
                     IntelligenceInterview.transcription_provider_job_id,
                     IntelligenceInterview.candidate_speaker_id,
+                    IntelligenceInterview.analysis_revision,
                     completed_extraction.label("completed_extraction"),
                 )
                 .where(IntelligenceInterview.processing_status.in_(recoverable_statuses))
@@ -190,6 +194,7 @@ async def reconcile_intelligence_jobs(ctx: dict[str, Any]) -> None:
         status,
         transcription_provider_job_id,
         candidate_speaker_id,
+        analysis_revision,
         extraction_completed,
     ) in rows:
         function = _recovery_job_name(
@@ -201,10 +206,15 @@ async def reconcile_intelligence_jobs(ctx: dict[str, Any]) -> None:
         if function is None:
             continue
         if function == "generate_answer_reviews":
-            await _enqueue(ctx, "refresh_interview_question_embeddings", str(interview_id))
+            await _enqueue(
+                ctx,
+                "refresh_interview_question_embeddings",
+                str(interview_id),
+                analysis_revision=analysis_revision,
+            )
             scheduled += 1
             continue
-        await _enqueue(ctx, function, str(interview_id))
+        await _enqueue(ctx, function, str(interview_id), analysis_revision=analysis_revision)
         scheduled += 1
     if scheduled:
         logger.info("Reconciled interview processing jobs count=%s", scheduled)
@@ -495,7 +505,9 @@ async def process_transcription_result(ctx: dict[str, Any], interview_id: str) -
         await session.commit()
 
 
-async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) -> None:
+async def extract_interview_structure(
+    ctx: dict[str, Any], interview_id: str, analysis_revision: int = 1
+) -> None:
     parsed_id = UUID(interview_id)
     async with async_session_factory() as session:
         interview = await _interview(session, parsed_id, lock=True)
@@ -503,6 +515,8 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
             IntelligenceProcessingStatus.READY,
             IntelligenceProcessingStatus.FAILED,
         }:
+            return
+        if interview.analysis_revision != analysis_revision:
             return
         if interview.candidate_speaker_id is None:
             return
@@ -522,7 +536,12 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
             )
         )
         if existing_questions:
-            await _enqueue(ctx, "refresh_interview_question_embeddings", interview_id)
+            await _enqueue(
+                ctx,
+                "refresh_interview_question_embeddings",
+                interview_id,
+                analysis_revision=analysis_revision,
+            )
             return
         attempt = await _start_attempt(
             session,
@@ -557,7 +576,9 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
         track = await session.get(LearningTrack, process.track_id)
         direction = track.slug if track else None
         try:
-            for chunk in transcript_chunks(blocks):
+            # Leave output room for independent follow-ups and recovery anchors.
+            # Overlap retains dialogue context across chunk boundaries.
+            for chunk in transcript_chunks(blocks, size=40, overlap=8, max_chars=35_000):
                 result = await checkpoints.extract(chunk, direction=direction)
                 extracted.extend(result.output.questions)
         except InterviewAIError as error:
@@ -567,27 +588,32 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
                 raise Retry(defer=_retry_delay(ctx, 60)) from error
             return
         by_label = {f"U{item.sequence_number:03d}": item for item in utterances}
-        seen_ranges: set[tuple[str, ...]] = set()
-        sequence = 0
+        by_range: dict[tuple[tuple[str, ...], str], ExtractedQuestion] = {}
         for item in extracted:
-            range_key = tuple(item.question_utterance_ids)
-            if range_key in seen_ranges:
+            range_key = (
+                tuple(sorted(set(item.question_utterance_ids))),
+                normalize_question(item.question),
+            )
+            if previous := by_range.get(range_key):
+                previous.answer_utterance_ids = sorted(
+                    set(previous.answer_utterance_ids) | set(item.answer_utterance_ids)
+                )
+                previous.question_spans.extend(item.question_spans)
+                previous.answer_spans.extend(item.answer_spans)
+                previous.transcription_corrections.extend(item.transcription_corrections)
+                previous.uncertain_utterance_ids.extend(item.uncertain_utterance_ids)
+                previous.confidence = min(previous.confidence, item.confidence)
+                if item.answer_attribution == "uncertain":
+                    previous.answer_attribution = "uncertain"
+            else:
+                by_range[range_key] = item.model_copy(deep=True)
+        sequence = 0
+        for item in by_range.values():
+            grounded = ground_question(item, by_label, interview.candidate_speaker_id)
+            if grounded is None:
                 continue
-            question_utterances = [
-                by_label[key] for key in item.question_utterance_ids if key in by_label
-            ]
-            answer_utterances = [
-                by_label[key] for key in item.answer_utterance_ids if key in by_label
-            ]
-            if len(question_utterances) != len(item.question_utterance_ids):
-                continue
-            if any(row.speaker_id == interview.candidate_speaker_id for row in question_utterances):
-                continue
-            answer_utterances = [
-                row for row in answer_utterances if row.speaker_id == interview.candidate_speaker_id
-            ]
-            question_utterances.sort(key=lambda row: row.sequence_number)
-            answer_utterances.sort(key=lambda row: row.sequence_number)
+            question_utterances = grounded.questions
+            answer_utterances = grounded.answers
             annotations = ground_annotations(
                 direction,
                 {
@@ -595,10 +621,12 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
                     for row in [*question_utterances, *answer_utterances]
                 },
                 item.transcription_corrections,
-                item.uncertain_utterance_ids,
+                grounded.uncertain_ids,
             )
+            annotations.speaker_attribution_conflict = grounded.speaker_conflict
+            annotations.answer_unreliable = grounded.answer_unreliable
+            annotations.answer_spans = grounded.answer_spans
             sequence += 1
-            seen_ranges.add(range_key)
             question = IntelligenceQuestion(
                 interview_id=interview.id,
                 direction_id=process.track_id,
@@ -632,7 +660,7 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
                 IntelligenceAnswer(
                     question_id=question.id,
                     student_id=interview.student_id,
-                    answer_text="\n".join(row.text for row in answer_utterances),
+                    answer_text=grounded.answer_text,
                     start_ms=question.answer_start_ms,
                     end_ms=question.answer_end_ms,
                 )
@@ -640,17 +668,30 @@ async def extract_interview_structure(ctx: dict[str, Any], interview_id: str) ->
         interview.processing_status = IntelligenceProcessingStatus.ANALYZING
         _complete_attempt(attempt)
         await session.commit()
-    await _enqueue(ctx, "refresh_interview_question_embeddings", interview_id)
+    await _enqueue(
+        ctx,
+        "refresh_interview_question_embeddings",
+        interview_id,
+        analysis_revision=analysis_revision,
+    )
 
 
-async def refresh_interview_question_embeddings(ctx: dict[str, Any], interview_id: str) -> None:
+async def refresh_interview_question_embeddings(
+    ctx: dict[str, Any], interview_id: str, analysis_revision: int = 1
+) -> None:
     """Refresh cached question vectors without affecting the main AI pipeline state."""
 
     parsed_id = UUID(interview_id)
     should_enqueue_reviews = False
     async with async_session_factory() as session:
-        interview = await session.get(IntelligenceInterview, parsed_id)
+        interview = await session.scalar(
+            select(IntelligenceInterview)
+            .where(IntelligenceInterview.id == parsed_id)
+            .with_for_update(key_share=True)
+        )
         if interview is None:
+            return
+        if interview.analysis_revision != analysis_revision:
             return
         stage = await session.get(InterviewProcessStage, interview.stage_id)
         process = await session.get(InterviewProcess, stage.process_id) if stage else None
@@ -705,13 +746,19 @@ async def refresh_interview_question_embeddings(ctx: dict[str, Any], interview_i
                 await session.commit()
                 should_enqueue_reviews = True
     if should_enqueue_reviews:
-        await _enqueue(ctx, "generate_answer_reviews", interview_id)
+        await _enqueue(
+            ctx, "generate_answer_reviews", interview_id, analysis_revision=analysis_revision
+        )
 
 
-async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> None:
+async def generate_answer_reviews(
+    ctx: dict[str, Any], interview_id: str, analysis_revision: int = 1
+) -> None:
     parsed_id = UUID(interview_id)
     async with async_session_factory() as session:
         interview = await _interview(session, parsed_id, lock=True)
+        if interview.analysis_revision != analysis_revision:
+            return
         if interview.processing_status in {
             IntelligenceProcessingStatus.READY,
             IntelligenceProcessingStatus.FAILED,
@@ -775,21 +822,34 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                 if question.transcription_annotations and (
                     question.transcription_annotations.get("corrections")
                     or question.transcription_annotations.get("uncertain_utterance_ids")
+                    or question.transcription_annotations.get("speaker_attribution_conflict")
                 ):
                     context += (
                         "\nTranscription interpretation hints (source text is unchanged):\n"
                         + json.dumps(question.transcription_annotations, ensure_ascii=False)
                     )
-                result = await checkpoints.review(
-                    question_id=question.id,
-                    question=question.question_text,
-                    answer=answer.answer_text,
-                    category=question.category,
-                    question_kind=question.question_kind,
-                    context=context,
-                    direction=directions.get(question.direction_id),
-                )
-                review = result.output
+                if (question.transcription_annotations or {}).get("answer_unreliable"):
+                    review = ReviewOutput(
+                        assessment=IntelligenceAssessment.UNABLE_TO_ASSESS,
+                        summary=(
+                            "Вопрос сохранён, но ответ кандидата не удалось надёжно выделить "
+                            "из транскрибации. Проверьте запись: отсутствие ответа или ошибка "
+                            "разделения спикеров не означает пробел в знаниях кандидата."
+                        ),
+                    )
+                    review_model = "source-grounding"
+                else:
+                    result = await checkpoints.review(
+                        question_id=question.id,
+                        question=question.question_text,
+                        answer=answer.answer_text,
+                        category=question.category,
+                        question_kind=question.question_kind,
+                        context=context,
+                        direction=directions.get(question.direction_id),
+                    )
+                    review = result.output
+                    review_model = result.usage.model
                 session.add(
                     IntelligenceAnswerReview(
                         answer_id=answer.id,
@@ -805,7 +865,7 @@ async def generate_answer_reviews(ctx: dict[str, Any], interview_id: str) -> Non
                             item.model_dump(mode="json") for item in review.incorrect_statements
                         ],
                         suggested_better_answer=review.suggested_better_answer,
-                        model_name=result.usage.model,
+                        model_name=review_model,
                         prompt_version=(
                             TECHNICAL_REVIEW_PROMPT_VERSION
                             if question.question_kind is IntelligenceQuestionKind.TECHNICAL
@@ -938,12 +998,9 @@ def _neighbor_context(
     first = min(included_positions)
     last = max(included_positions)
     # Hints and interruptions inside a resumed answer are more relevant than
-    # speech outside its span. They remain labelled interviewer context only.
+    # speech outside its span. Speaker labels here are only fallible context.
     selected = [
-        index
-        for index in range(first, last + 1)
-        if utterances[index].id not in included_ids
-        and utterances[index].speaker_id != candidate_speaker_id
+        index for index in range(first, last + 1) if utterances[index].id not in included_ids
     ][-limit:]
     distance = 1
     while len(selected) < limit and (first - distance >= 0 or last + distance < len(utterances)):
@@ -959,6 +1016,25 @@ def _neighbor_context(
             selected.append(right)
         distance += 1
     blocks = []
+    by_label = {f"U{row.sequence_number:03d}": row for row in utterances}
+    source_spans = cast(
+        list[dict[str, Any]],
+        (question.transcription_annotations or {}).get("answer_spans", []),
+    )
+    for span in source_spans[:limit]:
+        source = by_label.get(span["utterance_id"])
+        if source is None:
+            continue
+        start, end = span["start_char"], span["end_char"]
+        if start == 0 and end == len(source.text):
+            continue
+        before = source.text[max(0, start - 300) : start]
+        after = source.text[end : end + 300]
+        blocks.append(
+            f"Mixed source {span['utterance_id']}, context only; these fragments are NOT "
+            f"candidate answer evidence and may contain interviewer hints.\n"
+            f"Before selected answer: {before}\nAfter selected answer: {after}"
+        )
     for index in sorted(selected):
         utterance = utterances[index]
         speaker = speakers.get(utterance.speaker_id)
@@ -1230,6 +1306,10 @@ def _summary_evidence_blocks(rows: list[Any]) -> list[str]:
             "question": question.question_text[:2_000],
             "candidate_answer": answer.answer_text[:6_000],
             "extraction_confidence": question.confidence,
+            "transcription_quality": {
+                key: (question.transcription_annotations or {}).get(key, False)
+                for key in ("speaker_attribution_conflict", "answer_unreliable")
+            },
             "preliminary_review": {
                 "assessment": review.assessment.value,
                 "score": review.score,
@@ -1282,6 +1362,31 @@ def _ground_technical_assessment(
     overview: InterviewSummaryOutput,
     rows: list[Any],
 ) -> InterviewSummaryOutput:
+    unreliable_rows = [
+        row
+        for row in rows
+        if (row[0].transcription_annotations or {}).get("answer_unreliable")
+        and row[2].source is IntelligenceReviewSource.AI
+    ]
+    if unreliable_rows and len(unreliable_rows) == len(rows):
+        return InterviewSummaryOutput(
+            overall_summary=(
+                "Вопросы интервью сохранены, но ответы кандидата не удалось надёжно "
+                "выделить. Для содержательного фидбека нужно проверить запись."
+            ),
+            technical_summary="Техническая оценка недоступна из-за качества транскрибации.",
+            communication_summary=(
+                "Оценка коммуникации недоступна: авторство ответов не установлено надёжно."
+            ),
+            key_topics=list(dict.fromkeys(row[0].category for row in rows))[:20],
+            caveats=["Ошибки разделения реплик не являются ошибками кандидата."],
+        )
+    if unreliable_rows:
+        caveat = (
+            f"Ответы на {len(unreliable_rows)} вопрос(а) не удалось надёжно выделить; "
+            "они не учитываются как ошибки кандидата."
+        )
+        overview = overview.model_copy(update={"caveats": [*overview.caveats, caveat]})
     evidence: dict[int, tuple[float | None, float]] = {}
     for question, _answer, review in rows:
         if question.question_kind is not IntelligenceQuestionKind.TECHNICAL:
@@ -1579,12 +1684,14 @@ async def _enqueue(
     interview_id: str,
     *,
     defer_seconds: int | float | None = None,
+    analysis_revision: int = 1,
 ) -> str:
     return await enqueue_intelligence_job(
         function,
         interview_id,
         defer_seconds=defer_seconds,
         redis=ctx["redis"],
+        analysis_revision=analysis_revision,
     )
 
 

@@ -2437,6 +2437,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/interviews/ai-operations/{interview_id}/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Restart Ai Analysis */
+        post: operations["admin_restart_ai_analysis_api_v1_admin_interviews_ai_operations__interview_id__restart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/interviews/ai-operations/{interview_id}/archives/{archive_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Download Analysis Archive */
+        get: operations["admin_download_analysis_archive_api_v1_admin_interviews_ai_operations__interview_id__archives__archive_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/card-automation/duplicates": {
         parameters: {
             query?: never;
@@ -9982,6 +10016,21 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** IntelligenceAnalysisArchiveRead */
+        IntelligenceAnalysisArchiveRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Revision */
+            revision: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** IntelligenceAnswerRead */
         IntelligenceAnswerRead: {
             /**
@@ -10114,6 +10163,13 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Analysis Revision
+             * @default 1
+             */
+            analysis_revision: number;
+            /** Analysis Archives */
+            analysis_archives?: components["schemas"]["IntelligenceAnalysisArchiveRead"][];
             /** Media Filename */
             media_filename: string | null;
             /** Media Content Type */
@@ -14834,6 +14890,20 @@ export interface components {
             corrections?: components["schemas"]["TranscriptCorrection"][];
             /** Uncertain Utterance Ids */
             uncertain_utterance_ids?: string[];
+            /**
+             * Speaker Attribution Conflict
+             * @default false
+             */
+            speaker_attribution_conflict: boolean;
+            /**
+             * Answer Unreliable
+             * @default false
+             */
+            answer_unreliable: boolean;
+            /** Answer Spans */
+            answer_spans?: {
+                [key: string]: string | number;
+            }[];
         };
         /** TranscriptCorrection */
         TranscriptCorrection: {
@@ -20925,6 +20995,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntelligenceInterviewDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_restart_ai_analysis_api_v1_admin_interviews_ai_operations__interview_id__restart_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                interview_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntelligenceInterviewDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_download_analysis_archive_api_v1_admin_interviews_ai_operations__interview_id__archives__archive_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                interview_id: string;
+                archive_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

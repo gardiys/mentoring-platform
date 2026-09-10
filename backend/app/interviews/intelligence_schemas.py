@@ -223,7 +223,15 @@ class IntelligenceInterviewOverviewRead(BaseModel):
     prompt_version: str | None
 
 
+class IntelligenceAnalysisArchiveRead(BaseModel):
+    id: UUID
+    revision: int
+    created_at: datetime
+
+
 class IntelligenceInterviewDetail(IntelligenceInterviewSummary):
+    analysis_revision: int = 1
+    analysis_archives: list[IntelligenceAnalysisArchiveRead] = Field(default_factory=list)
     media_filename: str | None
     media_content_type: str | None
     media_size: int | None

@@ -211,6 +211,12 @@ export function useDeleteIntelligenceInterview() {
   );
 }
 
+export function useAdminRestartIntelligenceInterview() {
+  return useIntelligenceMutation((id: string) =>
+    api.adminRestartIntelligenceInterview(id),
+  );
+}
+
 export function useIntelligenceReviewAction() {
   return useIntelligenceMutation(
     ({

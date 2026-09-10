@@ -137,6 +137,8 @@ class IntelligenceInterview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UniqueConstraint("stage_id", name="uq_intelligence_interviews_stage"),
     )
 
+    analysis_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
     stage_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("interview_process_stages.id", ondelete="CASCADE"),
@@ -452,6 +454,25 @@ class IntelligenceQuestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("interview_cards.id", ondelete="SET NULL"),
         nullable=True,
     )
+
+
+class IntelligenceAnalysisArchive(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "intelligence_analysis_archives"
+    __table_args__ = (
+        UniqueConstraint("interview_id", "revision", name="uq_analysis_archive_revision"),
+    )
+
+    interview_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("intelligence_interviews.id", ondelete="CASCADE"),
+        index=True,
+    )
+    revision: Mapped[int] = mapped_column(Integer)
+    requested_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    snapshot: Mapped[dict[str, object]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class IntelligenceAnswer(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -26,6 +26,9 @@ from app.interviews.card_frequency import effective_card_frequency, refresh_card
 from app.interviews.companies import resolve_company
 from app.interviews.intelligence_models import (
     IntelligenceAIAdmission,
+    IntelligenceAICheckpoint,
+    IntelligenceAIUsage,
+    IntelligenceAnalysisArchive,
     IntelligenceAnswer,
     IntelligenceAnswerReview,
     IntelligenceAttemptStage,
@@ -50,6 +53,7 @@ from app.interviews.intelligence_schemas import (
     AdminQuestionModerationDetail,
     AdminQuestionModerationPage,
     AdminQuestionModerationSummary,
+    IntelligenceAnalysisArchiveRead,
     IntelligenceAnswerRead,
     IntelligenceInterviewCreate,
     IntelligenceInterviewDetail,
@@ -76,6 +80,7 @@ from app.interviews.models import (
     InterviewProcess,
     InterviewProcessStage,
     InterviewProcessStatus,
+    InterviewStageComment,
     InterviewStageType,
     InterviewTopicSelection,
 )
@@ -155,11 +160,7 @@ def _usable_russian_feedback(value: object) -> str | None:
 
 
 def _review_text_items(items: list[dict[str, object]], key: str) -> list[str]:
-    return [
-        text
-        for item in items
-        if (text := _usable_russian_feedback(item.get(key))) is not None
-    ]
+    return [text for item in items if (text := _usable_russian_feedback(item.get(key))) is not None]
 
 
 def _derived_technical_report(
@@ -308,14 +309,11 @@ def _derived_technical_report(
         )
         strength = (
             f" Лучше всего пройдена тема «{strongest['topic']}»."
-            if strongest is not None
-            and strongest is not weakest
-            and strongest["score"] >= 0.7
+            if strongest is not None and strongest is not weakest and strongest["score"] >= 0.7
             else ""
         )
         technical_summary = (
-            f"Оценено {assessed_answers} из {total_technical} технических ответов."
-            f"{strength}{focus}"
+            f"Оценено {assessed_answers} из {total_technical} технических ответов.{strength}{focus}"
         )
 
     priority_actions: list[dict[str, object]] = []
@@ -325,9 +323,7 @@ def _derived_technical_report(
         if not gaps and (score is None or score >= 0.8):
             continue
         first_gap = str(gaps[0]) if gaps else str(topic["summary"])
-        question_numbers = ", ".join(
-            f"№{number}" for number in topic["evidence_question_numbers"]
-        )
+        question_numbers = ", ".join(f"№{number}" for number in topic["evidence_question_numbers"])
         steps = []
         if gaps:
             steps.append(f"Повторить: {'; '.join(str(item) for item in gaps[:2])}.")
@@ -1167,6 +1163,25 @@ async def intelligence_detail(
 
     return IntelligenceInterviewDetail(
         **summary.model_dump(),
+        analysis_revision=interview.analysis_revision,
+        analysis_archives=[
+            IntelligenceAnalysisArchiveRead(
+                id=row.id, revision=row.revision, created_at=row.created_at
+            )
+            for row in (
+                await session.execute(
+                    select(
+                        IntelligenceAnalysisArchive.id,
+                        IntelligenceAnalysisArchive.revision,
+                        IntelligenceAnalysisArchive.created_at,
+                    )
+                    .where(IntelligenceAnalysisArchive.interview_id == interview.id)
+                    .order_by(IntelligenceAnalysisArchive.revision.desc())
+                )
+            ).all()
+        ]
+        if user.role is UserRole.ADMIN
+        else [],
         media_filename=stage.media_filename,
         media_content_type=stage.media_content_type,
         media_size=stage.media_size,
@@ -1534,6 +1549,83 @@ async def mark_upload_complete(
     interview.processing_error_message = None
     await session.commit()
     return previous_key
+
+
+async def prepare_analysis_restart(
+    session: AsyncSession, admin: User, interview_id: UUID
+) -> IntelligenceInterview:
+    if admin.role is not UserRole.ADMIN:
+        api_error(403, "analysis_restart_forbidden", "Пересчёт доступен только администратору.")
+    interview = await get_intelligence_interview(session, admin, interview_id, lock=True)
+    if interview.processing_status not in {
+        IntelligenceProcessingStatus.READY,
+        IntelligenceProcessingStatus.FAILED,
+    }:
+        api_error(409, "analysis_restart_not_available", "Дождитесь завершения текущего разбора.")
+    has_transcript = await session.scalar(
+        select(IntelligenceUtterance.id)
+        .where(IntelligenceUtterance.interview_id == interview.id)
+        .limit(1)
+    )
+    if has_transcript is None or interview.candidate_speaker_id is None:
+        api_error(
+            409,
+            "analysis_restart_no_transcript",
+            "Для пересчёта нужна транскрибация и выбранный кандидат.",
+        )
+    now = datetime.now(UTC)
+    await _ensure_ai_analysis_capacity(session, admin, now=now)
+    previous = await intelligence_detail(session, admin, interview.id)
+    session.add(
+        IntelligenceAnalysisArchive(
+            interview_id=interview.id,
+            revision=interview.analysis_revision,
+            requested_by_user_id=admin.id,
+            snapshot=previous.model_dump(mode="json"),
+        )
+    )
+    impact = await prepare_automation_deletion(session, [interview.id])
+    # Retain financial history even though question-specific AI records are replaced.
+    await session.execute(
+        update(IntelligenceAIUsage)
+        .where(IntelligenceAIUsage.interview_id == interview.id)
+        .values(question_id=None)
+    )
+    await session.execute(
+        delete(IntelligenceQuestion).where(IntelligenceQuestion.interview_id == interview.id)
+    )
+    await session.flush()
+    await finalize_automation_deletion(session, impact)
+    await session.execute(
+        delete(IntelligenceAICheckpoint).where(
+            IntelligenceAICheckpoint.interview_id == interview.id
+        )
+    )
+    # The archive retains old attempts; recovery must inspect this run only.
+    await session.execute(
+        delete(IntelligenceProcessingAttempt).where(
+            IntelligenceProcessingAttempt.interview_id == interview.id
+        )
+    )
+    await session.execute(
+        delete(InterviewStageComment).where(
+            InterviewStageComment.stage_id == interview.stage_id,
+            InterviewStageComment.is_ai_feedback.is_(True),
+        )
+    )
+    interview.analysis_revision += 1
+    interview.ai_summary_payload = None
+    interview.ai_summary_model = None
+    interview.ai_summary_prompt_version = None
+    interview.reviewed_at = None
+    interview.reviewed_by_user_id = None
+    interview.processing_status = IntelligenceProcessingStatus.ANALYZING
+    interview.failed_stage = None
+    interview.processing_error_code = None
+    interview.processing_error_message = None
+    _record_ai_admission(session, admin, interview, operation="reanalysis", now=now)
+    await session.commit()
+    return interview
 
 
 async def delete_intelligence_interview(

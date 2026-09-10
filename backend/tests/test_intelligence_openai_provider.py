@@ -231,8 +231,7 @@ def test_summary_language_validation_rejects_untranslated_english_feedback() -> 
 def test_summary_language_validation_allows_small_english_fragment() -> None:
     summary = InterviewSummaryOutput(
         overall_summary=(
-            "Кандидат уверенно объяснил основную идею. "
-            "The final answer needs one concrete example."
+            "Кандидат уверенно объяснил основную идею. The final answer needs one concrete example."
         ),
         technical_summary=(
             "Техническая база достаточная, но некоторые формулировки стоит сделать точнее."
@@ -256,8 +255,7 @@ def test_summary_language_validation_allows_small_english_fragment() -> None:
 async def test_openai_summary_does_not_retry_small_english_fragment() -> None:
     summary = InterviewSummaryOutput(
         overall_summary=(
-            "Кандидат уверенно объяснил основную идею. "
-            "The final answer needs one concrete example."
+            "Кандидат уверенно объяснил основную идею. The final answer needs one concrete example."
         ),
         technical_summary="Техническая оценка сформирована.",
         communication_summary="Коммуникация оценена отдельно.",
@@ -521,6 +519,7 @@ def test_summary_technical_scores_and_evidence_are_grounded_in_review_rows() -> 
                 question_kind=IntelligenceQuestionKind.TECHNICAL,
                 sequence_number=1,
                 confidence=0.9,
+                transcription_annotations=None,
             ),
             SimpleNamespace(),
             SimpleNamespace(
@@ -533,6 +532,7 @@ def test_summary_technical_scores_and_evidence_are_grounded_in_review_rows() -> 
                 question_kind=IntelligenceQuestionKind.HR,
                 sequence_number=2,
                 confidence=1.0,
+                transcription_annotations=None,
             ),
             SimpleNamespace(),
             SimpleNamespace(score=0.0, assessment=IntelligenceAssessment.INCORRECT),
@@ -641,6 +641,14 @@ def test_transcript_chunks_enforce_a_character_budget_and_keep_progressing() -> 
 
     assert chunks == ["a" * 60, "b" * 60, "c" * 60]
     assert all(len(chunk) <= 100 for chunk in chunks)
+
+
+def test_oversized_single_utterance_keeps_questions_at_the_end() -> None:
+    source = "[U001] Speaker A: " + "Речь. " * 100 + "Последний вопрос? Ответ."
+    assert transcript_chunks([source, "[U002] Далее."], max_chars=100) == [
+        source,
+        "[U002] Далее.",
+    ]
 
 
 @pytest.mark.asyncio

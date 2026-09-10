@@ -88,13 +88,25 @@ def test_jobs_are_routed_to_independent_provider_queues() -> None:
         == intelligence_queue.OPENAI_QUEUE_NAME
     )
     assert (
-        intelligence_queue.intelligence_queue_name(
-            "refresh_interview_card_duplicate_cache"
-        )
+        intelligence_queue.intelligence_queue_name("refresh_interview_card_duplicate_cache")
         == intelligence_queue.OPENAI_QUEUE_NAME
     )
     with pytest.raises(ValueError, match="Unknown interview intelligence job"):
         intelligence_queue.intelligence_queue_name("unexpected_job")
+
+
+@pytest.mark.asyncio
+async def test_restarted_analysis_uses_new_job_id_and_passes_revision() -> None:
+    interview_id = str(uuid4())
+    redis = RecordingRedis()
+    job_id = await intelligence_queue.enqueue_intelligence_job(
+        "extract_interview_structure",
+        interview_id,
+        analysis_revision=2,
+        redis=cast(ArqRedis, redis),
+    )
+    assert job_id == f"intelligence:{interview_id}:extract_interview_structure:v2"
+    assert redis.calls[0][1] == (interview_id, 2)
 
 
 @pytest.mark.asyncio
@@ -156,13 +168,14 @@ def test_worker_keeps_deterministic_ids_reusable_and_runs_reconciliation() -> No
     assert AIWorkerSettings.queue_name == intelligence_queue.OPENAI_QUEUE_NAME
     assert AIWorkerSettings.max_jobs == intelligence_jobs.settings.openai_max_concurrency
     assert AIWorkerSettings.job_timeout == intelligence_jobs.settings.openai_job_timeout_seconds
-    assert len(AIWorkerSettings.cron_jobs) == 2
-    assert all(job.run_at_startup is True for job in AIWorkerSettings.cron_jobs)
+    for coroutine in (
+        intelligence_jobs.reconcile_card_automation_jobs,
+        intelligence_jobs.refresh_interview_card_duplicate_cache,
+    ):
+        cron_job = next(job for job in AIWorkerSettings.cron_jobs if job.coroutine is coroutine)
+        assert cron_job.run_at_startup is True
     assert intelligence_jobs.refresh_interview_question_embeddings in AIWorkerSettings.functions
-    assert (
-        intelligence_jobs.refresh_interview_card_duplicate_cache
-        in AIWorkerSettings.functions
-    )
+    assert intelligence_jobs.refresh_interview_card_duplicate_cache in AIWorkerSettings.functions
     assert (
         AIWorkerSettings.health_check_interval
         == intelligence_jobs.WORKER_HEALTH_CHECK_INTERVAL_SECONDS

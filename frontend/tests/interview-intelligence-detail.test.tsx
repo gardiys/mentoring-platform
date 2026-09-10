@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
+import { AdminAnalysisRestartPanel } from "../src/components/AdminAnalysisRestartPanel";
 import { InterviewIntelligencePage } from "../src/pages/InterviewIntelligencePage";
 import type { IntelligenceInterviewDetail, User } from "../src/types/api";
 import { renderPage } from "./render";
@@ -196,6 +197,66 @@ const detail: IntelligenceInterviewDetail = {
 
 afterEach(() => vi.restoreAllMocks());
 
+it("администратор подтверждает повторный разбор, а отмена не запускает запрос", async () => {
+  const restart = vi
+    .spyOn(api, "adminRestartIntelligenceInterview")
+    .mockResolvedValue({
+      ...detail,
+      processing_status: "analyzing",
+      analysis_revision: 2,
+    });
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  renderPage(<AdminAnalysisRestartPanel interview={detail} />);
+  await userEvent.click(
+    screen.getByRole("button", { name: "Пересчитать AI-разбор" }),
+  );
+  expect(restart).not.toHaveBeenCalled();
+  confirm.mockReturnValue(true);
+  await userEvent.click(
+    screen.getByRole("button", { name: "Пересчитать AI-разбор" }),
+  );
+  await waitFor(() =>
+    expect(restart).toHaveBeenCalledExactlyOnceWith(interviewId),
+  );
+  expect(confirm).toHaveBeenCalledWith(
+    expect.stringContaining("ручными рецензиями"),
+  );
+});
+
+it("блокирует повторный запуск во время обработки и показывает архив", () => {
+  renderPage(
+    <AdminAnalysisRestartPanel
+      interview={{
+        ...detail,
+        processing_status: "analyzing",
+        analysis_archives: [
+          { id: "archive-1", revision: 1, created_at: "2026-09-10T12:00:00Z" },
+        ],
+      }}
+    />,
+  );
+  expect(
+    screen.getByRole("button", { name: "Пересчитать AI-разбор" }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: /Скачать разбор №1/ }),
+  ).toBeInTheDocument();
+});
+
+it("ученик не видит административную кнопку пересчёта", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "intelligenceInterview").mockResolvedValue(detail);
+  renderPage(
+    <InterviewIntelligencePage />,
+    `/interviews/analysis/${interviewId}`,
+    "/interviews/analysis/:interviewId",
+  );
+  await screen.findByText("Вердикт");
+  expect(
+    screen.queryByRole("button", { name: "Пересчитать AI-разбор" }),
+  ).not.toBeInTheDocument();
+});
+
 it("показывает уточнения терминов отдельно от исходного ответа", async () => {
   const question = detail.questions[0]!;
   vi.spyOn(api, "me").mockResolvedValue(student);
@@ -243,6 +304,39 @@ function expectBefore(first: HTMLElement, second: HTMLElement) {
     first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 }
+
+it("объясняет конфликт спикеров и отсутствие надёжной оценки", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "intelligenceInterview").mockResolvedValue({
+    ...detail,
+    questions: [
+      {
+        ...detail.questions[0]!,
+        is_low_confidence: true,
+        transcription_annotations: {
+          glossary_version: "interview-terms-v1",
+          direction: "python",
+          corrections: [],
+          uncertain_utterance_ids: ["U001"],
+          speaker_attribution_conflict: true,
+          answer_unreliable: true,
+        },
+      },
+    ],
+  });
+  renderPage(
+    <InterviewIntelligencePage />,
+    `/interviews/analysis/${interviewId}`,
+    "/interviews/analysis/:interviewId",
+  );
+  expect(
+    await screen.findByText("Разметка спикеров неоднозначна"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Недостаточно данных для оценки ответа"),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Как работает GIL?")).toBeInTheDocument();
+});
 
 it("показывает компактный AI-отчёт до soft skills и материалов", async () => {
   vi.spyOn(api, "me").mockResolvedValue(student);

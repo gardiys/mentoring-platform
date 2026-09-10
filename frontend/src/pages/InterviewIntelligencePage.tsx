@@ -18,6 +18,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/endpoints";
+import { AdminAnalysisRestartPanel } from "../components/AdminAnalysisRestartPanel";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
@@ -139,10 +140,7 @@ function OverviewSummary({
                 Приоритетов: {priorityActions.length}
               </Text>
             </Group>
-            <SimpleGrid
-              cols={{ base: 1, md: 2, xl: 3 }}
-              spacing="sm"
-            >
+            <SimpleGrid cols={{ base: 1, md: 2, xl: 3 }} spacing="sm">
               {priorityActions.map((action, index) => (
                 <div
                   key={`${action.title}-${index}`}
@@ -516,6 +514,19 @@ function QuestionCard({
             . Неясная речь сама по себе не означает ошибку кандидата.
           </Alert>
         )}
+        {question.transcription_annotations?.speaker_attribution_conflict && (
+          <Alert color="yellow" title="Разметка спикеров неоднозначна">
+            Вопрос и ответ выделены по смыслу разговора: метки спикеров могут
+            быть перепутаны или в одной реплике говорят разные участники.
+            Проверьте авторство по записи.
+          </Alert>
+        )}
+        {question.transcription_annotations?.answer_unreliable && (
+          <Alert color="gray" title="Недостаточно данных для оценки ответа">
+            Вопрос сохранён, но ответ не удалось надёжно отделить от других
+            реплик. Этот фрагмент не оценивается как ошибка кандидата.
+          </Alert>
+        )}
         {review && (
           <Card withBorder bg="var(--mantine-color-default-hover)">
             <Stack gap="xs">
@@ -788,6 +799,9 @@ export function InterviewIntelligencePage() {
         title={interview.company_name}
         description={interview.position_name ?? "Разбор записи собеседования"}
       />
+      {me.data.role === "admin" && (
+        <AdminAnalysisRestartPanel interview={interview} />
+      )}
       <SimpleGrid cols={{ base: 1, md: 3 }}>
         <Card withBorder>
           <Text className="technical-label">Статус</Text>

@@ -90,9 +90,11 @@ async def admin_question_moderation_detail(
     return await get_admin_question_moderation(session, question_id)
 
 
-async def _enqueue(function: str, interview_id: UUID) -> None:
+async def _enqueue(function: str, interview_id: UUID, *, analysis_revision: int = 1) -> None:
     try:
-        job_id = await enqueue_intelligence_job(function, str(interview_id))
+        job_id = await enqueue_intelligence_job(
+            function, str(interview_id), analysis_revision=analysis_revision
+        )
     except Exception:
         logger.exception(
             "Could not enqueue interview processing interview_id=%s function=%s",
@@ -201,7 +203,7 @@ async def retry_interview(
     interview_id: UUID, session: Session, current_user: CurrentUser
 ) -> IntelligenceInterviewDetail:
     interview, job_name = await prepare_processing_retry(session, current_user, interview_id)
-    await _enqueue(job_name, interview.id)
+    await _enqueue(job_name, interview.id, analysis_revision=interview.analysis_revision)
     return await intelligence_detail(session, current_user, interview.id)
 
 
@@ -258,7 +260,9 @@ async def generate_overview(
     interview_id: UUID, session: Session, mentor: MentorUser
 ) -> IntelligenceInterviewDetail:
     interview = await prepare_interview_overview_generation(session, mentor, interview_id)
-    await _enqueue("generate_answer_reviews", interview.id)
+    await _enqueue(
+        "generate_answer_reviews", interview.id, analysis_revision=interview.analysis_revision
+    )
     return await intelligence_detail(session, mentor, interview.id)
 
 

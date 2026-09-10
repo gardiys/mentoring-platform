@@ -44,10 +44,10 @@ from app.interviews.intelligence_transcript_context import (
     transcript_context,
 )
 
-EXTRACTION_PROMPT_VERSION = "interview-extraction-terms-v3"
-TECHNICAL_REVIEW_PROMPT_VERSION = "technical-answer-review-v5-terms"
-LIGHT_REVIEW_PROMPT_VERSION = "nontechnical-answer-review-v4-terms"
-SUMMARY_PROMPT_VERSION = "interview-coaching-report-v4-ru-recovery"
+EXTRACTION_PROMPT_VERSION = "interview-extraction-speaker-recovery-v4"
+TECHNICAL_REVIEW_PROMPT_VERSION = "technical-answer-review-v6-speakers"
+LIGHT_REVIEW_PROMPT_VERSION = "nontechnical-answer-review-v5-speakers"
+SUMMARY_PROMPT_VERSION = "interview-coaching-report-v5-speakers"
 QUESTION_ROUTING_PROMPT_VERSION = "question-routing-v2"
 QUESTION_ROUTING_SCHEMA_VERSION = "question-routing-result-v2"
 PAIRWISE_CARD_MATCH_PROMPT_VERSION = "pairwise-card-match-v1"
@@ -133,7 +133,33 @@ Set question_kind using these strict definitions:
 - other: a meaningful question that does not fit the definitions above.
 
 Return the interviewer utterance IDs that form each question and candidate utterance IDs that form
-its logical answer. Never invent timestamps or speech. Keep category as a narrow topic label and do
+its logical answer. Speaker labels, including Candidate, are fallible hints, not ground truth.
+Infer conversational roles from the dialogue: who conducts the interview, asks knowledge questions,
+and who describes their experience and answers them. Labels can be globally swapped or locally
+wrong. Never omit a question just because its speaker is labelled Candidate. Do not extract the
+candidate's own questions to the employer as questions asked to the candidate.
+Extract independent questions and meaningful follow-ups separately, even within one utterance;
+do not collapse a whole code review, topic or interview section into one question.
+
+An utterance can contain BOTH an interviewer's question/hint and the candidate's answer. For every
+mixed utterance, provide question_spans and answer_spans selecting only the corresponding speech.
+Also provide answer_spans for answers assigned to a speaker other than the labelled Candidate.
+Each span uses utterance_id and exact start_text/end_text anchors (normally the first/last 5-12
+words of the fragment, each at most 160 characters). The anchors and all text between them form
+the fragment, inclusively. Anchors must occur uniquely in the utterance; for a short fragment use
+its entire text for both anchors. Preserve original spelling, fillers and punctuation in anchors.
+Include every span's utterance_id in the corresponding utterance_ids list. Pure utterances with
+consistent labels need no spans. Never include interviewer hints or explanations in answer spans.
+Mark conflicting labels and unclear attribution in uncertain_utterance_ids and lower confidence.
+If an answer cannot be separated reliably, keep the question with an empty answer list and mark
+the question's source uncertain. Never fabricate an answer to increase coverage.
+Set answer_attribution to clear only when the selected speech is confidently the candidate's own
+answer; use uncertain when hints, self-answers, role switches or overlapping speech cannot be
+distinguished. A conflicting speaker label alone does not make semantic attribution uncertain.
+Before returning, check the entire chunk for missed questions and follow-ups, including requests
+to explain, compare, predict code output, or review code without a question mark.
+
+Never invent timestamps or speech. Keep category as a narrow topic label and do
 not use it for routing. Lower confidence when transcription, classification,
 or boundaries are ambiguous.
 For each question, list transcription_corrections for unambiguous glossary spelling changes in
@@ -151,6 +177,11 @@ errors, missing detail, imprecise wording, and irrelevant content. If transcript
 use unable_to_assess. Do not infer personality, age, gender, accent, or employability. Base every
 claim only on the supplied question, answer, and limited neighboring utterances. The context is
 provided only to resolve references and conversational boundaries.
+The Candidate answer field contains source-grounded speech selected by conversational role, which
+can disagree with noisy speaker labels in neighboring utterances. Never replace it with speech
+labelled Candidate from context, or credit interviewer hints as candidate knowledge. If attribution
+remains ambiguous, use unable_to_assess with a null score and explain the transcription limitation;
+do not list uncertain speech as a factual error or a missing skill.
 Do not review unrelated speech."""
 
 LIGHT_REVIEW_PROMPT = """Give concise, supportive feedback on one non-technical interview answer.
@@ -172,6 +203,10 @@ OUTPUT LANGUAGE IS RUSSIAN. Write every user-facing field, topic label, sentence
 criterion, and caveat in Russian only. Never copy English feedback from the input. Translate it to
 Russian first. English is allowed only inside established technical terms, identifiers, API and
 library names, and code examples. Never finish a field with an ellipsis or an incomplete sentence.
+Questions whose answers could not be attributed or separated reliably are coverage evidence only.
+Do not count unable_to_assess reviews as failures or use them to infer missing skills or poor
+communication. Explain these limitations in caveats; if there are no assessable technical answers,
+return null technical scores. Speaker-label conflicts alone are not candidate mistakes.
 
 The report must answer three questions in this order: (1) how the interview went based only on
 available evidence, (2) which technical topics are strong or weak, and (3) exactly what the student
@@ -385,10 +420,19 @@ class PairwiseCardMatchResult(StrictAIOutput):
     reasoning_summary: str = Field(min_length=1, max_length=1_000)
 
 
+class ExtractedSpeechSpan(BaseModel):
+    utterance_id: str = Field(min_length=1, max_length=80)
+    start_text: str = Field(min_length=1, max_length=160)
+    end_text: str = Field(min_length=1, max_length=160)
+
+
 class ExtractedQuestion(BaseModel):
     question: str = Field(min_length=1)
     question_utterance_ids: list[str] = Field(min_length=1)
     answer_utterance_ids: list[str] = Field(default_factory=list)
+    question_spans: list[ExtractedSpeechSpan] = Field(default_factory=list)
+    answer_spans: list[ExtractedSpeechSpan] = Field(default_factory=list)
+    answer_attribution: Literal["clear", "uncertain"] = "clear"
     question_kind: IntelligenceQuestionKind
     category: str = Field(min_length=1, max_length=120)
     subcategory: str | None = Field(default=None, max_length=160)
@@ -1994,7 +2038,9 @@ def transcript_chunks(
         while end > start + 1 and len(chunk) > max_chars:
             end -= 1
             chunk = "\n\n".join(transcript_blocks[start:end])
-        chunks.append(chunk[:max_chars])
+        # An oversized single utterance must remain intact: clipping it silently
+        # loses questions and breaks exact source anchors. It occupies its own chunk.
+        chunks.append(chunk)
         if end >= len(transcript_blocks):
             break
         start = max(start + 1, end - overlap)

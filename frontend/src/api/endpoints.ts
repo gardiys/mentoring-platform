@@ -1054,6 +1054,15 @@ export const api = {
       `/api/v1/admin/interviews/ai-operations/${id}/requeue`,
       { method: "POST" },
     ),
+  adminRestartIntelligenceInterview: (id: string) =>
+    apiRequest<IntelligenceInterviewDetail>(
+      `/api/v1/admin/interviews/ai-operations/${id}/restart`,
+      { method: "POST" },
+    ),
+  adminIntelligenceArchive: (id: string, archiveId: string) =>
+    apiRequest<Record<string, unknown>>(
+      `/api/v1/admin/interviews/ai-operations/${id}/archives/${archiveId}`,
+    ),
   startInterviewStageAnalysis: (processId: string, stageId: string) =>
     apiRequest<IntelligenceInterviewDetail>(
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/ai-analysis`,

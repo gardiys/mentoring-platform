@@ -15,7 +15,12 @@ from app.interviews import (
     intelligence_service,
     journal_router,
 )
-from app.interviews.intelligence_ai import FakeInterviewAIProvider, InterviewAIError
+from app.interviews.intelligence_ai import (
+    ExtractedQuestion,
+    ExtractedSpeechSpan,
+    FakeInterviewAIProvider,
+    InterviewAIError,
+)
 from app.interviews.intelligence_models import (
     IntelligenceAIAdmission,
     IntelligenceAIUsage,
@@ -472,7 +477,9 @@ async def test_manual_retry_consumes_the_requesters_daily_ai_quota(
     )
     interview_id = UUID(created.json()["id"])
 
-    async def fake_enqueue(_function: str, _interview_id: UUID) -> None:
+    async def fake_enqueue(
+        _function: str, _interview_id: UUID, *, analysis_revision: int = 1
+    ) -> None:
         return None
 
     monkeypatch.setattr(intelligence_router, "_enqueue", fake_enqueue)
@@ -542,7 +549,9 @@ async def test_mentor_overview_generation_is_quotad_and_cannot_replace_a_summary
         interview.processing_status = IntelligenceProcessingStatus.READY
         await session.commit()
 
-    async def fake_enqueue(_function: str, _interview_id: UUID) -> None:
+    async def fake_enqueue(
+        _function: str, _interview_id: UUID, *, analysis_revision: int = 1
+    ) -> None:
         return None
 
     monkeypatch.setattr(intelligence_router, "_enqueue", fake_enqueue)
@@ -809,6 +818,123 @@ async def test_standalone_intelligence_upload_endpoint_is_disabled(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("candidate_key", ["A", "B"])
+@pytest.mark.parametrize("all_uncertain", [False, True])
+async def test_mixed_speech_pipeline_keeps_multiple_questions_and_blocks_uncertain_feedback(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    candidate_key: str,
+    all_uncertain: bool,
+) -> None:
+    created, _, _ = await create_analysis_from_journal(client, seeded, monkeypatch)
+    interview_id = UUID(created.json()["id"])
+    monkeypatch.setattr(intelligence_jobs, "async_session_factory", TestSession)
+    fake_ai = FakeInterviewAIProvider()
+    original_extract = fake_ai.extract
+    context: dict[str, Any] = {
+        "redis": RecordingRedis(),
+        "transcription_provider": FakeTranscriptionProvider(),
+        "ai_provider": fake_ai,
+        "upload_store": StubUploadStore(),
+    }
+    await intelligence_jobs.submit_transcription(context, str(interview_id))
+    await intelligence_jobs.poll_transcription(context, str(interview_id))
+    await intelligence_jobs.process_transcription_result(context, str(interview_id))
+    prompt = "Что делает verify=False?"
+    answer = "Шифрование остаётся, но сертификат не проверяется."
+    followup = "Какой сертификат?"
+    second_answer = "Наверное, клиента."
+    hint = "Интервьюер: на самом деле сервера."
+    text = f"{prompt} {answer} {followup} {second_answer} {hint}"
+    async with TestSession() as session:
+        candidate = await session.scalar(
+            select(IntelligenceSpeaker).where(
+                IntelligenceSpeaker.interview_id == interview_id,
+                IntelligenceSpeaker.provider_speaker_key == candidate_key,
+            )
+        )
+        row = await session.scalar(
+            select(IntelligenceUtterance).where(
+                IntelligenceUtterance.interview_id == interview_id,
+                IntelligenceUtterance.sequence_number == 1,
+            )
+        )
+        student = await session.get(User, seeded.student_id)
+        assert row is not None and candidate is not None and student is not None
+        row.text = text
+        await session.commit()
+        await select_candidate_speaker(session, student, interview_id, candidate.id)
+
+    def speech(text: str) -> ExtractedSpeechSpan:
+        return ExtractedSpeechSpan(utterance_id="U001", start_text=text, end_text=text)
+
+    async def extract_mixed(transcript: str, *, direction: str | None = None):
+        result = await original_extract(transcript, direction=direction)
+        first = ExtractedQuestion(
+            question=prompt,
+            question_utterance_ids=["U001"],
+            answer_utterance_ids=["U001"],
+            question_spans=[speech(prompt)],
+            answer_spans=[speech(answer)],
+            category="TLS",
+            question_kind=IntelligenceQuestionKind.TECHNICAL,
+            confidence=0.99,
+            answer_attribution="uncertain" if all_uncertain else "clear",
+        )
+        second = first.model_copy(
+            update={
+                "question": followup,
+                "question_spans": [speech(followup)],
+                "answer_spans": [speech(second_answer)],
+                "answer_attribution": "uncertain",
+            }
+        )
+        # An earlier chunk contains only the beginning of the first answer.
+        # Overlap adds the complete answer, without duplicating its beginning
+        # or losing the distinct follow-up in the SAME utterance.
+        partial = first.model_copy(
+            update={
+                "answer_spans": [speech("Шифрование остаётся,")],
+            }
+        )
+        result.output.questions = [partial, second, first.model_copy()]
+        return result
+
+    monkeypatch.setattr(fake_ai, "extract", extract_mixed)
+    await intelligence_jobs.extract_interview_structure(context, str(interview_id))
+    await intelligence_jobs.generate_answer_reviews(context, str(interview_id))
+    response = await client.get(
+        f"/api/v1/interviews/{interview_id}", headers=auth(seeded.student_id)
+    )
+    assert response.status_code == 200
+    detail = response.json()
+    assert detail["processing_status"] == "ready"
+    assert detail["transcript"][0]["text"] == text
+    first, second = detail["questions"]
+    assert first["answer"]["answer_text"] == answer
+    assert second["answer"]["answer_text"] == second_answer
+    assert all(q["is_low_confidence"] for q in detail["questions"])
+    assert first["transcription_annotations"]["speaker_attribution_conflict"]
+    assert first["transcription_annotations"]["answer_spans"][0]["start_char"] == len(prompt) + 1
+    review = second["answer"]["reviews"][0]
+    assert review["assessment"] == "unable_to_assess"
+    assert review["score"] is None
+    assert review["problems"] == []
+    if all_uncertain:
+        assert not fake_ai.review_calls
+        assert detail["overview"]["technical_score"] is None
+        assert detail["overview"]["communication_score"] is None
+        assert detail["overview"]["communication_growth_areas"] == []
+    else:
+        assert len(fake_ai.review_calls) == 1
+        assert fake_ai.review_calls[0]["answer"] == answer
+        assert "Наверное, клиента." not in fake_ai.review_calls[0]["answer"]
+        assert hint in fake_ai.review_calls[0]["context"]
+        assert "NOT candidate answer evidence" in fake_ai.review_calls[0]["context"]
+
+
+@pytest.mark.asyncio
 async def test_fake_processing_pipeline_reaches_ready(
     client: AsyncClient,
     seeded: SeededData,
@@ -834,7 +960,7 @@ async def test_fake_processing_pipeline_reaches_ready(
         ]
         # The resumed candidate answer is deliberately returned out of order;
         # the interviewer interjection must never become candidate evidence.
-        result.output.questions[0].answer_utterance_ids = ["U006", "U005", "U002"]
+        result.output.questions[0].answer_utterance_ids = ["U006", "U002"]
         result.output.questions[0].uncertain_utterance_ids = ["U006", "U999"]
         return result
 
@@ -1047,7 +1173,9 @@ async def test_fake_processing_pipeline_reaches_ready(
 
     enqueued: list[tuple[str, UUID]] = []
 
-    async def fake_enqueue(function: str, queued_interview_id: UUID) -> None:
+    async def fake_enqueue(
+        function: str, queued_interview_id: UUID, *, analysis_revision: int = 1
+    ) -> None:
         enqueued.append((function, queued_interview_id))
 
     monkeypatch.setattr(intelligence_router, "_enqueue", fake_enqueue)
@@ -1619,7 +1747,9 @@ async def test_transcription_retry_reuses_the_existing_paid_provider_job(
 
     enqueued: list[tuple[str, UUID]] = []
 
-    async def fake_enqueue(function: str, queued_interview_id: UUID) -> None:
+    async def fake_enqueue(
+        function: str, queued_interview_id: UUID, *, analysis_revision: int = 1
+    ) -> None:
         enqueued.append((function, queued_interview_id))
 
     monkeypatch.setattr(intelligence_router, "_enqueue", fake_enqueue)
@@ -1673,7 +1803,9 @@ async def test_transcription_retry_resubmits_when_provider_job_cannot_be_resumed
 
     enqueued: list[tuple[str, UUID]] = []
 
-    async def fake_enqueue(function: str, queued_interview_id: UUID) -> None:
+    async def fake_enqueue(
+        function: str, queued_interview_id: UUID, *, analysis_revision: int = 1
+    ) -> None:
         enqueued.append((function, queued_interview_id))
 
     monkeypatch.setattr(intelligence_router, "_enqueue", fake_enqueue)

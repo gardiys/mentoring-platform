@@ -8,6 +8,13 @@ from app.core.config import get_settings
 DEFAULT_INTELLIGENCE_JOB_EXPIRES_SECONDS = 7 * 24 * 60 * 60
 TRANSCRIPTION_QUEUE_NAME = "arq:queue:interview-transcription"
 OPENAI_QUEUE_NAME = "arq:queue:interview-openai"
+REVISIONED_ANALYSIS_FUNCTIONS = frozenset(
+    {
+        "extract_interview_structure",
+        "refresh_interview_question_embeddings",
+        "generate_answer_reviews",
+    }
+)
 TRANSCRIPTION_FUNCTIONS = frozenset(
     {"submit_transcription", "poll_transcription", "process_transcription_result"}
 )
@@ -60,6 +67,7 @@ async def enqueue_intelligence_job(
     *,
     defer_seconds: int | float | None = None,
     redis: ArqRedis | None = None,
+    analysis_revision: int = 1,
 ) -> str:
     """Enqueue an idempotent interview job with an explicit queue lifetime.
 
@@ -68,6 +76,10 @@ async def enqueue_intelligence_job(
     treating a repeated request as a queue outage.
     """
     job_id = intelligence_job_id(function, interview_id)
+    args: tuple[str | int, ...] = (interview_id,)
+    if function in REVISIONED_ANALYSIS_FUNCTIONS and analysis_revision > 1:
+        job_id += f":v{analysis_revision}"
+        args = (interview_id, analysis_revision)
     owned_pool = redis is None
     if redis is None:
         redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
@@ -79,7 +91,7 @@ async def enqueue_intelligence_job(
         }
         if defer_seconds is not None:
             options["_defer_by"] = defer_seconds
-        job = await redis.enqueue_job(function, interview_id, **options)
+        job = await redis.enqueue_job(function, *args, **options)
         return job.job_id if job is not None else job_id
     finally:
         if owned_pool:

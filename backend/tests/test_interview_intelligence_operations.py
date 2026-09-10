@@ -341,7 +341,7 @@ async def test_admin_requeues_uploaded_processing_without_quota_or_state_changes
 
     enqueued: list[tuple[str, str]] = []
 
-    async def enqueue(function: str, interview_id: str) -> str:
+    async def enqueue(function: str, interview_id: str, *, analysis_revision: int = 1) -> str:
         enqueued.append((function, interview_id))
         return f"job:{function}:{interview_id}"
 
@@ -401,7 +401,7 @@ async def test_admin_requeue_enqueue_failure_leaves_database_unchanged(
             await session.scalar(select(func.count(IntelligenceAIAdmission.id))) or 0
         )
 
-    async def unavailable(_function: str, _interview_id: str) -> str:
+    async def unavailable(_function: str, _interview_id: str, *, analysis_revision: int = 1) -> str:
         raise ConnectionError("Redis is unavailable")
 
     monkeypatch.setattr(
