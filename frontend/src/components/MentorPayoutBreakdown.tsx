@@ -20,8 +20,63 @@ export function MentorPayoutBreakdown({
     );
   }
 
+  const studentTotals = new Map<string, MentorPayoutAllocationRead>();
+  for (const allocation of payout.allocations) {
+    const total = studentTotals.get(allocation.student_id);
+    if (total) {
+      total.amount_kopecks += allocation.amount_kopecks;
+    } else {
+      studentTotals.set(allocation.student_id, { ...allocation });
+    }
+  }
+
   return (
     <Stack gap="xs" mt="md">
+      <Text fw={700}>Сумма выплаты по ученикам</Text>
+      <Table
+        aria-label="Сумма выплаты по ученикам"
+        withTableBorder
+        withColumnBorders
+        verticalSpacing="sm"
+        horizontalSpacing="md"
+      >
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Ученик</Table.Th>
+            <Table.Th>Сумма в этой выплате</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {Array.from(studentTotals.values()).map((student) => (
+            <Table.Tr key={student.student_id}>
+              <Table.Td>
+                <Text
+                  component={Link}
+                  to={`/admin/payments/students/${student.student_id}`}
+                  fw={700}
+                  c="blue"
+                >
+                  {student.student_name}
+                </Text>
+                {student.student_telegram_username && (
+                  <Text size="xs" c="dimmed">
+                    @{student.student_telegram_username}
+                  </Text>
+                )}
+              </Table.Td>
+              <Table.Td fw={700}>
+                {formatRubles(student.amount_kopecks)}
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+        <Table.Tfoot>
+          <Table.Tr>
+            <Table.Th>Итого</Table.Th>
+            <Table.Th>{formatRubles(payout.amount_kopecks)}</Table.Th>
+          </Table.Tr>
+        </Table.Tfoot>
+      </Table>
       <div>
         <Text fw={700}>Состав запроса</Text>
         <Text size="sm" c="dimmed">

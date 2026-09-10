@@ -24,6 +24,7 @@ import { AdminMentorPayoutActions } from "../components/AdminMentorPayoutActions
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { MentorPayoutBreakdown } from "../components/MentorPayoutBreakdown";
+import { MentorStudentRewardSummary } from "../components/MentorStudentRewardSummary";
 import { PageHeader } from "../components/PageHeader";
 import {
   useAdminMentorPayoutDetail,
@@ -122,6 +123,8 @@ export function AdminMentorPaymentDetailPage() {
         <Metric title="В заявках" value={data.reserved_kopecks} />
         <Metric title="Можно выплатить" value={data.available_kopecks} />
       </SimpleGrid>
+
+      <MentorStudentRewardSummary rewards={data.rewards} />
 
       {openRequest && (
         <Card withBorder>

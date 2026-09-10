@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
 import { AdminMentorPayoutsPanel } from "../src/components/AdminMentorPayoutsPanel";
+import { MentorPayoutBreakdown } from "../src/components/MentorPayoutBreakdown";
 import { PaymentSchedule } from "../src/components/PaymentSchedule";
 import { AdminMentorPaymentDetailPage } from "../src/pages/AdminMentorPaymentDetailPage";
 import { AdminOverduePaymentsPage } from "../src/pages/AdminOverduePaymentsPage";
@@ -466,7 +467,11 @@ it("администратор выплачивает часть общего б
   renderPage(<AdminMentorPayoutsPanel />);
   expect(await screen.findByText("Доступно")).toBeInTheDocument();
   expect(screen.getByText("Состав запроса")).toBeInTheDocument();
-  expect(screen.getByText("Иван Иванов")).toBeInTheDocument();
+  expect(
+    within(
+      screen.getByRole("table", { name: "Сумма выплаты по ученикам" }),
+    ).getByRole("link", { name: "Иван Иванов" }),
+  ).toBeInTheDocument();
   expect(
     screen.getByText("Платёж ученика после трудоустройства · Яндекс"),
   ).toBeInTheDocument();
@@ -489,6 +494,66 @@ it("администратор выплачивает часть общего б
       { amount_rubles: 12_000, payment_reference: "Акт №12" },
     ),
   );
+});
+
+it("суммирует по ученику только включённые в выплату части начислений", () => {
+  const payout = payoutDashboard.payouts[0]!;
+  const allocation = payout.allocations[0]!;
+  renderPage(
+    <MentorPayoutBreakdown
+      payout={{
+        ...payout,
+        amount_kopecks: 850_075,
+        allocations: [
+          allocation,
+          {
+            ...allocation,
+            reward_id: "reward-other-student",
+            student_id: "other-student",
+            student_telegram_username: "other_ivan",
+            amount_kopecks: 100_000,
+          },
+          {
+            ...allocation,
+            reward_id: "reward-second",
+            kind: "entry_payment",
+            amount_kopecks: 250_075,
+          },
+        ],
+      }}
+    />,
+  );
+
+  const table = screen.getByRole("table", {
+    name: "Сумма выплаты по ученикам",
+  });
+  const rows = within(table).getAllByRole("row");
+  expect(rows).toHaveLength(4);
+  expect(within(rows[1]!).getByText("7 500,75 ₽")).toBeInTheDocument();
+  expect(within(rows[1]!).getByRole("link")).toHaveAttribute(
+    "href",
+    `/admin/payments/students/${allocation.student_id}`,
+  );
+  expect(within(rows[2]!).getByText("1 000 ₽")).toBeInTheDocument();
+  expect(within(rows[2]!).getByRole("link")).toHaveAttribute(
+    "href",
+    "/admin/payments/students/other-student",
+  );
+  expect(within(rows[3]!).getByText("8 500,75 ₽")).toBeInTheDocument();
+  expect(screen.getAllByText("Частично")).toHaveLength(3);
+});
+
+it("сохраняет сообщение об отсутствии детализации архивной выплаты", () => {
+  renderPage(
+    <MentorPayoutBreakdown
+      payout={{ ...payoutDashboard.payouts[0]!, allocations: [] }}
+    />,
+  );
+
+  expect(
+    screen.getByText(/детализация по начислениям не сохранилась/),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
 });
 
 const mentorSummary: MentorRewardSummary = {
@@ -571,8 +636,69 @@ it("показывает администратору происхождение
   expect(
     screen.getByText("Платёж после трудоустройства · Яндекс"),
   ).toBeInTheDocument();
-  expect(screen.getByText("Иван Иванов")).toBeInTheDocument();
+  expect(
+    within(screen.getByRole("table", { name: "Сводка по ученикам" })).getByRole(
+      "link",
+      { name: "Иван Иванов" },
+    ),
+  ).toBeInTheDocument();
   expect(screen.getByText("50 000 ₽")).toBeInTheDocument();
+});
+
+it("в детализации объединяет начисления ученика и разделяет выплаченное, заявки и остаток", async () => {
+  const reward = mentorDetail.rewards[0]!;
+  vi.spyOn(api, "adminMentorPayoutDetail").mockResolvedValue({
+    ...mentorDetail,
+    rewards: [
+      {
+        ...reward,
+        paid_kopecks: 100_000,
+        reserved_kopecks: 200_000,
+        available_kopecks: 700_000,
+      },
+      {
+        ...reward,
+        id: "reward-other-student",
+        student_id: "other-student",
+        student_telegram_username: null,
+      },
+      {
+        ...reward,
+        id: "reward-second",
+        kind: "consultation",
+        amount_kopecks: 500_075,
+        paid_kopecks: 300_000,
+        reserved_kopecks: 50_000,
+        available_kopecks: 150_075,
+      },
+    ],
+  });
+
+  renderPage(
+    <AdminMentorPaymentDetailPage />,
+    `/admin/payments/mentors/${mentorDetail.mentor_id}`,
+    "/admin/payments/mentors/:mentorId",
+  );
+
+  const table = await screen.findByRole("table", {
+    name: "Сводка по ученикам",
+  });
+  const rows = within(table).getAllByRole("row");
+  expect(rows).toHaveLength(3);
+  const cells = within(rows[1]!).getAllByRole("cell");
+  expect(cells[1]).toHaveTextContent("15 000,75 ₽");
+  expect(cells[2]).toHaveTextContent("4 000 ₽");
+  expect(cells[3]).toHaveTextContent("2 500 ₽");
+  expect(cells[4]).toHaveTextContent("8 500,75 ₽");
+  expect(within(rows[1]!).getByRole("link")).toHaveAttribute(
+    "href",
+    `/admin/payments/students/${reward.student_id}`,
+  );
+  expect(within(rows[2]!).getByRole("link")).toHaveAttribute(
+    "href",
+    "/admin/payments/students/other-student",
+  );
+  expect(within(rows[2]!).getAllByText("10 000 ₽")).toHaveLength(2);
 });
 
 it("администратор удаляет повторное архивное начисление из баланса ментора", async () => {
