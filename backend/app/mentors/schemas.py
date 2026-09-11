@@ -119,6 +119,7 @@ class MentorEfficiencyItem(BaseModel):
     last_name: str | None
     telegram_username: str | None
     assigned_students: int
+    students_with_interviews: int
     interviewing_students: int
     active_interviewing_students: int
     recording_students: int
@@ -140,6 +141,7 @@ class MentorEfficiencyAnalytics(BaseModel):
     period_end: datetime
     mentor_count: int
     assigned_students: int
+    students_with_interviews: int
     interviewing_students: int
     active_interviewing_students: int
     inactive_interviewing_students: int

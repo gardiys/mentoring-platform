@@ -264,6 +264,7 @@ it("показывает администратору эффективность
       period_end: "2026-08-15T00:00:00Z",
       mentor_count: 1,
       assigned_students: 4,
+      students_with_interviews: 3,
       interviewing_students: 3,
       active_interviewing_students: 2,
       inactive_interviewing_students: 1,
@@ -277,9 +278,10 @@ it("показывает администратору эффективность
           last_name: "Менторов",
           telegram_username: "mentor",
           assigned_students: 3,
+          students_with_interviews: 2,
           interviewing_students: 2,
           active_interviewing_students: 1,
-          recording_students: 1,
+          recording_students: 2,
           inactive_interviewing_students: 1,
           interview_count: 4,
           recording_count: 2,
@@ -288,7 +290,7 @@ it("показывает администратору эффективность
           upcoming_students: 1,
           participation_percent: 50,
           recording_participation_percent: 100,
-          average_interviews_per_active_student: 4,
+          average_interviews_per_active_student: 2,
           last_interview_at: "2026-08-14T10:00:00Z",
         },
       ],
@@ -306,6 +308,20 @@ it("показывает администратору эффективность
   expect(screen.getByText("Ученики без ментора")).toBeInTheDocument();
   expect(screen.getByText("Антон Менторов")).toBeInTheDocument();
   expect(screen.getByText("1 из 2")).toBeInTheDocument();
+  expect(screen.getByText("Всего с этапами: 2")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      /Ученики на испытательном сроке и завершившие обучение исключены/,
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getByText("2 учеников")).toBeInTheDocument();
+  const previousCalls = efficiency.mock.calls.length;
+  await userEvent.click(
+    screen.getByRole("button", { name: "Обновить статистику" }),
+  );
+  await waitFor(() =>
+    expect(efficiency.mock.calls.length).toBeGreaterThan(previousCalls),
+  );
   await waitFor(() =>
     expect(efficiency).toHaveBeenLastCalledWith({
       period: "week",

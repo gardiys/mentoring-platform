@@ -11879,6 +11879,8 @@ export interface components {
             mentor_count: number;
             /** Assigned Students */
             assigned_students: number;
+            /** Students With Interviews */
+            students_with_interviews: number;
             /** Interviewing Students */
             interviewing_students: number;
             /** Active Interviewing Students */
@@ -11908,6 +11910,8 @@ export interface components {
             telegram_username: string | null;
             /** Assigned Students */
             assigned_students: number;
+            /** Students With Interviews */
+            students_with_interviews: number;
             /** Interviewing Students */
             interviewing_students: number;
             /** Active Interviewing Students */

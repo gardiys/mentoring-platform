@@ -383,8 +383,8 @@ async def mentor_efficiency_analytics(
 ) -> MentorEfficiencyAnalytics:
     """Compare mentors using observable student interview activity.
 
-    Status alone is not treated as activity: a student is active only when a
-    scheduled interview stage actually happened during the selected period.
+    Count past-dated journal stages for students learning or interviewing.
+    Participation within the INTERVIEWING status is a separate cohort metric.
     """
 
     if viewer.role is not UserRole.ADMIN:
@@ -402,7 +402,14 @@ async def mentor_efficiency_analytics(
         )
         .outerjoin(MentorStudent, MentorStudent.student_id == User.id)
         .outerjoin(StudentMentorshipState, StudentMentorshipState.student_id == User.id)
-        .where(User.role == UserRole.STUDENT)
+        .where(
+            User.role == UserRole.STUDENT,
+            func.coalesce(
+                StudentMentorshipState.learning_status,
+                MentorStudent.learning_status,
+                StudentLearningStatus.LEARNING,
+            ).in_([StudentLearningStatus.LEARNING, StudentLearningStatus.INTERVIEWING]),
+        )
     )
     if is_active is not None:
         students_statement = students_statement.where(User.is_active.is_(is_active))
@@ -426,6 +433,7 @@ async def mentor_efficiency_analytics(
             period_end=now,
             mentor_count=0,
             assigned_students=0,
+            students_with_interviews=0,
             interviewing_students=0,
             active_interviewing_students=0,
             inactive_interviewing_students=0,
@@ -528,14 +536,14 @@ async def mentor_efficiency_analytics(
             if status is StudentLearningStatus.INTERVIEWING
         }
         active_ids = interviewing_ids.intersection(stage_by_student)
-        recording_ids = {
-            student_id for student_id in active_ids if stage_by_student[student_id][1] > 0
-        }
         assigned_ids = {student_id for student_id, _ in assigned}
+        participant_ids = assigned_ids.intersection(stage_by_student)
+        recording_ids = {
+            student_id for student_id in participant_ids if stage_by_student[student_id][1] > 0
+        }
         interview_count = sum(
             stage_by_student.get(student_id, (0, 0, None))[0] for student_id in assigned_ids
         )
-        active_interview_count = sum(stage_by_student[student_id][0] for student_id in active_ids)
         last_interviews = [
             stage_by_student[student_id][2]
             for student_id in assigned_ids
@@ -549,6 +557,7 @@ async def mentor_efficiency_analytics(
                 last_name=mentor.last_name,
                 telegram_username=mentor.telegram_username,
                 assigned_students=len(assigned_ids),
+                students_with_interviews=len(participant_ids),
                 interviewing_students=len(interviewing_ids),
                 active_interviewing_students=len(active_ids),
                 recording_students=len(recording_ids),
@@ -570,10 +579,12 @@ async def mentor_efficiency_analytics(
                     else 0
                 ),
                 recording_participation_percent=(
-                    round(len(recording_ids) / len(active_ids) * 100, 1) if active_ids else 0
+                    round(len(recording_ids) / len(participant_ids) * 100, 1)
+                    if participant_ids
+                    else 0
                 ),
                 average_interviews_per_active_student=(
-                    round(active_interview_count / len(active_ids), 1) if active_ids else 0
+                    round(interview_count / len(participant_ids), 1) if participant_ids else 0
                 ),
                 last_interview_at=max(last_interviews) if last_interviews else None,
             )
@@ -604,6 +615,7 @@ async def mentor_efficiency_analytics(
         period_end=now,
         mentor_count=len(items),
         assigned_students=len(assigned_ids),
+        students_with_interviews=len(stage_by_student),
         interviewing_students=len(all_interviewing_ids),
         active_interviewing_students=len(active_interviewing_ids),
         inactive_interviewing_students=len(all_interviewing_ids - active_interviewing_ids),

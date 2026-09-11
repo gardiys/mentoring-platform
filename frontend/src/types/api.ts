@@ -830,6 +830,7 @@ export interface MentorEfficiencyItem {
   last_name: string | null;
   telegram_username: string | null;
   assigned_students: number;
+  students_with_interviews: number;
   interviewing_students: number;
   active_interviewing_students: number;
   recording_students: number;
@@ -851,6 +852,7 @@ export interface MentorEfficiencyAnalytics {
   period_end: string;
   mentor_count: number;
   assigned_students: number;
+  students_with_interviews: number;
   interviewing_students: number;
   active_interviewing_students: number;
   inactive_interviewing_students: number;

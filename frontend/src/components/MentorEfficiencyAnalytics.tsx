@@ -1,6 +1,7 @@
 import {
   Alert,
   Badge,
+  Button,
   Card,
   Group,
   Progress,
@@ -84,19 +85,28 @@ export function MentorEfficiencyAnalytics({
         <div>
           <Title order={2}>Эффективность менторов</Title>
           <Text c="dimmed" size="sm" maw={760}>
-            Реальная активность считается по состоявшимся этапам, а не только по
-            статусу ученика. Так видно, где воронка движется, а где нужна
-            помощь.
+            Активность считается по этапам журнала с прошедшей датой.
+            Учитываются ученики в статусах «учится» и «ходит на собеседования».
+            Ученики на испытательном сроке и завершившие обучение исключены.
           </Text>
         </div>
-        <SegmentedControl
-          value={period}
-          onChange={(value) => onPeriodChange(value as MentorAnalyticsPeriod)}
-          data={Object.entries(periodLabels).map(([value, label]) => ({
-            value,
-            label,
-          }))}
-        />
+        <Group>
+          <Button
+            variant="light"
+            loading={query.isFetching}
+            onClick={() => void query.refetch()}
+          >
+            Обновить статистику
+          </Button>
+          <SegmentedControl
+            value={period}
+            onChange={(value) => onPeriodChange(value as MentorAnalyticsPeriod)}
+            data={Object.entries(periodLabels).map(([value, label]) => ({
+              value,
+              label,
+            }))}
+          />
+        </Group>
       </Group>
 
       {query.isPending ? (
@@ -109,7 +119,7 @@ export function MentorEfficiencyAnalytics({
             <MetricCard
               label="Менторов с учениками"
               value={query.data.mentor_count}
-              hint={`${query.data.assigned_students} учеников распределено`}
+              hint={`${query.data.assigned_students} учеников на учёбе или собеседованиях`}
             />
             <MetricCard
               label="На собеседованиях"
@@ -118,8 +128,8 @@ export function MentorEfficiencyAnalytics({
             />
             <MetricCard
               label="Реально активны"
-              value={query.data.active_interviewing_students}
-              hint={`Был этап за период: ${periodLabels[period].toLowerCase()}`}
+              value={query.data.students_with_interviews}
+              hint="Был этап за период, включая учеников в статусе «учится»"
               color="green"
             />
             <MetricCard
@@ -147,9 +157,17 @@ export function MentorEfficiencyAnalytics({
               <div style={{ padding: "var(--mantine-spacing-lg)" }}>
                 <Title order={3}>Состояние учеников по менторам</Title>
                 <Text size="sm" c="dimmed">
+                  Этапы и записи учеников в статусе «учится» тоже учитываются.
                   Процент активности — доля учеников со статусом «ходит на
-                  собеседования», у которых был хотя бы один этап за период.
-                  Покрытие записями считается среди реально активных.
+                  собеседования», у которых был этап. Покрытие записями — доля
+                  всех учеников с этапами за период, у которых есть запись.
+                </Text>
+                <Text size="sm" c="dimmed" mt="xs">
+                  Этапы и записи считаются по дате собеседования, AI-разборы —
+                  по дате запроса. Запись старого собеседования не попадает в
+                  текущую неделю только из-за недавней загрузки. Учитываются
+                  выбранные направление и доступ учеников; данные относятся к их
+                  текущему ментору.
                 </Text>
               </div>
               {query.data.mentors.length === 0 ? (
@@ -165,7 +183,7 @@ export function MentorEfficiencyAnalytics({
                         <Table.Th>Ученики</Table.Th>
                         <Table.Th>На собеседованиях</Table.Th>
                         <Table.Th>Реально активны</Table.Th>
-                        <Table.Th>Выкладывают записи</Table.Th>
+                        <Table.Th>Ученики с записями</Table.Th>
                         <Table.Th>Этапов</Table.Th>
                         <Table.Th>AI-разборов</Table.Th>
                         <Table.Th>Офферов</Table.Th>
@@ -182,7 +200,7 @@ export function MentorEfficiencyAnalytics({
                         );
                         const recordingColor = rateColor(
                           mentor.recording_participation_percent,
-                          mentor.active_interviewing_students > 0,
+                          mentor.students_with_interviews > 0,
                         );
                         return (
                           <Table.Tr key={mentor.mentor_id}>
@@ -212,6 +230,13 @@ export function MentorEfficiencyAnalytics({
                             <Table.Td>{mentor.interviewing_students}</Table.Td>
                             <Table.Td>
                               <Stack gap={5} miw={140}>
+                                <Text size="sm" fw={700}>
+                                  Всего с этапами:{" "}
+                                  {mentor.students_with_interviews}
+                                </Text>
+                                <Text size="xs" c="dimmed">
+                                  В статусе «ходит на собеседования»:
+                                </Text>
                                 <Group justify="space-between" gap="xs">
                                   <Text size="sm" fw={700}>
                                     {mentor.active_interviewing_students} из{" "}
