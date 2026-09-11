@@ -385,6 +385,7 @@ async def mentor_efficiency_analytics(
 
     Count past-dated journal stages for students learning or interviewing.
     Participation within the INTERVIEWING status is a separate cohort metric.
+    Offers are outcomes and remain visible after a student's learning status changes.
     """
 
     if viewer.role is not UserRole.ADMIN:
@@ -402,14 +403,7 @@ async def mentor_efficiency_analytics(
         )
         .outerjoin(MentorStudent, MentorStudent.student_id == User.id)
         .outerjoin(StudentMentorshipState, StudentMentorshipState.student_id == User.id)
-        .where(
-            User.role == UserRole.STUDENT,
-            func.coalesce(
-                StudentMentorshipState.learning_status,
-                MentorStudent.learning_status,
-                StudentLearningStatus.LEARNING,
-            ).in_([StudentLearningStatus.LEARNING, StudentLearningStatus.INTERVIEWING]),
-        )
+        .where(User.role == UserRole.STUDENT)
     )
     if is_active is not None:
         students_statement = students_statement.where(User.is_active.is_(is_active))
@@ -423,10 +417,16 @@ async def mentor_efficiency_analytics(
             .exists()
         )
 
-    student_rows = (await session.execute(students_statement)).all()
+    all_student_rows = (await session.execute(students_statement)).all()
+    student_rows = [
+        row
+        for row in all_student_rows
+        if (row[3] or row[2] or StudentLearningStatus.LEARNING)
+        in {StudentLearningStatus.LEARNING, StudentLearningStatus.INTERVIEWING}
+    ]
     now = datetime.now(UTC)
     start = _period_start(period, now)
-    if not student_rows:
+    if not all_student_rows:
         return MentorEfficiencyAnalytics(
             period=period,
             period_start=start,
@@ -472,7 +472,7 @@ async def mentor_efficiency_analytics(
         await session.execute(
             select(InterviewProcess.user_id, func.count(InterviewProcess.id))
             .where(
-                InterviewProcess.user_id.in_(student_ids),
+                InterviewProcess.user_id.in_([row[0] for row in all_student_rows]),
                 InterviewProcess.track_id.in_(interview_track_ids),
                 InterviewProcess.status == InterviewProcessStatus.OFFER,
                 *_in_period(InterviewProcess.offer_received_at, start, now),
@@ -511,7 +511,7 @@ async def mentor_efficiency_analytics(
         )
     )
 
-    mentor_ids = {row[1] for row in student_rows if row[1] is not None}
+    mentor_ids = {row[1] for row in all_student_rows if row[1] is not None}
     mentors = {
         mentor.id: mentor
         for mentor in await session.scalars(select(User).where(User.id.in_(mentor_ids)))
@@ -524,6 +524,14 @@ async def mentor_efficiency_analytics(
             unassigned.append((student_id, status))
         else:
             grouped.setdefault(mentor_id, []).append((student_id, status))
+
+    offers_by_mentor: dict[UUID, int] = {}
+    for student_id, mentor_id, _, _ in all_student_rows:
+        count = offers_by_student.get(student_id, 0)
+        if mentor_id is not None and count:
+            offers_by_mentor[mentor_id] = offers_by_mentor.get(mentor_id, 0) + count
+            # Mentors with offers but no students still searching must remain visible.
+            grouped.setdefault(mentor_id, [])
 
     items: list[MentorEfficiencyItem] = []
     for mentor_id, assigned in grouped.items():
@@ -569,9 +577,7 @@ async def mentor_efficiency_analytics(
                 ai_analysis_count=sum(
                     ai_by_student.get(student_id, 0) for student_id in assigned_ids
                 ),
-                offer_count=sum(
-                    offers_by_student.get(student_id, 0) for student_id in assigned_ids
-                ),
+                offer_count=offers_by_mentor.get(mentor_id, 0),
                 upcoming_students=len(assigned_ids.intersection(upcoming_student_ids)),
                 participation_percent=(
                     round(len(active_ids) / len(interviewing_ids) * 100, 1)

@@ -163,7 +163,7 @@ async def test_counts_include_learning_but_exclude_working_students(
     assert row["average_interviews_per_active_student"] == 2.5
     assert row["participation_percent"] == 100
     assert row["ai_analysis_count"] == 1
-    assert row["offer_count"] == 0
+    assert row["offer_count"] == 1
     assert row["upcoming_students"] == 1
     async with TestSession() as session:
         state = await session.get(StudentMentorshipState, seeded.student_id)
@@ -173,12 +173,12 @@ async def test_counts_include_learning_but_exclude_working_students(
     assert after["assigned_students"] == after["students_with_interviews"] == 1
     assert after["interview_count"] == 2
     assert after["average_interviews_per_active_student"] == 2
+    assert after["offer_count"] == 1
     for key in (
         "recording_count",
         "recording_students",
         "recording_participation_percent",
         "ai_analysis_count",
-        "offer_count",
         "upcoming_students",
     ):
         assert after[key] == 0
@@ -237,3 +237,57 @@ async def test_unassigned_students_follow_status_filter_and_missing_status_means
     data, _ = await read_counts(client, seeded)
     assert data["unassigned_students"] == 1
     assert data["unassigned_interviewing_students"] == 0
+
+
+@pytest.mark.parametrize(
+    "status", [StudentLearningStatus.PROBATION, StudentLearningStatus.FINISHED]
+)
+async def test_offers_survive_status_change_even_without_active_students_or_stages(
+    client: AsyncClient, seeded: SeededData, status
+):
+    now = datetime.now(UTC)
+    async with TestSession() as session:
+        session.add(StudentMentorshipState(student_id=seeded.student_id, learning_status=status))
+        company = Company(name="Оффер", normalized_name="оффер", transliterated_name="offer")
+        session.add(company)
+        await session.flush()
+        for days, outcome in (
+            (1, InterviewProcessStatus.OFFER),
+            (20, InterviewProcessStatus.OFFER),
+            (60, InterviewProcessStatus.OFFER),
+            (1, InterviewProcessStatus.CLOSED),
+        ):
+            session.add(
+                InterviewProcess(
+                    user_id=seeded.student_id,
+                    track_id=seeded.python_track_id,
+                    company_id=company.id,
+                    company_name=company.name,
+                    status=outcome,
+                    offer_received_at=now - timedelta(days=days),
+                )
+            )
+        await session.commit()
+    for period, count in (("week", 1), ("month", 2), ("all", 3)):
+        data, row = await read_counts(client, seeded, period=period)
+        assert data["mentor_count"] == 1
+        assert row["offer_count"] == count
+        for key in (
+            "assigned_students",
+            "students_with_interviews",
+            "interview_count",
+            "recording_count",
+            "ai_analysis_count",
+            "upcoming_students",
+        ):
+            assert row[key] == 0
+        assert data["assigned_students"] == data["students_with_interviews"] == 0
+    async with TestSession() as session:
+        student = await session.get(User, seeded.student_id)
+        student.is_active = False
+        await session.commit()
+    data, row = await read_counts(client, seeded)
+    assert row is None
+    assert data["mentors"] == []
+    _, row = await read_counts(client, seeded, is_active="false")
+    assert row["offer_count"] == 1

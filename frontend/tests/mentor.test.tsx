@@ -310,9 +310,7 @@ it("показывает администратору эффективность
   expect(screen.getByText("1 из 2")).toBeInTheDocument();
   expect(screen.getByText("Всего с этапами: 2")).toBeInTheDocument();
   expect(
-    screen.getByText(
-      /Ученики на испытательном сроке и завершившие обучение исключены/,
-    ),
+    screen.getByText(/исключены из активности, но их офферы учитываются/),
   ).toBeInTheDocument();
   expect(screen.getByText("2 учеников")).toBeInTheDocument();
   const previousCalls = efficiency.mock.calls.length;
