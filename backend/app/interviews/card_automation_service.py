@@ -1466,6 +1466,7 @@ async def request_question_cluster_answer_generation(
     if cluster.answer_status not in {
         None,
         AnswerContractStatus.NEEDS_EXPERT_SOURCE,
+        AnswerContractStatus.NEEDS_MANUAL_REVIEW,
     }:
         api_error(
             409,
@@ -1510,11 +1511,27 @@ async def request_question_cluster_answer_generation(
             "question_cluster_answer_generation_disabled",
             "Включите автоматизацию и модерацию кластеров для этого направления",
         )
+    # Explicit draft requests remain available after automatic preflight defers
+    # a cluster. This is a human action, not approval of the generated answer.
+    await record_automation_decision(
+        session,
+        entity_type="cluster",
+        entity_id=cluster.id,
+        idempotency_key=f"cluster:{cluster.id}:manual-answer-request:{cluster.version}",
+        decision_type=AutomationDecisionType.MANUAL_OVERRIDE,
+        decision_source=AutomationDecisionSource.HUMAN,
+        reason="Administrator requested an AI draft for manual review; publication is not approved",
+        confidence=None,
+        settings=settings,
+        selected_cluster_id=cluster.id,
+    )
+    await session.commit()
     try:
         job_id = await enqueue_card_automation_job(
             "generate_cluster_candidate",
             str(cluster.id),
             cluster.membership_revision,
+            manual_draft=True,
         )
     except Exception:
         api_error(

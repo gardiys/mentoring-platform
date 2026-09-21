@@ -69,6 +69,7 @@ from app.interviews.models import InterviewCard, InterviewCardOccurrence
 logger = logging.getLogger(__name__)
 CARD_AUTOMATION_JOB_MAX_TRIES = 4
 ANSWER_JOB_MAX_TRIES = CARD_AUTOMATION_JOB_MAX_TRIES
+ANSWER_CACHE_VERSION = "answer-input-v2"
 _ANSWER_DRAFT_CLUSTER_STATUSES = frozenset(
     {
         QuestionClusterStatus.SHADOW,
@@ -387,25 +388,39 @@ async def promote_question_cluster(
 
 
 async def generate_cluster_candidate(
-    ctx: dict[str, Any], cluster_id: str, membership_revision: int
+    ctx: dict[str, Any], cluster_id: str, membership_revision: int, *, manual_draft: bool = False
 ) -> None:
     parsed_id = UUID(cluster_id)
     async with async_session_factory() as session:
-        cluster = await session.get(QuestionCluster, parsed_id)
+        cluster = await session.get(QuestionCluster, parsed_id, with_for_update=True)
         if (
             cluster is None
             or cluster.membership_revision != membership_revision
             or cluster.status not in _ANSWER_DRAFT_CLUSTER_STATUSES
             or cluster.answer_contract is not None
-            or cluster.answer_status not in {None, AnswerContractStatus.NEEDS_EXPERT_SOURCE}
+            or cluster.answer_status
+            not in (
+                {
+                    None,
+                    AnswerContractStatus.NEEDS_EXPERT_SOURCE,
+                    AnswerContractStatus.NEEDS_MANUAL_REVIEW,
+                }
+                if manual_draft
+                else {None, AnswerContractStatus.NEEDS_EXPERT_SOURCE}
+            )
         ):
             return
         settings = await session.get(CardAutomationSettings, cluster.direction_id)
         if settings is None or not settings.enabled or not settings.cluster_moderation_enabled:
             return
         version = cluster.version
-        question = redact_untrusted_text(cluster.canonical_question)
+        question = redact_untrusted_text(cluster.canonical_question)[:4_000]
         sources = await _trusted_sources(session, cluster)
+        if not manual_draft and await _defer_unpublishable_answer(
+            session, cluster, settings, sources
+        ):
+            await session.commit()
+            return
         analysis_draft = (
             None
             if settings.global_auto_publish_enabled
@@ -418,6 +433,9 @@ async def generate_cluster_candidate(
             ANSWER_CONTRACT_PROMPT_VERSION,
             ANSWER_CONTRACT_SCHEMA_VERSION,
             _analysis_model_name(provider),
+            direction_id=cluster.direction_id,
+            provider_name=provider.name,
+            max_output_tokens=getattr(provider, "review_max_output_tokens", 4_000),
             analysis_draft=analysis_draft,
         )
         cached_generation = await _cached_answer_decision(
@@ -426,7 +444,6 @@ async def generate_cluster_candidate(
             decision_type=AutomationDecisionType.ANSWER_CONTRACT_GENERATED,
             prompt_version=ANSWER_CONTRACT_PROMPT_VERSION,
             schema_version=ANSWER_CONTRACT_SCHEMA_VERSION,
-            model_name=_analysis_model_name(provider),
         )
         cached_contract: AnswerContract | None = None
         if cached_generation is not None and cached_generation.judge_result is not None:
@@ -463,7 +480,7 @@ async def generate_cluster_candidate(
         started_at = time.perf_counter()
         try:
             generated = await provider.generate_answer_contract(
-                question=question[:4_000], trusted_sources=sources
+                question=question, trusted_sources=sources
             )
         except InterviewAIError as error:
             latency_ms = _elapsed_ms(started_at)
@@ -529,13 +546,8 @@ async def generate_cluster_candidate(
         usage = generated.usage
         prompt_version = generated.prompt_version
         schema_version = generated.schema_version
-        generation_input_hash = _answer_input_hash(
-            question,
-            sources,
-            generated.prompt_version,
-            ANSWER_CONTRACT_SCHEMA_VERSION,
-            generated.usage.model,
-        )
+        # Keep the request identity. The API may report a dated snapshot instead
+        # of the configured alias; that actual model belongs in usage, not the key.
         decision_source = AutomationDecisionSource.SEMANTIC_JUDGE
         reason = (
             "Answer contract generated from internal sources; validation is pending"
@@ -579,6 +591,10 @@ async def generate_cluster_candidate(
             settings=settings,
             selected_cluster_id=cluster.id,
             judge_result=contract_payload,
+            retrieval_scores={
+                "request_model": _analysis_model_name(provider),
+                "answer_cache_version": ANSWER_CACHE_VERSION,
+            },
             usage=usage,
             ai_tier="analysis" if usage is not None else None,
             prompt_version=prompt_version,
@@ -592,17 +608,18 @@ async def generate_cluster_candidate(
         cluster_id,
         membership_revision,
         redis=ctx["redis"],
+        manual_draft=manual_draft,
     )
 
 
 async def validate_cluster_answer(
-    ctx: dict[str, Any], cluster_id: str, membership_revision: int
+    ctx: dict[str, Any], cluster_id: str, membership_revision: int, *, manual_draft: bool = False
 ) -> None:
     parsed_id = UUID(cluster_id)
     if await _publish_ready_cluster(parsed_id, membership_revision):
         return
     async with async_session_factory() as session:
-        cluster = await session.get(QuestionCluster, parsed_id)
+        cluster = await session.get(QuestionCluster, parsed_id, with_for_update=True)
         if (
             cluster is None
             or cluster.membership_revision != membership_revision
@@ -616,13 +633,18 @@ async def validate_cluster_answer(
         if settings is None or not settings.enabled or not settings.cluster_moderation_enabled:
             return
         version = cluster.version
-        question = redact_untrusted_text(cluster.canonical_question)
+        question = redact_untrusted_text(cluster.canonical_question)[:4_000]
         contract_payload = dict(cluster.answer_contract)
         safe_contract_payload = cast(
             dict[str, object],
             redact_untrusted_value(contract_payload),
         )
         sources = await _trusted_sources(session, cluster)
+        if not manual_draft and await _defer_unpublishable_answer(
+            session, cluster, settings, sources
+        ):
+            await session.commit()
+            return
         # Internal allowlisted UUIDs are identifiers, not personal numbers. Keep
         # them intact while redacting the untrusted answer's prose.
         allowed_ids = {s["source_id"] for s in sources}
@@ -639,6 +661,9 @@ async def validate_cluster_answer(
             ANSWER_VALIDATION_PROMPT_VERSION,
             ANSWER_VALIDATION_SCHEMA_VERSION,
             _analysis_model_name(provider),
+            direction_id=cluster.direction_id,
+            provider_name=provider.name,
+            max_output_tokens=getattr(provider, "review_max_output_tokens", 4_000),
             contract=safe_contract_payload,
         )
         cached_validation = await _cached_answer_decision(
@@ -647,7 +672,6 @@ async def validate_cluster_answer(
             decision_type=AutomationDecisionType.ANSWER_CONTRACT_VALIDATED,
             prompt_version=ANSWER_VALIDATION_PROMPT_VERSION,
             schema_version=ANSWER_VALIDATION_SCHEMA_VERSION,
-            model_name=_analysis_model_name(provider),
         )
         cached_validation_output: AnswerValidationResult | None = None
         if cached_validation is not None and cached_validation.judge_result is not None:
@@ -709,7 +733,7 @@ async def validate_cluster_answer(
         started_at = time.perf_counter()
         try:
             validation = await provider.validate_answer_contract(
-                question=question[:4_000],
+                question=question,
                 contract=safe_contract_payload,
                 trusted_sources=sources,
             )
@@ -779,14 +803,6 @@ async def validate_cluster_answer(
         usage = validation.usage
         prompt_version = validation.prompt_version
         schema_version = validation.schema_version
-        validation_input_hash = _answer_input_hash(
-            question,
-            sources,
-            validation.prompt_version,
-            ANSWER_VALIDATION_SCHEMA_VERSION,
-            validation.usage.model,
-            contract=safe_contract_payload,
-        )
         decision_source = AutomationDecisionSource.SEMANTIC_JUDGE
         reason = "Independent structured answer validation completed"
     references = contract_payload.get("source_references")
@@ -824,7 +840,11 @@ async def validate_cluster_answer(
             settings=settings,
             selected_cluster_id=cluster.id,
             judge_result=validation_payload,
-            retrieval_scores={"publication_sources_hash": _publication_sources_hash(sources)},
+            retrieval_scores={
+                "publication_sources_hash": _publication_sources_hash(sources),
+                "request_model": _analysis_model_name(provider),
+                "answer_cache_version": ANSWER_CACHE_VERSION,
+            },
             usage=usage,
             ai_tier="analysis" if usage is not None else None,
             prompt_version=prompt_version,
@@ -835,6 +855,49 @@ async def validate_cluster_answer(
         await session.commit()
 
     await _publish_ready_cluster(parsed_id, membership_revision)
+
+
+async def _defer_unpublishable_answer(
+    session: AsyncSession,
+    cluster: QuestionCluster,
+    settings: CardAutomationSettings,
+    sources: list[dict[str, str]],
+) -> bool:
+    from app.interviews.card_auto_publish import publication_preflight_reason
+
+    if not settings.global_auto_publish_enabled or settings.shadow_mode:
+        return False
+    reason = await publication_preflight_reason(session, cluster, settings)
+    status = AnswerContractStatus.NEEDS_MANUAL_REVIEW
+    if reason is None and not sources:
+        reason = (
+            "No trusted sources: automatic answer generation skipped; expert material is required"
+        )
+        status = AnswerContractStatus.NEEDS_EXPERT_SOURCE
+    if reason is None:
+        return False
+    if cluster.answer_status != status:
+        cluster.answer_status = status
+        cluster.version += 1
+    # A missing-source cluster can be reconsidered after material is added.
+    # Reconciliation must not append the same audit event on every pass.
+    await _record_answer_terminal_decision(
+        session,
+        cluster=cluster,
+        settings=settings,
+        membership_revision=cluster.membership_revision,
+        decision_type=AutomationDecisionType.ANSWER_CONTRACT_NEEDS_SOURCE
+        if status is AnswerContractStatus.NEEDS_EXPERT_SOURCE
+        else AutomationDecisionType.ANSWER_VALIDATION_FAILED,
+        decision_source=AutomationDecisionSource.RULE,
+        stage="preflight",
+        outcome=hashlib.sha256(reason.encode()).hexdigest()[:16],
+        error_code="no_trusted_sources"
+        if status is AnswerContractStatus.NEEDS_EXPERT_SOURCE
+        else "publication_preflight_failed",
+        reason=reason,
+    )
+    return True
 
 
 async def _publish_ready_cluster(cluster_id: UUID, revision: int) -> bool:
@@ -1258,7 +1321,6 @@ async def _cached_answer_decision(
     decision_type: AutomationDecisionType,
     prompt_version: str,
     schema_version: str,
-    model_name: str,
 ) -> AutomationDecision | None:
     return cast(
         AutomationDecision | None,
@@ -1269,7 +1331,9 @@ async def _cached_answer_decision(
                 AutomationDecision.decision_type == decision_type,
                 AutomationDecision.prompt_version == prompt_version,
                 AutomationDecision.schema_version == schema_version,
-                AutomationDecision.model_name == model_name,
+                # Only original provider results are cache entries. RULE copies
+                # must not resurrect a result after its original is overridden.
+                AutomationDecision.model_name.is_not(None),
                 AutomationDecision.judge_result.is_not(None),
                 AutomationDecision.is_overridden.is_(False),
             )
@@ -1285,10 +1349,19 @@ def _answer_input_hash(
     schema_version: str,
     model_name: str,
     *,
+    direction_id: UUID,
+    provider_name: str,
+    max_output_tokens: int,
     contract: dict[str, object] | None = None,
     analysis_draft: str | None = None,
 ) -> str:
     payload = {
+        # Older keys mixed requested and returned model names. Do not silently
+        # reuse them or share cached source material across directions.
+        "cache_version": ANSWER_CACHE_VERSION,
+        "direction_id": str(direction_id),
+        "provider": provider_name,
+        "max_output_tokens": max_output_tokens,
         "question": question,
         "sources": sources,
         "contract": contract,

@@ -1,6 +1,7 @@
 """Publish independently validated clusters without impersonating a moderator."""
 
 import hashlib
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -42,6 +43,134 @@ from app.interviews.question_matching import (
 )
 
 AUTO_PUBLISH_CONFIDENCE = 0.9
+
+
+@dataclass(frozen=True)
+class PublicationTarget:
+    card: InterviewCard | None = None
+    deck_id: UUID | None = None
+    category: str | None = None
+    reason: str | None = None
+
+
+async def publication_preflight_reason(
+    session: AsyncSession, cluster: QuestionCluster, settings: CardAutomationSettings
+) -> str | None:
+    """Read-only early check; publication repeats these checks under its locks."""
+    if cluster.linked_card_id is not None:
+        return "Cluster already has a linked card; automatic answer work is unnecessary"
+    if (
+        cluster.learning_object_type not in CARD_ELIGIBLE_TYPES
+        or not normalize_question(cluster.canonical_question)
+        or redact_untrusted_text(cluster.canonical_question) != cluster.canonical_question
+    ):
+        return "Question did not pass automatic publication quality/privacy checks"
+    questions = list(
+        await session.scalars(
+            select(IntelligenceQuestion).where(IntelligenceQuestion.cluster_id == cluster.id)
+        )
+    )
+    reason = await _question_review_blocker(session, cluster, questions)
+    if reason:
+        return reason
+    return (await _publication_target(session, cluster, settings)).reason
+
+
+async def _question_review_blocker(
+    session: AsyncSession, cluster: QuestionCluster, questions: list[IntelligenceQuestion]
+) -> str | None:
+    human_decision = await session.scalar(
+        select(AutomationDecision.id)
+        .where(
+            AutomationDecision.entity_type == "cluster",
+            AutomationDecision.entity_id == cluster.id,
+            AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+        )
+        .limit(1)
+    )
+    if (
+        not questions
+        or human_decision is not None
+        or any(
+            q.moderation_status is not IntelligenceQuestionModerationStatus.PENDING
+            or q.automation_decision_source is AutomationDecisionSource.HUMAN
+            or q.published_card_id is not None
+            or q.alias_human_confirmed
+            or q.automation_status
+            not in {QuestionOccurrenceStatus.CLUSTERED, QuestionOccurrenceStatus.NEEDS_REVIEW}
+            or not q.is_standalone
+            or not q.is_real_interviewer_question
+            or (q.routing_confidence or 0) < AUTO_PUBLISH_CONFIDENCE
+            or q.confidence < 0.85
+            or CRITICAL_QUALITY_FLAGS.intersection(q.quality_flags or [])
+            for q in questions
+        )
+    ):
+        return "Question needs manual review or has a previous human decision"
+    return None
+
+
+async def _publication_target(
+    session: AsyncSession, cluster: QuestionCluster, settings: CardAutomationSettings
+) -> PublicationTarget:
+    cards = list(
+        await session.scalars(
+            select(InterviewCard)
+            .join(InterviewDeck)
+            .where(
+                InterviewDeck.track_id == cluster.direction_id,
+                InterviewDeck.is_published.is_(True),
+                InterviewCard.is_published.is_(True),
+            )
+        )
+    )
+    candidates = [
+        QuestionCandidate(
+            card_id=c.id,
+            asked_count=c.asked_count,
+            variants=(
+                QuestionVariant(
+                    text=c.question_markdown,
+                    embedding=tuple(c.question_embedding)
+                    if c.question_embedding is not None
+                    and c.question_embedding_model == cluster.embedding_model
+                    and c.question_embedding_dimensions == cluster.embedding_dimensions
+                    else None,
+                    source="canonical",
+                ),
+            ),
+        )
+        for c in cards
+    ]
+    matches = rank_question_candidates(
+        cluster.canonical_question, cluster.embedding, candidates, limit=2
+    )
+    exact = [
+        c
+        for c in cards
+        if normalize_question(c.question_markdown) == normalize_question(cluster.canonical_question)
+    ]
+    if len(exact) > 1 or (
+        not exact and matches and matches[0].similarity >= settings.cluster_match_threshold
+    ):
+        return PublicationTarget(reason="Possible duplicate found during the publication check")
+    card = exact[0] if exact else None
+    if card is None:
+        # Resolve the existing broad topic; do not invent a deck or taxonomy from AI text.
+        destinations = {
+            (c.deck_id, c.category)
+            for c in cards
+            if cluster.topic_name
+            and c.category.casefold().strip() == cluster.topic_name.casefold().strip()
+            and (cluster.deck_id is None or c.deck_id == cluster.deck_id)
+        }
+        if len(destinations) != 1:
+            return PublicationTarget(
+                reason="No unambiguous published deck and existing topic for this question"
+            )
+        deck_id, category = next(iter(destinations))
+        return PublicationTarget(deck_id=deck_id, category=category)
+    return PublicationTarget(card=card)
 
 
 async def publish_validated_cluster(
@@ -139,92 +268,19 @@ async def publish_validated_cluster(
         # Routing/manual review may hold a question while waiting for this cluster.
         # Release it and let reconciliation retry, rather than invert those locks.
         return None
-    human_decision = await session.scalar(
-        select(AutomationDecision.id)
-        .where(
-            AutomationDecision.entity_type == "cluster",
-            AutomationDecision.entity_id == cluster.id,
-            AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
-        )
-        .limit(1)
-    )
-    if (
-        not questions
-        or human_decision is not None
-        or any(
-            q.moderation_status is not IntelligenceQuestionModerationStatus.PENDING
-            or q.automation_decision_source is AutomationDecisionSource.HUMAN
-            or q.published_card_id is not None
-            or q.alias_human_confirmed
-            or q.automation_status
-            not in {QuestionOccurrenceStatus.CLUSTERED, QuestionOccurrenceStatus.NEEDS_REVIEW}
-            or not q.is_standalone
-            or not q.is_real_interviewer_question
-            or (q.routing_confidence or 0) < AUTO_PUBLISH_CONFIDENCE
-            or q.confidence < 0.85
-            or CRITICAL_QUALITY_FLAGS.intersection(q.quality_flags or [])
-            for q in questions
-        )
-    ):
-        await defer("Question needs manual review or has a previous human decision")
+    reason = await _question_review_blocker(session, cluster, questions)
+    if reason:
+        await defer(reason)
         return None
-    cards = list(
-        await session.scalars(
-            select(InterviewCard)
-            .join(InterviewDeck)
-            .where(
-                InterviewDeck.track_id == direction_id,
-                InterviewDeck.is_published.is_(True),
-                InterviewCard.is_published.is_(True),
-            )
-        )
-    )
-    candidates = [
-        QuestionCandidate(
-            card_id=c.id,
-            asked_count=c.asked_count,
-            variants=(
-                QuestionVariant(
-                    text=c.question_markdown,
-                    embedding=tuple(c.question_embedding)
-                    if c.question_embedding is not None
-                    and c.question_embedding_model == cluster.embedding_model
-                    and c.question_embedding_dimensions == cluster.embedding_dimensions
-                    else None,
-                    source="canonical",
-                ),
-            ),
-        )
-        for c in cards
-    ]
-    matches = rank_question_candidates(
-        cluster.canonical_question, cluster.embedding, candidates, limit=2
-    )
-    exact = [
-        c
-        for c in cards
-        if normalize_question(c.question_markdown) == normalize_question(cluster.canonical_question)
-    ]
-    if len(exact) > 1 or (
-        not exact and matches and matches[0].similarity >= settings.cluster_match_threshold
-    ):
-        await defer("Possible duplicate found during the final publication check")
+    target = await _publication_target(session, cluster, settings)
+    if target.reason:
+        await defer(target.reason)
         return None
-    card = exact[0] if exact else None
+    card = target.card
     created = card is None
     if card is None:
-        # Resolve the existing broad topic; do not invent a deck or taxonomy from AI text.
-        destinations = {
-            (c.deck_id, c.category)
-            for c in cards
-            if cluster.topic_name
-            and c.category.casefold().strip() == cluster.topic_name.casefold().strip()
-            and (cluster.deck_id is None or c.deck_id == cluster.deck_id)
-        }
-        if len(destinations) != 1:
-            await defer("No unambiguous published deck and existing topic for this question")
-            return None
-        deck_id, category = next(iter(destinations))
+        deck_id, category = target.deck_id, target.category
+        assert deck_id is not None and category is not None
         deck = await session.get(
             InterviewDeck, deck_id, with_for_update=True, populate_existing=True
         )

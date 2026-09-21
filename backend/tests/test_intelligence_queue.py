@@ -95,6 +95,21 @@ def test_jobs_are_routed_to_independent_provider_queues() -> None:
         intelligence_queue.intelligence_queue_name("unexpected_job")
 
 
+@pytest.mark.parametrize("function", ["generate_cluster_candidate", "validate_cluster_answer"])
+async def test_manual_answer_jobs_do_not_collide_with_automatic_jobs(function):
+    cluster_id = str(uuid4())
+    redis = RecordingRedis()
+    automatic = await intelligence_queue.enqueue_card_automation_job(
+        function, cluster_id, 1, redis=redis
+    )
+    manual = await intelligence_queue.enqueue_card_automation_job(
+        function, cluster_id, 1, redis=redis, manual_draft=True
+    )
+    assert manual == automatic + ":manual-draft"
+    assert "manual_draft" not in redis.calls[0][2]
+    assert redis.calls[1][2]["manual_draft"] is True
+
+
 @pytest.mark.asyncio
 async def test_restarted_analysis_uses_new_job_id_and_passes_revision() -> None:
     interview_id = str(uuid4())

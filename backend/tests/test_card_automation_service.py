@@ -509,20 +509,28 @@ async def test_occurrence_reprocess_preserves_human_moderation(seeded: SeededDat
         QuestionClusterStatus.NEEDS_REVIEW,
     ],
 )
+@pytest.mark.parametrize(
+    "answer_status",
+    [AnswerContractStatus.NEEDS_EXPERT_SOURCE, AnswerContractStatus.NEEDS_MANUAL_REVIEW],
+)
 async def test_admin_can_request_missing_cluster_answer_generation(
     seeded: SeededData,
     monkeypatch: pytest.MonkeyPatch,
     cluster_status: QuestionClusterStatus,
+    answer_status: AnswerContractStatus,
 ) -> None:
     cluster = _cluster(
         seeded.python_track_id,
         99,
         status=cluster_status,
     )
-    cluster.answer_status = AnswerContractStatus.NEEDS_EXPERT_SOURCE
+    cluster.answer_status = answer_status
     queued: list[tuple[str, str, int]] = []
 
-    async def fake_enqueue(function: str, entity_id: str, revision: int) -> str:
+    async def fake_enqueue(
+        function: str, entity_id: str, revision: int, *, manual_draft: bool = False
+    ) -> str:
+        assert manual_draft is True
         queued.append((function, entity_id, revision))
         return f"job:{entity_id}:v{revision}"
 
@@ -558,6 +566,14 @@ async def test_admin_can_request_missing_cluster_answer_generation(
         assert queued == [
             ("generate_cluster_candidate", str(cluster.id), cluster.membership_revision)
         ]
+
+        decision = await session.scalar(
+            select(AutomationDecision).where(
+                AutomationDecision.entity_id == cluster.id,
+                AutomationDecision.decision_type == AutomationDecisionType.MANUAL_OVERRIDE,
+            )
+        )
+        assert decision.decision_source is AutomationDecisionSource.HUMAN
 
 
 @pytest.mark.asyncio
@@ -1763,14 +1779,17 @@ async def test_card_duplicate_merge_preserves_learning_and_repoints_relations(
         assert (
             await session.get_one(PersonalReviewItem, personal_item.id)
         ).canonical_card_id == primary.id
-        assert await session.get(
-            InterviewTopicSelection,
-            {
-                "user_id": seeded.student_id,
-                "deck_id": deck.id,
-                "category": primary.category,
-            },
-        ) is not None
+        assert (
+            await session.get(
+                InterviewTopicSelection,
+                {
+                    "user_id": seeded.student_id,
+                    "deck_id": deck.id,
+                    "category": primary.category,
+                },
+            )
+            is not None
+        )
         review = await session.get_one(InterviewCardDuplicateReview, result.review_id)
         assert review.decision == "merged"
         assert review.merge_summary is not None

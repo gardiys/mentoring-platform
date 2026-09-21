@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -66,6 +66,19 @@ class RecordingRedis:
     ) -> StubJob:
         self.calls.append((function, args, kwargs))
         return StubJob(cast(str, kwargs["_job_id"]))
+
+
+class SnapshotAnswerProvider(FakeInterviewAIProvider):
+    analysis_model = "gpt-5-mini"
+    review_max_output_tokens = 4_000
+
+    async def generate_answer_contract(self, question, trusted_sources):
+        result = await super().generate_answer_contract(question, trusted_sources)
+        return replace(result, usage=replace(result.usage, model="gpt-5-mini-2025-08-07"))
+
+    async def validate_answer_contract(self, question, contract, trusted_sources):
+        result = await super().validate_answer_contract(question, contract, trusted_sources)
+        return replace(result, usage=replace(result.usage, model="gpt-5-mini-2025-08-07"))
 
 
 class RetryValidationOnceProvider(FakeInterviewAIProvider):
@@ -329,24 +342,27 @@ async def test_validation_retry_reuses_generated_contract(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("snapshot_model", [False, True])
 async def test_identical_answer_inputs_reuse_persisted_generation_and_validation(
     seeded: SeededData,
     monkeypatch: pytest.MonkeyPatch,
+    snapshot_model: bool,
 ) -> None:
     await _enable_cluster_automation(seeded)
     first_cluster_id = await _create_cluster(seeded)
     second_cluster_id = await _create_cluster(seeded)
+    third_cluster_id = await _create_cluster(seeded)
     redis = RecordingRedis()
-    ai = FakeInterviewAIProvider()
+    ai = SnapshotAnswerProvider() if snapshot_model else FakeInterviewAIProvider()
     monkeypatch.setattr(card_automation_jobs, "async_session_factory", TestSession)
 
-    for cluster_id in (first_cluster_id, second_cluster_id):
+    for cluster_id in (first_cluster_id, second_cluster_id, third_cluster_id):
         await card_automation_jobs.generate_cluster_candidate(
             _ctx(redis, ai),
             str(cluster_id),
             1,
         )
-    for cluster_id in (first_cluster_id, second_cluster_id):
+    for cluster_id in (first_cluster_id, second_cluster_id, third_cluster_id):
         await card_automation_jobs.validate_cluster_answer(
             _ctx(redis, ai),
             str(cluster_id),
@@ -386,6 +402,18 @@ async def test_identical_answer_inputs_reuse_persisted_generation_and_validation
         )
     assert len(ai.answer_contract_calls) == 1
     assert len(ai.answer_validation_calls) == 1
+
+    if snapshot_model:
+        async with TestSession() as session:
+            paid = await session.scalar(
+                select(AutomationDecision).where(
+                    AutomationDecision.entity_id == first_cluster_id,
+                    AutomationDecision.decision_type
+                    == AutomationDecisionType.ANSWER_CONTRACT_GENERATED,
+                )
+            )
+            assert paid.model_name == "gpt-5-mini-2025-08-07"
+            assert paid.retrieval_scores["request_model"] == "gpt-5-mini"
 
 
 @pytest.mark.asyncio
@@ -971,3 +999,112 @@ async def test_reprocess_unlinks_automatic_card_and_cluster_and_reactivates_pers
     assert [(name, args) for name, args, _options in redis.calls] == [
         ("route_question_occurrence", (str(source.question_id), 2))
     ]
+
+
+@pytest.mark.parametrize(
+    "changed", ["model", "limit", "sources", "question", "prompt", "schema", "overridden"]
+)
+async def test_answer_cache_invalidates_changed_inputs(seeded, monkeypatch, changed):
+    await _enable_cluster_automation(seeded)
+    first = await _create_cluster(seeded)
+    second = await _create_cluster(seeded)
+    ai = SnapshotAnswerProvider()
+    ctx = _ctx(RecordingRedis(), ai)
+    source_text = "Материал о типах Python."
+
+    async def sources(session, cluster):
+        return [{"source_id": "knowledge_entry:example", "title": "Python", "content": source_text}]
+
+    monkeypatch.setattr(card_automation_jobs, "async_session_factory", TestSession)
+    monkeypatch.setattr(card_automation_jobs, "_trusted_sources", sources)
+    await card_automation_jobs.generate_cluster_candidate(ctx, str(first), 1)
+    if changed == "model":
+        ai.analysis_model = "another-model"
+    elif changed == "limit":
+        ai.review_max_output_tokens = 8_000
+    elif changed == "sources":
+        source_text += " Новые сведения."
+    elif changed in {"prompt", "schema"}:
+        name = "ANSWER_CONTRACT_" + ("PROMPT_VERSION" if changed == "prompt" else "SCHEMA_VERSION")
+        monkeypatch.setattr(card_automation_jobs, name, "new-version")
+    else:
+        async with TestSession() as session:
+            if changed == "question":
+                (await session.get(QuestionCluster, second)).canonical_question = "Другой вопрос?"
+            else:
+                decision = await session.scalar(
+                    select(AutomationDecision).where(
+                        AutomationDecision.entity_id == first,
+                        AutomationDecision.decision_type
+                        == AutomationDecisionType.ANSWER_CONTRACT_GENERATED,
+                    )
+                )
+                decision.is_overridden = True
+            await session.commit()
+    await card_automation_jobs.generate_cluster_candidate(ctx, str(second), 1)
+    assert len(ai.answer_contract_calls) == 2
+
+
+async def test_answer_cache_uses_transmitted_question_and_is_scoped_to_direction(
+    seeded, monkeypatch
+):
+    await _enable_cluster_automation(seeded)
+    prefix = "Как работают типы Python? " + "я" * 4_000
+    prefix = prefix[:4_000]
+    first = await _create_cluster(seeded, question=prefix + " первый хвост")
+    second = await _create_cluster(seeded, question=prefix + " второй хвост")
+    other_direction = await _create_cluster(seeded, question=prefix)
+    async with TestSession() as session:
+        (await session.get(QuestionCluster, other_direction)).direction_id = seeded.go_track_id
+        session.add(
+            CardAutomationSettings(
+                direction_id=seeded.go_track_id,
+                enabled=True,
+                shadow_mode=True,
+                cluster_moderation_enabled=True,
+            )
+        )
+        await session.commit()
+    ai = SnapshotAnswerProvider()
+    ctx = _ctx(RecordingRedis(), ai)
+
+    async def sources(session, cluster):
+        return [
+            {
+                "source_id": "knowledge_entry:example",
+                "title": "Типы",
+                "content": "Одинаковый материал",
+            }
+        ]
+
+    monkeypatch.setattr(card_automation_jobs, "async_session_factory", TestSession)
+    monkeypatch.setattr(card_automation_jobs, "_trusted_sources", sources)
+    for cluster_id in (first, second):
+        await card_automation_jobs.generate_cluster_candidate(ctx, str(cluster_id), 1)
+        await card_automation_jobs.validate_cluster_answer(ctx, str(cluster_id), 1)
+    assert len(ai.answer_contract_calls) == len(ai.answer_validation_calls) == 1
+    assert ai.answer_contract_calls[0]["question"] == prefix
+    await card_automation_jobs.generate_cluster_candidate(ctx, str(other_direction), 1)
+    await card_automation_jobs.validate_cluster_answer(ctx, str(other_direction), 1)
+    assert len(ai.answer_contract_calls) == len(ai.answer_validation_calls) == 2
+
+
+async def test_cached_copies_do_not_resurrect_overridden_provider_results(seeded, monkeypatch):
+    await _enable_cluster_automation(seeded)
+    clusters = [await _create_cluster(seeded) for _ in range(3)]
+    ai = SnapshotAnswerProvider()
+    ctx = _ctx(RecordingRedis(), ai)
+    monkeypatch.setattr(card_automation_jobs, "async_session_factory", TestSession)
+    for cluster_id in clusters[:2]:
+        await card_automation_jobs.generate_cluster_candidate(ctx, str(cluster_id), 1)
+        await card_automation_jobs.validate_cluster_answer(ctx, str(cluster_id), 1)
+    assert len(ai.answer_contract_calls) == len(ai.answer_validation_calls) == 1
+    async with TestSession() as session:
+        for decision in await session.scalars(
+            select(AutomationDecision).where(AutomationDecision.entity_id == clusters[0])
+        ):
+            decision.is_overridden = True
+        await session.commit()
+    await card_automation_jobs.generate_cluster_candidate(ctx, str(clusters[2]), 1)
+    await card_automation_jobs.validate_cluster_answer(ctx, str(clusters[2]), 1)
+    assert len(ai.answer_contract_calls) == len(ai.answer_validation_calls) == 2

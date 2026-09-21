@@ -333,3 +333,148 @@ async def test_migration_enables_active_directions_and_preserves_published_cards
             settings.enabled and settings.global_auto_publish_enabled and not settings.shadow_mode
         )
         assert await session.scalar(select(func.count()).select_from(InterviewCard)) == 1
+
+
+@pytest.mark.parametrize("stage", ["generation", "validation"])
+@pytest.mark.parametrize(
+    "problem",
+    ["no_sources", "missing_topic", "human", "uncertain", "personal_data", "duplicate", "linked"],
+)
+async def test_preflight_skips_paid_calls(ready, seeded, monkeypatch, stage, problem):
+    async with TestSession() as session:
+        cluster = await session.get(QuestionCluster, ready[0])
+        cluster.answer_status = cluster.answer_validation = None
+        if stage == "generation":
+            cluster.answer_contract = None
+        if problem == "missing_topic":
+            cluster.topic_name = "Неизвестная тема"
+        elif problem == "linked":
+            cluster.linked_card_id = ready[2].card_id
+        elif problem == "human":
+            session.add(
+                AutomationDecision(
+                    entity_type="cluster",
+                    entity_id=cluster.id,
+                    idempotency_key="preflight-human",
+                    decision_type=AutomationDecisionType.MANUAL_OVERRIDE,
+                    decision_source=AutomationDecisionSource.HUMAN,
+                    reason="Изменено вручную",
+                )
+            )
+        elif problem == "uncertain":
+            (await session.get(IntelligenceQuestion, ready[1])).confidence = 0.5
+        elif problem == "personal_data":
+            cluster.canonical_question += " test@example.com"
+        elif problem == "duplicate":
+            (
+                await session.get(InterviewCard, ready[2].card_id)
+            ).question_markdown = cluster.canonical_question
+        await session.commit()
+    if problem == "duplicate":
+        await _create_card(seeded, "Как устроен сборщик мусора Python?")
+    if problem == "no_sources":
+
+        async def empty_sources(session, cluster):
+            return []
+
+        monkeypatch.setattr(jobs, "_trusted_sources", empty_sources)
+    ai = FakeInterviewAIProvider()
+    ctx = {"redis": RecordingRedis(), "ai_provider": ai}
+    work = (
+        jobs.generate_cluster_candidate if stage == "generation" else jobs.validate_cluster_answer
+    )
+    await work(ctx, str(ready[0]), 1)
+    await work(ctx, str(ready[0]), 1)
+    assert ai.answer_contract_calls == ai.answer_validation_calls == []
+    async with TestSession() as session:
+        cluster = await session.get(QuestionCluster, ready[0])
+        assert cluster.linked_card_id == (ready[2].card_id if problem == "linked" else None)
+        assert cluster.answer_status is (
+            AnswerContractStatus.NEEDS_EXPERT_SOURCE
+            if problem == "no_sources"
+            else AnswerContractStatus.NEEDS_MANUAL_REVIEW
+        )
+        decisions = list(
+            await session.scalars(
+                select(AutomationDecision).where(
+                    AutomationDecision.entity_id == cluster.id,
+                    AutomationDecision.decision_source == AutomationDecisionSource.RULE,
+                )
+            )
+        )
+        assert len(decisions) == 1
+        assert decisions[0].judge_result["stage"] == "preflight"
+        assert decisions[0].input_tokens is None
+
+
+@pytest.mark.parametrize("change_during", ["generation", "validation"])
+async def test_manual_change_during_ai_is_respected(ready, change_during):
+    async with TestSession() as session:
+        cluster = await session.get(QuestionCluster, ready[0])
+        cluster.answer_contract = cluster.answer_validation = cluster.answer_status = None
+        await session.commit()
+
+    async def reject_question():
+        async with TestSession() as session:
+            question = await session.get(IntelligenceQuestion, ready[1])
+            question.moderation_status = IntelligenceQuestionModerationStatus.REJECTED
+            await session.commit()
+
+    class ChangingProvider(FakeInterviewAIProvider):
+        async def generate_answer_contract(self, question, trusted_sources):
+            result = await super().generate_answer_contract(question, trusted_sources)
+            if change_during == "generation":
+                await reject_question()
+            return result
+
+        async def validate_answer_contract(self, question, contract, trusted_sources):
+            result = await super().validate_answer_contract(question, contract, trusted_sources)
+            if change_during == "validation":
+                await reject_question()
+            return result
+
+    ai = ChangingProvider()
+    ctx = {"redis": RecordingRedis(), "ai_provider": ai}
+    await jobs.generate_cluster_candidate(ctx, str(ready[0]), 1)
+    await jobs.validate_cluster_answer(ctx, str(ready[0]), 1)
+    assert len(ai.answer_contract_calls) == 1
+    assert len(ai.answer_validation_calls) == (1 if change_during == "validation" else 0)
+    async with TestSession() as session:
+        cluster = await session.get(QuestionCluster, ready[0])
+        assert cluster.linked_card_id is None
+        assert cluster.answer_status is AnswerContractStatus.NEEDS_MANUAL_REVIEW
+        assert (
+            await session.get(IntelligenceQuestion, ready[1])
+        ).moderation_status is IntelligenceQuestionModerationStatus.REJECTED
+
+
+async def test_explicit_manual_draft_can_run_after_preflight_deferral(ready):
+    async with TestSession() as session:
+        cluster = await session.get(QuestionCluster, ready[0])
+        cluster.answer_contract = cluster.answer_validation = None
+        cluster.answer_status = AnswerContractStatus.NEEDS_MANUAL_REVIEW
+        cluster.topic_name = "Неизвестная тема"
+        session.add(
+            AutomationDecision(
+                entity_type="cluster",
+                entity_id=cluster.id,
+                idempotency_key="manual-draft-request",
+                decision_type=AutomationDecisionType.MANUAL_OVERRIDE,
+                decision_source=AutomationDecisionSource.HUMAN,
+                reason="Запрошен AI-черновик",
+            )
+        )
+        await session.commit()
+    ai = FakeInterviewAIProvider()
+    redis = RecordingRedis()
+    ctx = {"redis": redis, "ai_provider": ai}
+    await jobs.generate_cluster_candidate(ctx, str(ready[0]), 1, manual_draft=True)
+    assert redis.calls[-1][2]["manual_draft"] is True
+    assert redis.calls[-1][2]["_job_id"].endswith(":manual-draft")
+    await jobs.validate_cluster_answer(ctx, str(ready[0]), 1, manual_draft=True)
+    assert len(ai.answer_contract_calls) == len(ai.answer_validation_calls) == 1
+    async with TestSession() as session:
+        cluster = await session.get(QuestionCluster, ready[0])
+        assert cluster.answer_contract is not None
+        assert cluster.answer_status is AnswerContractStatus.NEEDS_MANUAL_REVIEW
+        assert cluster.linked_card_id is None

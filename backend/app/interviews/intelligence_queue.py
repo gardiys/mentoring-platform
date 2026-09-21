@@ -114,6 +114,7 @@ async def enqueue_card_automation_job(
     *,
     defer_seconds: int | float | None = None,
     redis: ArqRedis | None = None,
+    manual_draft: bool = False,
 ) -> str:
     """Enqueue a revision-aware automation job.
 
@@ -123,6 +124,10 @@ async def enqueue_card_automation_job(
     """
 
     job_id = card_automation_job_id(function, entity_id, revision)
+    if manual_draft:
+        if function not in {"generate_cluster_candidate", "validate_cluster_answer"}:
+            raise ValueError("Manual drafts are only supported for answer jobs")
+        job_id += ":manual-draft"
     owned_pool = redis is None
     if redis is None:
         redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
@@ -134,6 +139,8 @@ async def enqueue_card_automation_job(
         }
         if defer_seconds is not None:
             options["_defer_by"] = defer_seconds
+        if manual_draft:
+            options["manual_draft"] = True
         job = await redis.enqueue_job(function, entity_id, revision, **options)
         return job.job_id if job is not None else job_id
     finally:
