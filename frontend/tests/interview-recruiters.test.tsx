@@ -33,6 +33,7 @@ const recruiter: RecruiterContactRead = {
   students_contacted_count: 8,
   last_contacted_at: "2026-08-15T10:00:00Z",
   helpful_count: 5,
+  invited_count: 2,
   ignores_count: 1,
   no_longer_works_count: 0,
   account_missing_count: 0,
@@ -61,6 +62,17 @@ const groupedRecruiters = [
     recruiters: [recruiter],
   },
 ];
+
+const daily = {
+  eligible: true,
+  is_workday: true,
+  day: "2026-09-21",
+  resets_at: "2099-09-22T00:00:00+03:00",
+  next_batch_at: "2026-09-22T00:00:00+03:00",
+  assigned_count: 10,
+  contacted_count: 3,
+  daily_limit: 10,
+};
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -195,5 +207,146 @@ it("позволяет сообщить о неактуальном контак
       kind: "ignores",
       reason: "Не отвечает две недели",
     }),
+  );
+});
+
+it("показывает прогресс подборки и позволяет отметить приглашение из истории", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "interviewCatalogDirections").mockResolvedValue([]);
+  const listing = vi.spyOn(api, "interviewRecruiters").mockResolvedValue({
+    items: groupedRecruiters,
+    total: 1,
+    limit: 24,
+    offset: 0,
+    daily,
+  });
+  const save = vi.spyOn(api, "setRecruiterFeedback").mockResolvedValue({
+    kind: "invited",
+    reason: null,
+    updated_at: "2026-09-21T12:00:00Z",
+  });
+  renderPage(
+    <InterviewRecruitersPage />,
+    "/interviews/recruiters",
+    "/interviews/recruiters",
+  );
+  expect(await screen.findByText("Открыто контактов: 3 из 10")).toBeVisible();
+  await userEvent.click(screen.getByRole("radio", { name: "Мои контакты" }));
+  await waitFor(() =>
+    expect(listing).toHaveBeenLastCalledWith(
+      expect.objectContaining({ view: "history" }),
+      expect.anything(),
+    ),
+  );
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Позвал на собеседование" }),
+  );
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledWith(recruiter.id, {
+      kind: "invited",
+      reason: null,
+    }),
+  );
+});
+
+it("без статуса собеседований оставляет полную базу и отзывы доступными", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "interviewCatalogDirections").mockResolvedValue([]);
+  const listing = vi
+    .spyOn(api, "interviewRecruiters")
+    .mockImplementation(async (filters) => ({
+      items: filters.view === "all" ? groupedRecruiters : [],
+      total: filters.view === "all" ? 1 : 0,
+      limit: 24,
+      offset: 0,
+      daily: {
+        ...daily,
+        eligible: false,
+        assigned_count: 0,
+        contacted_count: 0,
+      },
+    }));
+  const save = vi.spyOn(api, "setRecruiterFeedback").mockResolvedValue({
+    kind: "invited",
+    reason: null,
+    updated_at: "2026-09-21T12:00:00Z",
+  });
+  renderPage(
+    <InterviewRecruitersPage />,
+    "/interviews/recruiters",
+    "/interviews/recruiters",
+  );
+  expect(
+    await screen.findByText("Подборка доступна на этапе собеседований"),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("textbox", { name: "Поиск" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Написать в Telegram ↗" }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("radio", { name: "Все рекрутеры" }));
+  expect(await screen.findByText("@yandex_recruiter")).toBeVisible();
+  expect(screen.getByRole("textbox", { name: "Поиск" })).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Написать в Telegram ↗" }),
+  ).toBeVisible();
+  expect(
+    screen.queryByText("Подборка доступна на этапе собеседований"),
+  ).not.toBeInTheDocument();
+  expect(listing).toHaveBeenLastCalledWith(
+    expect.objectContaining({ view: "all" }),
+    expect.anything(),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Позвал на собеседование" }),
+  );
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledWith(recruiter.id, {
+      kind: "invited",
+      reason: null,
+    }),
+  );
+});
+
+it("в выходные показывает дату следующей подборки и оставляет доступ к истории", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "interviewCatalogDirections").mockResolvedValue([]);
+  const listing = vi
+    .spyOn(api, "interviewRecruiters")
+    .mockImplementation(async (filters) => ({
+      items: filters?.view !== "daily" ? groupedRecruiters : [],
+      total: filters?.view !== "daily" ? 1 : 0,
+      limit: 24,
+      offset: 0,
+      daily: {
+        ...daily,
+        is_workday: false,
+        assigned_count: 0,
+        contacted_count: 0,
+        next_batch_at: "2026-09-28T00:00:00+03:00",
+      },
+    }));
+  renderPage(
+    <InterviewRecruitersPage />,
+    "/interviews/recruiters",
+    "/interviews/recruiters",
+  );
+  expect(
+    await screen.findByText("В выходные — без новых подборок"),
+  ).toBeVisible();
+  expect(screen.getByText(/28.09.2026/)).toBeVisible();
+  expect(screen.queryByText(/Открыто контактов:/)).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("radio", { name: "Все рекрутеры" }));
+  expect(await screen.findByText("@yandex_recruiter")).toBeVisible();
+  expect(listing).toHaveBeenLastCalledWith(
+    expect.objectContaining({ view: "all" }),
+    expect.anything(),
+  );
+  await userEvent.click(screen.getByRole("radio", { name: "Мои контакты" }));
+  expect(await screen.findByText("@yandex_recruiter")).toBeVisible();
+  expect(listing).toHaveBeenLastCalledWith(
+    expect.objectContaining({ view: "history" }),
+    expect.anything(),
   );
 });

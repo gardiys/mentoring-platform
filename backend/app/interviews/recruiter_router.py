@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -34,6 +34,7 @@ async def recruiter_directory(
     sort: RecruiterSort = RecruiterSort.RECOMMENDED,
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    view: Literal["daily", "history", "all"] = "daily",
 ) -> RecruiterContactPage:
     return await list_recruiters(
         session,
@@ -44,6 +45,7 @@ async def recruiter_directory(
         sort=sort,
         limit=limit,
         offset=offset,
+        view=view,
     )
 
 

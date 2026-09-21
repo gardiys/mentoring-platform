@@ -85,6 +85,8 @@ from app.interviews.models import (
     RecruiterContact,
     RecruiterContactOpen,
     RecruiterContactProcess,
+    RecruiterDailyAssignment,
+    RecruiterDailyBatch,
     RecruiterFeedback,
     RecruiterFeedbackKind,
 )
@@ -256,6 +258,8 @@ __all__ = [
     "RecruiterContact",
     "RecruiterContactOpen",
     "RecruiterContactProcess",
+    "RecruiterDailyAssignment",
+    "RecruiterDailyBatch",
     "RecruiterFeedback",
     "RecruiterFeedbackKind",
     "InterviewStageType",

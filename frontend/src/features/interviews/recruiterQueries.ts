@@ -15,7 +15,17 @@ export const recruiterKeys = {
     contacted: boolean | null,
     sort: RecruiterSort,
     page: number,
-  ) => [...recruiterKeys.all, query, trackId, contacted, sort, page] as const,
+    view: "daily" | "history" | "all",
+  ) =>
+    [
+      ...recruiterKeys.all,
+      query,
+      trackId,
+      contacted,
+      sort,
+      page,
+      view,
+    ] as const,
 };
 
 export function useRecruiters(
@@ -24,14 +34,27 @@ export function useRecruiters(
   contacted: boolean | null,
   sort: RecruiterSort,
   page: number,
+  view: "daily" | "history" | "all" = "daily",
+  enabled = true,
 ) {
   return useQuery({
-    queryKey: recruiterKeys.list(query, trackId, contacted, sort, page),
+    queryKey: recruiterKeys.list(query, trackId, contacted, sort, page, view),
     queryFn: () =>
       api.interviewRecruiters(
-        { query, trackId, contacted, sort },
+        { query, trackId, contacted, sort, view },
         { limit: 24, offset: (page - 1) * 24 },
       ),
+    enabled,
+    refetchInterval: (query) =>
+      query.state.data?.daily
+        ? Math.max(
+            1000,
+            Math.min(
+              60_000,
+              Date.parse(query.state.data.daily.resets_at) - Date.now() + 250,
+            ),
+          )
+        : false,
   });
 }
 
@@ -69,6 +92,14 @@ export function useOpenRecruiterContact() {
       await queryClient.invalidateQueries({
         queryKey: recruiterKeys.all,
         refetchType: "none",
+      });
+      await queryClient.refetchQueries({
+        queryKey: recruiterKeys.all,
+        type: "active",
+        predicate: (query) =>
+          Boolean(
+            (query.state.data as RecruiterContactPage | undefined)?.daily,
+          ),
       });
     },
   });

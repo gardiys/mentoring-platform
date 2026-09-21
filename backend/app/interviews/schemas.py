@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Literal
 from uuid import UUID
@@ -722,6 +722,7 @@ class RecruiterContactRead(BaseModel):
     students_contacted_count: int
     last_contacted_at: datetime | None
     helpful_count: int
+    invited_count: int = 0
     ignores_count: int
     no_longer_works_count: int
     account_missing_count: int
@@ -739,11 +740,23 @@ class RecruiterCompanyGroupRead(BaseModel):
     recruiters: list[RecruiterContactRead]
 
 
+class RecruiterDailyRead(BaseModel):
+    eligible: bool
+    is_workday: bool
+    day: date
+    resets_at: datetime
+    next_batch_at: datetime
+    assigned_count: int = 0
+    contacted_count: int = 0
+    daily_limit: int = 10
+
+
 class RecruiterContactPage(BaseModel):
     items: list[RecruiterCompanyGroupRead]
     total: int
     limit: int
     offset: int
+    daily: RecruiterDailyRead | None = None
 
 
 class RecruiterContactOpenRead(BaseModel):

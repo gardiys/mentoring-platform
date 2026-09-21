@@ -52,7 +52,7 @@ def desktop_scope(request: Request) -> bool:
         return True
     return request.method == "GET" and bool(
         re.fullmatch(
-            r"/api/v1/(?:me|copilot/(?:access|tracks|companies|tracks/[a-f0-9-]{36}/context)|knowledge/topics(?:/[^/]+)?|knowledge/entries/[^/]+|"
+            r"/api/v1/(?:me|copilot/(?:access|releases(?:/(?:mac-arm64|mac-x64|win-x64)/download)?|tracks|companies|tracks/[a-f0-9-]{36}/context)|knowledge/topics(?:/[^/]+)?|knowledge/entries/[^/]+|"
             r"interviews/decks(?:/[^/]+/questions)?|career-packages/me|"
             r"copilot/rag/(?:manifest|sources/(?:kb|card|resume)/[a-f0-9-]{36})|"
             r"copilot/preparation/(?:options|sources/(?:profile|document|resume|conditions|interview)/[a-f0-9-]{36}))",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import delete, distinct, exists, func, or_, select
@@ -19,6 +20,10 @@ from app.interviews.models import (
     RecruiterContactProcess,
     RecruiterFeedback,
     RecruiterFeedbackKind,
+)
+from app.interviews.recruiter_daily_service import (
+    daily_selection,
+    known_contact,
 )
 from app.interviews.schemas import (
     RecruiterCompanyGroupRead,
@@ -113,10 +118,17 @@ async def list_recruiters(
     sort: RecruiterSort,
     limit: int,
     offset: int,
+    view: Literal["daily", "history", "all"] = "daily",
 ) -> RecruiterContactPage:
+    daily = None
+    assigned_ids: list[UUID] = []
+    if user.role is UserRole.STUDENT:
+        assigned_ids, daily = await daily_selection(session, user, generate=view == "daily")
+        if view == "daily" and not daily.eligible:
+            return RecruiterContactPage(items=[], total=0, limit=limit, offset=offset, daily=daily)
     track_ids = await _track_ids(session, user, track_id)
     if not track_ids:
-        return RecruiterContactPage(items=[], total=0, limit=limit, offset=offset)
+        return RecruiterContactPage(items=[], total=0, limit=limit, offset=offset, daily=daily)
 
     pair_statement = (
         select(
@@ -135,6 +147,10 @@ async def list_recruiters(
         )
         .where(InterviewProcess.track_id.in_(track_ids))
     )
+    if daily is not None and view != "all":
+        pair_statement = pair_statement.where(
+            RecruiterContact.id.in_(assigned_ids) if view == "daily" else known_contact(user.id)
+        )
     if query and query.strip():
         matched_company_ids = [
             company.id for company in await suggest_companies(session, query, 100)
@@ -168,11 +184,22 @@ async def list_recruiters(
         )
 
     eligible_pairs = pair_statement.distinct().subquery()
+    if daily is not None:
+        # Display each student's contact once even if associated with several companies.
+        eligible_pairs = (
+            select(eligible_pairs.c.company_id, eligible_pairs.c.recruiter_id)
+            .join(Company, Company.id == eligible_pairs.c.company_id)
+            .distinct(eligible_pairs.c.recruiter_id)
+            .order_by(eligible_pairs.c.recruiter_id, Company.name, Company.id)
+            .subquery()
+        )
     helpful_score = (
         select(func.count(RecruiterFeedback.user_id))
         .where(
             RecruiterFeedback.recruiter_id == RecruiterContact.id,
-            RecruiterFeedback.kind == RecruiterFeedbackKind.HELPFUL,
+            RecruiterFeedback.kind.in_(
+                [RecruiterFeedbackKind.HELPFUL, RecruiterFeedbackKind.INVITED]
+            ),
         )
         .correlate(RecruiterContact)
         .scalar_subquery()
@@ -181,7 +208,9 @@ async def list_recruiters(
         select(func.count(RecruiterFeedback.user_id))
         .where(
             RecruiterFeedback.recruiter_id == RecruiterContact.id,
-            RecruiterFeedback.kind != RecruiterFeedbackKind.HELPFUL,
+            RecruiterFeedback.kind.not_in(
+                [RecruiterFeedbackKind.HELPFUL, RecruiterFeedbackKind.INVITED]
+            ),
         )
         .correlate(RecruiterContact)
         .scalar_subquery()
@@ -236,7 +265,7 @@ async def list_recruiters(
     )
     selected_companies = list(await session.scalars(company_statement.limit(limit).offset(offset)))
     if not selected_companies:
-        return RecruiterContactPage(items=[], total=total, limit=limit, offset=offset)
+        return RecruiterContactPage(items=[], total=total, limit=limit, offset=offset, daily=daily)
     selected_company_ids = [company.id for company in selected_companies]
 
     contact_statement = (
@@ -358,7 +387,9 @@ async def list_recruiters(
             .join(User, User.id == RecruiterFeedback.user_id)
             .where(
                 RecruiterFeedback.recruiter_id.in_(ids),
-                RecruiterFeedback.kind != RecruiterFeedbackKind.HELPFUL,
+                RecruiterFeedback.kind.not_in(
+                    [RecruiterFeedbackKind.HELPFUL, RecruiterFeedbackKind.INVITED]
+                ),
                 RecruiterFeedback.reason.is_not(None),
                 func.length(func.trim(RecruiterFeedback.reason)) > 0,
             )
@@ -431,6 +462,7 @@ async def list_recruiters(
             students_contacted_count=int(student_count or 0),
             last_contacted_at=last_contacted_at,
             helpful_count=counts.get(RecruiterFeedbackKind.HELPFUL, 0),
+            invited_count=counts.get(RecruiterFeedbackKind.INVITED, 0),
             ignores_count=counts.get(RecruiterFeedbackKind.IGNORES, 0),
             no_longer_works_count=counts.get(RecruiterFeedbackKind.NO_LONGER_WORKS, 0),
             account_missing_count=counts.get(RecruiterFeedbackKind.ACCOUNT_MISSING, 0),
@@ -458,7 +490,7 @@ async def list_recruiters(
         )
         for company in selected_companies
     ]
-    return RecruiterContactPage(items=items, total=total, limit=limit, offset=offset)
+    return RecruiterContactPage(items=items, total=total, limit=limit, offset=offset, daily=daily)
 
 
 async def _get_recruiter(session: AsyncSession, user: User, recruiter_id: UUID) -> RecruiterContact:

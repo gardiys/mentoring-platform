@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
@@ -9,10 +9,12 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Computed,
+    Date,
     DateTime,
     Enum,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -87,6 +89,7 @@ class InterviewMediaAnonymizationStatus(StrEnum):
 
 class RecruiterFeedbackKind(StrEnum):
     HELPFUL = "helpful"
+    INVITED = "invited"
     IGNORES = "ignores"
     NO_LONGER_WORKS = "no_longer_works"
     ACCOUNT_MISSING = "account_missing"
@@ -567,6 +570,42 @@ class RecruiterContact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     telegram_username: Mapped[str] = mapped_column(String(32), nullable=False)
     normalized_username: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+
+
+class RecruiterDailyBatch(Base):
+    __tablename__ = "recruiter_daily_batches"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class RecruiterDailyAssignment(Base):
+    __tablename__ = "recruiter_daily_assignments"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["user_id", "day"],
+            ["recruiter_daily_batches.user_id", "recruiter_daily_batches.day"],
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("user_id", "recruiter_id", name="uq_recruiter_assignment_user_contact"),
+        UniqueConstraint("user_id", "day", "position", name="uq_recruiter_assignment_position"),
+        CheckConstraint("position BETWEEN 1 AND 10", name="recruiter_assignment_position_range"),
+        Index("ix_recruiter_assignment_day_contact", "day", "recruiter_id"),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    recruiter_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("recruiter_contacts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class RecruiterContactProcess(Base):

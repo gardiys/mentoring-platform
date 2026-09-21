@@ -14343,6 +14343,7 @@ export interface components {
             limit: number;
             /** Offset */
             offset: number;
+            daily?: components["schemas"]["RecruiterDailyRead"] | null;
         };
         /** RecruiterContactRead */
         RecruiterContactRead: {
@@ -14365,6 +14366,11 @@ export interface components {
             last_contacted_at: string | null;
             /** Helpful Count */
             helpful_count: number;
+            /**
+             * Invited Count
+             * @default 0
+             */
+            invited_count: number;
             /** Ignores Count */
             ignores_count: number;
             /** No Longer Works Count */
@@ -14397,11 +14403,48 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** RecruiterDailyRead */
+        RecruiterDailyRead: {
+            /** Eligible */
+            eligible: boolean;
+            /** Is Workday */
+            is_workday: boolean;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /**
+             * Resets At
+             * Format: date-time
+             */
+            resets_at: string;
+            /**
+             * Next Batch At
+             * Format: date-time
+             */
+            next_batch_at: string;
+            /**
+             * Assigned Count
+             * @default 0
+             */
+            assigned_count: number;
+            /**
+             * Contacted Count
+             * @default 0
+             */
+            contacted_count: number;
+            /**
+             * Daily Limit
+             * @default 10
+             */
+            daily_limit: number;
+        };
         /**
          * RecruiterFeedbackKind
          * @enum {string}
          */
-        RecruiterFeedbackKind: "helpful" | "ignores" | "no_longer_works" | "account_missing" | "other";
+        RecruiterFeedbackKind: "helpful" | "invited" | "ignores" | "no_longer_works" | "account_missing" | "other";
         /** RecruiterFeedbackMutation */
         RecruiterFeedbackMutation: {
             kind: components["schemas"]["RecruiterFeedbackKind"];
@@ -19340,6 +19383,7 @@ export interface operations {
                 sort?: components["schemas"]["RecruiterSort"];
                 limit?: number;
                 offset?: number;
+                view?: "daily" | "history" | "all";
             };
             header?: {
                 authorization?: string | null;

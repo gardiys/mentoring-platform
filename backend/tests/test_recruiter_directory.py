@@ -1,10 +1,28 @@
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
 from httpx import AsyncClient
 
+from app.interviews import recruiter_daily_service
+from app.mentors.models import StudentLearningStatus, StudentMentorshipState
 from app.tracks.models import LearningTrackEnrollment
 from app.users.models import User, UserRole
 from tests.conftest import SeededData, TestSession, auth
+
+
+@pytest.fixture(autouse=True)
+async def workday(seeded, monkeypatch):
+    clock = [datetime(2026, 9, 21, 10, tzinfo=UTC)]
+    monkeypatch.setattr(recruiter_daily_service, "daily_now", lambda: clock[0])
+    async with TestSession() as session:
+        session.add(
+            StudentMentorshipState(
+                student_id=seeded.student_id, learning_status=StudentLearningStatus.INTERVIEWING
+            )
+        )
+        await session.commit()
+    return clock
 
 
 async def test_recruiter_directory_counts_student_contacts_and_feedback(
@@ -20,6 +38,11 @@ async def test_recruiter_directory_counts_student_contacts_and_feedback(
             )
         )
         await session.flush()
+        session.add(
+            StudentMentorshipState(
+                student_id=second_student_id, learning_status=StudentLearningStatus.INTERVIEWING
+            )
+        )
         session.add(
             LearningTrackEnrollment(
                 user_id=second_student_id,
@@ -41,6 +64,8 @@ async def test_recruiter_directory_counts_student_contacts_and_feedback(
         },
     )
     assert created.status_code == 201
+    assigned = await client.get("/api/v1/interviews/recruiters", headers=auth(seeded.student_id))
+    assert assigned.status_code == 200
 
     listing = await client.get(
         "/api/v1/interviews/recruiters?q=яндекс",
@@ -194,12 +219,17 @@ async def test_recruiter_directory_counts_student_contacts_and_feedback(
 
 
 async def test_recruiter_directory_respects_direction_and_syncs_edits(
-    client: AsyncClient, seeded: SeededData
+    client: AsyncClient, seeded: SeededData, workday
 ) -> None:
     go_student_id = uuid4()
     async with TestSession() as session:
         session.add(User(id=go_student_id, first_name="Go", role=UserRole.STUDENT))
         await session.flush()
+        session.add(
+            StudentMentorshipState(
+                student_id=go_student_id, learning_status=StudentLearningStatus.INTERVIEWING
+            )
+        )
         session.add(
             LearningTrackEnrollment(
                 user_id=go_student_id,
@@ -233,6 +263,11 @@ async def test_recruiter_directory_respects_direction_and_syncs_edits(
         json={"recruiter_telegram_usernames": ["second_recruiter"]},
     )
     assert updated.status_code == 200
+    after_update = await client.get(
+        "/api/v1/interviews/recruiters", headers=auth(seeded.student_id)
+    )
+    assert after_update.json()["items"] == []
+    workday[0] += timedelta(days=1)
     after_update = await client.get(
         "/api/v1/interviews/recruiters", headers=auth(seeded.student_id)
     )

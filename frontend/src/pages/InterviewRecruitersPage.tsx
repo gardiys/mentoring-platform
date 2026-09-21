@@ -1,10 +1,13 @@
 import {
+  Alert,
   Badge,
   Button,
   Card,
   Group,
   Modal,
   Pagination,
+  Progress,
+  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
@@ -45,6 +48,7 @@ const issueOptions: { value: RecruiterFeedbackKind; label: string }[] = [
 
 const feedbackLabels: Record<RecruiterFeedbackKind, string> = {
   helpful: "Активно отвечает",
+  invited: "Позвал на собеседование",
   ignores: "Не отвечает",
   no_longer_works: "Больше не работает",
   account_missing: "Аккаунт не существует",
@@ -77,6 +81,7 @@ export function InterviewRecruitersPage() {
   const [contactFilter, setContactFilter] = useState<string | null>(null);
   const [sort, setSort] = useState<RecruiterSort>("recommended");
   const [page, setPage] = useState(1);
+  const [view, setView] = useState<"daily" | "history" | "all">("daily");
   const [reportedRecruiter, setReportedRecruiter] =
     useState<RecruiterContactRead | null>(null);
   const [issueKind, setIssueKind] = useState<RecruiterFeedbackKind>("ignores");
@@ -93,7 +98,11 @@ export function InterviewRecruitersPage() {
     contacted,
     sort,
     page,
+    view,
+    me.isSuccess,
   );
+  const daily = recruiters.data?.daily;
+  const isStudent = me.data?.role === "student";
   const openContact = useOpenRecruiterContact();
   const setFeedback = useSetRecruiterFeedback();
   const deleteFeedback = useDeleteRecruiterFeedback();
@@ -102,7 +111,10 @@ export function InterviewRecruitersPage() {
     me.data?.role === "mentor" ||
     me.data?.role === "admin";
 
-  useEffect(() => setPage(1), [debouncedSearch, trackId, contactFilter, sort]);
+  useEffect(
+    () => setPage(1),
+    [debouncedSearch, trackId, contactFilter, sort, view],
+  );
 
   const handleContact = async (recruiterId: string) => {
     try {
@@ -120,11 +132,14 @@ export function InterviewRecruitersPage() {
     }
   };
 
-  const markHelpful = async (recruiterId: string) => {
+  const markPositive = async (
+    recruiterId: string,
+    kind: "helpful" | "invited",
+  ) => {
     try {
       await setFeedback.mutateAsync({
         recruiterId,
-        payload: { kind: "helpful", reason: null },
+        payload: { kind, reason: null },
       });
       notifications.show({
         color: "green",
@@ -201,7 +216,11 @@ export function InterviewRecruitersPage() {
       <PageHeader
         eyebrow="Собеседования · база контактов"
         title="Рекрутеры"
-        description="Ищите контакты по Telegram или компании. Переходы и оценки помогают понять, какие контакты действительно актуальны."
+        description={
+          isStudent
+            ? "Пользуйтесь полной базой рекрутеров или подборкой до 10 новых контактов по будням. Отмечайте ответы и приглашения — это помогает улучшать подборки."
+            : "Ищите контакты по Telegram или компании. Переходы и оценки помогают понять, какие контакты действительно актуальны."
+        }
       />
 
       <Group>
@@ -213,57 +232,145 @@ export function InterviewRecruitersPage() {
         </Button>
       </Group>
 
-      <Card withBorder>
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-          <TextInput
-            label="Поиск"
-            placeholder="@username или название компании"
-            value={search}
-            onChange={(event) => setSearch(event.currentTarget.value)}
-          />
-          <Select
-            label="Направление"
-            placeholder="Все доступные направления"
-            clearable
-            value={trackId}
-            onChange={setTrackId}
-            data={(directions.data ?? []).map((track) => ({
-              value: track.id,
-              label: track.title,
-            }))}
-          />
-          {canRate && (
-            <Select
-              label="Мои контакты"
-              placeholder="Все рекрутеры"
-              clearable
-              value={contactFilter}
-              onChange={setContactFilter}
+      {view === "daily" && daily && !daily.eligible && (
+        <Alert color="blue" title="Подборка доступна на этапе собеседований">
+          Чтобы получать контакты, попросите ментора установить статус «ходит на
+          собеседования». Полная база доступна на вкладке «Все рекрутеры».
+        </Alert>
+      )}
+      {isStudent && (
+        <Card withBorder>
+          <Stack>
+            <SegmentedControl
+              value={view}
+              onChange={(value) =>
+                setView(value as "daily" | "history" | "all")
+              }
               data={[
-                { value: "not_contacted", label: "Ещё не писал" },
-                { value: "contacted", label: "Уже открывал контакт" },
+                { value: "daily", label: "Подборка дня" },
+                { value: "all", label: "Все рекрутеры" },
+                { value: "history", label: "Мои контакты" },
               ]}
             />
-          )}
-          <Select
-            label="Сортировка"
-            value={sort}
-            allowDeselect={false}
-            onChange={(value) =>
-              setSort((value as RecruiterSort | null) ?? "recommended")
-            }
-            data={[
-              { value: "recommended", label: "Сначала рекомендуемые" },
-              { value: "most_helpful", label: "Больше хороших отзывов" },
-              { value: "most_contacted", label: "Больше контактов" },
-              { value: "recently_contacted", label: "Недавние контакты" },
-              { value: "username", label: "По Telegram username" },
-            ]}
-          />
-        </SimpleGrid>
-      </Card>
+            {view === "daily" && daily?.eligible && (
+              <>
+                <Title order={3}>
+                  {daily.is_workday
+                    ? "Контакты на сегодня"
+                    : "В выходные — без новых подборок"}
+                </Title>
+                {daily.is_workday && (
+                  <>
+                    <Text>
+                      Открыто контактов: {daily.contacted_count} из{" "}
+                      {daily.assigned_count}
+                    </Text>
+                    <Progress
+                      value={
+                        daily.assigned_count
+                          ? (daily.contacted_count / daily.assigned_count) * 100
+                          : 0
+                      }
+                    />
+                    <Text size="sm" c="dimmed">
+                      Переход в Telegram отмечает открытие контакта. Само
+                      сообщение отправляете вы.
+                    </Text>
+                    <Text size="sm" c="dimmed">
+                      Сначала предлагаем разные компании. Если их не хватает,
+                      добавляем второго рекрутера от компании. Отметка «Не
+                      отвечает» помогает предложить другой контакт этой компании
+                      в следующих подборках.
+                    </Text>
+                    {daily.assigned_count < daily.daily_limit && (
+                      <Text size="sm" c="dimmed">
+                        Новых подходящих контактов меньше {daily.daily_limit}.
+                        Ранее выданные контакты не повторяются.
+                      </Text>
+                    )}
+                  </>
+                )}
+                <Text size="sm" c="dimmed">
+                  Следующая подборка:{" "}
+                  {new Date(daily.next_batch_at).toLocaleDateString("ru-RU", {
+                    timeZone: "Europe/Moscow",
+                  })}
+                  , после 00:00 МСК.
+                </Text>
+              </>
+            )}
+            {view === "history" && (
+              <Text c="dimmed">
+                Ваши выданные и ранее открытые контакты. Здесь можно отметить
+                приглашение, полученное позже.
+              </Text>
+            )}
+            {view === "all" && (
+              <Text c="dimmed">
+                Полная база контактов по доступным вам направлениям. Можно
+                искать рекрутеров, писать им и оставлять отзывы без ограничения
+                подборкой дня.
+              </Text>
+            )}
+          </Stack>
+        </Card>
+      )}
 
-      {recruiters.isPending ? (
+      {(!isStudent || view !== "daily" || daily?.eligible) && (
+        <Card withBorder>
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
+            <TextInput
+              label="Поиск"
+              placeholder="@username или название компании"
+              value={search}
+              onChange={(event) => setSearch(event.currentTarget.value)}
+            />
+            <Select
+              label="Направление"
+              placeholder="Все доступные направления"
+              clearable
+              value={trackId}
+              onChange={setTrackId}
+              data={(directions.data ?? []).map((track) => ({
+                value: track.id,
+                label: track.title,
+              }))}
+            />
+            {canRate && (
+              <Select
+                label="Мои контакты"
+                placeholder="Все рекрутеры"
+                clearable
+                value={contactFilter}
+                onChange={setContactFilter}
+                data={[
+                  { value: "not_contacted", label: "Ещё не писал" },
+                  { value: "contacted", label: "Уже открывал контакт" },
+                ]}
+              />
+            )}
+            <Select
+              label="Сортировка"
+              value={sort}
+              allowDeselect={false}
+              onChange={(value) =>
+                setSort((value as RecruiterSort | null) ?? "recommended")
+              }
+              data={[
+                { value: "recommended", label: "Сначала рекомендуемые" },
+                { value: "most_helpful", label: "Больше хороших отзывов" },
+                { value: "most_contacted", label: "Больше контактов" },
+                { value: "recently_contacted", label: "Недавние контакты" },
+                { value: "username", label: "По Telegram username" },
+              ]}
+            />
+          </SimpleGrid>
+        </Card>
+      )}
+
+      {view === "daily" &&
+      daily &&
+      !daily.eligible ? null : recruiters.isPending ? (
         <LoadingState label="Ищем рекрутеров…" />
       ) : recruiters.isError ? (
         <ErrorState
@@ -274,9 +381,15 @@ export function InterviewRecruitersPage() {
         <Card withBorder>
           <Title order={3}>Контактов не найдено</Title>
           <Text c="dimmed" mt="xs">
-            Попробуйте изменить запрос или направление. Контакты появляются
-            здесь после добавления Telegram username рекрутера в трек
-            собеседований.
+            {isStudent && view === "daily" ? (
+              "В этой подборке нет контактов, подходящих под выбранные фильтры. Можно открыть «Мои контакты» или дождаться следующего рабочего дня."
+            ) : (
+              <>
+                Попробуйте изменить запрос или направление. Контакты появляются
+                здесь после добавления Telegram username рекрутера в трек
+                собеседований.
+              </>
+            )}
           </Text>
         </Card>
       ) : (
@@ -320,6 +433,12 @@ export function InterviewRecruitersPage() {
                             {recruiter.helpful_count > 0 && (
                               <Badge color="green" variant="light">
                                 Отвечает · {recruiter.helpful_count}
+                              </Badge>
+                            )}
+                            {(recruiter.invited_count ?? 0) > 0 && (
+                              <Badge color="green">
+                                Приглашает на собеседования ·{" "}
+                                {recruiter.invited_count}
                               </Badge>
                             )}
                           </Group>
@@ -464,10 +583,26 @@ export function InterviewRecruitersPage() {
                                       : "light"
                                   }
                                   color="green"
-                                  onClick={() => void markHelpful(recruiter.id)}
+                                  onClick={() =>
+                                    void markPositive(recruiter.id, "helpful")
+                                  }
                                   loading={setFeedback.isPending}
                                 >
                                   Хороший контакт
+                                </Button>
+                                <Button
+                                  variant={
+                                    recruiter.my_feedback?.kind === "invited"
+                                      ? "filled"
+                                      : "light"
+                                  }
+                                  color="green"
+                                  onClick={() =>
+                                    void markPositive(recruiter.id, "invited")
+                                  }
+                                  loading={setFeedback.isPending}
+                                >
+                                  Позвал на собеседование
                                 </Button>
                                 <Button
                                   variant="light"
@@ -476,7 +611,10 @@ export function InterviewRecruitersPage() {
                                     setReportedRecruiter(recruiter);
                                     setIssueKind(
                                       recruiter.my_feedback?.kind !==
-                                        "helpful" && recruiter.my_feedback
+                                        "helpful" &&
+                                        recruiter.my_feedback?.kind !==
+                                          "invited" &&
+                                        recruiter.my_feedback
                                         ? recruiter.my_feedback.kind
                                         : "ignores",
                                     );

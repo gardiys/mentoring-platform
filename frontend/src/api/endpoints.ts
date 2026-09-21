@@ -2168,6 +2168,7 @@ export const api = {
       trackId: string | null;
       contacted: boolean | null;
       sort: RecruiterSort;
+      view?: "daily" | "history" | "all";
     },
     options: { limit?: number; offset?: number } = {},
   ) => {
@@ -2180,6 +2181,7 @@ export const api = {
     if (filters.contacted !== null)
       params.set("contacted", String(filters.contacted));
     params.set("sort", filters.sort);
+    if (filters.view) params.set("view", filters.view);
     return apiRequest<RecruiterContactPage>(
       `/api/v1/interviews/recruiters?${params.toString()}`,
     );
