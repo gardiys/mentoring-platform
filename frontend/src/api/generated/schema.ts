@@ -8079,7 +8079,7 @@ export interface components {
          * AnswerContractStatus
          * @enum {string}
          */
-        AnswerContractStatus: "generated_from_sources" | "needs_expert_source" | "needs_manual_review" | "approved" | "rejected";
+        AnswerContractStatus: "waiting_for_ai" | "repair_pending" | "generated_from_sources" | "needs_expert_source" | "needs_manual_review" | "approved" | "rejected";
         /** AnswerValidationResult */
         AnswerValidationResult: {
             /** Supported */
@@ -8092,6 +8092,10 @@ export interface components {
             missing_required_points?: string[];
             /** Version Sensitive Claims */
             version_sensitive_claims?: string[];
+            /** Version Warnings */
+            version_warnings?: string[];
+            /** Question Is Self Contained */
+            question_is_self_contained?: boolean | null;
             /** Confidence */
             confidence: number;
         };
@@ -13894,7 +13898,7 @@ export interface components {
             direction_title: string;
             status: components["schemas"]["QuestionClusterStatus"];
             /** Processing State */
-            processing_state?: ("ai_processing" | "manual_review") | null;
+            processing_state?: ("ai_processing" | "manual_review" | "waiting_for_ai") | null;
             /** Canonical Question */
             canonical_question: string;
             learning_object_type: components["schemas"]["LearningObjectType"];
@@ -13963,6 +13967,15 @@ export interface components {
             answer_contract?: components["schemas"]["AnswerContract"] | null;
             answer_validation?: components["schemas"]["AnswerValidationResult"] | null;
             answer_status?: components["schemas"]["AnswerContractStatus"] | null;
+            /** Ai Retry After */
+            ai_retry_after?: string | null;
+            /** Ai Error Code */
+            ai_error_code?: string | null;
+            /**
+             * Answer Repair Attempts
+             * @default 0
+             */
+            answer_repair_attempts: number;
             /** Decisions */
             decisions?: components["schemas"]["AutomationDecisionRead"][];
             /** Manual History */
@@ -14155,6 +14168,11 @@ export interface components {
              * @default 0
              */
             manual_review_total: number;
+            /**
+             * Waiting For Ai Total
+             * @default 0
+             */
+            waiting_for_ai_total: number;
             /** Limit */
             limit: number;
             /** Offset */
@@ -14198,7 +14216,7 @@ export interface components {
             direction_title: string;
             status: components["schemas"]["QuestionClusterStatus"];
             /** Processing State */
-            processing_state?: ("ai_processing" | "manual_review") | null;
+            processing_state?: ("ai_processing" | "manual_review" | "waiting_for_ai") | null;
             /** Canonical Question */
             canonical_question: string;
             learning_object_type: components["schemas"]["LearningObjectType"];
@@ -21309,6 +21327,7 @@ export interface operations {
                 seen_to?: string | null;
                 needs_action_only?: boolean;
                 processing_only?: boolean;
+                waiting_only?: boolean;
                 sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
                 sort_order?: "asc" | "desc";
                 limit?: number;
@@ -22129,6 +22148,7 @@ export interface operations {
                 seen_to?: string | null;
                 needs_action_only?: boolean;
                 processing_only?: boolean;
+                waiting_only?: boolean;
                 sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
                 sort_order?: "asc" | "desc";
                 limit?: number;

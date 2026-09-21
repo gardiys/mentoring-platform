@@ -677,6 +677,7 @@ class AIRequestLog(UUIDPrimaryKeyMixin, Base):
     response_id: Mapped[str | None] = mapped_column(String(500))
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     cached_input_tokens: Mapped[int | None] = mapped_column(Integer)
+    cache_write_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     reasoning_tokens: Mapped[int | None] = mapped_column(Integer)
     estimated_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(16, 10))

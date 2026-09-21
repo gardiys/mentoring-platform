@@ -549,11 +549,8 @@ async def test_reconciler_restores_each_persisted_stage_and_retries_source_block
         "validate_cluster_answer",
         (str(validation_cluster_id), 1),
     ) in queued
-    assert (
-        "generate_cluster_candidate",
-        (str(terminal_cluster_id), 1),
-    ) in queued
-    assert len(queued) == 5
+    assert all(str(terminal_cluster_id) not in args for _name, args in queued)
+    assert len(queued) == 4
     async with TestSession() as session:
         archived = await session.get(PersonalReviewItem, expired_item.id)
         active = await session.get(PersonalReviewItem, active_item.id)

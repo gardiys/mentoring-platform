@@ -76,6 +76,15 @@ async def publication_preflight_reason(
     return (await _publication_target(session, cluster, settings)).reason
 
 
+def _transcript_uncertainty_only(question: IntelligenceQuestion) -> bool:
+    # Extraction caps confidence at 0.5 when speech/attribution is uncertain.
+    # A standalone learning card is checked independently; this never upgrades
+    # the candidate's own answer, speaker labels, or interview feedback.
+    return question.confidence == 0.5 and bool(
+        (question.transcription_annotations or {}).get("uncertain_utterance_ids")
+    )
+
+
 async def _question_review_blocker(
     session: AsyncSession, cluster: QuestionCluster, questions: list[IntelligenceQuestion]
 ) -> str | None:
@@ -101,7 +110,7 @@ async def _question_review_blocker(
             or not q.is_standalone
             or not q.is_real_interviewer_question
             or (q.routing_confidence or 0) < AUTO_PUBLISH_CONFIDENCE
-            or q.confidence < 0.85
+            or (q.confidence < 0.85 and not _transcript_uncertainty_only(q))
             or CRITICAL_QUALITY_FLAGS.intersection(q.quality_flags or [])
             for q in questions
         )
@@ -236,6 +245,7 @@ async def publish_validated_cluster(
         cluster.learning_object_type not in CARD_ELIGIBLE_TYPES
         or not normalize_question(cluster.canonical_question)
         or not validation.supported
+        or validation.question_is_self_contained is False
         or contract.confidence < AUTO_PUBLISH_CONFIDENCE
         or validation.confidence < AUTO_PUBLISH_CONFIDENCE
         or contract.unsupported_claims
@@ -267,6 +277,11 @@ async def publish_validated_cluster(
     if len(questions) != question_count:
         # Routing/manual review may hold a question while waiting for this cluster.
         # Release it and let reconciliation retry, rather than invert those locks.
+        return None
+    if any(_transcript_uncertainty_only(q) for q in questions) and not (
+        validation.question_is_self_contained
+    ):
+        await defer("Question wording needs independent verification after uncertain transcription")
         return None
     reason = await _question_review_blocker(session, cluster, questions)
     if reason:

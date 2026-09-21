@@ -1,13 +1,63 @@
 """Retrieve trusted materials by ranking or pinned identifiers with identical access checks."""
 
+import re
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.interviews.card_automation_models import AutomationDecision, QuestionCluster
 from app.interviews.card_automation_privacy import redact_untrusted_text
 from app.interviews.card_automation_types import AutomationDecisionSource, AutomationDecisionType
+
+_STOP_WORDS = frozenset(
+    """
+что как для чем это такое такие такой каких какие какая какой когда где почему зачем
+при про или без если между после перед есть быть будет были был было может можно нужно
+расскажите объясните кратко устроен устроены устроена обычно работает работают
+работа работы используется используют
+использовали использовал используете у вас ваш ваша вашем свои свой например вопрос
+ли бы вы мы они он она оно их его ее ты нам вам нас мне тебе собой
+""".split()
+)
+_ALIASES = {
+    "decorator": "декоратор",
+    "singleton": "синглтон одиночка",
+    "join": "соединение",
+    "gil": "global interpreter lock",
+    "asyncio": "асинхронность",
+    "redis": "редис",
+    "postgresql": "postgres postgresql",
+    "декоратор": "decorator",
+}
+
+
+def _source_query(question: str) -> str:
+    terms = list(
+        dict.fromkeys(
+            token
+            for token in re.findall(r"[\w]+", question.casefold())
+            if len(token) >= 3 and token not in _STOP_WORDS
+        )
+    )[:24]
+    for term in list(terms):
+        terms.extend(_ALIASES.get(term, "").split())
+    return " OR ".join(dict.fromkeys(terms))
+
+
+def _source_rank(query: str, title: Any, content: Any) -> ColumnElement[float]:
+    # Rank the entire authorized corpus BEFORE applying a limit. PostgreSQL provides
+    # Russian stemming and a simple dictionary for code identifiers / English terms.
+    scores = []
+    for config in ("russian", "simple"):
+        language: ColumnElement[Any] = literal_column(f"'{config}'::regconfig")
+        title_vector = func.setweight(func.to_tsvector(language, title), literal_column("'A'"))
+        body_vector = func.setweight(func.to_tsvector(language, content), literal_column("'D'"))
+        vector = title_vector.op("||")(body_vector)
+        scores.append(func.ts_rank_cd(vector, func.websearch_to_tsquery(language, query)))
+    return scores[0] + scores[1]
 
 
 async def load_trusted_sources(
@@ -41,12 +91,31 @@ async def load_trusted_sources(
     from app.roadmaps.models import Roadmap, RoadmapSection, Topic
     from app.tracks.models import LearningTrackRoadmap
 
+    query = _source_query(cluster.normalized_canonical_question)
+    if source_ids is None and not query:
+        return []
+    card_rank = _source_rank(
+        query,
+        func.concat_ws(" ", InterviewCard.question_markdown, InterviewCard.category),
+        func.coalesce(InterviewCard.answer_markdown, ""),
+    )
+    knowledge_rank = _source_rank(
+        query,
+        func.concat_ws(" ", KnowledgeEntry.title, KnowledgeEntry.summary),
+        func.coalesce(KnowledgeEntry.content_markdown, ""),
+    )
+    roadmap_rank = _source_rank(
+        query,
+        func.concat_ws(" ", Topic.title, Topic.description),
+        func.coalesce(Topic.content_markdown, ""),
+    )
     cards = list(
-        await session.scalars(
-            select(InterviewCard)
+        await session.execute(
+            select(InterviewCard, card_rank)
             .join(InterviewDeck, InterviewDeck.id == InterviewCard.deck_id)
             .where(
                 InterviewDeck.track_id == cluster.direction_id,
+                *([card_rank > 0] if source_ids is None else []),
                 *(
                     [InterviewCard.id.in_(requested["interview_card"])]
                     if source_ids is not None
@@ -62,9 +131,7 @@ async def load_trusted_sources(
                     )
                 ),
             )
-            .order_by(
-                InterviewCard.asked_count.desc(), InterviewCard.updated_at.desc(), InterviewCard.id
-            )
+            .order_by(card_rank.desc(), InterviewCard.id)
             .limit(100)
         )
     )
@@ -75,11 +142,13 @@ async def load_trusted_sources(
                 KnowledgeEntry.title,
                 KnowledgeEntry.summary,
                 KnowledgeEntry.content_markdown,
+                knowledge_rank,
             )
             .join(KnowledgeTopic, KnowledgeTopic.id == KnowledgeEntry.topic_id)
             .join(KnowledgeTopicTrack, KnowledgeTopicTrack.topic_id == KnowledgeTopic.id)
             .where(
                 KnowledgeTopicTrack.track_id == cluster.direction_id,
+                *([knowledge_rank > 0] if source_ids is None else []),
                 *(
                     [KnowledgeEntry.id.in_(requested["knowledge_entry"])]
                     if source_ids is not None
@@ -88,66 +157,41 @@ async def load_trusted_sources(
                 KnowledgeTopic.is_published.is_(True),
                 KnowledgeEntry.is_published.is_(True),
             )
-            .order_by(KnowledgeEntry.updated_at.desc(), KnowledgeEntry.id)
+            .order_by(knowledge_rank.desc(), KnowledgeEntry.id)
             .limit(100)
         )
     ).all()
     roadmap_rows = (
         await session.execute(
-            select(Topic.id, Topic.title, Topic.description, Topic.content_markdown)
+            select(Topic.id, Topic.title, Topic.description, Topic.content_markdown, roadmap_rank)
             .join(RoadmapSection, RoadmapSection.id == Topic.section_id)
             .join(Roadmap, Roadmap.id == RoadmapSection.roadmap_id)
             .join(LearningTrackRoadmap, LearningTrackRoadmap.roadmap_id == Roadmap.id)
             .where(
                 LearningTrackRoadmap.track_id == cluster.direction_id,
+                *([roadmap_rank > 0] if source_ids is None else []),
                 *([Topic.id.in_(requested["roadmap_topic"])] if source_ids is not None else []),
                 Roadmap.is_published.is_(True),
                 Topic.is_published.is_(True),
             )
-            .order_by(Topic.updated_at.desc(), Topic.id)
+            .order_by(roadmap_rank.desc(), Topic.id)
             .limit(100)
         )
     ).all()
-    question_tokens = {
-        token for token in cluster.normalized_canonical_question.split() if len(token) >= 3
-    }
-    ranked: list[tuple[int, str, str, str]] = []
-    for card in cards:
-        haystack = f"{card.category} {card.question_markdown}".casefold()
-        score = sum(1 for token in question_tokens if token in haystack)
-        if score or source_ids is not None:
-            ranked.append(
-                (
-                    score,
-                    f"interview_card:{card.id}",
-                    card.question_markdown,
-                    card.answer_markdown,
-                )
+    ranked: list[tuple[float, str, str, str]] = []
+    for card, score in cards:
+        ranked.append(
+            (
+                float(score),
+                f"interview_card:{card.id}",
+                card.question_markdown,
+                card.answer_markdown,
             )
-    for entry_id, title, summary, content in knowledge_rows:
-        haystack = f"{title} {summary or ''}".casefold()
-        score = sum(1 for token in question_tokens if token in haystack)
-        if score or source_ids is not None:
-            ranked.append(
-                (
-                    score,
-                    f"knowledge_entry:{entry_id}",
-                    title,
-                    content,
-                )
-            )
-    for topic_id, title, description, content in roadmap_rows:
-        haystack = f"{title} {description or ''}".casefold()
-        score = sum(1 for token in question_tokens if token in haystack)
-        if score or source_ids is not None:
-            ranked.append(
-                (
-                    score,
-                    f"roadmap_topic:{topic_id}",
-                    title,
-                    content,
-                )
-            )
+        )
+    for entry_id, title, _summary, content, score in knowledge_rows:
+        ranked.append((float(score), f"knowledge_entry:{entry_id}", title, content))
+    for topic_id, title, _description, content, score in roadmap_rows:
+        ranked.append((float(score), f"roadmap_topic:{topic_id}", title, content))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     snippets = [
         {

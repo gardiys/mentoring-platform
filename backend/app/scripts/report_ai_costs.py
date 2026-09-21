@@ -47,6 +47,7 @@ async def daily_report(
                         .label("unpriced_attempts"),
                         func.sum(AIRequestLog.input_tokens).label("input_tokens"),
                         func.sum(AIRequestLog.cached_input_tokens).label("cached_input_tokens"),
+                        func.sum(AIRequestLog.cache_write_tokens).label("cache_write_tokens"),
                         func.sum(AIRequestLog.output_tokens).label("output_tokens"),
                         func.sum(AIRequestLog.reasoning_tokens).label("reasoning_tokens"),
                         func.sum(AIRequestLog.estimated_cost_usd).label("known_estimated_cost_usd"),

@@ -1184,6 +1184,82 @@ function ClusterDetail({
 
         <Tabs.Panel value="answer" pt="lg">
           <Stack>
+            {cluster.answer_status === "waiting_for_ai" && (
+              <Alert color="orange" title="Ожидаем восстановления AI">
+                Ответы сохранены. Обработка продолжится с остановленного этапа.
+                {cluster.ai_error_code === "OPENAI_QUOTA_EXCEEDED" && (
+                  <Text size="sm">Проверьте квоту и оплату AI-провайдера.</Text>
+                )}
+                {cluster.ai_retry_after && (
+                  <Text size="sm">
+                    Следующая попытка не раньше:{" "}
+                    {new Date(cluster.ai_retry_after).toLocaleString("ru-RU")}
+                  </Text>
+                )}
+              </Alert>
+            )}
+            {cluster.answer_status === "repair_pending" && (
+              <Alert color="blue" title="AI исправляет ответ">
+                Проверим исправления по источникам. Автоматических исправлений:
+                не более двух.
+              </Alert>
+            )}
+            {!!cluster.answer_validation?.version_warnings?.length && (
+              <Alert
+                color="blue"
+                title="Область применимости — не препятствие к публикации"
+              >
+                {cluster.answer_validation.version_warnings.map(
+                  (warning, index) => (
+                    <Text key={index} size="sm">
+                      {warning}
+                    </Text>
+                  ),
+                )}
+              </Alert>
+            )}
+            {cluster.answer_validation && (
+              <Stack gap="xs">
+                {[
+                  [
+                    "Неподтверждённые утверждения",
+                    cluster.answer_validation.unsupported_claims,
+                  ],
+                  ["Противоречия", cluster.answer_validation.contradictions],
+                  [
+                    "Недостающие пункты",
+                    cluster.answer_validation.missing_required_points,
+                  ],
+                  [
+                    "Неуточнённые версии и настройки",
+                    cluster.answer_validation.version_sensitive_claims,
+                  ],
+                ].map(
+                  ([title, findings]) =>
+                    Array.isArray(findings) &&
+                    findings.length > 0 && (
+                      <Alert
+                        key={String(title)}
+                        color="yellow"
+                        title={String(title)}
+                      >
+                        {findings.map((finding, index) => (
+                          <Text key={index} size="sm">
+                            {finding}
+                          </Text>
+                        ))}
+                      </Alert>
+                    ),
+                )}
+                {cluster.answer_validation.question_is_self_contained ===
+                  false && (
+                  <Alert color="yellow" title="Нужно уточнить контекст вопроса">
+                    Для самостоятельной карточки не хватает кода, данных или
+                    ясной формулировки.
+                  </Alert>
+                )}
+              </Stack>
+            )}
             <Alert color="blue" title="Что нужно проверить">
               <Text size="sm">
                 AI уже собрал предложение карточки. Проверьте широкую тему,

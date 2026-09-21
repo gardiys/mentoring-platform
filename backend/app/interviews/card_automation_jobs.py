@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -13,6 +13,7 @@ from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import async_session_factory
+from app.interviews.ai_rate_limit import defer_model_cooldown, retry_delay
 from app.interviews.card_answer_sources import load_trusted_sources
 from app.interviews.card_automation_domain import ensure_occurrence_transition
 from app.interviews.card_automation_models import (
@@ -45,7 +46,7 @@ from app.interviews.card_automation_types import (
     QuestionClusterStatus,
     QuestionOccurrenceStatus,
 )
-from app.interviews.card_cluster_workflow import ai_processing_condition
+from app.interviews.card_cluster_workflow import ai_processing_condition, waiting_for_ai_condition
 from app.interviews.card_duplicate_cache import (
     acquire_duplicate_refresh_lock,
     clear_duplicate_refresh_status,
@@ -71,7 +72,18 @@ from app.interviews.models import InterviewCard, InterviewCardOccurrence
 logger = logging.getLogger(__name__)
 CARD_AUTOMATION_JOB_MAX_TRIES = 4
 ANSWER_JOB_MAX_TRIES = CARD_AUTOMATION_JOB_MAX_TRIES
-ANSWER_CACHE_VERSION = "answer-input-v2"
+SOURCE_RECHECK_INTERVAL = timedelta(hours=6)
+ANSWER_CACHE_VERSION = "answer-input-v3"
+MAX_ANSWER_REPAIRS = 2
+AI_SERVICE_ERRORS = frozenset(
+    {
+        "OPENAI_QUOTA_EXCEEDED",
+        "OPENAI_AUTH_ERROR",
+        "OPENAI_RATE_LIMIT",
+        "OPENAI_PROXY_ERROR",
+        "OPENAI_PROVIDER_ERROR",
+    }
+)
 MISSING_REFERENCE_FINDING = "Контракт ссылается на непереданные источники."
 _ANSWER_DRAFT_CLUSTER_STATUSES = frozenset(
     {
@@ -199,10 +211,206 @@ async def repair_missing_source_validations(*, limit: int = 50) -> int:
     return repaired
 
 
+async def recheck_source_blocked_clusters(*, limit: int = 50) -> int:
+    """Check materials in a separate bounded lane, without calling AI."""
+    now = datetime.now(UTC)
+    recovered = 0
+    async with async_session_factory() as session:
+        clusters = await session.scalars(
+            select(QuestionCluster)
+            .join(
+                CardAutomationSettings,
+                CardAutomationSettings.direction_id == QuestionCluster.direction_id,
+            )
+            .where(
+                CardAutomationSettings.enabled.is_(True),
+                CardAutomationSettings.cluster_moderation_enabled.is_(True),
+                QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
+                QuestionCluster.linked_card_id.is_(None),
+                QuestionCluster.answer_contract.is_(None),
+                QuestionCluster.answer_status == AnswerContractStatus.NEEDS_EXPERT_SOURCE,
+                or_(
+                    QuestionCluster.source_retry_after.is_(None),
+                    QuestionCluster.source_retry_after <= now,
+                ),
+                ~exists(
+                    select(AutomationDecision.id).where(
+                        AutomationDecision.entity_type == "cluster",
+                        AutomationDecision.entity_id == QuestionCluster.id,
+                        AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+                    )
+                ),
+            )
+            .order_by(QuestionCluster.source_retry_after.asc().nulls_first(), QuestionCluster.id)
+            .limit(limit)
+            .with_for_update(of=QuestionCluster, skip_locked=True)
+        )
+        for cluster in clusters:
+            cluster.source_retry_after = now + SOURCE_RECHECK_INTERVAL
+            sources = await _trusted_sources(session, cluster)
+            if not sources:
+                continue
+            settings = await session.get(CardAutomationSettings, cluster.direction_id)
+            assert settings is not None
+            if await _defer_unpublishable_answer(session, cluster, settings, sources):
+                continue
+            cluster.answer_status = None
+            cluster.answer_validation = None
+            cluster.source_retry_after = None
+            cluster.version += 1
+            recovered += 1
+        await session.commit()
+    return recovered
+
+
+async def resume_service_blocked_clusters(*, limit: int = 50) -> int:
+    """Resume a bounded batch at its saved stage, never regenerate validated work."""
+    now = datetime.now(UTC)
+    recovered = 0
+    async with async_session_factory() as session:
+        clusters = await session.scalars(
+            select(QuestionCluster)
+            .join(
+                CardAutomationSettings,
+                CardAutomationSettings.direction_id == QuestionCluster.direction_id,
+            )
+            .where(
+                QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
+                QuestionCluster.answer_status == AnswerContractStatus.WAITING_FOR_AI,
+                QuestionCluster.linked_card_id.is_(None),
+                QuestionCluster.ai_retry_after <= now,
+                CardAutomationSettings.enabled.is_(True),
+                CardAutomationSettings.cluster_moderation_enabled.is_(True),
+                ~exists(
+                    select(AutomationDecision.id).where(
+                        AutomationDecision.entity_type == "cluster",
+                        AutomationDecision.entity_id == QuestionCluster.id,
+                        AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+                    )
+                ),
+            )
+            .order_by(QuestionCluster.ai_retry_after, QuestionCluster.id)
+            .limit(limit)
+            .with_for_update(of=QuestionCluster, skip_locked=True)
+        )
+        for cluster in clusters:
+            cluster.answer_status = (
+                AnswerContractStatus.REPAIR_PENDING
+                if cluster.answer_validation is not None
+                else None
+            )
+            cluster.ai_retry_after = None
+            cluster.ai_error_code = None
+            cluster.version += 1
+            recovered += 1
+        await session.commit()
+    return recovered
+
+
+async def schedule_answer_repairs(*, limit: int = 20) -> int:
+    """Try a small, bounded correction cycle for sourced drafts, including the backlog."""
+    from app.interviews.card_auto_publish import publication_preflight_reason
+
+    scheduled = 0
+    now = datetime.now(UTC)
+    async with async_session_factory() as session:
+        clusters = await session.scalars(
+            select(QuestionCluster)
+            .join(
+                CardAutomationSettings,
+                CardAutomationSettings.direction_id == QuestionCluster.direction_id,
+            )
+            .where(
+                QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
+                QuestionCluster.linked_card_id.is_(None),
+                QuestionCluster.answer_status.in_(
+                    [
+                        AnswerContractStatus.NEEDS_EXPERT_SOURCE,
+                        AnswerContractStatus.NEEDS_MANUAL_REVIEW,
+                    ]
+                ),
+                QuestionCluster.answer_contract.is_not(None),
+                QuestionCluster.answer_validation.is_not(None),
+                QuestionCluster.answer_repair_attempts < MAX_ANSWER_REPAIRS,
+                QuestionCluster.ai_error_code.is_(None),
+                or_(
+                    QuestionCluster.source_retry_after.is_(None),
+                    QuestionCluster.source_retry_after <= now,
+                ),
+                CardAutomationSettings.enabled.is_(True),
+                CardAutomationSettings.cluster_moderation_enabled.is_(True),
+                CardAutomationSettings.global_auto_publish_enabled.is_(True),
+                CardAutomationSettings.shadow_mode.is_(False),
+                ~exists(
+                    select(AutomationDecision.id).where(
+                        AutomationDecision.entity_type == "cluster",
+                        AutomationDecision.entity_id == QuestionCluster.id,
+                        AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+                    )
+                ),
+            )
+            .order_by(QuestionCluster.source_retry_after.asc().nulls_first(), QuestionCluster.id)
+            .limit(limit)
+            .with_for_update(of=QuestionCluster, skip_locked=True)
+        )
+        for cluster in clusters:
+            cluster.source_retry_after = now + SOURCE_RECHECK_INTERVAL
+            # Explicit missing-context verdicts cannot be fixed by inventing more prose.
+            if (cluster.answer_validation or {}).get("question_is_self_contained") is False:
+                continue
+            settings = await session.get(CardAutomationSettings, cluster.direction_id)
+            assert settings is not None
+            if await publication_preflight_reason(session, cluster, settings):
+                continue
+            if not await _trusted_sources(session, cluster):
+                continue
+            previous_validation = cluster.answer_validation or {}
+            contract = cluster.answer_contract or {}
+            contract_confidence = contract.get("confidence")
+            revalidate_only = (
+                previous_validation.get("supported") is True
+                and "version_warnings" not in previous_validation
+                and not any(
+                    previous_validation.get(key)
+                    for key in ("unsupported_claims", "contradictions", "missing_required_points")
+                )
+                and not contract.get("unsupported_claims")
+                and isinstance(contract_confidence, int | float)
+                and contract_confidence >= 0.9
+            )
+            cluster.answer_status = None if revalidate_only else AnswerContractStatus.REPAIR_PENDING
+            if revalidate_only:
+                cluster.answer_validation = None
+            cluster.version += 1
+            await record_automation_decision(
+                session,
+                entity_type="cluster",
+                entity_id=cluster.id,
+                idempotency_key=f"cluster:{cluster.id}:answer-repair:{cluster.version}",
+                decision_type=AutomationDecisionType.ANSWER_VALIDATION_FAILED,
+                decision_source=AutomationDecisionSource.RULE,
+                reason=(
+                    "Answer queued for current validation policy without regeneration"
+                    if revalidate_only
+                    else "Sourced answer queued for bounded correction using validation findings"
+                ),
+                confidence=None,
+                settings=settings,
+                selected_cluster_id=cluster.id,
+                retrieval_scores={"repair_attempt": cluster.answer_repair_attempts + 1},
+            )
+            scheduled += 1
+        await session.commit()
+    return scheduled
+
+
 async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
     """Recover queued work after Redis or worker restarts."""
 
     await repair_missing_source_validations()
+    await recheck_source_blocked_clusters()
+    await resume_service_blocked_clusters()
+    await schedule_answer_repairs()
 
     async with async_session_factory() as session:
         occurrences = (
@@ -229,7 +437,9 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
         ).all()
         pending_directions = set(
             await session.scalars(
-                select(QuestionCluster.direction_id).where(ai_processing_condition()).distinct()
+                select(QuestionCluster.direction_id)
+                .where(or_(ai_processing_condition(), waiting_for_ai_condition()))
+                .distinct()
             )
         )
         dirty_clusters = (
@@ -262,42 +472,16 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
                 select(
                     QuestionCluster.id,
                     QuestionCluster.membership_revision,
-                    QuestionCluster.answer_contract.is_(None),
+                    or_(
+                        QuestionCluster.answer_contract.is_(None),
+                        QuestionCluster.answer_status == AnswerContractStatus.REPAIR_PENDING,
+                    ),
                 )
                 .join(
                     CardAutomationSettings,
                     CardAutomationSettings.direction_id == QuestionCluster.direction_id,
                 )
-                .where(
-                    CardAutomationSettings.enabled.is_(True),
-                    CardAutomationSettings.cluster_moderation_enabled.is_(True),
-                    QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
-                    or_(
-                        QuestionCluster.answer_status.is_(None),
-                        and_(
-                            CardAutomationSettings.global_auto_publish_enabled.is_(True),
-                            CardAutomationSettings.shadow_mode.is_(False),
-                            QuestionCluster.answer_status
-                            == AnswerContractStatus.GENERATED_FROM_SOURCES,
-                        ),
-                        and_(
-                            QuestionCluster.answer_contract.is_(None),
-                            QuestionCluster.answer_status
-                            == AnswerContractStatus.NEEDS_EXPERT_SOURCE,
-                        ),
-                    ),
-                    (
-                        QuestionCluster.answer_contract.is_(None)
-                        | QuestionCluster.answer_validation.is_(None)
-                        | (
-                            CardAutomationSettings.global_auto_publish_enabled.is_(True)
-                            & (
-                                QuestionCluster.answer_status
-                                == AnswerContractStatus.GENERATED_FROM_SOURCES
-                            )
-                        )
-                    ),
-                )
+                .where(ai_processing_condition())
                 .order_by(
                     QuestionCluster.answer_contract.is_(None),
                     QuestionCluster.updated_at,
@@ -382,8 +566,9 @@ async def route_question_occurrence(ctx: dict[str, Any], question_id: str, revis
             retryable_failure_is_terminal=final_attempt,
         )
     except InterviewAIError as error:
+        await defer_model_cooldown(ctx, error)
         if error.retryable and not final_attempt:
-            raise Retry(defer=min(60 * (2 ** (attempt - 1)), 900)) from error
+            raise Retry(defer=retry_delay(error, min(60 * (2 ** (attempt - 1)), 900))) from error
         if error.retryable:
             logger.warning(
                 "Occurrence routing retry budget exhausted question_id=%s revision=%s "
@@ -447,7 +632,7 @@ async def recalculate_cluster_stats(
             settings.enabled
             and settings.cluster_moderation_enabled
             and cluster.status is QuestionClusterStatus.NEEDS_REVIEW
-            and cluster.answer_status in {None, AnswerContractStatus.NEEDS_EXPERT_SOURCE}
+            and cluster.answer_status is None
             and cluster.answer_contract is None
         )
         should_validate = (
@@ -498,25 +683,69 @@ async def generate_cluster_candidate(
             cluster is None
             or cluster.membership_revision != membership_revision
             or cluster.status not in _ANSWER_DRAFT_CLUSTER_STATUSES
-            or cluster.answer_contract is not None
+            or (
+                cluster.answer_contract is not None
+                and cluster.answer_status != AnswerContractStatus.REPAIR_PENDING
+            )
             or cluster.answer_status
             not in (
                 {
                     None,
                     AnswerContractStatus.NEEDS_EXPERT_SOURCE,
                     AnswerContractStatus.NEEDS_MANUAL_REVIEW,
+                    AnswerContractStatus.REPAIR_PENDING,
                 }
                 if manual_draft
-                else {None, AnswerContractStatus.NEEDS_EXPERT_SOURCE}
+                else {
+                    None,
+                    AnswerContractStatus.NEEDS_EXPERT_SOURCE,
+                    AnswerContractStatus.REPAIR_PENDING,
+                }
             )
+        ):
+            return
+        if (
+            not manual_draft
+            and cluster.answer_status is AnswerContractStatus.NEEDS_EXPERT_SOURCE
+            and cluster.source_retry_after is not None
+            and cluster.source_retry_after > datetime.now(UTC)
         ):
             return
         settings = await session.get(CardAutomationSettings, cluster.direction_id)
         if settings is None or not settings.enabled or not settings.cluster_moderation_enabled:
             return
+        repair_context = None
+        if cluster.answer_status == AnswerContractStatus.REPAIR_PENDING:
+            if cluster.answer_repair_attempts >= MAX_ANSWER_REPAIRS:
+                cluster.answer_status = AnswerContractStatus.NEEDS_MANUAL_REVIEW
+                cluster.version += 1
+                await session.commit()
+                return
+            repair_context = cast(
+                dict[str, object],
+                redact_untrusted_value(
+                    {
+                        "previous_contract": cluster.answer_contract,
+                        "validation": cluster.answer_validation,
+                    }
+                ),
+            )
         version = cluster.version
         question = redact_untrusted_text(cluster.canonical_question)[:4_000]
         sources = await _trusted_sources(session, cluster)
+        if repair_context is not None:
+            pinned = await load_trusted_sources(
+                session, cluster, source_ids=_contract_source_ids(cluster.answer_contract)
+            )
+            sources = list(
+                {source["source_id"]: source for source in [*pinned, *sources]}.values()
+            )[:12]
+            previous = repair_context.get("previous_contract")
+            if isinstance(previous, dict):
+                allowed = {source["source_id"] for source in sources}
+                previous["source_references"] = [
+                    ref for ref in _contract_source_ids(cluster.answer_contract) if ref in allowed
+                ]
         if not manual_draft and await _defer_unpublishable_answer(
             session, cluster, settings, sources
         ):
@@ -524,7 +753,7 @@ async def generate_cluster_candidate(
             return
         analysis_draft = (
             None
-            if settings.global_auto_publish_enabled
+            if settings.global_auto_publish_enabled or repair_context is not None
             else await analysis_answer_draft_for_cluster(session, cluster.id)
         )
         provider = _ai(ctx)
@@ -538,6 +767,7 @@ async def generate_cluster_candidate(
             provider_name=provider.name,
             max_output_tokens=getattr(provider, "review_max_output_tokens", 4_000),
             analysis_draft=analysis_draft,
+            contract=repair_context,
         )
         cached_generation = await _cached_answer_decision(
             session,
@@ -580,10 +810,16 @@ async def generate_cluster_candidate(
     else:
         started_at = time.perf_counter()
         try:
-            generated = await provider.generate_answer_contract(
-                question=question, trusted_sources=sources
-            )
+            if repair_context is not None:
+                generated = await provider.generate_answer_contract(
+                    question=question, trusted_sources=sources, repair_context=repair_context
+                )
+            else:
+                generated = await provider.generate_answer_contract(
+                    question=question, trusted_sources=sources
+                )
         except InterviewAIError as error:
+            await defer_model_cooldown(ctx, error)
             latency_ms = _elapsed_ms(started_at)
             attempt = max(int(ctx.get("job_try", 1)), 1)
             if error.retryable and attempt < ANSWER_JOB_MAX_TRIES:
@@ -593,7 +829,9 @@ async def generate_cluster_candidate(
                     error.code,
                     attempt,
                 )
-                raise Retry(defer=min(60 * (2 ** (attempt - 1)), 900)) from error
+                raise Retry(
+                    defer=retry_delay(error, min(60 * (2 ** (attempt - 1)), 900))
+                ) from error
             async with async_session_factory() as session:
                 cluster = await session.scalar(
                     select(QuestionCluster).where(QuestionCluster.id == parsed_id).with_for_update()
@@ -611,7 +849,17 @@ async def generate_cluster_candidate(
                     or not settings.cluster_moderation_enabled
                 ):
                     return
-                cluster.answer_status = AnswerContractStatus.NEEDS_MANUAL_REVIEW
+                cluster.ai_error_code = error.code
+                cluster.answer_status = (
+                    AnswerContractStatus.WAITING_FOR_AI
+                    if error.code in AI_SERVICE_ERRORS
+                    else AnswerContractStatus.NEEDS_MANUAL_REVIEW
+                )
+                cluster.ai_retry_after = (
+                    datetime.now(UTC) + timedelta(hours=1)
+                    if error.code in AI_SERVICE_ERRORS
+                    else None
+                )
                 cluster.version += 1
                 await _record_answer_terminal_decision(
                     session,
@@ -676,6 +924,11 @@ async def generate_cluster_candidate(
         settings = await session.get(CardAutomationSettings, cluster.direction_id)
         if settings is None or not settings.enabled or not settings.cluster_moderation_enabled:
             return
+        if repair_context is not None:
+            cluster.answer_repair_attempts += 1
+        cluster.ai_error_code = None
+        cluster.ai_retry_after = None
+        cluster.source_retry_after = None
         cluster.answer_contract = contract_payload
         cluster.answer_validation = None
         cluster.answer_status = None
@@ -846,6 +1099,7 @@ async def validate_cluster_answer(
                 trusted_sources=sources,
             )
         except InterviewAIError as error:
+            await defer_model_cooldown(ctx, error)
             latency_ms = _elapsed_ms(started_at)
             attempt = max(int(ctx.get("job_try", 1)), 1)
             if error.retryable and attempt < ANSWER_JOB_MAX_TRIES:
@@ -855,7 +1109,9 @@ async def validate_cluster_answer(
                     error.code,
                     attempt,
                 )
-                raise Retry(defer=min(60 * (2 ** (attempt - 1)), 900)) from error
+                raise Retry(
+                    defer=retry_delay(error, min(60 * (2 ** (attempt - 1)), 900))
+                ) from error
             async with async_session_factory() as session:
                 cluster = await session.scalar(
                     select(QuestionCluster).where(QuestionCluster.id == parsed_id).with_for_update()
@@ -874,7 +1130,17 @@ async def validate_cluster_answer(
                     or not settings.cluster_moderation_enabled
                 ):
                     return
-                cluster.answer_status = AnswerContractStatus.NEEDS_MANUAL_REVIEW
+                cluster.ai_error_code = error.code
+                cluster.answer_status = (
+                    AnswerContractStatus.WAITING_FOR_AI
+                    if error.code in AI_SERVICE_ERRORS
+                    else AnswerContractStatus.NEEDS_MANUAL_REVIEW
+                )
+                cluster.ai_retry_after = (
+                    datetime.now(UTC) + timedelta(hours=1)
+                    if error.code in AI_SERVICE_ERRORS
+                    else None
+                )
                 cluster.version += 1
                 await _record_answer_terminal_decision(
                     session,
@@ -914,7 +1180,16 @@ async def validate_cluster_answer(
         decision_source = AutomationDecisionSource.SEMANTIC_JUDGE
         reason = "Independent structured answer validation completed"
     references = contract_payload.get("source_references")
-    supported = bool(validation_supported and isinstance(references, list) and references)
+    supported = bool(
+        validation_supported
+        and isinstance(references, list)
+        and references
+        and validation_payload.get("question_is_self_contained", True)
+        and not validation_payload.get("unsupported_claims")
+        and not validation_payload.get("contradictions")
+        and not validation_payload.get("missing_required_points")
+        and not validation_payload.get("version_sensitive_claims")
+    )
     async with async_session_factory() as session:
         cluster = await session.scalar(
             select(QuestionCluster).where(QuestionCluster.id == parsed_id).with_for_update()
@@ -985,6 +1260,8 @@ async def _defer_unpublishable_answer(
         status = AnswerContractStatus.NEEDS_EXPERT_SOURCE
     if reason is None:
         return False
+    if status is AnswerContractStatus.NEEDS_EXPERT_SOURCE:
+        cluster.source_retry_after = datetime.now(UTC) + SOURCE_RECHECK_INTERVAL
     if cluster.answer_status != status:
         cluster.answer_status = status
         cluster.version += 1
@@ -1036,9 +1313,12 @@ async def _publish_ready_cluster(cluster_id: UUID, revision: int) -> bool:
             and cluster.answer_status is AnswerContractStatus.GENERATED_FROM_SOURCES
             and cluster.membership_revision == revision
         ):
-            if validation_decision is None or validation_decision.retrieval_scores.get(
-                "publication_sources_hash"
-            ) != _publication_sources_hash(sources):
+            if (
+                validation_decision is None
+                or validation_decision.prompt_version != ANSWER_VALIDATION_PROMPT_VERSION
+                or validation_decision.retrieval_scores.get("publication_sources_hash")
+                != _publication_sources_hash(sources)
+            ):
                 version = cluster.version
                 current = await session.get(
                     QuestionCluster, cluster_id, with_for_update=True, populate_existing=True

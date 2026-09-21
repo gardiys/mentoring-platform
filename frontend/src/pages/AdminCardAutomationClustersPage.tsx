@@ -143,8 +143,10 @@ function filtersFromParams(params: URLSearchParams): QuestionClusterFilters {
     seenTo: seenTo ? `${seenTo}T23:59:59.999Z` : null,
     needsActionOnly:
       params.get("processing_only") !== "true" &&
+      params.get("waiting_only") !== "true" &&
       params.get("needs_action_only") !== "false",
     processingOnly: params.get("processing_only") === "true",
+    waitingOnly: params.get("waiting_only") === "true",
     sortBy:
       sortBy && sortOptions.some((option) => option.value === sortBy)
         ? sortBy
@@ -420,15 +422,18 @@ export function CardAutomationClustersPage({
               <Select
                 label="Показать"
                 value={
-                  filters.processingOnly
-                    ? "ai"
-                    : filters.needsActionOnly
-                      ? "manual"
-                      : "all"
+                  filters.waitingOnly
+                    ? "waiting"
+                    : filters.processingOnly
+                      ? "ai"
+                      : filters.needsActionOnly
+                        ? "manual"
+                        : "all"
                 }
                 data={[
                   { value: "manual", label: "Нужно решение человека" },
                   { value: "ai", label: "Обрабатывает AI" },
+                  { value: "waiting", label: "Ожидает восстановления AI" },
                   { value: "all", label: "Все кластеры" },
                 ]}
                 allowDeselect={false}
@@ -437,6 +442,8 @@ export function CardAutomationClustersPage({
                     (current) => {
                       const next = new URLSearchParams(current);
                       next.delete("page");
+                      if (value === "waiting") next.set("waiting_only", "true");
+                      else next.delete("waiting_only");
                       if (value === "ai") next.set("processing_only", "true");
                       else next.delete("processing_only");
                       if (value === "manual") next.delete("needs_action_only");
@@ -495,6 +502,9 @@ export function CardAutomationClustersPage({
             <Badge color="orange">
               Нужно решение человека: {query.data.manual_review_total ?? 0}
             </Badge>
+            <Badge color="orange">
+              Ожидают AI: {query.data.waiting_for_ai_total ?? 0}
+            </Badge>
           </Group>
         </Stack>
         <Stack gap={2} align="flex-end">
@@ -518,9 +528,11 @@ export function CardAutomationClustersPage({
       {query.data.items.length === 0 ? (
         <Card withBorder>
           <Text fw={600}>
-            {filters.processingOnly
-              ? "Кластеров в обработке AI нет"
-              : "Карточек на проверку нет"}
+            {filters.waitingOnly
+              ? "Кластеров в ожидании AI нет"
+              : filters.processingOnly
+                ? "Кластеров в обработке AI нет"
+                : "Карточек на проверку нет"}
           </Text>
           <Text size="sm" c="dimmed" mt={4}>
             Измените фильтры или дождитесь новых повторяющихся вопросов.
@@ -666,9 +678,11 @@ export function CardAutomationClustersPage({
                     </Table.Td>
                     <Table.Td>
                       <Badge color={clusterStatusColors[cluster.status]}>
-                        {cluster.processing_state === "ai_processing"
-                          ? "Обрабатывает AI"
-                          : clusterStatusLabels[cluster.status]}
+                        {cluster.processing_state === "waiting_for_ai"
+                          ? "Ожидает восстановления AI"
+                          : cluster.processing_state === "ai_processing"
+                            ? "Обрабатывает AI"
+                            : clusterStatusLabels[cluster.status]}
                       </Badge>
                     </Table.Td>
                     <Table.Td>

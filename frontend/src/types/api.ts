@@ -1143,6 +1143,8 @@ export type QuestionOccurrenceStatus =
   | "failed";
 
 export type AnswerContractStatus =
+  | "waiting_for_ai"
+  | "repair_pending"
   | "generated_from_sources"
   | "needs_expert_source"
   | "needs_manual_review"
@@ -1230,6 +1232,8 @@ export interface CardAutomationAnswerValidation {
   contradictions: string[];
   missing_required_points: string[];
   version_sensitive_claims: string[];
+  version_warnings?: string[];
+  question_is_self_contained?: boolean | null;
   confidence: number;
 }
 
@@ -1252,7 +1256,8 @@ export interface QuestionClusterSummary {
   direction_title: string;
   direction_slug: string;
   status: QuestionClusterStatus;
-  processing_state?: "ai_processing" | "manual_review" | null;
+  processing_state?:
+    "ai_processing" | "manual_review" | "waiting_for_ai" | null;
   canonical_question: string;
   learning_object_type: LearningObjectType;
   deck_id: string | null;
@@ -1353,6 +1358,9 @@ export interface QuestionClusterDetail extends QuestionClusterSummary {
   answer_contract: CardAutomationAnswerContract | null;
   answer_validation: CardAutomationAnswerValidation | null;
   answer_status: AnswerContractStatus | null;
+  ai_retry_after?: string | null;
+  ai_error_code?: string | null;
+  answer_repair_attempts?: number;
   occurrences: QuestionClusterOccurrence[];
   top_card_matches: CardAutomationCardCandidate[];
   decisions: AutomationDecisionRead[];
@@ -1377,6 +1385,7 @@ export interface QuestionClusterPage {
   total: number;
   ai_processing_total?: number;
   manual_review_total?: number;
+  waiting_for_ai_total?: number;
   limit: number;
   offset: number;
 }
@@ -1459,6 +1468,7 @@ export interface QuestionClusterFilters {
   seenTo: string | null;
   needsActionOnly: boolean;
   processingOnly?: boolean;
+  waitingOnly?: boolean;
   sortBy:
     | "priority_score"
     | "last_seen_at"

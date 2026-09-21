@@ -45,6 +45,8 @@ export const clusterStatusColors: Record<QuestionClusterStatus, string> = {
 };
 
 export const answerStatusLabels: Record<AnswerContractStatus, string> = {
+  waiting_for_ai: "Ожидает восстановления AI",
+  repair_pending: "AI исправляет ответ",
   generated_from_sources: "Сформирован по источникам",
   needs_expert_source: "Нужен экспертный источник",
   needs_manual_review: "Нужна ручная проверка",

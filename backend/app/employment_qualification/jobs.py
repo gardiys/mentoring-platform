@@ -17,6 +17,7 @@ from app.employment_qualification.models import (
     EmploymentEvidence,
     EmploymentTechnologyUsage,
 )
+from app.interviews.ai_rate_limit import defer_model_cooldown, retry_delay
 from app.interviews.intelligence_ai import InterviewAIError, InterviewAIProvider
 from app.payments.models import StudentEmployment
 
@@ -44,6 +45,7 @@ async def generate_employment_ai_suggestion(ctx: dict[str, Any], suggestion_id: 
     try:
         result = await provider.assess_employment_profile(payload)
     except InterviewAIError as error:
+        await defer_model_cooldown(ctx, error)
         attempt = int(ctx.get("job_try", 1))
         async with async_session_factory() as session:
             suggestion = cast(
@@ -54,7 +56,7 @@ async def generate_employment_ai_suggestion(ctx: dict[str, Any], suggestion_id: 
                 suggestion.status = EmploymentAISuggestionStatus.QUEUED
                 suggestion.safe_error_message = error.safe_message
                 await session.commit()
-                raise Retry(defer=30 * attempt) from error
+                raise Retry(defer=retry_delay(error, 30 * attempt)) from error
             suggestion.status = EmploymentAISuggestionStatus.FAILED
             suggestion.safe_error_message = error.safe_message
             suggestion.finished_at = datetime.now(UTC)

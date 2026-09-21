@@ -39,7 +39,9 @@ async def hide_reference_from_ranking(ready):
                     slug=f"ranked-{index}",
                     category="Python",
                     question_markdown=f"Python unrelated topic {index}",
-                    answer_markdown="A different concept.",
+                    # Outrank by relevant body text, not popularity: retrieval now ranks
+                    # the full corpus before the limit.
+                    answer_markdown="Сборщик мусора Python. " * 40,
                     frequency=InterviewCardFrequency.OCCASIONAL,
                     is_published=True,
                     asked_count=100,

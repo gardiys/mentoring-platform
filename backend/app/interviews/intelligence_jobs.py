@@ -23,6 +23,7 @@ from app.core.config import get_settings
 from app.db import models as _db_models  # noqa: F401
 from app.db.session import async_session_factory
 from app.employment_qualification.jobs import generate_employment_ai_suggestion
+from app.interviews.ai_rate_limit import defer_model_cooldown, retry_delay
 from app.interviews.card_automation_jobs import (
     assign_question_cluster,
     backfill_existing_questions,
@@ -583,10 +584,11 @@ async def extract_interview_structure(
                 result = await checkpoints.extract(chunk, direction=direction)
                 extracted.extend(result.output.questions)
         except InterviewAIError as error:
+            await defer_model_cooldown(ctx, error)
             will_retry = _will_retry(ctx, error.retryable)
             await _ai_failure(session, interview, attempt, error, retryable=will_retry)
             if will_retry:
-                raise Retry(defer=_retry_delay(ctx, 60)) from error
+                raise Retry(defer=retry_delay(error, _retry_delay(ctx, 60))) from error
             return
         by_label = {f"U{item.sequence_number:03d}": item for item in utterances}
         by_range: dict[tuple[tuple[str, ...], str], ExtractedQuestion] = {}
@@ -621,10 +623,11 @@ async def extract_interview_structure(
                 direction=direction,
             )
         except InterviewAIError as error:
+            await defer_model_cooldown(ctx, error)
             will_retry = _will_retry(ctx, error.retryable)
             await _ai_failure(session, interview, attempt, error, retryable=will_retry)
             if will_retry:
-                raise Retry(defer=_retry_delay(ctx, 60)) from error
+                raise Retry(defer=retry_delay(error, _retry_delay(ctx, 60))) from error
             return
         sequence = 0
         for item in questions_to_save:
@@ -738,6 +741,7 @@ async def refresh_interview_question_embeddings(
                     questions,
                 )
             except InterviewAIError as error:
+                await defer_model_cooldown(ctx, error)
                 await session.rollback()
                 will_retry = _will_retry(ctx, error.retryable)
                 logger.warning(
@@ -747,7 +751,7 @@ async def refresh_interview_question_embeddings(
                     will_retry,
                 )
                 if will_retry:
-                    raise Retry(defer=_retry_delay(ctx, 60)) from error
+                    raise Retry(defer=retry_delay(error, _retry_delay(ctx, 60))) from error
                 should_enqueue_reviews = True
             else:
                 for usage in refresh.usages:
@@ -975,10 +979,11 @@ async def generate_answer_reviews(
                     interview.ai_summary_model = summary_results[-1].usage.model
                     interview.ai_summary_prompt_version = SUMMARY_PROMPT_VERSION
         except InterviewAIError as error:
+            await defer_model_cooldown(ctx, error)
             will_retry = _will_retry(ctx, error.retryable)
             await _ai_failure(session, interview, attempt, error, retryable=will_retry)
             if will_retry:
-                raise Retry(defer=_retry_delay(ctx, 60)) from error
+                raise Retry(defer=retry_delay(error, _retry_delay(ctx, 60))) from error
             return
         interview.processing_status = IntelligenceProcessingStatus.READY
         interview.failed_stage = None

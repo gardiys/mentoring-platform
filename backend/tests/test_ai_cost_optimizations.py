@@ -87,6 +87,7 @@ async def _provider(handler: object) -> OpenAIInterviewAIProvider:
         http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
     )
     provider.request_recorder = AIRequestRecorder(TestSession)
+    provider.model_cooldown = None
     return provider
 
 

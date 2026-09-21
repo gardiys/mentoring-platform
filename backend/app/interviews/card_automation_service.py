@@ -104,7 +104,11 @@ from app.interviews.card_automation_types import (
     QuestionClusterStatus,
     QuestionOccurrenceStatus,
 )
-from app.interviews.card_cluster_workflow import ai_processing_condition, manual_review_condition
+from app.interviews.card_cluster_workflow import (
+    ai_processing_condition,
+    manual_review_condition,
+    waiting_for_ai_condition,
+)
 from app.interviews.card_duplicate_cache import (
     CACHE_STALE_SECONDS,
     DuplicateCacheUnavailable,
@@ -508,7 +512,11 @@ async def _cluster_summaries(
             direction_title=track.title,
             status=cluster.status,
             processing_state=(
-                "ai_processing" if cluster.id in ai_processing_ids else "manual_review"
+                "waiting_for_ai"
+                if cluster.answer_status == AnswerContractStatus.WAITING_FOR_AI
+                else "ai_processing"
+                if cluster.id in ai_processing_ids
+                else "manual_review"
             )
             if cluster.status is QuestionClusterStatus.NEEDS_REVIEW
             else None,
@@ -690,8 +698,15 @@ async def list_question_clusters(
 
     processing = ai_processing_condition()
     manual = manual_review_condition()
+    waiting = waiting_for_ai_condition()
     selected_work = (
-        processing if filters.processing_only else manual if filters.needs_action_only else true()
+        waiting
+        if filters.waiting_only
+        else processing
+        if filters.processing_only
+        else manual
+        if filters.needs_action_only
+        else true()
     )
     totals = (
         await session.execute(
@@ -699,6 +714,7 @@ async def list_question_clusters(
                 func.count(QuestionCluster.id).filter(selected_work),
                 func.count(QuestionCluster.id).filter(processing),
                 func.count(QuestionCluster.id).filter(manual),
+                func.count(QuestionCluster.id).filter(waiting),
             ).where(*conditions)
         )
     ).one()
@@ -734,6 +750,7 @@ async def list_question_clusters(
         total=totals[0],
         ai_processing_total=totals[1],
         manual_review_total=totals[2],
+        waiting_for_ai_total=totals[3],
         limit=filters.limit,
         offset=filters.offset,
     )
@@ -1313,6 +1330,9 @@ async def get_question_cluster_detail(
         answer_contract=_answer_contract(cluster.answer_contract),
         answer_validation=_answer_validation(cluster.answer_validation),
         answer_status=cluster.answer_status,
+        ai_retry_after=cluster.ai_retry_after,
+        ai_error_code=cluster.ai_error_code,
+        answer_repair_attempts=cluster.answer_repair_attempts,
         decisions=decision_reads,
         manual_history=manual_history,
         topic_options=[

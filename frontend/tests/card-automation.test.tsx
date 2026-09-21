@@ -1342,3 +1342,31 @@ it("отделяет обработку AI от ручной очереди и �
     ),
   );
 });
+
+it("отделяет ожидание AI от очереди ручных решений", async () => {
+  vi.spyOn(api, "adminTracks").mockResolvedValue([]);
+  const list = vi.spyOn(api, "adminCardAutomationClusters").mockResolvedValue({
+    items: [{ ...cluster, processing_state: "waiting_for_ai" }],
+    total: 1,
+    waiting_for_ai_total: 1,
+    manual_review_total: 0,
+    ai_processing_total: 0,
+    limit: 20,
+    offset: 0,
+  });
+  renderPage(
+    <AdminCardAutomationClustersPage />,
+    "/admin/card-automation/clusters?waiting_only=true",
+    "/admin/card-automation/clusters",
+  );
+  expect(await screen.findByText("Ожидают AI: 1")).toBeInTheDocument();
+  expect(screen.getByText("Нужно решение человека: 0")).toBeInTheDocument();
+  expect(list).toHaveBeenCalledWith(
+    expect.objectContaining({
+      waitingOnly: true,
+      needsActionOnly: false,
+      processingOnly: false,
+    }),
+    { limit: 20, offset: 0 },
+  );
+});

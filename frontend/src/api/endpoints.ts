@@ -307,6 +307,7 @@ function questionClusterSearchParams(
     offset: String(options.offset ?? 0),
     needs_action_only: String(filters.needsActionOnly),
     processing_only: String(filters.processingOnly ?? false),
+    waiting_only: String(filters.waitingOnly ?? false),
     sort_by: filters.sortBy,
     sort_order: filters.sortOrder,
   });

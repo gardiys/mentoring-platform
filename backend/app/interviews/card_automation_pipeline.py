@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
 from app.interviews.ai_accounting import estimated_cost
+from app.interviews.ai_rate_limit import COOLDOWN_ERROR
 from app.interviews.card_automation_domain import (
     audit_sample,
     ensure_occurrence_transition,
@@ -311,6 +312,8 @@ async def process_question_occurrence(
 
         await _cluster_occurrence(session_factory, snapshot, settings)
     except InterviewAIError as error:
+        if error.code == COOLDOWN_ERROR:
+            raise
         retry_budget_exhausted = error.retryable and retryable_failure_is_terminal
         await _mark_failed(
             session_factory,
@@ -1896,6 +1899,7 @@ def _estimated_ai_cost(
             input_tokens,
             min(max(int(getattr(usage, "cached_input_tokens", 0) or 0), 0), input_tokens),
             max(int(getattr(usage, "output_tokens", 0) or 0), 0),
+            cache_write_tokens=getattr(usage, "cache_write_tokens", None),
         )
     input_tokens = max(int(getattr(usage, "input_tokens", 0) or 0), 0)
     output_tokens = max(int(getattr(usage, "output_tokens", 0) or 0), 0)

@@ -100,6 +100,8 @@ class AnswerValidationResult(StrictAPIModel):
     contradictions: list[str] = Field(default_factory=list)
     missing_required_points: list[str] = Field(default_factory=list)
     version_sensitive_claims: list[str] = Field(default_factory=list)
+    version_warnings: list[str] = Field(default_factory=list)
+    question_is_self_contained: bool | None = None
     confidence: float = Field(ge=0, le=1)
 
 
@@ -128,7 +130,7 @@ class QuestionClusterSummary(StrictAPIModel):
     direction_slug: str
     direction_title: str
     status: QuestionClusterStatus
-    processing_state: Literal["ai_processing", "manual_review"] | None = None
+    processing_state: Literal["ai_processing", "manual_review", "waiting_for_ai"] | None = None
     canonical_question: str
     learning_object_type: LearningObjectType
     deck_id: UUID | None = None
@@ -169,6 +171,7 @@ class QuestionClusterListFilters(StrictAPIModel):
     seen_to: datetime | None = None
     needs_action_only: bool = False
     processing_only: bool = False
+    waiting_only: bool = False
     sort_by: Literal[
         "priority_score",
         "last_seen_at",
@@ -202,6 +205,7 @@ class QuestionClusterPage(StrictAPIModel):
     total: int = Field(ge=0)
     ai_processing_total: int = Field(default=0, ge=0)
     manual_review_total: int = Field(default=0, ge=0)
+    waiting_for_ai_total: int = Field(default=0, ge=0)
     limit: int = Field(ge=1)
     offset: int = Field(ge=0)
 
@@ -415,6 +419,9 @@ class QuestionClusterDetail(QuestionClusterSummary):
     answer_contract: AnswerContract | None = None
     answer_validation: AnswerValidationResult | None = None
     answer_status: AnswerContractStatus | None = None
+    ai_retry_after: datetime | None = None
+    ai_error_code: str | None = None
+    answer_repair_attempts: int = 0
     decisions: list[AutomationDecisionRead] = Field(default_factory=list)
     manual_history: list[QuestionClusterManualHistoryRead] = Field(default_factory=list)
     topic_options: list[QuestionClusterTopicOption] = Field(default_factory=list)

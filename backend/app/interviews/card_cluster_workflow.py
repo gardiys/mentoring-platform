@@ -17,27 +17,33 @@ from app.interviews.card_automation_types import (
 
 def ai_processing_condition() -> ColumnElement[bool]:
     enabled = exists(
-        select(CardAutomationSettings.direction_id).where(
+        select(CardAutomationSettings.direction_id)
+        .where(
             CardAutomationSettings.direction_id == QuestionCluster.direction_id,
             CardAutomationSettings.enabled.is_(True),
             CardAutomationSettings.cluster_moderation_enabled.is_(True),
         )
+        .correlate(QuestionCluster)
     )
     auto_publish = exists(
-        select(CardAutomationSettings.direction_id).where(
+        select(CardAutomationSettings.direction_id)
+        .where(
             CardAutomationSettings.direction_id == QuestionCluster.direction_id,
             CardAutomationSettings.enabled.is_(True),
             CardAutomationSettings.cluster_moderation_enabled.is_(True),
             CardAutomationSettings.global_auto_publish_enabled.is_(True),
             CardAutomationSettings.shadow_mode.is_(False),
         )
+        .correlate(QuestionCluster)
     )
     human_decision = exists(
-        select(AutomationDecision.id).where(
+        select(AutomationDecision.id)
+        .where(
             AutomationDecision.entity_type == "cluster",
             AutomationDecision.entity_id == QuestionCluster.id,
             AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
         )
+        .correlate(QuestionCluster)
     )
     return and_(
         QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
@@ -46,6 +52,7 @@ def ai_processing_condition() -> ColumnElement[bool]:
         enabled,
         or_(
             QuestionCluster.answer_status.is_(None),
+            QuestionCluster.answer_status == AnswerContractStatus.REPAIR_PENDING,
             and_(
                 QuestionCluster.answer_status == AnswerContractStatus.GENERATED_FROM_SOURCES,
                 auto_publish,
@@ -54,7 +61,17 @@ def ai_processing_condition() -> ColumnElement[bool]:
     )
 
 
+def waiting_for_ai_condition() -> ColumnElement[bool]:
+    return and_(
+        QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
+        QuestionCluster.answer_status.is_not(None),
+        QuestionCluster.answer_status == AnswerContractStatus.WAITING_FOR_AI,
+    )
+
+
 def manual_review_condition() -> ColumnElement[bool]:
     return and_(
-        QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW, ~ai_processing_condition()
+        QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
+        ~ai_processing_condition(),
+        ~waiting_for_ai_condition(),
     )

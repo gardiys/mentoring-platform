@@ -21,6 +21,7 @@ from app.career_packages.models import (
 from app.career_packages.resume_text import ResumeTextExtractionError, resume_text_for_ai
 from app.career_packages.state_machine import transition
 from app.db.session import async_session_factory
+from app.interviews.ai_rate_limit import defer_model_cooldown, retry_delay
 from app.interviews.intelligence_ai import InterviewAIError, InterviewAIProvider
 from app.interviews.uploads import InterviewUploadStore
 
@@ -177,6 +178,7 @@ async def generate_career_package(ctx: dict[str, Any], run_id: str) -> None:
 async def _record_generation_failure(
     ctx: dict[str, Any], run_id: UUID, error: InterviewAIError
 ) -> None:
+    await defer_model_cooldown(ctx, error)
     attempt = int(ctx.get("job_try", 1))
     async with async_session_factory() as session:
         run = cast(
@@ -189,7 +191,7 @@ async def _record_generation_failure(
             run.error_code = error.code
             run.safe_error_message = error.safe_message
             await session.commit()
-            raise Retry(defer=30 * attempt) from error
+            raise Retry(defer=retry_delay(error, 30 * attempt)) from error
         run.status = CareerGenerationStatus.FAILED
         run.error_code = error.code
         run.safe_error_message = error.safe_message

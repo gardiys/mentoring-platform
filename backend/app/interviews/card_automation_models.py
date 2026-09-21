@@ -137,6 +137,10 @@ class QuestionCluster(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     answer_status: Mapped[AnswerContractStatus | None] = mapped_column(
         _enum(AnswerContractStatus, "answer_contract_status"), nullable=True
     )
+    ai_retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ai_error_code: Mapped[str | None] = mapped_column(String(100))
+    answer_repair_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    source_retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     occurrences_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     distinct_interviews_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     distinct_companies_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
