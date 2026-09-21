@@ -128,6 +128,7 @@ class QuestionClusterSummary(StrictAPIModel):
     direction_slug: str
     direction_title: str
     status: QuestionClusterStatus
+    processing_state: Literal["ai_processing", "manual_review"] | None = None
     canonical_question: str
     learning_object_type: LearningObjectType
     deck_id: UUID | None = None
@@ -167,6 +168,7 @@ class QuestionClusterListFilters(StrictAPIModel):
     seen_from: datetime | None = None
     seen_to: datetime | None = None
     needs_action_only: bool = False
+    processing_only: bool = False
     sort_by: Literal[
         "priority_score",
         "last_seen_at",
@@ -198,6 +200,8 @@ class QuestionClusterListFilters(StrictAPIModel):
 class QuestionClusterPage(StrictAPIModel):
     items: list[QuestionClusterSummary]
     total: int = Field(ge=0)
+    ai_processing_total: int = Field(default=0, ge=0)
+    manual_review_total: int = Field(default=0, ge=0)
     limit: int = Field(ge=1)
     offset: int = Field(ge=0)
 

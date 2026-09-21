@@ -1068,7 +1068,7 @@ async def test_answer_cache_uses_transmitted_question_and_is_scoped_to_direction
     ai = SnapshotAnswerProvider()
     ctx = _ctx(RecordingRedis(), ai)
 
-    async def sources(session, cluster):
+    async def sources(session, cluster, **kwargs):
         return [
             {
                 "source_id": "knowledge_entry:example",
@@ -1078,7 +1078,7 @@ async def test_answer_cache_uses_transmitted_question_and_is_scoped_to_direction
         ]
 
     monkeypatch.setattr(card_automation_jobs, "async_session_factory", TestSession)
-    monkeypatch.setattr(card_automation_jobs, "_trusted_sources", sources)
+    monkeypatch.setattr(card_automation_jobs, "load_trusted_sources", sources)
     for cluster_id in (first, second):
         await card_automation_jobs.generate_cluster_candidate(ctx, str(cluster_id), 1)
         await card_automation_jobs.validate_cluster_answer(ctx, str(cluster_id), 1)

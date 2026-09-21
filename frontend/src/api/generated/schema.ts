@@ -13893,6 +13893,8 @@ export interface components {
             /** Direction Title */
             direction_title: string;
             status: components["schemas"]["QuestionClusterStatus"];
+            /** Processing State */
+            processing_state?: ("ai_processing" | "manual_review") | null;
             /** Canonical Question */
             canonical_question: string;
             learning_object_type: components["schemas"]["LearningObjectType"];
@@ -14143,6 +14145,16 @@ export interface components {
             items: components["schemas"]["QuestionClusterSummary"][];
             /** Total */
             total: number;
+            /**
+             * Ai Processing Total
+             * @default 0
+             */
+            ai_processing_total: number;
+            /**
+             * Manual Review Total
+             * @default 0
+             */
+            manual_review_total: number;
             /** Limit */
             limit: number;
             /** Offset */
@@ -14185,6 +14197,8 @@ export interface components {
             /** Direction Title */
             direction_title: string;
             status: components["schemas"]["QuestionClusterStatus"];
+            /** Processing State */
+            processing_state?: ("ai_processing" | "manual_review") | null;
             /** Canonical Question */
             canonical_question: string;
             learning_object_type: components["schemas"]["LearningObjectType"];
@@ -21294,6 +21308,7 @@ export interface operations {
                 seen_from?: string | null;
                 seen_to?: string | null;
                 needs_action_only?: boolean;
+                processing_only?: boolean;
                 sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
                 sort_order?: "asc" | "desc";
                 limit?: number;
@@ -22113,6 +22128,7 @@ export interface operations {
                 seen_from?: string | null;
                 seen_to?: string | null;
                 needs_action_only?: boolean;
+                processing_only?: boolean;
                 sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
                 sort_order?: "asc" | "desc";
                 limit?: number;

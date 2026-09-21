@@ -14,7 +14,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from pydantic import ValidationError
-from sqlalchemy import and_, delete, exists, func, or_, select
+from sqlalchemy import and_, delete, exists, func, or_, select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,6 +104,7 @@ from app.interviews.card_automation_types import (
     QuestionClusterStatus,
     QuestionOccurrenceStatus,
 )
+from app.interviews.card_cluster_workflow import ai_processing_condition, manual_review_condition
 from app.interviews.card_duplicate_cache import (
     CACHE_STALE_SECONDS,
     DuplicateCacheUnavailable,
@@ -480,8 +481,22 @@ async def _cluster_summaries(
     session: AsyncSession,
     viewer: User,
     rows: Sequence[tuple[QuestionCluster, LearningTrack]],
+    *,
+    ai_processing_ids: set[UUID] | None = None,
 ) -> list[QuestionClusterSummary]:
     cluster_ids = [cluster.id for cluster, _ in rows]
+    if ai_processing_ids is None:
+        ai_processing_ids = (
+            set(
+                await session.scalars(
+                    select(QuestionCluster.id).where(
+                        QuestionCluster.id.in_(cluster_ids), ai_processing_condition()
+                    )
+                )
+            )
+            if cluster_ids
+            else set()
+        )
     latest_decisions = await _latest_cluster_decisions(session, cluster_ids)
     match_decisions = await _latest_cluster_match_decisions(session, cluster_ids)
     match_by_decision = await _card_matches_for_decisions(session, match_decisions.values())
@@ -492,6 +507,11 @@ async def _cluster_summaries(
             direction_slug=track.slug,
             direction_title=track.title,
             status=cluster.status,
+            processing_state=(
+                "ai_processing" if cluster.id in ai_processing_ids else "manual_review"
+            )
+            if cluster.status is QuestionClusterStatus.NEEDS_REVIEW
+            else None,
             canonical_question=cluster.canonical_question,
             learning_object_type=cluster.learning_object_type,
             deck_id=cluster.deck_id,
@@ -631,8 +651,6 @@ async def list_question_clusters(
         conditions.append(QuestionCluster.last_seen_at >= filters.seen_from)
     if filters.seen_to is not None:
         conditions.append(QuestionCluster.first_seen_at <= filters.seen_to)
-    if filters.needs_action_only:
-        conditions.append(QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW)
     if filters.decision_source is not None:
         conditions.append(
             exists(
@@ -670,9 +688,21 @@ async def list_question_clusters(
             else ~possible_duplicate
         )
 
-    total = int(
-        await session.scalar(select(func.count(QuestionCluster.id)).where(*conditions)) or 0
+    processing = ai_processing_condition()
+    manual = manual_review_condition()
+    selected_work = (
+        processing if filters.processing_only else manual if filters.needs_action_only else true()
     )
+    totals = (
+        await session.execute(
+            select(
+                func.count(QuestionCluster.id).filter(selected_work),
+                func.count(QuestionCluster.id).filter(processing),
+                func.count(QuestionCluster.id).filter(manual),
+            ).where(*conditions)
+        )
+    ).one()
+    conditions.append(selected_work)
     sort_columns = {
         "priority_score": QuestionCluster.priority_score,
         "last_seen_at": QuestionCluster.last_seen_at,
@@ -685,7 +715,7 @@ async def list_question_clusters(
     rows = list(
         (
             await session.execute(
-                select(QuestionCluster, LearningTrack)
+                select(QuestionCluster, LearningTrack, processing)
                 .join(LearningTrack, LearningTrack.id == QuestionCluster.direction_id)
                 .where(*conditions)
                 .order_by(order, QuestionCluster.id)
@@ -695,8 +725,15 @@ async def list_question_clusters(
         ).tuples()
     )
     return QuestionClusterPage(
-        items=await _cluster_summaries(session, viewer, rows),
-        total=total,
+        items=await _cluster_summaries(
+            session,
+            viewer,
+            [(row[0], row[1]) for row in rows],
+            ai_processing_ids={row[0].id for row in rows if row[2]},
+        ),
+        total=totals[0],
+        ai_processing_total=totals[1],
+        manual_review_total=totals[2],
         limit=filters.limit,
         offset=filters.offset,
     )

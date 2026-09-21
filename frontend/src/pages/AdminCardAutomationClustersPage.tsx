@@ -141,7 +141,10 @@ function filtersFromParams(params: URLSearchParams): QuestionClusterFilters {
         : null,
     seenFrom: seenFrom ? `${seenFrom}T00:00:00.000Z` : null,
     seenTo: seenTo ? `${seenTo}T23:59:59.999Z` : null,
-    needsActionOnly: params.get("needs_action_only") !== "false",
+    needsActionOnly:
+      params.get("processing_only") !== "true" &&
+      params.get("needs_action_only") !== "false",
+    processingOnly: params.get("processing_only") === "true",
     sortBy:
       sortBy && sortOptions.some((option) => option.value === sortBy)
         ? sortBy
@@ -414,13 +417,33 @@ export function CardAutomationClustersPage({
               />
             </Group>
             <Stack gap="xs" justify="flex-end">
-              <Switch
-                label="Только требующие решения"
-                checked={filters.needsActionOnly}
-                onChange={(event) =>
-                  updateFilter(
-                    "needs_action_only",
-                    event.currentTarget.checked ? null : "false",
+              <Select
+                label="Показать"
+                value={
+                  filters.processingOnly
+                    ? "ai"
+                    : filters.needsActionOnly
+                      ? "manual"
+                      : "all"
+                }
+                data={[
+                  { value: "manual", label: "Нужно решение человека" },
+                  { value: "ai", label: "Обрабатывает AI" },
+                  { value: "all", label: "Все кластеры" },
+                ]}
+                allowDeselect={false}
+                onChange={(value) =>
+                  setSearchParams(
+                    (current) => {
+                      const next = new URLSearchParams(current);
+                      next.delete("page");
+                      if (value === "ai") next.set("processing_only", "true");
+                      else next.delete("processing_only");
+                      if (value === "manual") next.delete("needs_action_only");
+                      else next.set("needs_action_only", "false");
+                      return next;
+                    },
+                    { replace: true },
                   )
                 }
               />
@@ -463,10 +486,20 @@ export function CardAutomationClustersPage({
       </Card>
 
       <Group justify="space-between">
-        <Text fw={600}>Карточек требуют внимания: {query.data.total}</Text>
+        <Stack gap={4}>
+          <Text fw={600}>Кластеров по фильтрам: {query.data.total}</Text>
+          <Group gap="sm">
+            <Badge color="blue">
+              Обрабатывает AI: {query.data.ai_processing_total ?? 0}
+            </Badge>
+            <Badge color="orange">
+              Нужно решение человека: {query.data.manual_review_total ?? 0}
+            </Badge>
+          </Group>
+        </Stack>
         <Stack gap={2} align="flex-end">
           <Text size="sm" c="dimmed">
-            Новые карточки всегда подтверждает администратор
+            Обработка AI и решения модератора показаны отдельно
           </Text>
           <Text size="xs" c="dimmed" visibleFrom="sm">
             Клавиши J/K — строка, Enter — открыть
@@ -484,7 +517,11 @@ export function CardAutomationClustersPage({
 
       {query.data.items.length === 0 ? (
         <Card withBorder>
-          <Text fw={600}>Карточек на проверку нет</Text>
+          <Text fw={600}>
+            {filters.processingOnly
+              ? "Кластеров в обработке AI нет"
+              : "Карточек на проверку нет"}
+          </Text>
           <Text size="sm" c="dimmed" mt={4}>
             Измените фильтры или дождитесь новых повторяющихся вопросов.
           </Text>
@@ -629,7 +666,9 @@ export function CardAutomationClustersPage({
                     </Table.Td>
                     <Table.Td>
                       <Badge color={clusterStatusColors[cluster.status]}>
-                        {clusterStatusLabels[cluster.status]}
+                        {cluster.processing_state === "ai_processing"
+                          ? "Обрабатывает AI"
+                          : clusterStatusLabels[cluster.status]}
                       </Badge>
                     </Table.Td>
                     <Table.Td>

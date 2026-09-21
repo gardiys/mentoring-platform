@@ -102,6 +102,7 @@ export function useQuestionClusters(
         offset: (page - 1) * CARD_AUTOMATION_PAGE_SIZE,
       }),
     placeholderData: keepPreviousData,
+    refetchInterval: 15_000,
   });
 }
 

@@ -1252,6 +1252,7 @@ export interface QuestionClusterSummary {
   direction_title: string;
   direction_slug: string;
   status: QuestionClusterStatus;
+  processing_state?: "ai_processing" | "manual_review" | null;
   canonical_question: string;
   learning_object_type: LearningObjectType;
   deck_id: string | null;
@@ -1374,6 +1375,8 @@ export interface QuestionClusterDetail extends QuestionClusterSummary {
 export interface QuestionClusterPage {
   items: QuestionClusterSummary[];
   total: number;
+  ai_processing_total?: number;
+  manual_review_total?: number;
   limit: number;
   offset: number;
 }
@@ -1455,6 +1458,7 @@ export interface QuestionClusterFilters {
   seenFrom: string | null;
   seenTo: string | null;
   needsActionOnly: boolean;
+  processingOnly?: boolean;
   sortBy:
     | "priority_score"
     | "last_seen_at"

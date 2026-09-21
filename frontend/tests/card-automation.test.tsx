@@ -1308,3 +1308,37 @@ it("передаёт версию личного вопроса и предла�
   );
   expect(window.confirm).toHaveBeenCalled();
 });
+
+it("отделяет обработку AI от ручной очереди и переключает фильтр", async () => {
+  vi.spyOn(api, "adminTracks").mockResolvedValue([]);
+  const list = vi.spyOn(api, "adminCardAutomationClusters").mockResolvedValue({
+    items: [{ ...cluster, processing_state: "ai_processing" }],
+    total: 1,
+    ai_processing_total: 12,
+    manual_review_total: 3,
+    limit: 20,
+    offset: 0,
+  });
+  renderPage(
+    <AdminCardAutomationClustersPage />,
+    "/admin/card-automation/clusters?processing_only=true",
+    "/admin/card-automation/clusters",
+  );
+  expect(await screen.findByText("Обрабатывает AI: 12")).toBeInTheDocument();
+  expect(screen.getByText("Нужно решение человека: 3")).toBeInTheDocument();
+  expect(
+    within(screen.getByRole("table")).getByText("Обрабатывает AI"),
+  ).toBeInTheDocument();
+  expect(list).toHaveBeenLastCalledWith(
+    expect.objectContaining({ processingOnly: true, needsActionOnly: false }),
+    { limit: 20, offset: 0 },
+  );
+  await userEvent.click(screen.getByRole("textbox", { name: "Показать" }));
+  await userEvent.keyboard("{ArrowUp}{Enter}");
+  await waitFor(() =>
+    expect(list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ processingOnly: false, needsActionOnly: true }),
+      { limit: 20, offset: 0 },
+    ),
+  );
+});

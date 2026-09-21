@@ -374,10 +374,10 @@ async def test_preflight_skips_paid_calls(ready, seeded, monkeypatch, stage, pro
         await _create_card(seeded, "Как устроен сборщик мусора Python?")
     if problem == "no_sources":
 
-        async def empty_sources(session, cluster):
+        async def empty_sources(session, cluster, **kwargs):
             return []
 
-        monkeypatch.setattr(jobs, "_trusted_sources", empty_sources)
+        monkeypatch.setattr(jobs, "load_trusted_sources", empty_sources)
     ai = FakeInterviewAIProvider()
     ctx = {"redis": RecordingRedis(), "ai_provider": ai}
     work = (

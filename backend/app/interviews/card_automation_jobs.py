@@ -13,6 +13,7 @@ from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import async_session_factory
+from app.interviews.card_answer_sources import load_trusted_sources
 from app.interviews.card_automation_domain import ensure_occurrence_transition
 from app.interviews.card_automation_models import (
     AutomationDecision,
@@ -44,6 +45,7 @@ from app.interviews.card_automation_types import (
     QuestionClusterStatus,
     QuestionOccurrenceStatus,
 )
+from app.interviews.card_cluster_workflow import ai_processing_condition
 from app.interviews.card_duplicate_cache import (
     acquire_duplicate_refresh_lock,
     clear_duplicate_refresh_status,
@@ -70,6 +72,7 @@ logger = logging.getLogger(__name__)
 CARD_AUTOMATION_JOB_MAX_TRIES = 4
 ANSWER_JOB_MAX_TRIES = CARD_AUTOMATION_JOB_MAX_TRIES
 ANSWER_CACHE_VERSION = "answer-input-v2"
+MISSING_REFERENCE_FINDING = "Контракт ссылается на непереданные источники."
 _ANSWER_DRAFT_CLUSTER_STATUSES = frozenset(
     {
         QuestionClusterStatus.SHADOW,
@@ -110,8 +113,96 @@ async def refresh_interview_card_duplicate_cache(ctx: dict[str, Any]) -> None:
         await release_duplicate_refresh_lock(owner)
 
 
+async def repair_missing_source_validations(*, limit: int = 50) -> int:
+    """Restore only source-mismatch failures, once per failed validation payload."""
+    from app.interviews.card_auto_publish import publication_preflight_reason
+
+    repaired = 0
+    async with async_session_factory() as session:
+        candidates = list(
+            await session.scalars(
+                select(QuestionCluster)
+                .join(
+                    CardAutomationSettings,
+                    CardAutomationSettings.direction_id == QuestionCluster.direction_id,
+                )
+                .where(
+                    QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
+                    QuestionCluster.linked_card_id.is_(None),
+                    QuestionCluster.answer_status == AnswerContractStatus.NEEDS_EXPERT_SOURCE,
+                    QuestionCluster.answer_contract.is_not(None),
+                    QuestionCluster.answer_validation["unsupported_claims"].contains(
+                        [MISSING_REFERENCE_FINDING]
+                    ),
+                    CardAutomationSettings.enabled.is_(True),
+                    CardAutomationSettings.cluster_moderation_enabled.is_(True),
+                    CardAutomationSettings.global_auto_publish_enabled.is_(True),
+                    CardAutomationSettings.shadow_mode.is_(False),
+                    ~exists(
+                        select(AutomationDecision.id).where(
+                            AutomationDecision.entity_type == "cluster",
+                            AutomationDecision.entity_id == QuestionCluster.id,
+                            AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+                        )
+                    ),
+                    ~exists(
+                        select(AutomationDecision.id).where(
+                            AutomationDecision.entity_type == "cluster",
+                            AutomationDecision.entity_id == QuestionCluster.id,
+                            AutomationDecision.retrieval_scores[
+                                "source_repair_version"
+                            ].as_integer()
+                            == 1,
+                            AutomationDecision.judge_result == QuestionCluster.answer_validation,
+                        )
+                    ),
+                )
+                .order_by(QuestionCluster.updated_at, QuestionCluster.id)
+                .limit(limit)
+                .with_for_update(of=QuestionCluster, skip_locked=True)
+            )
+        )
+        for cluster in candidates:
+            settings = await session.get(CardAutomationSettings, cluster.direction_id)
+            assert settings is not None
+            references = _contract_source_ids(cluster.answer_contract)
+            sources = await _validation_sources(session, cluster)
+            available = {source["source_id"] for source in sources}
+            reason = await publication_preflight_reason(session, cluster, settings)
+            restorable = bool(references) and set(references) <= available and reason is None
+            previous_validation = cluster.answer_validation
+            fingerprint = hashlib.sha256(
+                json.dumps(previous_validation, sort_keys=True).encode()
+            ).hexdigest()
+            await record_automation_decision(
+                session,
+                entity_type="cluster",
+                entity_id=cluster.id,
+                idempotency_key=f"cluster:{cluster.id}:source-repair-v1:{fingerprint[:24]}",
+                decision_type=AutomationDecisionType.ANSWER_VALIDATION_FAILED,
+                decision_source=AutomationDecisionSource.RULE,
+                reason="Sources restored; validation requeued without answer regeneration"
+                if restorable
+                else "Source recovery requires a manual decision or an available trusted source",
+                confidence=None,
+                settings=settings,
+                selected_cluster_id=cluster.id,
+                judge_result=previous_validation,
+                retrieval_scores={"source_repair_version": 1, "restored": restorable},
+            )
+            if restorable:
+                cluster.answer_validation = None
+                cluster.answer_status = None
+                cluster.version += 1
+                repaired += 1
+        await session.commit()
+    return repaired
+
+
 async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
     """Recover queued work after Redis or worker restarts."""
+
+    await repair_missing_source_validations()
 
     async with async_session_factory() as session:
         occurrences = (
@@ -136,6 +227,11 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
                 .limit(500)
             )
         ).all()
+        pending_directions = set(
+            await session.scalars(
+                select(QuestionCluster.direction_id).where(ai_processing_condition()).distinct()
+            )
+        )
         dirty_clusters = (
             await session.execute(
                 select(QuestionCluster.id, QuestionCluster.membership_revision)
@@ -147,6 +243,7 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
                     or_(
                         QuestionCluster.stats_revision < QuestionCluster.membership_revision,
                         and_(
+                            QuestionCluster.direction_id.not_in(pending_directions),
                             CardAutomationSettings.enabled.is_(True),
                             CardAutomationSettings.global_auto_publish_enabled.is_(True),
                             CardAutomationSettings.shadow_mode.is_(False),
@@ -201,7 +298,11 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
                         )
                     ),
                 )
-                .order_by(QuestionCluster.updated_at)
+                .order_by(
+                    QuestionCluster.answer_contract.is_(None),
+                    QuestionCluster.updated_at,
+                    QuestionCluster.id,
+                )
                 .limit(200)
             )
         ).all()
@@ -241,6 +342,13 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
                 )
         if expired_personal_items:
             await session.commit()
+    for cluster_id, membership_revision, needs_generation in answer_work:
+        await enqueue_card_automation_job(
+            ("generate_cluster_candidate" if needs_generation else "validate_cluster_answer"),
+            str(cluster_id),
+            membership_revision,
+            redis=ctx["redis"],
+        )
     for question_id, revision in occurrences:
         await enqueue_card_automation_job(
             "route_question_occurrence",
@@ -251,13 +359,6 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
     for cluster_id, membership_revision in dirty_clusters:
         await enqueue_card_automation_job(
             "recalculate_cluster_stats",
-            str(cluster_id),
-            membership_revision,
-            redis=ctx["redis"],
-        )
-    for cluster_id, membership_revision, needs_generation in answer_work:
-        await enqueue_card_automation_job(
-            ("generate_cluster_candidate" if needs_generation else "validate_cluster_answer"),
             str(cluster_id),
             membership_revision,
             redis=ctx["redis"],
@@ -594,6 +695,7 @@ async def generate_cluster_candidate(
             retrieval_scores={
                 "request_model": _analysis_model_name(provider),
                 "answer_cache_version": ANSWER_CACHE_VERSION,
+                "answer_source_ids": [source["source_id"] for source in sources],
             },
             usage=usage,
             ai_tier="analysis" if usage is not None else None,
@@ -639,7 +741,7 @@ async def validate_cluster_answer(
             dict[str, object],
             redact_untrusted_value(contract_payload),
         )
-        sources = await _trusted_sources(session, cluster)
+        sources = await _validation_sources(session, cluster)
         if not manual_draft and await _defer_unpublishable_answer(
             session, cluster, settings, sources
         ):
@@ -684,7 +786,8 @@ async def validate_cluster_answer(
                     "Ignoring invalid cached answer validation decision_id=%s",
                     cached_validation.id,
                 )
-    if not sources:
+    missing_references = set(_contract_source_ids(contract_payload)) - allowed_ids
+    if not sources or missing_references:
         async with async_session_factory() as session:
             cluster = await session.scalar(
                 select(QuestionCluster).where(QuestionCluster.id == parsed_id).with_for_update()
@@ -710,13 +813,18 @@ async def validate_cluster_answer(
                 decision_source=AutomationDecisionSource.RULE,
                 stage="validation",
                 outcome="needs_source",
-                error_code="no_trusted_sources",
-                reason="Answer validation needs an approved internal source",
+                error_code="missing_trusted_references"
+                if missing_references
+                else "no_trusted_sources",
+                reason=MISSING_REFERENCE_FINDING
+                if missing_references
+                else "Answer validation needs an approved internal source",
             )
             await session.commit()
         logger.info(
-            "Answer contract validation blocked cluster_id=%s code=no_trusted_sources",
+            "Answer contract validation blocked cluster_id=%s code=%s",
             cluster_id,
+            "missing_trusted_references" if missing_references else "no_trusted_sources",
         )
         return
     if cached_validation_output is not None:
@@ -842,6 +950,7 @@ async def validate_cluster_answer(
             judge_result=validation_payload,
             retrieval_scores={
                 "publication_sources_hash": _publication_sources_hash(sources),
+                "answer_source_ids": [source["source_id"] for source in sources],
                 "request_model": _analysis_model_name(provider),
                 "answer_cache_version": ANSWER_CACHE_VERSION,
             },
@@ -907,7 +1016,15 @@ async def _publish_ready_cluster(cluster_id: UUID, revision: int) -> bool:
         cluster = await session.get(QuestionCluster, cluster_id)
         if cluster is None or cluster.answer_validation is None:
             return False
-        sources = await _trusted_sources(session, cluster)
+        validation_decision = await _latest_answer_decision(
+            session, cluster, AutomationDecisionType.ANSWER_CONTRACT_VALIDATED
+        )
+        pinned = _decision_source_ids(validation_decision)
+        sources = (
+            await load_trusted_sources(session, cluster, source_ids=pinned)
+            if pinned is not None
+            else await _validation_sources(session, cluster)
+        )
         settings = await session.get(CardAutomationSettings, cluster.direction_id)
         if (
             settings is not None
@@ -919,18 +1036,6 @@ async def _publish_ready_cluster(cluster_id: UUID, revision: int) -> bool:
             and cluster.answer_status is AnswerContractStatus.GENERATED_FROM_SOURCES
             and cluster.membership_revision == revision
         ):
-            validation_decision = await session.scalar(
-                select(AutomationDecision)
-                .where(
-                    AutomationDecision.entity_type == "cluster",
-                    AutomationDecision.entity_id == cluster.id,
-                    AutomationDecision.decision_type
-                    == AutomationDecisionType.ANSWER_CONTRACT_VALIDATED,
-                    AutomationDecision.is_overridden.is_(False),
-                )
-                .order_by(AutomationDecision.created_at.desc())
-                .limit(1)
-            )
             if validation_decision is None or validation_decision.retrieval_scores.get(
                 "publication_sources_hash"
             ) != _publication_sources_hash(sources):
@@ -1188,122 +1293,78 @@ async def _record_answer_terminal_decision(
     )
 
 
-async def _trusted_sources(session: Any, cluster: QuestionCluster) -> list[dict[str, str]]:
-    """Return small, explicitly identified internal source snippets.
-
-    Candidate answers and raw transcripts are intentionally excluded. The
-    source set is limited to human-published cards, knowledge entries and
-    roadmap materials from the same direction.
-    """
-
-    from app.interviews.models import InterviewCard, InterviewDeck
-    from app.knowledge.models import KnowledgeEntry, KnowledgeTopic, KnowledgeTopicTrack
-    from app.roadmaps.models import Roadmap, RoadmapSection, Topic
-    from app.tracks.models import LearningTrackRoadmap
-
-    cards = list(
-        await session.scalars(
-            select(InterviewCard)
-            .join(InterviewDeck, InterviewDeck.id == InterviewCard.deck_id)
-            .where(
-                InterviewDeck.track_id == cluster.direction_id,
-                InterviewDeck.is_published.is_(True),
-                InterviewCard.is_published.is_(True),
-                ~exists(
-                    select(AutomationDecision.id).where(
-                        AutomationDecision.selected_card_id == InterviewCard.id,
-                        AutomationDecision.decision_type == AutomationDecisionType.CARD_CREATED,
-                        AutomationDecision.decision_source != AutomationDecisionSource.HUMAN,
-                    )
-                ),
-            )
-            .order_by(InterviewCard.asked_count.desc(), InterviewCard.updated_at.desc())
-            .limit(100)
-        )
+def _contract_source_ids(contract: dict[str, object] | None) -> list[str]:
+    references = (contract or {}).get("source_references", [])
+    return (
+        list(dict.fromkeys(ref for ref in references if isinstance(ref, str)))
+        if isinstance(references, list)
+        else []
     )
-    knowledge_rows = (
-        await session.execute(
-            select(
-                KnowledgeEntry.id,
-                KnowledgeEntry.title,
-                KnowledgeEntry.summary,
-                KnowledgeEntry.content_markdown,
-            )
-            .join(KnowledgeTopic, KnowledgeTopic.id == KnowledgeEntry.topic_id)
-            .join(KnowledgeTopicTrack, KnowledgeTopicTrack.topic_id == KnowledgeTopic.id)
-            .where(
-                KnowledgeTopicTrack.track_id == cluster.direction_id,
-                KnowledgeTopic.is_published.is_(True),
-                KnowledgeEntry.is_published.is_(True),
-            )
-            .order_by(KnowledgeEntry.updated_at.desc())
-            .limit(100)
+
+
+def _decision_source_ids(decision: AutomationDecision | None) -> list[str] | None:
+    values = decision.retrieval_scores.get("answer_source_ids") if decision else None
+    if isinstance(values, list) and all(isinstance(value, str) for value in values):
+        return list(dict.fromkeys(values))
+    return None
+
+
+async def _latest_answer_decision(
+    session: AsyncSession, cluster: QuestionCluster, decision_type: AutomationDecisionType
+) -> AutomationDecision | None:
+    output = (
+        cluster.answer_contract
+        if decision_type is AutomationDecisionType.ANSWER_CONTRACT_GENERATED
+        else cluster.answer_validation
+    )
+    result = await session.scalar(
+        select(AutomationDecision)
+        .where(
+            AutomationDecision.entity_type == "cluster",
+            AutomationDecision.entity_id == cluster.id,
+            AutomationDecision.decision_type == decision_type,
+            AutomationDecision.judge_result == output,
+            AutomationDecision.is_overridden.is_(False),
         )
-    ).all()
-    roadmap_rows = (
-        await session.execute(
-            select(Topic.id, Topic.title, Topic.description, Topic.content_markdown)
-            .join(RoadmapSection, RoadmapSection.id == Topic.section_id)
-            .join(Roadmap, Roadmap.id == RoadmapSection.roadmap_id)
-            .join(LearningTrackRoadmap, LearningTrackRoadmap.roadmap_id == Roadmap.id)
-            .where(
-                LearningTrackRoadmap.track_id == cluster.direction_id,
-                Roadmap.is_published.is_(True),
-                Topic.is_published.is_(True),
-            )
-            .order_by(Topic.updated_at.desc())
-            .limit(100)
+        .order_by(AutomationDecision.created_at.desc(), AutomationDecision.id.desc())
+        .limit(1)
+    )
+    return result
+
+
+async def _validation_sources(
+    session: AsyncSession, cluster: QuestionCluster
+) -> list[dict[str, str]]:
+    """Keep the generation evidence set; legacy contracts pin every cited source.
+
+    IDs bypass ranking, never access/publication/trust checks. Current content
+    is loaded so an edit invalidates validation instead of publishing old facts.
+    """
+    references = _contract_source_ids(cluster.answer_contract)
+    generation = await _latest_answer_decision(
+        session, cluster, AutomationDecisionType.ANSWER_CONTRACT_GENERATED
+    )
+    pinned = _decision_source_ids(generation)
+    if pinned is not None:
+        return await load_trusted_sources(
+            session, cluster, source_ids=list(dict.fromkeys([*pinned, *references]))
         )
-    ).all()
-    question_tokens = {
-        token for token in cluster.normalized_canonical_question.split() if len(token) >= 3
-    }
-    ranked: list[tuple[int, str, str, str]] = []
-    for card in cards:
-        haystack = f"{card.category} {card.question_markdown}".casefold()
-        score = sum(1 for token in question_tokens if token in haystack)
-        if score:
-            ranked.append(
-                (
-                    score,
-                    f"interview_card:{card.id}",
-                    card.question_markdown,
-                    card.answer_markdown,
-                )
-            )
-    for entry_id, title, summary, content in knowledge_rows:
-        haystack = f"{title} {summary or ''}".casefold()
-        score = sum(1 for token in question_tokens if token in haystack)
-        if score:
-            ranked.append(
-                (
-                    score,
-                    f"knowledge_entry:{entry_id}",
-                    title,
-                    content,
-                )
-            )
-    for topic_id, title, description, content in roadmap_rows:
-        haystack = f"{title} {description or ''}".casefold()
-        score = sum(1 for token in question_tokens if token in haystack)
-        if score:
-            ranked.append(
-                (
-                    score,
-                    f"roadmap_topic:{topic_id}",
-                    title,
-                    content,
-                )
-            )
-    ranked.sort(key=lambda item: (-item[0], item[1]))
-    return [
-        {
-            "source_id": source_id,
-            "title": redact_untrusted_text(title)[:500],
-            "content": redact_untrusted_text(content)[:8_000],
-        }
-        for _score, source_id, title, content in ranked[:8]
-    ]
+    if len(references) > 20:
+        return []
+    ranked = await _trusted_sources(session, cluster)
+    # Legacy answers can cite a valid material outside the first 100 candidates
+    # or top eight snippets. Resolve these references by ID before filling gaps.
+    pinned_sources = await load_trusted_sources(session, cluster, source_ids=references)
+    result = {source["source_id"]: source for source in pinned_sources}
+    for source in ranked:
+        if len(result) >= max(8, len(references)):
+            break
+        result.setdefault(source["source_id"], source)
+    return list(result.values())
+
+
+async def _trusted_sources(session: AsyncSession, cluster: QuestionCluster) -> list[dict[str, str]]:
+    return await load_trusted_sources(session, cluster)
 
 
 def _ai(ctx: dict[str, Any]) -> InterviewAIProvider:
