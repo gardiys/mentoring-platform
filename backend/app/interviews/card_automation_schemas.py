@@ -688,7 +688,7 @@ class CardAutomationSettingsUpdate(StrictAPIModel):
     min_failed_answers_for_promotion: int = Field(ge=1)
     audit_sample_percent: float = Field(ge=0, le=100)
     personal_review_enabled: bool
-    global_auto_publish_enabled: Literal[False]
+    global_auto_publish_enabled: bool
     cluster_moderation_enabled: bool
     legacy_queue_enabled: bool
 

@@ -9,7 +9,7 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 
 from arq import Retry
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import async_session_factory
@@ -137,9 +137,26 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
         ).all()
         dirty_clusters = (
             await session.execute(
-                select(QuestionCluster.id, QuestionCluster.membership_revision).where(
-                    QuestionCluster.stats_revision < QuestionCluster.membership_revision
+                select(QuestionCluster.id, QuestionCluster.membership_revision)
+                .join(
+                    CardAutomationSettings,
+                    CardAutomationSettings.direction_id == QuestionCluster.direction_id,
                 )
+                .where(
+                    or_(
+                        QuestionCluster.stats_revision < QuestionCluster.membership_revision,
+                        and_(
+                            CardAutomationSettings.enabled.is_(True),
+                            CardAutomationSettings.global_auto_publish_enabled.is_(True),
+                            CardAutomationSettings.shadow_mode.is_(False),
+                            QuestionCluster.status.in_(
+                                [QuestionClusterStatus.SHADOW, QuestionClusterStatus.CANDIDATE]
+                            ),
+                        ),
+                    )
+                )
+                .order_by(QuestionCluster.updated_at)
+                .limit(200)
             )
         ).all()
         answer_work = (
@@ -160,6 +177,12 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
                     or_(
                         QuestionCluster.answer_status.is_(None),
                         and_(
+                            CardAutomationSettings.global_auto_publish_enabled.is_(True),
+                            CardAutomationSettings.shadow_mode.is_(False),
+                            QuestionCluster.answer_status
+                            == AnswerContractStatus.GENERATED_FROM_SOURCES,
+                        ),
+                        and_(
                             QuestionCluster.answer_contract.is_(None),
                             QuestionCluster.answer_status
                             == AnswerContractStatus.NEEDS_EXPERT_SOURCE,
@@ -168,6 +191,13 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
                     (
                         QuestionCluster.answer_contract.is_(None)
                         | QuestionCluster.answer_validation.is_(None)
+                        | (
+                            CardAutomationSettings.global_auto_publish_enabled.is_(True)
+                            & (
+                                QuestionCluster.answer_status
+                                == AnswerContractStatus.GENERATED_FROM_SOURCES
+                            )
+                        )
                     ),
                 )
                 .order_by(QuestionCluster.updated_at)
@@ -292,6 +322,24 @@ async def recalculate_cluster_stats(
         # queued for an older revision. This makes stale jobs useful rather
         # than allowing them to overwrite newer aggregate values.
         await recalculate_cluster_stats_model(session, cluster, settings)
+        if (
+            settings.global_auto_publish_enabled
+            and cluster.answer_status is None
+            and cluster.answer_contract is not None
+            and not cluster.answer_contract.get("source_references")
+            and not await session.scalar(
+                select(AutomationDecision.id)
+                .where(
+                    AutomationDecision.entity_type == "cluster",
+                    AutomationDecision.entity_id == cluster.id,
+                    AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+                )
+                .limit(1)
+            )
+        ):
+            cluster.answer_contract = None
+            cluster.answer_validation = None
+            cluster.version += 1
         current_revision = cluster.membership_revision
         should_generate = (
             settings.enabled
@@ -358,7 +406,11 @@ async def generate_cluster_candidate(
         version = cluster.version
         question = redact_untrusted_text(cluster.canonical_question)
         sources = await _trusted_sources(session, cluster)
-        analysis_draft = await analysis_answer_draft_for_cluster(session, cluster.id)
+        analysis_draft = (
+            None
+            if settings.global_auto_publish_enabled
+            else await analysis_answer_draft_for_cluster(session, cluster.id)
+        )
         provider = _ai(ctx)
         generation_input_hash = _answer_input_hash(
             question,
@@ -519,7 +571,7 @@ async def generate_cluster_candidate(
             session,
             entity_type="cluster",
             entity_id=cluster.id,
-            idempotency_key=f"cluster:{cluster.id}:answer-contract:{membership_revision}",
+            idempotency_key=f"cluster:{cluster.id}:answer-contract:{membership_revision}:{generation_input_hash[:24]}",
             decision_type=AutomationDecisionType.ANSWER_CONTRACT_GENERATED,
             decision_source=decision_source,
             reason=reason,
@@ -547,6 +599,8 @@ async def validate_cluster_answer(
     ctx: dict[str, Any], cluster_id: str, membership_revision: int
 ) -> None:
     parsed_id = UUID(cluster_id)
+    if await _publish_ready_cluster(parsed_id, membership_revision):
+        return
     async with async_session_factory() as session:
         cluster = await session.get(QuestionCluster, parsed_id)
         if (
@@ -569,6 +623,15 @@ async def validate_cluster_answer(
             redact_untrusted_value(contract_payload),
         )
         sources = await _trusted_sources(session, cluster)
+        # Internal allowlisted UUIDs are identifiers, not personal numbers. Keep
+        # them intact while redacting the untrusted answer's prose.
+        allowed_ids = {s["source_id"] for s in sources}
+        references = contract_payload.get("source_references")
+        if isinstance(references, list):
+            safe_contract_payload["source_references"] = [
+                ref if isinstance(ref, str) and ref in allowed_ids else redact_untrusted_value(ref)
+                for ref in references
+            ]
         provider = _ai(ctx)
         validation_input_hash = _answer_input_hash(
             question,
@@ -753,7 +816,7 @@ async def validate_cluster_answer(
             session,
             entity_type="cluster",
             entity_id=cluster.id,
-            idempotency_key=f"cluster:{cluster.id}:answer-validation:{membership_revision}",
+            idempotency_key=f"cluster:{cluster.id}:answer-validation:{membership_revision}:{validation_input_hash[:24]}",
             decision_type=AutomationDecisionType.ANSWER_CONTRACT_VALIDATED,
             decision_source=decision_source,
             reason=reason,
@@ -761,6 +824,7 @@ async def validate_cluster_answer(
             settings=settings,
             selected_cluster_id=cluster.id,
             judge_result=validation_payload,
+            retrieval_scores={"publication_sources_hash": _publication_sources_hash(sources)},
             usage=usage,
             ai_tier="analysis" if usage is not None else None,
             prompt_version=prompt_version,
@@ -769,6 +833,65 @@ async def validate_cluster_answer(
             latency_ms=latency_ms,
         )
         await session.commit()
+
+    await _publish_ready_cluster(parsed_id, membership_revision)
+
+
+async def _publish_ready_cluster(cluster_id: UUID, revision: int) -> bool:
+    from app.interviews.card_auto_publish import publish_validated_cluster
+
+    async with async_session_factory() as session:
+        cluster = await session.get(QuestionCluster, cluster_id)
+        if cluster is None or cluster.answer_validation is None:
+            return False
+        sources = await _trusted_sources(session, cluster)
+        settings = await session.get(CardAutomationSettings, cluster.direction_id)
+        if (
+            settings is not None
+            and settings.enabled
+            and not settings.shadow_mode
+            and settings.global_auto_publish_enabled
+            and settings.cluster_moderation_enabled
+            and cluster.status is QuestionClusterStatus.NEEDS_REVIEW
+            and cluster.answer_status is AnswerContractStatus.GENERATED_FROM_SOURCES
+            and cluster.membership_revision == revision
+        ):
+            validation_decision = await session.scalar(
+                select(AutomationDecision)
+                .where(
+                    AutomationDecision.entity_type == "cluster",
+                    AutomationDecision.entity_id == cluster.id,
+                    AutomationDecision.decision_type
+                    == AutomationDecisionType.ANSWER_CONTRACT_VALIDATED,
+                    AutomationDecision.is_overridden.is_(False),
+                )
+                .order_by(AutomationDecision.created_at.desc())
+                .limit(1)
+            )
+            if validation_decision is None or validation_decision.retrieval_scores.get(
+                "publication_sources_hash"
+            ) != _publication_sources_hash(sources):
+                version = cluster.version
+                current = await session.get(
+                    QuestionCluster, cluster_id, with_for_update=True, populate_existing=True
+                )
+                if current is not None and current.version == version:
+                    current.answer_validation = None
+                    current.answer_status = None
+                    current.version += 1
+                    await session.commit()
+                return False
+        await publish_validated_cluster(
+            session, cluster_id, revision, {s["source_id"] for s in sources}
+        )
+        await session.commit()
+        return True
+
+
+def _publication_sources_hash(sources: list[dict[str, str]]) -> str:
+    return hashlib.sha256(
+        json.dumps(sources, ensure_ascii=False, sort_keys=True).encode()
+    ).hexdigest()
 
 
 async def create_personal_review_item(ctx: dict[str, Any], question_id: str, revision: int) -> None:
@@ -1023,6 +1146,13 @@ async def _trusted_sources(session: Any, cluster: QuestionCluster) -> list[dict[
                 InterviewDeck.track_id == cluster.direction_id,
                 InterviewDeck.is_published.is_(True),
                 InterviewCard.is_published.is_(True),
+                ~exists(
+                    select(AutomationDecision.id).where(
+                        AutomationDecision.selected_card_id == InterviewCard.id,
+                        AutomationDecision.decision_type == AutomationDecisionType.CARD_CREATED,
+                        AutomationDecision.decision_source != AutomationDecisionSource.HUMAN,
+                    )
+                ),
             )
             .order_by(InterviewCard.asked_count.desc(), InterviewCard.updated_at.desc())
             .limit(100)

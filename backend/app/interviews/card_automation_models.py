@@ -378,10 +378,6 @@ class CardAutomationSettings(TimestampMixin, Base):
         CheckConstraint("min_distinct_companies_for_promotion >= 1", name="min_companies_positive"),
         CheckConstraint("min_failed_answers_for_promotion >= 1", name="min_failures_positive"),
         CheckConstraint(
-            "global_auto_publish_enabled = false",
-            name="global_auto_publish_forbidden",
-        ),
-        CheckConstraint(
             "legacy_queue_enabled OR (enabled AND cluster_moderation_enabled)",
             name="moderation_path_required",
         ),

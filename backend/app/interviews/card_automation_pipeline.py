@@ -1073,6 +1073,9 @@ async def _cluster_occurrence(
             await session.commit()
             return
         settings = current_settings
+        if settings.global_auto_publish_enabled:
+            # Interview feedback is an unverified draft, not a publishable source.
+            analysis_answer_contract = None
         _set_occurrence_status(question, QuestionOccurrenceStatus.SEARCHING_CLUSTER)
         canonical = question.canonical_question_candidate or question.question_text
         normalized = normalize_question(canonical)
@@ -1397,13 +1400,16 @@ async def recalculate_cluster_stats(
         min_failures=settings.min_failed_answers_for_promotion,
         manual_important=cluster.manual_important,
     )
-    if promotion.promoted and cluster.status in {
+    auto_publish = (
+        settings.enabled and settings.global_auto_publish_enabled and not settings.shadow_mode
+    )
+    if (promotion.promoted or auto_publish) and cluster.status in {
         QuestionClusterStatus.SHADOW,
         QuestionClusterStatus.CANDIDATE,
     }:
         cluster.status = QuestionClusterStatus.NEEDS_REVIEW
         cluster.promoted_at = datetime.now(UTC)
-        cluster.promotion_reason = promotion.reason
+        cluster.promotion_reason = promotion.reason or "Automatic card generation enabled"
         cluster.version += 1
         await record_automation_decision(
             session,

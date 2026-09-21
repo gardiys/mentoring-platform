@@ -252,6 +252,7 @@ async def test_settings_update_requires_idempotency_header(
     }
     payload["expected_version"] = current["version"]
     payload["semantic_similarity_threshold"] = 0.91
+    payload["global_auto_publish_enabled"] = True
 
     missing_header = await client.put(
         "/api/v1/admin/card-automation/settings",
@@ -270,6 +271,7 @@ async def test_settings_update_requires_idempotency_header(
     )
     assert updated.status_code == 200
     assert updated.json()["semantic_similarity_threshold"] == 0.91
+    assert updated.json()["global_auto_publish_enabled"] is True
 
 
 @pytest.mark.asyncio

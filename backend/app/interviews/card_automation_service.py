@@ -1684,7 +1684,7 @@ async def update_card_automation_settings(
     settings.min_failed_answers_for_promotion = payload.min_failed_answers_for_promotion
     settings.audit_sample_percent = payload.audit_sample_percent
     settings.personal_review_enabled = payload.personal_review_enabled
-    settings.global_auto_publish_enabled = False
+    settings.global_auto_publish_enabled = payload.global_auto_publish_enabled
     settings.cluster_moderation_enabled = payload.cluster_moderation_enabled
     settings.legacy_queue_enabled = payload.legacy_queue_enabled
     settings.version += 1

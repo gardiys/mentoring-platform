@@ -8387,11 +8387,8 @@ export interface components {
             audit_sample_percent: number;
             /** Personal Review Enabled */
             personal_review_enabled: boolean;
-            /**
-             * Global Auto Publish Enabled
-             * @constant
-             */
-            global_auto_publish_enabled: false;
+            /** Global Auto Publish Enabled */
+            global_auto_publish_enabled: boolean;
             /** Cluster Moderation Enabled */
             cluster_moderation_enabled: boolean;
             /** Legacy Queue Enabled */

@@ -56,7 +56,7 @@ function initialForm(
     min_failed_answers_for_promotion: settings.min_failed_answers_for_promotion,
     audit_sample_percent: settings.audit_sample_percent,
     personal_review_enabled: settings.personal_review_enabled,
-    global_auto_publish_enabled: false,
+    global_auto_publish_enabled: settings.global_auto_publish_enabled,
     cluster_moderation_enabled: settings.cluster_moderation_enabled,
     legacy_queue_enabled: settings.legacy_queue_enabled,
   };
@@ -75,6 +75,7 @@ type BooleanSettingField =
   | "auto_link_alias_enabled"
   | "auto_link_semantic_enabled"
   | "personal_review_enabled"
+  | "global_auto_publish_enabled"
   | "cluster_moderation_enabled"
   | "legacy_queue_enabled";
 
@@ -331,10 +332,14 @@ function SettingsForm({ settings, reload }: SettingsFormProps) {
             <Divider />
             <Switch
               label="Глобальная автопубликация"
-              description="Зарезервировано: общие карточки всегда подтверждает человек"
-              checked={false}
-              disabled
-              readOnly
+              description="Создавать карточки после проверки ответа и дублей. Спорные случаи остаются на проверке. Работает при включённой автоматизации и модерации кластеров, вне теневого режима."
+              checked={form.global_auto_publish_enabled}
+              onChange={(event) =>
+                updateBooleanSetting(
+                  "global_auto_publish_enabled",
+                  event.currentTarget.checked,
+                )
+              }
             />
           </Stack>
         </Card>
@@ -501,7 +506,7 @@ export function AdminCardAutomationSettingsPage() {
       <PageHeader
         eyebrow="Администрирование · rollout"
         title="Настройки автоматизации"
-        description="Параметры разделены по направлениям. Общая автопубликация намеренно заблокирована на текущем этапе."
+        description="Параметры разделены по направлениям. Автопубликация создаёт проверенные карточки без обязательного одобрения администратором."
       />
       <CardAutomationNavigation />
 

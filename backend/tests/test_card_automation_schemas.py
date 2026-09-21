@@ -149,12 +149,11 @@ def test_bulk_action_validates_action_specific_target() -> None:
         )
 
 
-def test_settings_cannot_enable_global_auto_publish() -> None:
+def test_settings_can_enable_global_auto_publish() -> None:
     payload = _settings_payload()
     payload["global_auto_publish_enabled"] = True
 
-    with pytest.raises(ValidationError, match="global_auto_publish_enabled"):
-        CardAutomationSettingsUpdate.model_validate(payload)
+    assert CardAutomationSettingsUpdate.model_validate(payload).global_auto_publish_enabled
 
 
 def test_settings_cannot_disable_every_moderation_path() -> None:

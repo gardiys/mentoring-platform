@@ -1182,7 +1182,7 @@ it("сохраняет выборочный аудит решения", async ()
   );
 });
 
-it("никогда не включает глобальную автопубликацию из настроек", async () => {
+it("позволяет включить глобальную автопубликацию из настроек", async () => {
   const user = userEvent.setup();
   vi.spyOn(api, "adminCardAutomationSettings").mockResolvedValue({
     items: [settings],
@@ -1198,6 +1198,7 @@ it("никогда не включает глобальную автопубли
   );
 
   await user.click(await screen.findByText("Автоматизация включена"));
+  await user.click(screen.getByText("Глобальная автопубликация"));
   await user.click(screen.getByRole("button", { name: "Сохранить настройки" }));
 
   await waitFor(() =>
@@ -1206,7 +1207,7 @@ it("никогда не включает глобальную автопубли
         direction_id: directionId,
         expected_version: 4,
         enabled: true,
-        global_auto_publish_enabled: false,
+        global_auto_publish_enabled: true,
       }),
       expect.any(String),
     ),
@@ -1214,7 +1215,7 @@ it("никогда не включает глобальную автопубли
   const globalPublishLabel = screen.getByText("Глобальная автопубликация");
   expect(
     globalPublishLabel.closest("label")?.querySelector("input"),
-  ).toBeDisabled();
+  ).toBeEnabled();
 });
 
 it("одной кнопкой включает только безопасный shadow-режим", async () => {

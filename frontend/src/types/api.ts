@@ -1575,7 +1575,7 @@ export type CardAutomationSettingsMutation = Omit<
   | "updated_at"
   | "version"
   | "global_auto_publish_enabled"
-> & { expected_version: number; global_auto_publish_enabled: false };
+> & { expected_version: number; global_auto_publish_enabled: boolean };
 
 export interface QuestionClusterVersionMutation {
   expected_version: number;
