@@ -302,12 +302,14 @@ services:
         condition: service_healthy
     command: arq app.interviews.intelligence_jobs.TranscriptionWorkerSettings
     healthcheck:
+      # Read the queue heartbeat without importing the worker and its AI dependencies.
       test:
         [
           "CMD",
-          "arq",
-          "app.interviews.intelligence_jobs.TranscriptionWorkerSettings",
-          "--check",
+          "python",
+          "-m",
+          "app.arq_healthcheck",
+          "arq:queue:interview-transcription:health-check",
         ]
       interval: 15s
       timeout: 5s
@@ -318,12 +320,14 @@ services:
     <<: *intelligence-worker
     command: arq app.interviews.intelligence_jobs.AIWorkerSettings
     healthcheck:
+      # Read the queue heartbeat without importing the worker and its AI dependencies.
       test:
         [
           "CMD",
-          "arq",
-          "app.interviews.intelligence_jobs.AIWorkerSettings",
-          "--check",
+          "python",
+          "-m",
+          "app.arq_healthcheck",
+          "arq:queue:interview-openai:health-check",
         ]
       interval: 15s
       timeout: 5s
@@ -369,12 +373,14 @@ services:
         condition: service_healthy
     command: arq app.media.normalization_jobs.ContentMediaWorkerSettings
     healthcheck:
+      # Read the queue heartbeat without importing the worker and its AI dependencies.
       test:
         [
           "CMD",
-          "arq",
-          "app.media.normalization_jobs.ContentMediaWorkerSettings",
-          "--check",
+          "python",
+          "-m",
+          "app.arq_healthcheck",
+          "arq:queue:content-media-normalization:health-check",
         ]
       interval: 15s
       timeout: 5s
