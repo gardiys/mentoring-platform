@@ -623,18 +623,16 @@ def _decision_scope_condition(track_ids: set[UUID], viewer: User | None = None) 
     return or_(*conditions)
 
 
-async def list_question_clusters(
+async def _cluster_filter_conditions(
     session: AsyncSession,
     viewer: User,
     filters: QuestionClusterListFilters,
-) -> QuestionClusterPage:
+) -> tuple[set[UUID], list[Any]]:
     track_ids = await _allowed_track_ids(session, viewer)
     if filters.direction_id is not None:
         if filters.direction_id not in track_ids:
             api_error(404, "learning_track_not_found", "Learning track was not found")
         track_ids = {filters.direction_id}
-    if not track_ids:
-        return QuestionClusterPage(items=[], total=0, limit=filters.limit, offset=filters.offset)
 
     conditions: list[Any] = [_cluster_scope_condition(track_ids)]
     if filters.statuses:
@@ -700,6 +698,54 @@ async def list_question_clusters(
             else ~possible_duplicate
         )
 
+    return track_ids, conditions
+
+
+def _selected_cluster_work(filters: QuestionClusterListFilters) -> Any:
+    return (
+        waiting_for_sources_condition()
+        if filters.sources_only
+        else waiting_for_ai_condition()
+        if filters.waiting_only
+        else ai_processing_condition()
+        if filters.processing_only
+        else manual_review_condition()
+        if filters.needs_action_only
+        else true()
+    )
+
+
+def _cluster_order(filters: QuestionClusterListFilters) -> Any:
+    column = {
+        "priority_score": QuestionCluster.priority_score,
+        "last_seen_at": QuestionCluster.last_seen_at,
+        "first_seen_at": QuestionCluster.first_seen_at,
+        "occurrences_count": QuestionCluster.occurrences_count,
+        "cluster_confidence": QuestionCluster.cluster_confidence,
+    }[filters.sort_by]
+    return column.asc() if filters.sort_order == "asc" else column.desc()
+
+
+async def question_cluster_review_queue(
+    session: AsyncSession, viewer: User, filters: QuestionClusterListFilters
+) -> list[UUID]:
+    """A stable, lightweight review snapshot; no answers, Redis scan or detail N+1 queries."""
+    _, conditions = await _cluster_filter_conditions(session, viewer, filters)
+    return list(
+        await session.scalars(
+            select(QuestionCluster.id)
+            .where(*conditions, _selected_cluster_work(filters))
+            .order_by(_cluster_order(filters), QuestionCluster.id)
+        )
+    )
+
+
+async def list_question_clusters(
+    session: AsyncSession, viewer: User, filters: QuestionClusterListFilters
+) -> QuestionClusterPage:
+    track_ids, conditions = await _cluster_filter_conditions(session, viewer, filters)
+    if not track_ids:
+        return QuestionClusterPage(items=[], total=0, limit=filters.limit, offset=filters.offset)
     processing = ai_processing_condition()
     from app.interviews.card_queue_observability import running_card_cluster_ids
 
@@ -707,17 +753,7 @@ async def list_question_clusters(
     manual = manual_review_condition()
     waiting = waiting_for_ai_condition()
     sources_waiting = waiting_for_sources_condition()
-    selected_work = (
-        sources_waiting
-        if filters.sources_only
-        else waiting
-        if filters.waiting_only
-        else processing
-        if filters.processing_only
-        else manual
-        if filters.needs_action_only
-        else true()
-    )
+    selected_work = _selected_cluster_work(filters)
     totals = (
         await session.execute(
             select(
@@ -757,15 +793,7 @@ async def list_question_clusters(
         )
     )
     conditions.append(selected_work)
-    sort_columns = {
-        "priority_score": QuestionCluster.priority_score,
-        "last_seen_at": QuestionCluster.last_seen_at,
-        "first_seen_at": QuestionCluster.first_seen_at,
-        "occurrences_count": QuestionCluster.occurrences_count,
-        "cluster_confidence": QuestionCluster.cluster_confidence,
-    }
-    sort_column = sort_columns[filters.sort_by]
-    order = sort_column.asc() if filters.sort_order == "asc" else sort_column.desc()
+    order = _cluster_order(filters)
     rows = list(
         (
             await session.execute(

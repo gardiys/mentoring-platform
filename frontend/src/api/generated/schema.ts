@@ -2573,6 +2573,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/card-automation/clusters/review-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Cluster Review Queue */
+        get: operations["admin_cluster_review_queue_api_v1_admin_card_automation_clusters_review_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/card-automation/clusters/{cluster_id}": {
         parameters: {
             query?: never;
@@ -2872,6 +2889,23 @@ export interface paths {
         };
         /** Mentor Clusters */
         get: operations["mentor_clusters_api_v1_mentor_card_automation_clusters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mentor/card-automation/clusters/review-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Cluster Review Queue */
+        get: operations["mentor_cluster_review_queue_api_v1_mentor_card_automation_clusters_review_queue_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -21443,6 +21477,62 @@ export interface operations {
             };
         };
     };
+    admin_cluster_review_queue_api_v1_admin_card_automation_clusters_review_queue_get: {
+        parameters: {
+            query?: {
+                direction_id?: string | null;
+                statuses?: components["schemas"]["QuestionClusterStatus"][];
+                topic_name?: string | null;
+                learning_object_types?: components["schemas"]["LearningObjectType"][];
+                min_distinct_interviews?: number | null;
+                min_distinct_companies?: number | null;
+                has_failed_answers?: boolean | null;
+                min_confidence?: number | null;
+                max_confidence?: number | null;
+                has_possible_duplicate?: boolean | null;
+                decision_source?: components["schemas"]["AutomationDecisionSource"] | null;
+                seen_from?: string | null;
+                seen_to?: string | null;
+                needs_action_only?: boolean;
+                processing_only?: boolean;
+                waiting_only?: boolean;
+                sources_only?: boolean;
+                sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
+                sort_order?: "asc" | "desc";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_cluster_api_v1_admin_card_automation_clusters__cluster_id__get: {
         parameters: {
             query?: never;
@@ -22213,6 +22303,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuestionClusterPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_cluster_review_queue_api_v1_mentor_card_automation_clusters_review_queue_get: {
+        parameters: {
+            query?: {
+                direction_id?: string | null;
+                statuses?: components["schemas"]["QuestionClusterStatus"][];
+                topic_name?: string | null;
+                learning_object_types?: components["schemas"]["LearningObjectType"][];
+                min_distinct_interviews?: number | null;
+                min_distinct_companies?: number | null;
+                has_failed_answers?: boolean | null;
+                min_confidence?: number | null;
+                max_confidence?: number | null;
+                has_possible_duplicate?: boolean | null;
+                decision_source?: components["schemas"]["AutomationDecisionSource"] | null;
+                seen_from?: string | null;
+                seen_to?: string | null;
+                needs_action_only?: boolean;
+                processing_only?: boolean;
+                waiting_only?: boolean;
+                sources_only?: boolean;
+                sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
+                sort_order?: "asc" | "desc";
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
                 };
             };
             /** @description Validation Error */

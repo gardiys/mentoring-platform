@@ -669,6 +669,13 @@ export const api = {
         body: JSON.stringify(payload),
       },
     ),
+  cardAutomationReviewQueue: (
+    scope: "admin" | "mentor",
+    filters: QuestionClusterFilters,
+  ) =>
+    apiRequest<string[]>(
+      `/api/v1/${scope}/card-automation/clusters/review-queue?${questionClusterSearchParams(filters, {})}`,
+    ),
   adminCardAutomationClusters: (
     filters: QuestionClusterFilters,
     options: { limit?: number; offset?: number } = {},

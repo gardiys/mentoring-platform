@@ -1,6 +1,12 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ApiError } from "../src/api/client";
 import { api } from "../src/api/endpoints";
@@ -26,6 +32,7 @@ import type {
   QuestionClusterSummary,
 } from "../src/types/api";
 import { renderPage } from "./render";
+import { adjacentReviewId } from "../src/features/cardAutomation/useReviewQueue";
 
 const directionId = "30000000-0000-4000-8000-000000000001";
 const clusterId = "50000000-0000-4000-8000-000000000001";
@@ -301,6 +308,9 @@ const personalItem: PersonalReviewItemRead = {
   updated_at: "2026-08-16T10:00:00Z",
 };
 
+beforeEach(() => {
+  vi.spyOn(api, "cardAutomationReviewQueue").mockResolvedValue([clusterId]);
+});
 afterEach(() => vi.restoreAllMocks());
 
 it("передаёт cluster-фильтры и пагинацию в точном backend-контракте", async () => {
@@ -404,7 +414,10 @@ it("не показывает ментору admin-действия и вызы�
     expect(stateMutation).toHaveBeenCalledWith(
       cluster.id,
       "mark-important",
-      { expected_version: 4, reason: "важно для программы" },
+      {
+        expected_version: 4,
+        reason: "Пометить кластер важным при ручной проверке",
+      },
       expect.any(String),
     ),
   );
@@ -477,7 +490,7 @@ it("показывает ментору тему, вопрос и ответ и 
         },
         preserve_answer_status: false,
         expected_version: cluster.version,
-        reason: "Уточнил ответ после проверки",
+        reason: "Исправления карточки сохранены при ручной проверке",
       },
       expect.any(String),
     ),
@@ -563,10 +576,6 @@ it("версионированно сохраняет проверенный ч�
   const shortAnswer = screen.getByLabelText(/Краткий проверенный ответ/);
   await user.clear(shortAnswer);
   await user.type(shortAnswer, updatedAnswer);
-  await user.type(
-    screen.getByLabelText(/Причина изменения/),
-    "Уточнил формулировку и сверил ответ с документацией",
-  );
   await user.click(
     screen.getByRole("button", { name: "Сохранить проверенный черновик" }),
   );
@@ -583,7 +592,7 @@ it("версионированно сохраняет проверенный ч�
         },
         preserve_answer_status: false,
         expected_version: 4,
-        reason: "Уточнил формулировку и сверил ответ с документацией",
+        reason: "Проверенный черновик отредактирован вручную",
       },
       expect.any(String),
     ),
@@ -637,10 +646,6 @@ it("при конфликте черновика предлагает загру
   const canonicalQuestion = await screen.findByLabelText(/Канонический вопрос/);
   await user.clear(canonicalQuestion);
   await user.type(canonicalQuestion, "Моя устаревшая правка");
-  await user.type(
-    screen.getByLabelText(/Причина изменения/),
-    "Проверил вручную",
-  );
   await user.click(
     screen.getByRole("button", { name: "Сохранить проверенный черновик" }),
   );
@@ -699,7 +704,6 @@ it("позволяет изменить тему кластера без AI-от
   );
   await user.click(topic);
   await user.keyboard("{ArrowDown}{Enter}");
-  await user.type(screen.getByLabelText(/Причина изменения/), "Уточнил тему");
   await user.click(
     screen.getByRole("button", { name: "Сохранить проверенный черновик" }),
   );
@@ -711,7 +715,7 @@ it("позволяет изменить тему кластера без AI-от
         topic_name: "Runtime Python",
         preserve_answer_status: true,
         expected_version: 4,
-        reason: "Уточнил тему",
+        reason: "Проверенный черновик отредактирован вручную",
       },
       expect.any(String),
     ),
@@ -1382,5 +1386,334 @@ it("отделяет ожидание AI от очереди ручных реш
       processingOnly: false,
     }),
     { limit: 20, offset: 0 },
+  );
+});
+
+function reviewFlow() {
+  vi.mocked(api.cardAutomationReviewQueue).mockResolvedValue([
+    clusterId,
+    secondClusterId,
+  ]);
+  const details = new Map<string, QuestionClusterDetail>([
+    [clusterId, clusterDetail],
+    [secondClusterId, { ...clusterDetail, ...secondCluster }],
+  ]);
+  const fetch = vi
+    .spyOn(api, "adminCardAutomationCluster")
+    .mockImplementation(async (id) => details.get(id)!);
+  const view = renderPage(
+    <AdminCardAutomationClusterDetailPage />,
+    `/admin/card-automation/clusters/${clusterId}?topic_name=Python+core&needs_action_only=true`,
+    "/admin/card-automation/clusters/:clusterId",
+  );
+  return { ...view, details, fetch };
+}
+
+it("создаёт исправленную карточку одним кликом и переходит дальше без потери прогресса", async () => {
+  const user = userEvent.setup();
+  const prompt = vi.spyOn(window, "prompt");
+  const confirm = vi.spyOn(window, "confirm");
+  const { router, details, fetch } = reviewFlow();
+  const create = vi
+    .spyOn(api, "createCardFromAdminCardAutomationCluster")
+    .mockImplementation(async (id, payload) => {
+      const updated = {
+        ...details.get(id)!,
+        canonical_question: payload.question_markdown,
+        status: "card_created" as const,
+        version: 5,
+        allowed_actions: [],
+      };
+      details.set(id, updated);
+      return {
+        cluster: updated,
+        decision_id: decision.id,
+        affected_cluster_ids: [id],
+      };
+    });
+  expect(
+    await screen.findByText("Осталось в этой очереди: 2 из 2"),
+  ).toBeInTheDocument();
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith(secondClusterId));
+  const answer = await screen.findByLabelText("3. Ответ карточки");
+  await user.clear(answer);
+  await user.type(answer, "Проверенный и исправленный ответ");
+  await user.click(screen.getByRole("button", { name: "Создать карточку" }));
+  expect(
+    await screen.findByRole("heading", {
+      name: secondCluster.canonical_question,
+    }),
+  ).toBeInTheDocument();
+  expect(create).toHaveBeenCalledWith(
+    clusterId,
+    expect.objectContaining({
+      answer_markdown: "Проверенный и исправленный ответ",
+      expected_version: 4,
+    }),
+    expect.any(String),
+  );
+  expect(
+    screen.getByText("Осталось в этой очереди: 1 из 2"),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuenow",
+    "50",
+  );
+  expect(router.state.location.search).toContain("topic_name=Python+core");
+  expect(prompt).not.toHaveBeenCalled();
+  expect(confirm).not.toHaveBeenCalled();
+});
+
+it("отклоняет одним нажатием, не перескакивает карточки и завершает очередь", async () => {
+  const user = userEvent.setup();
+  const prompt = vi.spyOn(window, "prompt");
+  const confirm = vi.spyOn(window, "confirm");
+  const { details } = reviewFlow();
+  const reject = vi
+    .spyOn(api, "setAdminCardAutomationClusterState")
+    .mockImplementation(async (id) => {
+      const updated = {
+        ...details.get(id)!,
+        status: "ignored" as const,
+        version: 8,
+        allowed_actions: [],
+      };
+      details.set(id, updated);
+      return {
+        cluster: updated,
+        decision_id: decision.id,
+        affected_cluster_ids: [id],
+      };
+    });
+  await user.click(await screen.findByRole("button", { name: "Отклонить" }));
+  expect(
+    await screen.findByRole("heading", {
+      name: secondCluster.canonical_question,
+    }),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Отклонить" }));
+  expect(await screen.findByText("Очередь проверена")).toBeInTheDocument();
+  expect(reject.mock.calls.map(([id]) => id)).toEqual([
+    clusterId,
+    secondClusterId,
+  ]);
+  expect(screen.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuenow",
+    "100",
+  );
+  expect(prompt).not.toHaveBeenCalled();
+  expect(confirm).not.toHaveBeenCalled();
+});
+
+it("пропуск не считается решением, а переход назад сохраняет очередь", async () => {
+  const user = userEvent.setup();
+  reviewFlow();
+  await user.click(await screen.findByRole("button", { name: "Пропустить →" }));
+  expect(
+    await screen.findByRole("heading", {
+      name: secondCluster.canonical_question,
+    }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Осталось в этой очереди: 2 из 2"),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "← Предыдущая" }));
+  expect(
+    await screen.findByRole("heading", { name: cluster.canonical_question }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Завершено: 0")).toBeInTheDocument();
+});
+
+it("ошибка решения оставляет карточку и прогресс на месте", async () => {
+  const user = userEvent.setup();
+  reviewFlow();
+  vi.spyOn(api, "createCardFromAdminCardAutomationCluster").mockRejectedValue(
+    new ApiError(409, "conflict", "Версия изменилась"),
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Создать карточку" }),
+  );
+  expect(
+    await screen.findByText("Кластер уже изменён другим пользователем"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: cluster.canonical_question }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Осталось в этой очереди: 2 из 2"),
+  ).toBeInTheDocument();
+});
+
+it("двойное нажатие не отправляет решение дважды и блокирует переход до ответа", async () => {
+  const { details } = reviewFlow();
+  let finish!: () => void;
+  const create = vi
+    .spyOn(api, "createCardFromAdminCardAutomationCluster")
+    .mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () => {
+            const updated = {
+              ...clusterDetail,
+              status: "card_created" as const,
+              version: 5,
+              allowed_actions: [],
+            };
+            details.set(clusterId, updated);
+            resolve({
+              cluster: updated,
+              decision_id: decision.id,
+              affected_cluster_ids: [clusterId],
+            });
+          };
+        }),
+    );
+  const button = await screen.findByRole("button", {
+    name: "Создать карточку",
+  });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+  expect(screen.getByRole("button", { name: "Пропустить →" })).toBeDisabled();
+  finish();
+  expect(
+    await screen.findByRole("heading", {
+      name: secondCluster.canonical_question,
+    }),
+  ).toBeInTheDocument();
+});
+
+it("навигация проходит всю очередь, включая границу прежней страницы, и не возвращает решённые", () => {
+  const ids = Array.from({ length: 601 }, (_, index) => `card-${index}`);
+  const session = { ids, completed: ids.slice(0, 20) };
+  expect(adjacentReviewId(session, "card-19")).toBe("card-20");
+  expect(adjacentReviewId(session, "card-600")).toBe("card-20");
+  expect(adjacentReviewId({ ids, completed: ids }, "card-600")).toBeNull();
+});
+
+it("ручной переход не теряет несохранённые правки без согласия", async () => {
+  const user = userEvent.setup();
+  const { router } = reviewFlow();
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  const answer = await screen.findByLabelText("3. Ответ карточки");
+  await user.type(answer, " Несохранённое уточнение");
+  await user.click(screen.getByRole("button", { name: "Пропустить →" }));
+  await waitFor(() => expect(confirm).toHaveBeenCalled());
+  expect(router.state.location.pathname).toContain(clusterId);
+  expect(
+    (screen.getByLabelText("3. Ответ карточки") as HTMLTextAreaElement).value,
+  ).toContain("Несохранённое уточнение");
+  expect(screen.getByText("Завершено: 0")).toBeInTheDocument();
+});
+
+it("горячие клавиши перехода не мешают редактировать текст", async () => {
+  const { router } = reviewFlow();
+  const answer = await screen.findByLabelText("3. Ответ карточки");
+  fireEvent.keyDown(answer, { key: "ArrowRight", altKey: true });
+  expect(router.state.location.pathname).toContain(clusterId);
+  fireEvent.keyDown(window, { key: "ArrowRight", altKey: true });
+  expect(
+    await screen.findByRole("heading", {
+      name: secondCluster.canonical_question,
+    }),
+  ).toBeInTheDocument();
+});
+
+it("привязка дубля одним кликом также открывает следующий вопрос", async () => {
+  const user = userEvent.setup();
+  const { details } = reviewFlow();
+  const confirm = vi.spyOn(window, "confirm");
+  const prompt = vi.spyOn(window, "prompt");
+  const link = vi
+    .spyOn(api, "linkAdminCardAutomationCluster")
+    .mockImplementation(async (id) => {
+      const updated = {
+        ...details.get(id)!,
+        status: "linked" as const,
+        version: 5,
+        allowed_actions: [],
+      };
+      details.set(id, updated);
+      return {
+        cluster: updated,
+        decision_id: decision.id,
+        affected_cluster_ids: [id],
+      };
+    });
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Связать с выбранной карточкой",
+    }),
+  );
+  expect(
+    await screen.findByRole("heading", {
+      name: secondCluster.canonical_question,
+    }),
+  ).toBeInTheDocument();
+  expect(link).toHaveBeenCalledWith(
+    clusterId,
+    expect.objectContaining({ confirm_alias: true, expected_version: 4 }),
+    expect.any(String),
+  );
+  expect(confirm).not.toHaveBeenCalled();
+  expect(prompt).not.toHaveBeenCalled();
+});
+
+it("не перелистывает архивную карточку, открытую намеренно", async () => {
+  vi.mocked(api.cardAutomationReviewQueue).mockResolvedValue([
+    clusterId,
+    secondClusterId,
+  ]);
+  vi.spyOn(api, "adminCardAutomationCluster").mockImplementation(
+    async (id) => ({
+      ...clusterDetail,
+      id,
+      status: "ignored",
+      allowed_actions: ["reopen"],
+    }),
+  );
+  const { router } = renderPage(
+    <AdminCardAutomationClusterDetailPage />,
+    `/admin/card-automation/clusters/${clusterId}?needs_action_only=false&status=ignored`,
+    "/admin/card-automation/clusters/:clusterId",
+  );
+  expect(
+    await screen.findByRole("button", { name: "Вернуть в очередь" }),
+  ).toBeInTheDocument();
+  expect(router.state.location.pathname).toContain(clusterId);
+  expect(screen.getByText("Завершено: 0")).toBeInTheDocument();
+});
+
+it("завершение запроса не возвращает пользователя в проверку после выхода со страницы", async () => {
+  const { router } = reviewFlow();
+  let finish!: () => void;
+  const create = vi
+    .spyOn(api, "createCardFromAdminCardAutomationCluster")
+    .mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () =>
+            resolve({
+              cluster: { ...cluster, status: "card_created", version: 5 },
+              decision_id: decision.id,
+              affected_cluster_ids: [clusterId],
+            });
+        }),
+    );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Создать карточку" }),
+  );
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+  await act(async () => {
+    await router.navigate("/admin/card-automation/clusters");
+  });
+  expect(
+    screen.queryByRole("button", { name: "Создать карточку" }),
+  ).not.toBeInTheDocument();
+  await act(async () => finish());
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe(
+      "/admin/card-automation/clusters",
+    ),
   );
 });

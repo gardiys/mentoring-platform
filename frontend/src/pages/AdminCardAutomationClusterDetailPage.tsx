@@ -18,7 +18,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
@@ -48,6 +48,11 @@ import {
   learningObjectLabels,
   percent,
 } from "../features/cardAutomation/presentation";
+import { ReviewQueueProgress } from "../features/cardAutomation/ReviewQueueProgress";
+import {
+  useReviewQueue,
+  type ReviewQueue,
+} from "../features/cardAutomation/useReviewQueue";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import type {
   CardAutomationAnswerContract,
@@ -188,10 +193,12 @@ function ClusterDetail({
   cluster,
   reload,
   scope,
+  queue,
 }: {
   cluster: QuestionClusterDetail;
   reload: () => Promise<unknown>;
   scope: CardAutomationScope;
+  queue: ReviewQueue;
 }) {
   const location = useLocation();
   const link = useLinkQuestionCluster();
@@ -249,7 +256,6 @@ function ClusterDetail({
   ) => {
     setReviewedDraft((current) => ({ ...current, [field]: value }));
   };
-  const [draftReason, setDraftReason] = useState("");
   const [splitOccurrenceIds, setSplitOccurrenceIds] = useState<string[]>([]);
   const [splitQuestion, setSplitQuestion] = useState("");
   const [splitTopic, setSplitTopic] = useState("");
@@ -258,7 +264,9 @@ function ClusterDetail({
   const [mergeClusterVersion, setMergeClusterVersion] = useState<number | "">(
     "",
   );
+  const actionInFlight = useRef(false);
   const mutation =
+    queue.busy ||
     link.isPending ||
     create.isPending ||
     generateAnswer.isPending ||
@@ -349,14 +357,13 @@ function ClusterDetail({
     proposalTopicChanged ||
     proposalSubtopicChanged ||
     proposalAnswerChanged;
-  useUnsavedChanges(
+  const allowNavigation = useUnsavedChanges(
     deckId !== initialDraft.deckId ||
       category !== initialDraft.category ||
       subcategory !== initialDraft.subcategory ||
       question !== initialDraft.question ||
       answer !== initialDraft.answer ||
       reviewedFormDirty ||
-      Boolean(draftReason.trim()) ||
       splitOccurrenceIds.length > 0 ||
       Boolean(
         splitQuestion.trim() || splitTopic.trim() || splitSubtopic.trim(),
@@ -380,73 +387,105 @@ function ClusterDetail({
   const notifyError = (error: Error) =>
     notifications.show({ color: "red", message: error.message });
 
+  const performDecision = async (
+    work: () => Promise<unknown>,
+    message: string,
+    advance = true,
+  ) => {
+    if (mutation || actionInFlight.current) return;
+    actionInFlight.current = true;
+    queue.setBusy(true);
+    try {
+      await work();
+      notifySuccess(message);
+      if (advance) {
+        allowNavigation();
+        queue.complete(cluster.id);
+      }
+    } catch (error) {
+      notifyError(error as Error);
+    } finally {
+      actionInFlight.current = false;
+      queue.setBusy(false);
+    }
+  };
+
   const linkCard = () => {
     const candidate = cluster.top_card_matches.find(
       (item) => item.card_id === selectedCardId,
     );
-    if (!candidate) return;
-    const reason = requiredReason("связать с карточкой");
-    if (
-      !reason ||
-      !window.confirm(
-        `Связать весь кластер с карточкой «${candidate.question_markdown}»?`,
-      )
-    )
-      return;
-    link.mutate(
-      {
-        clusterId: cluster.id,
-        payload: {
-          card_id: candidate.card_id,
-          confirm_alias: true,
-          expected_version: cluster.version,
-          reason,
-        },
-      },
-      {
-        onSuccess: () => notifySuccess("Кластер связан с карточкой"),
-        onError: notifyError,
-      },
+    if (!candidate || !can("link_card")) return;
+    void performDecision(
+      () =>
+        link.mutateAsync({
+          clusterId: cluster.id,
+          payload: {
+            card_id: candidate.card_id,
+            confirm_alias: true,
+            expected_version: cluster.version,
+            reason: "Связано с выбранной карточкой при ручной проверке",
+          },
+        }),
+      "Вопросы связаны с существующей карточкой",
     );
   };
 
   const createCard = () => {
-    if (!deckId || !selectedCreateTopic || !question.trim() || !answer.trim())
-      return;
-    const reason = requiredReason(
-      "принять AI-предложение и создать каноническую карточку",
-    );
     if (
-      !reason ||
-      !window.confirm(
-        "Принять AI-предложение и создать одну каноническую карточку в общей базе? Это отдельное ручное действие, автопубликация не включается.",
-      )
+      !can("create_card") ||
+      reviewedFormDirty ||
+      !deckId ||
+      !selectedCreateTopic ||
+      !question.trim() ||
+      !answer.trim()
     )
       return;
-    create.mutate(
-      {
-        clusterId: cluster.id,
-        payload: {
-          deck_id: deckId,
-          category: selectedCreateTopic,
-          subcategory: subcategory.trim() || null,
-          question_markdown: question.trim(),
-          answer_markdown: answer.trim(),
-          frequency: "occasional",
-          frequency_mode: "automatic",
-          expected_version: cluster.version,
-          reason,
-        },
-      },
-      {
-        onSuccess: () =>
-          notifySuccess(
-            "AI-предложение принято, каноническая карточка создана",
-          ),
-        onError: notifyError,
-      },
+    void performDecision(
+      () =>
+        create.mutateAsync({
+          clusterId: cluster.id,
+          payload: {
+            deck_id: deckId,
+            category: selectedCreateTopic,
+            subcategory: subcategory.trim() || null,
+            question_markdown: question.trim(),
+            answer_markdown: answer.trim(),
+            frequency: "occasional",
+            frequency_mode: "automatic",
+            expected_version: cluster.version,
+            reason: "Карточка создана после ручной проверки вопроса и ответа",
+          },
+        }),
+      "Карточка создана",
     );
   };
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.repeat || event.isComposing || mutation) return;
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        createCard();
+      } else if (
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !(
+          event.target instanceof HTMLElement &&
+          event.target.closest(
+            "input, textarea, select, [contenteditable='true']",
+          )
+        ) &&
+        (event.key === "ArrowRight" || event.key === "ArrowLeft")
+      ) {
+        event.preventDefault();
+        if (event.key === "ArrowRight") queue.next();
+        else queue.previous();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  });
 
   const saveProposalDraft = () => {
     if (
@@ -456,8 +495,7 @@ function ClusterDetail({
       !question.trim()
     )
       return;
-    const reason = requiredReason("сохранить исправления AI-предложения");
-    if (!reason) return;
+    const reason = "Исправления карточки сохранены при ручной проверке";
     const answerContract = answer.trim()
       ? {
           ...(cluster.answer_contract ?? {
@@ -525,8 +563,7 @@ function ClusterDetail({
       !reviewedDraftChanged ||
       !reviewedDraft.canonicalQuestion.trim() ||
       !reviewedTopicName ||
-      !answerContractValid ||
-      !draftReason.trim()
+      !answerContractValid
     )
       return;
     updateDraft.mutate(
@@ -546,7 +583,7 @@ function ClusterDetail({
           preserve_answer_status:
             !canonicalQuestionChanged && !answerContractChanged,
           expected_version: cluster.version,
-          reason: draftReason.trim(),
+          reason: "Проверенный черновик отредактирован вручную",
         },
       },
       {
@@ -563,19 +600,20 @@ function ClusterDetail({
     action: "ignore" | "defer" | "mark-important" | "reopen",
     label: string,
   ) => {
-    const reason = requiredReason(label);
-    if (!reason || !window.confirm(`${label}? Изменение попадёт в аудит.`))
-      return;
-    setState.mutate(
-      {
-        clusterId: cluster.id,
-        action,
-        payload: { expected_version: cluster.version, reason },
-      },
-      {
-        onSuccess: () => notifySuccess("Состояние кластера обновлено"),
-        onError: notifyError,
-      },
+    const permission = action === "mark-important" ? "mark_important" : action;
+    if (!can(permission)) return;
+    void performDecision(
+      () =>
+        setState.mutateAsync({
+          clusterId: cluster.id,
+          action,
+          payload: {
+            expected_version: cluster.version,
+            reason: `${label} при ручной проверке`,
+          },
+        }),
+      "Решение сохранено",
+      action === "ignore" || action === "defer",
     );
   };
 
@@ -686,6 +724,98 @@ function ClusterDetail({
         </Button>
       </Group>
       <CardAutomationNavigation scope={scope} />
+      <Card
+        withBorder
+        shadow="sm"
+        style={{
+          position: "sticky",
+          top: "calc(var(--app-shell-header-offset, 0px) + 8px)",
+          zIndex: 20,
+        }}
+      >
+        <Group>
+          {can("create_card") && (
+            <Button
+              loading={create.isPending}
+              disabled={
+                mutation ||
+                !deckId ||
+                !selectedCreateTopic ||
+                !question.trim() ||
+                !answer.trim() ||
+                reviewedFormDirty
+              }
+              onClick={createCard}
+            >
+              Создать карточку
+            </Button>
+          )}
+          {can("link_card") && (
+            <Button
+              variant="light"
+              loading={link.isPending}
+              disabled={mutation || !selectedCardId}
+              onClick={linkCard}
+            >
+              Связать с выбранной карточкой
+            </Button>
+          )}
+          {can("ignore") && (
+            <Button
+              color="red"
+              variant="light"
+              disabled={mutation}
+              onClick={() => runStateAction("ignore", "Отклонено")}
+            >
+              Отклонить
+            </Button>
+          )}
+          {can("defer") && (
+            <Button
+              color="orange"
+              variant="light"
+              disabled={mutation}
+              onClick={() =>
+                runStateAction("defer", "Отложено до следующего появления")
+              }
+            >
+              Отложить
+            </Button>
+          )}
+          {can("update_draft") && (
+            <Button
+              variant="default"
+              loading={updateDraft.isPending}
+              disabled={
+                mutation ||
+                !proposalChanged ||
+                !selectedCreateTopic ||
+                !question.trim()
+              }
+              onClick={saveProposalDraft}
+            >
+              Сохранить исправления
+            </Button>
+          )}
+          <Button
+            variant="subtle"
+            disabled={mutation || !queue.nextId}
+            onClick={queue.next}
+            title="Перейти без решения, оставив карточку в очереди"
+          >
+            Следующая →
+          </Button>
+        </Group>
+        <Text size="xs" c="dimmed" mt="xs">
+          Решение сохраняется сразу. После создания, привязки или отклонения
+          откроется следующая карточка.
+        </Text>
+        {reviewedFormDirty && (
+          <Text size="xs" c="orange">
+            Сначала сохраните изменения во вкладке «Расширенная правка».
+          </Text>
+        )}
+      </Card>
 
       {mutationError && (
         <Alert
@@ -1016,16 +1146,6 @@ function ClusterDetail({
                     }
                   />
                 </SimpleGrid>
-                <Textarea
-                  label="Причина изменения"
-                  description="Обязательна для аудита: укажите, что и почему проверили вручную."
-                  minRows={2}
-                  required
-                  value={draftReason}
-                  onChange={(event) =>
-                    setDraftReason(event.currentTarget.value)
-                  }
-                />
                 <Group justify="space-between" align="center">
                   <Text size="sm" c="dimmed">
                     Изменение смысла вопроса или контракта ответа переведёт
@@ -1040,7 +1160,6 @@ function ClusterDetail({
                       !reviewedDraft.canonicalQuestion.trim() ||
                       !reviewedTopicName ||
                       !answerContractValid ||
-                      !draftReason.trim() ||
                       updateDraft.isPending
                     }
                     onClick={saveReviewedDraft}
@@ -1409,7 +1528,7 @@ function ClusterDetail({
                       широкую тему.
                     </Alert>
                   )}
-                  {scope === "admin" && (
+                  {scope === "admin" && availableDecks.length > 1 && (
                     <Select
                       label="Колода"
                       value={deckId}
@@ -1458,13 +1577,17 @@ function ClusterDetail({
                   />
                   <Textarea
                     label="2. Формулировка вопроса"
-                    minRows={3}
+                    autosize
+                    minRows={2}
+                    maxRows={6}
                     value={question}
                     onChange={(event) => setQuestion(event.currentTarget.value)}
                   />
                   <Textarea
                     label="3. Ответ карточки"
-                    minRows={8}
+                    autosize
+                    minRows={6}
+                    maxRows={18}
                     value={answer}
                     onChange={(event) => setAnswer(event.currentTarget.value)}
                   />
@@ -1501,63 +1624,6 @@ function ClusterDetail({
                       Проверьте ответ вручную перед созданием карточки.
                     </Alert>
                   )}
-                </Stack>
-              </Card>
-            )}
-            {(can("update_draft") ||
-              (scope === "admin" &&
-                (can("link_card") || can("create_card")))) && (
-              <Card withBorder style={{ order: 3 }}>
-                <Stack>
-                  <div>
-                    <Title order={3}>5. Примите решение</Title>
-                    <Text size="sm" c="dimmed" mt={4}>
-                      Если найден полный дубль — свяжите вопросы. Если карточка
-                      новая — создайте её из проверенных полей выше.
-                    </Text>
-                  </div>
-                  <Group>
-                    {can("update_draft") && (
-                      <Button
-                        variant="light"
-                        loading={updateDraft.isPending}
-                        disabled={
-                          mutation ||
-                          !proposalChanged ||
-                          !selectedCreateTopic ||
-                          !question.trim()
-                        }
-                        onClick={saveProposalDraft}
-                      >
-                        Сохранить исправления
-                      </Button>
-                    )}
-                    {can("link_card") && (
-                      <Button
-                        variant="light"
-                        loading={link.isPending}
-                        disabled={mutation || !selectedCardId}
-                        onClick={linkCard}
-                      >
-                        Связать с выбранной карточкой
-                      </Button>
-                    )}
-                    {can("create_card") && (
-                      <Button
-                        loading={create.isPending}
-                        disabled={
-                          mutation ||
-                          !deckId ||
-                          !selectedCreateTopic ||
-                          !question.trim() ||
-                          !answer.trim()
-                        }
-                        onClick={createCard}
-                      >
-                        Создать новую карточку
-                      </Button>
-                    )}
-                  </Group>
                 </Stack>
               </Card>
             )}
@@ -1624,30 +1690,6 @@ function ClusterDetail({
                 }
               >
                 Пометить важным
-              </Button>
-            )}
-            {can("defer") && (
-              <Button
-                variant="light"
-                color="orange"
-                disabled={mutation}
-                onClick={() =>
-                  runStateAction("defer", "Отложить до следующего появления")
-                }
-              >
-                Отложить
-              </Button>
-            )}
-            {can("ignore") && (
-              <Button
-                variant="light"
-                color="gray"
-                disabled={mutation}
-                onClick={() =>
-                  runStateAction("ignore", "Исключить из общей базы")
-                }
-              >
-                Исключить из карточек
               </Button>
             )}
             {can("reopen") && (
@@ -1717,19 +1759,56 @@ export function CardAutomationClusterDetailPage({
   scope: CardAutomationScope;
 }) {
   const { clusterId = "" } = useParams();
+  const pageTop = useRef<HTMLDivElement>(null);
   const query = useQuestionCluster(clusterId, scope);
-  if (query.isPending) return <LoadingState label="Загружаем кластер…" />;
-  if (query.isError)
-    return (
-      <ErrorState error={query.error} retry={() => void query.refetch()} />
-    );
+  const queue = useReviewQueue(scope, clusterId);
+  const queueFinished =
+    queue.query.isSuccess && queue.completed === queue.total;
+  useEffect(() => {
+    pageTop.current?.scrollIntoView?.({ block: "start" });
+    pageTop.current?.focus({ preventScroll: true });
+  }, [clusterId, queueFinished]);
+  useEffect(() => {
+    if (
+      !queue.isManualReview ||
+      queue.busy ||
+      !queue.containsCurrent ||
+      queue.currentCompleted
+    )
+      return;
+    const closed =
+      query.data &&
+      ["card_created", "linked", "ignored", "merged", "split"].includes(
+        query.data.status,
+      );
+    const removed =
+      query.error instanceof ApiError && query.error.status === 404;
+    if (closed || removed) queue.complete(clusterId);
+  }, [clusterId, query.data, query.error, queue]);
   return (
-    <ClusterDetail
-      key={`${query.data.id}:${query.data.version}`}
-      cluster={query.data}
-      reload={() => query.refetch()}
-      scope={scope}
-    />
+    <Stack
+      gap="lg"
+      ref={pageTop}
+      tabIndex={-1}
+      style={{
+        scrollMarginTop: "calc(var(--app-shell-header-offset, 0px) + 8px)",
+      }}
+    >
+      <ReviewQueueProgress queue={queue} />
+      {query.isPending ? (
+        <LoadingState label="Загружаем карточку…" />
+      ) : query.isError ? (
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
+      ) : (
+        <ClusterDetail
+          key={`${query.data.id}:${query.data.version}`}
+          cluster={query.data}
+          reload={() => query.refetch()}
+          scope={scope}
+          queue={queue}
+        />
+      )}
+    </Stack>
   );
 }
 

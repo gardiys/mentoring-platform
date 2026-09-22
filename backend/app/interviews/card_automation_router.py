@@ -70,6 +70,7 @@ from app.interviews.card_automation_service import (
     merge_interview_card_duplicate,
     merge_question_clusters,
     override_automation_decision,
+    question_cluster_review_queue,
     reopen_question_cluster,
     reprocess_question_occurrence,
     request_interview_card_duplicate_refresh,
@@ -396,6 +397,20 @@ async def admin_bulk_clusters(
     # Keep this static route before ``/clusters/{cluster_id}``, otherwise
     # Starlette would route the literal ``bulk`` through UUID validation.
     return await bulk_update_question_clusters(session, admin, payload)
+
+
+@admin_router.get("/clusters/review-queue", response_model=list[UUID])
+async def admin_cluster_review_queue(
+    session: Session, admin: AdminUser, filters: Annotated[QuestionClusterListFilters, Query()]
+) -> list[UUID]:
+    return await question_cluster_review_queue(session, admin, filters)
+
+
+@mentor_router.get("/clusters/review-queue", response_model=list[UUID])
+async def mentor_cluster_review_queue(
+    session: Session, mentor: MentorUser, filters: Annotated[QuestionClusterListFilters, Query()]
+) -> list[UUID]:
+    return await question_cluster_review_queue(session, mentor, filters)
 
 
 @admin_router.get("/clusters/{cluster_id}", response_model=QuestionClusterDetail)
