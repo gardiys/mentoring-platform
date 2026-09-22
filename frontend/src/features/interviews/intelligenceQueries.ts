@@ -212,8 +212,16 @@ export function useDeleteIntelligenceInterview() {
 }
 
 export function useAdminRestartIntelligenceInterview() {
-  return useIntelligenceMutation((id: string) =>
-    api.adminRestartIntelligenceInterview(id),
+  return useIntelligenceMutation(
+    ({
+      id,
+      force,
+      economy,
+    }: {
+      id: string;
+      force: boolean;
+      economy: boolean;
+    }) => api.adminRestartIntelligenceInterview(id, force, economy),
   );
 }
 

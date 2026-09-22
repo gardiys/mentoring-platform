@@ -87,6 +87,7 @@ class AnswerContract(StrictAPIModel):
     optional_points: list[str] = Field(default_factory=list)
     common_mistakes: list[str] = Field(default_factory=list)
     unsupported_claims: list[str] = Field(default_factory=list)
+    source_limitations: list[str] = Field(default_factory=list)
     follow_up_questions: list[str] = Field(default_factory=list)
     difficulty: Literal["junior", "middle", "senior", "mixed"]
     version_scope: list[str] = Field(default_factory=list)
@@ -102,6 +103,9 @@ class AnswerValidationResult(StrictAPIModel):
     version_sensitive_claims: list[str] = Field(default_factory=list)
     version_warnings: list[str] = Field(default_factory=list)
     question_is_self_contained: bool | None = None
+    answer_is_substantive: bool | None = None
+    unverified_personal_claims: list[str] = Field(default_factory=list)
+    generator_warnings_resolved: bool = False
     confidence: float = Field(ge=0, le=1)
 
 
@@ -130,7 +134,9 @@ class QuestionClusterSummary(StrictAPIModel):
     direction_slug: str
     direction_title: str
     status: QuestionClusterStatus
-    processing_state: Literal["ai_processing", "manual_review", "waiting_for_ai"] | None = None
+    processing_state: (
+        Literal["ai_processing", "manual_review", "waiting_for_ai", "waiting_for_sources"] | None
+    ) = None
     canonical_question: str
     learning_object_type: LearningObjectType
     deck_id: UUID | None = None
@@ -172,6 +178,7 @@ class QuestionClusterListFilters(StrictAPIModel):
     needs_action_only: bool = False
     processing_only: bool = False
     waiting_only: bool = False
+    sources_only: bool = False
     sort_by: Literal[
         "priority_score",
         "last_seen_at",
@@ -206,6 +213,7 @@ class QuestionClusterPage(StrictAPIModel):
     ai_processing_total: int = Field(default=0, ge=0)
     manual_review_total: int = Field(default=0, ge=0)
     waiting_for_ai_total: int = Field(default=0, ge=0)
+    waiting_for_sources_total: int = Field(default=0, ge=0)
     limit: int = Field(ge=1)
     offset: int = Field(ge=0)
 

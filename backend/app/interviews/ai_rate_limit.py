@@ -17,6 +17,8 @@ from redis.asyncio import Redis
 if TYPE_CHECKING:
     from app.interviews.intelligence_ai import InterviewAIError
 
+from app.interviews.intelligence_request_policy import INTERVIEW_STAGE_CONTINUE
+
 COOLDOWN_ERROR = "OPENAI_MODEL_COOLDOWN"
 DEFAULT_COOLDOWN_SECONDS = 60.0
 _EXTEND = """
@@ -97,9 +99,12 @@ class ModelCooldown:
         await self.redis.aclose()
 
 
+CONTINUE_ERROR = "CARD_REVIEW_CONTINUE"
+
+
 async def defer_model_cooldown(ctx: dict[str, Any], error: InterviewAIError) -> None:
-    """A blocked request was never sent: release the slot and preserve its retry budget."""
-    if error.code != COOLDOWN_ERROR:
+    """Yield for a shared cooldown or saved continuation without consuming failure retries."""
+    if error.code not in {COOLDOWN_ERROR, INTERVIEW_STAGE_CONTINUE, CONTINUE_ERROR}:
         return
     if ctx.get("job_id") and ctx.get("redis") is not None:
         await ctx["redis"].eval(_REFUND, 1, retry_key_prefix + str(ctx["job_id"]))

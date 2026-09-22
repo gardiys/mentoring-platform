@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import (
@@ -138,6 +139,9 @@ class IntelligenceInterview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     analysis_revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    ai_service_tier: Mapped[Literal["default", "flex"]] = mapped_column(
+        String(16), default="default", server_default="default"
+    )
 
     stage_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),

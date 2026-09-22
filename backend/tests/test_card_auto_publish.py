@@ -184,7 +184,11 @@ async def test_uncertain_cards_stay_for_review(ready, problem):
     assert await publish(ready, references=set() if problem == "untrusted_source" else None) is None
     async with TestSession() as session:
         cluster = await session.get(QuestionCluster, ready[0])
-        assert cluster.answer_status is AnswerContractStatus.NEEDS_MANUAL_REVIEW
+        assert cluster.answer_status is (
+            AnswerContractStatus.REVIEW_PENDING
+            if problem in {"low_confidence", "contradiction", "missing_points", "untrusted_source"}
+            else AnswerContractStatus.NEEDS_MANUAL_REVIEW
+        )
         assert cluster.linked_card_id is None
         assert await session.scalar(select(func.count()).select_from(InterviewCard)) == 1
         if problem == "human_rejected":
@@ -392,6 +396,8 @@ async def test_preflight_skips_paid_calls(ready, seeded, monkeypatch, stage, pro
         assert cluster.answer_status is (
             AnswerContractStatus.NEEDS_EXPERT_SOURCE
             if problem == "no_sources"
+            else AnswerContractStatus.REVIEW_PENDING
+            if problem == "duplicate"
             else AnswerContractStatus.NEEDS_MANUAL_REVIEW
         )
         decisions = list(

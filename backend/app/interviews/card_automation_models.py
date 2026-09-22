@@ -140,6 +140,7 @@ class QuestionCluster(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     ai_retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ai_error_code: Mapped[str | None] = mapped_column(String(100))
     answer_repair_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    review_policy_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     source_retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     occurrences_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     distinct_interviews_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

@@ -4,6 +4,7 @@ import asyncio
 import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -16,7 +17,11 @@ from app.core.config import Settings
 from app.interviews.ai_accounting import AIRequestRecorder, estimated_cost
 from app.interviews.card_automation_models import AutomationDecision
 from app.interviews.card_automation_types import AutomationDecisionSource, AutomationDecisionType
-from app.interviews.intelligence_ai import FakeInterviewAIProvider, OpenAIInterviewAIProvider
+from app.interviews.intelligence_ai import (
+    FakeInterviewAIProvider,
+    InterviewAIError,
+    OpenAIInterviewAIProvider,
+)
 from app.interviews.intelligence_checkpoints import InterviewAICheckpoints
 from app.interviews.intelligence_jobs import _interview
 from app.interviews.intelligence_models import (
@@ -25,9 +30,11 @@ from app.interviews.intelligence_models import (
     IntelligenceAIUsage,
     IntelligenceInterview,
     IntelligenceQuestion,
+    IntelligenceQuestionKind,
     IntelligenceSpeaker,
     IntelligenceUtterance,
 )
+from app.interviews.intelligence_summary_evidence import summarize_review_evidence
 from app.interviews.models import InterviewCard
 from app.scripts.report_ai_costs import daily_report
 from tests.conftest import SeededData, TestSession
@@ -37,6 +44,7 @@ from tests.test_card_automation_pipeline import (
     _create_source,
     _process,
 )
+from tests.test_interview_summary_evidence import evidence
 
 
 class SmallOutput(BaseModel):
@@ -144,6 +152,7 @@ async def test_recovery_keeps_both_paid_attempts() -> None:
             max_output_tokens=1_000,
             validate=validate,
             operation="answer review",
+            reasoning_effort="low",
         )
         assert result.value == 2
     finally:
@@ -154,6 +163,7 @@ async def test_recovery_keeps_both_paid_attempts() -> None:
         assert [row.recovery for row in rows] == [False, True]
         assert sum(row.output_tokens for row in rows) == 1_000
         assert sum(row.estimated_cost_usd for row in rows) == Decimal("0.00214")
+    assert all(request["reasoning"] == {"effort": "low"} for request in requests)
     assert [request["max_output_tokens"] for request in requests] == [1_000, 2_000]
 
 
@@ -304,6 +314,62 @@ async def test_checkpoint_survives_outer_rollback_and_invalidates_changed_inputs
     async with TestSession() as session:
         assert await session.scalar(select(func.count(IntelligenceAICheckpoint.id))) == 3
         assert await session.scalar(select(func.count(IntelligenceAIUsage.id))) == 3
+
+
+async def test_review_cache_reuses_new_question_id_but_not_changed_evidence_or_interview(
+    seeded: SeededData,
+) -> None:
+    source = await _create_source(seeded, "Что такое GIL?")
+    other = await _create_source(seeded, "Что такое GIL?")
+    ai = FakeInterviewAIProvider()
+    checkpoints = InterviewAICheckpoints(TestSession, source.interview_id, ai)
+    kwargs = {
+        "question_id": source.question_id,
+        "question": "Что такое GIL?",
+        "answer": "Блокировка интерпретатора.",
+        "category": "python",
+        "question_kind": IntelligenceQuestionKind.TECHNICAL,
+        "context": "Источник: ответ кандидата.",
+        "direction": "python",
+    }
+    await checkpoints.review(**kwargs)
+    cached = await checkpoints.review(**{**kwargs, "question_id": uuid4()})
+    assert cached.usage.input_tokens == 0
+    assert len(ai.review_calls) == 1
+    # Changed answer/attribution/direction must be evaluated again.
+    await checkpoints.review(**{**kwargs, "answer": "Исправленный ответ из записи."})
+    await checkpoints.review(**{**kwargs, "context": "Источник: реплика другого спикера."})
+    await checkpoints.review(**{**kwargs, "direction": "go"})
+    assert len(ai.review_calls) == 4
+    ai.analysis_model = "changed-model"
+    await checkpoints.review(**kwargs)
+    assert len(ai.review_calls) == 5
+    separate = InterviewAICheckpoints(TestSession, other.interview_id, ai)
+    await separate.review(**{**kwargs, "question_id": other.question_id})
+    assert len(ai.review_calls) == 6
+
+
+async def test_final_report_retry_reuses_paid_evidence_checkpoints(seeded, monkeypatch):
+    source = await _create_source(seeded, "Что такое GIL?")
+    ai = FakeInterviewAIProvider()
+    final = await ai.summarize("Сохранённые оценки")
+    compression = AsyncMock(wraps=ai.summarize_evidence)
+    summarization = AsyncMock(
+        side_effect=[InterviewAIError("OPENAI_PROXY_ERROR", "unavailable", retryable=True), final]
+    )
+    monkeypatch.setattr(ai, "summarize_evidence", compression)
+    monkeypatch.setattr(ai, "summarize", summarization)
+    checkpoints = InterviewAICheckpoints(TestSession, source.interview_id, ai)
+    blocks = [evidence(i, long=True) for i in range(1, 22)]
+    with pytest.raises(InterviewAIError):
+        await summarize_review_evidence(checkpoints, blocks)
+    paid_compressions = compression.await_count
+    assert paid_compressions > 1
+    restarted = InterviewAICheckpoints(TestSession, source.interview_id, ai)
+    result = await summarize_review_evidence(restarted, blocks)
+    assert result.output == final.output
+    assert compression.await_count == paid_compressions
+    assert summarization.await_count == 2
 
 
 @pytest.mark.parametrize(

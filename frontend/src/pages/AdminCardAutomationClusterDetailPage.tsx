@@ -1198,6 +1198,18 @@ function ClusterDetail({
                 )}
               </Alert>
             )}
+            {cluster.answer_status === "review_pending" && (
+              <Alert color="blue" title="AI повторно проверяет карточку">
+                Проверим совпадения с базой и замечания к ответу. Ручное
+                подтверждение пока не требуется.
+              </Alert>
+            )}
+            {cluster.processing_state === "waiting_for_sources" && (
+              <Alert color="orange" title="Нужен проверенный материал">
+                Добавьте материал по теме в базу знаний. После появления
+                подходящего источника AI автоматически продолжит обработку.
+              </Alert>
+            )}
             {cluster.answer_status === "repair_pending" && (
               <Alert color="blue" title="AI исправляет ответ">
                 Проверим исправления по источникам. Автоматических исправлений:
@@ -1227,6 +1239,10 @@ function ClusterDetail({
                   ],
                   ["Противоречия", cluster.answer_validation.contradictions],
                   [
+                    "Неподтверждённый личный опыт",
+                    cluster.answer_validation.unverified_personal_claims,
+                  ],
+                  [
                     "Недостающие пункты",
                     cluster.answer_validation.missing_required_points,
                   ],
@@ -1250,6 +1266,12 @@ function ClusterDetail({
                         ))}
                       </Alert>
                     ),
+                )}
+                {cluster.answer_validation.answer_is_substantive === false && (
+                  <Alert color="yellow" title="Нет содержательного ответа">
+                    Ответ не раскрывает вопрос: оговорки об отсутствии
+                    информации недостаточно.
+                  </Alert>
                 )}
                 {cluster.answer_validation.question_is_self_contained ===
                   false && (

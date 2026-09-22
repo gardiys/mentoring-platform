@@ -1164,6 +1164,7 @@ async def intelligence_detail(
     return IntelligenceInterviewDetail(
         **summary.model_dump(),
         analysis_revision=interview.analysis_revision,
+        ai_service_tier=interview.ai_service_tier,
         analysis_archives=[
             IntelligenceAnalysisArchiveRead(
                 id=row.id, revision=row.revision, created_at=row.created_at
@@ -1552,7 +1553,12 @@ async def mark_upload_complete(
 
 
 async def prepare_analysis_restart(
-    session: AsyncSession, admin: User, interview_id: UUID
+    session: AsyncSession,
+    admin: User,
+    interview_id: UUID,
+    *,
+    force: bool = False,
+    economy: bool = False,
 ) -> IntelligenceInterview:
     if admin.role is not UserRole.ADMIN:
         api_error(403, "analysis_restart_forbidden", "Пересчёт доступен только администратору.")
@@ -1596,11 +1602,12 @@ async def prepare_analysis_restart(
     )
     await session.flush()
     await finalize_automation_deletion(session, impact)
-    await session.execute(
-        delete(IntelligenceAICheckpoint).where(
-            IntelligenceAICheckpoint.interview_id == interview.id
+    if force:
+        await session.execute(
+            delete(IntelligenceAICheckpoint).where(
+                IntelligenceAICheckpoint.interview_id == interview.id
+            )
         )
-    )
     # The archive retains old attempts; recovery must inspect this run only.
     await session.execute(
         delete(IntelligenceProcessingAttempt).where(
@@ -1614,6 +1621,7 @@ async def prepare_analysis_restart(
         )
     )
     interview.analysis_revision += 1
+    interview.ai_service_tier = "flex" if economy else "default"
     interview.ai_summary_payload = None
     interview.ai_summary_model = None
     interview.ai_summary_prompt_version = None

@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from app.interviews import card_automation_jobs as jobs
 from app.interviews.ai_accounting import estimated_cost
 from app.interviews.ai_rate_limit import (
+    CONTINUE_ERROR,
     COOLDOWN_ERROR,
     ModelCooldown,
     retry_after_seconds,
@@ -22,6 +23,7 @@ from app.interviews.card_automation_models import AutomationDecision, QuestionCl
 from app.interviews.card_automation_types import AnswerContractStatus, QuestionClusterStatus
 from app.interviews.intelligence_ai import FakeInterviewAIProvider, InterviewAIError
 from app.interviews.intelligence_models import AIRequestLog
+from app.interviews.intelligence_request_policy import INTERVIEW_STAGE_CONTINUE
 from tests.conftest import TestSession
 from tests.test_ai_cost_optimizations import SmallOutput, _provider, _response
 from tests.test_card_auto_publish import ready as ready_fixture
@@ -269,7 +271,8 @@ async def test_recorder_prices_actual_response_model_tier_and_retains_write_toke
         assert row.pricing_version == "openai-public-2026-09-22"
 
 
-async def test_real_arq_cooldown_retry_keeps_one_attempt_budget(cooldown):
+@pytest.mark.parametrize("error_code", [COOLDOWN_ERROR, INTERVIEW_STAGE_CONTINUE, CONTINUE_ERROR])
+async def test_real_arq_cooldown_retry_keeps_one_attempt_budget(cooldown, error_code):
     from arq.connections import RedisSettings, create_pool
     from arq.worker import Worker, func
 
@@ -285,7 +288,7 @@ async def test_real_arq_cooldown_retry_keeps_one_attempt_budget(cooldown):
             await defer_model_cooldown(
                 ctx,
                 InterviewAIError(
-                    COOLDOWN_ERROR,
+                    error_code,
                     "Wait",
                     retryable=True,
                     retry_after_seconds=10,

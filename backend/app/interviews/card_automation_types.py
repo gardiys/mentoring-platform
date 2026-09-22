@@ -46,6 +46,7 @@ class QuestionClusterStatus(StrEnum):
 
 
 class AnswerContractStatus(StrEnum):
+    REVIEW_PENDING = "review_pending"
     WAITING_FOR_AI = "waiting_for_ai"
     REPAIR_PENDING = "repair_pending"
     GENERATED_FROM_SOURCES = "generated_from_sources"

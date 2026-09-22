@@ -144,9 +144,11 @@ function filtersFromParams(params: URLSearchParams): QuestionClusterFilters {
     needsActionOnly:
       params.get("processing_only") !== "true" &&
       params.get("waiting_only") !== "true" &&
+      params.get("sources_only") !== "true" &&
       params.get("needs_action_only") !== "false",
     processingOnly: params.get("processing_only") === "true",
     waitingOnly: params.get("waiting_only") === "true",
+    sourcesOnly: params.get("sources_only") === "true",
     sortBy:
       sortBy && sortOptions.some((option) => option.value === sortBy)
         ? sortBy
@@ -422,18 +424,21 @@ export function CardAutomationClustersPage({
               <Select
                 label="Показать"
                 value={
-                  filters.waitingOnly
-                    ? "waiting"
-                    : filters.processingOnly
-                      ? "ai"
-                      : filters.needsActionOnly
-                        ? "manual"
-                        : "all"
+                  filters.sourcesOnly
+                    ? "sources"
+                    : filters.waitingOnly
+                      ? "waiting"
+                      : filters.processingOnly
+                        ? "ai"
+                        : filters.needsActionOnly
+                          ? "manual"
+                          : "all"
                 }
                 data={[
                   { value: "manual", label: "Нужно решение человека" },
                   { value: "ai", label: "Обрабатывает AI" },
                   { value: "waiting", label: "Ожидает восстановления AI" },
+                  { value: "sources", label: "Ожидает материалов" },
                   { value: "all", label: "Все кластеры" },
                 ]}
                 allowDeselect={false}
@@ -442,6 +447,8 @@ export function CardAutomationClustersPage({
                     (current) => {
                       const next = new URLSearchParams(current);
                       next.delete("page");
+                      if (value === "sources") next.set("sources_only", "true");
+                      else next.delete("sources_only");
                       if (value === "waiting") next.set("waiting_only", "true");
                       else next.delete("waiting_only");
                       if (value === "ai") next.set("processing_only", "true");
@@ -504,6 +511,9 @@ export function CardAutomationClustersPage({
             </Badge>
             <Badge color="orange">
               Ожидают AI: {query.data.waiting_for_ai_total ?? 0}
+            </Badge>
+            <Badge color="gray">
+              Ожидают материалов: {query.data.waiting_for_sources_total ?? 0}
             </Badge>
           </Group>
         </Stack>
@@ -678,11 +688,13 @@ export function CardAutomationClustersPage({
                     </Table.Td>
                     <Table.Td>
                       <Badge color={clusterStatusColors[cluster.status]}>
-                        {cluster.processing_state === "waiting_for_ai"
-                          ? "Ожидает восстановления AI"
-                          : cluster.processing_state === "ai_processing"
-                            ? "Обрабатывает AI"
-                            : clusterStatusLabels[cluster.status]}
+                        {cluster.processing_state === "waiting_for_sources"
+                          ? "Ожидает материалов"
+                          : cluster.processing_state === "waiting_for_ai"
+                            ? "Ожидает восстановления AI"
+                            : cluster.processing_state === "ai_processing"
+                              ? "Обрабатывает AI"
+                              : clusterStatusLabels[cluster.status]}
                       </Badge>
                     </Table.Td>
                     <Table.Td>

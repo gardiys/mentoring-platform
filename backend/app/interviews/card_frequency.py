@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import and_, or_
+from sqlalchemy import or_
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.config import get_settings
@@ -37,19 +37,20 @@ def effective_card_frequency(
     *,
     threshold: int | None = None,
 ) -> InterviewCardFrequency:
-    return card.frequency_override or automatic_card_frequency(
+    observed = automatic_card_frequency(
         card.asked_count or 0,
         threshold=threshold,
     )
+    # Real interview frequency takes precedence over a historical/manual "rare" label.
+    if observed is InterviewCardFrequency.FREQUENT:
+        return observed
+    return card.frequency_override or observed
 
 
 def effective_frequent_predicate() -> ColumnElement[bool]:
     return or_(
         InterviewCard.frequency_override == InterviewCardFrequency.FREQUENT,
-        and_(
-            InterviewCard.frequency_override.is_(None),
-            InterviewCard.asked_count >= frequent_occurrence_threshold(),
-        ),
+        InterviewCard.asked_count >= frequent_occurrence_threshold(),
     ).is_(True)
 
 
@@ -58,8 +59,5 @@ def refresh_card_frequency(
     *,
     threshold: int | None = None,
 ) -> InterviewCardFrequency:
-    card.frequency = card.frequency_override or automatic_card_frequency(
-        card.asked_count or 0,
-        threshold=threshold,
-    )
+    card.frequency = effective_card_frequency(card, threshold=threshold)
     return card.frequency

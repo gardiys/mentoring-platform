@@ -202,6 +202,11 @@ class Settings(BaseSettings):
     openai_analysis_model: str | None = None
     openai_extraction_model: str | None = None
     openai_light_review_model: str | None = None
+    # Experiments stay opt-in until the synthetic and human-reviewed evaluations pass.
+    openai_review_reasoning_effort: Literal["low", "medium", "high"] | None = None
+    openai_simple_review_enabled: bool = False
+    openai_simple_review_model: str | None = None
+    openai_simple_review_reasoning_effort: Literal["low", "medium", "high"] = "low"
     openai_embedding_model: str = "text-embedding-3-small"
     openai_embedding_dimensions: int = Field(default=256, ge=1, le=3_072)
     openai_proxy_url: SecretStr | None = None
@@ -625,6 +630,8 @@ class Settings(BaseSettings):
         "openai_analysis_model",
         "openai_extraction_model",
         "openai_light_review_model",
+        "openai_simple_review_model",
+        "openai_review_reasoning_effort",
         "tochka_client_id",
         "tochka_customer_code",
         "tochka_ca_bundle_path",

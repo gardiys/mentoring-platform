@@ -1143,6 +1143,7 @@ export type QuestionOccurrenceStatus =
   | "failed";
 
 export type AnswerContractStatus =
+  | "review_pending"
   | "waiting_for_ai"
   | "repair_pending"
   | "generated_from_sources"
@@ -1214,6 +1215,7 @@ export type QuestionClusterAction =
   | "reopen";
 
 export interface CardAutomationAnswerContract {
+  source_limitations?: string[];
   short_answer: string;
   required_points: string[];
   optional_points: string[];
@@ -1227,6 +1229,9 @@ export interface CardAutomationAnswerContract {
 }
 
 export interface CardAutomationAnswerValidation {
+  answer_is_substantive?: boolean | null;
+  unverified_personal_claims?: string[];
+  generator_warnings_resolved?: boolean;
   supported: boolean;
   unsupported_claims: string[];
   contradictions: string[];
@@ -1257,7 +1262,11 @@ export interface QuestionClusterSummary {
   direction_slug: string;
   status: QuestionClusterStatus;
   processing_state?:
-    "ai_processing" | "manual_review" | "waiting_for_ai" | null;
+    | "ai_processing"
+    | "manual_review"
+    | "waiting_for_ai"
+    | "waiting_for_sources"
+    | null;
   canonical_question: string;
   learning_object_type: LearningObjectType;
   deck_id: string | null;
@@ -1386,6 +1395,7 @@ export interface QuestionClusterPage {
   ai_processing_total?: number;
   manual_review_total?: number;
   waiting_for_ai_total?: number;
+  waiting_for_sources_total?: number;
   limit: number;
   offset: number;
 }
@@ -1469,6 +1479,7 @@ export interface QuestionClusterFilters {
   needsActionOnly: boolean;
   processingOnly?: boolean;
   waitingOnly?: boolean;
+  sourcesOnly?: boolean;
   sortBy:
     | "priority_score"
     | "last_seen_at"
@@ -1935,6 +1946,7 @@ export interface IntelligenceInterviewOverview {
 
 export interface IntelligenceInterviewDetail extends IntelligenceInterviewSummary {
   analysis_revision?: number;
+  ai_service_tier?: "default" | "flex";
   analysis_archives?: Array<{
     id: string;
     revision: number;

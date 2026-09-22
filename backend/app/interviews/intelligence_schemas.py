@@ -231,6 +231,7 @@ class IntelligenceAnalysisArchiveRead(BaseModel):
 
 class IntelligenceInterviewDetail(IntelligenceInterviewSummary):
     analysis_revision: int = 1
+    ai_service_tier: Literal["default", "flex"] = "default"
     analysis_archives: list[IntelligenceAnalysisArchiveRead] = Field(default_factory=list)
     media_filename: str | None
     media_content_type: str | None

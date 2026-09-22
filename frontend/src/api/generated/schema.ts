@@ -8061,6 +8061,8 @@ export interface components {
             common_mistakes?: string[];
             /** Unsupported Claims */
             unsupported_claims?: string[];
+            /** Source Limitations */
+            source_limitations?: string[];
             /** Follow Up Questions */
             follow_up_questions?: string[];
             /**
@@ -8079,7 +8081,7 @@ export interface components {
          * AnswerContractStatus
          * @enum {string}
          */
-        AnswerContractStatus: "waiting_for_ai" | "repair_pending" | "generated_from_sources" | "needs_expert_source" | "needs_manual_review" | "approved" | "rejected";
+        AnswerContractStatus: "review_pending" | "waiting_for_ai" | "repair_pending" | "generated_from_sources" | "needs_expert_source" | "needs_manual_review" | "approved" | "rejected";
         /** AnswerValidationResult */
         AnswerValidationResult: {
             /** Supported */
@@ -8096,6 +8098,15 @@ export interface components {
             version_warnings?: string[];
             /** Question Is Self Contained */
             question_is_self_contained?: boolean | null;
+            /** Answer Is Substantive */
+            answer_is_substantive?: boolean | null;
+            /** Unverified Personal Claims */
+            unverified_personal_claims?: string[];
+            /**
+             * Generator Warnings Resolved
+             * @default false
+             */
+            generator_warnings_resolved: boolean;
             /** Confidence */
             confidence: number;
         };
@@ -10169,6 +10180,12 @@ export interface components {
              * @default 1
              */
             analysis_revision: number;
+            /**
+             * Ai Service Tier
+             * @default default
+             * @enum {string}
+             */
+            ai_service_tier: "default" | "flex";
             /** Analysis Archives */
             analysis_archives?: components["schemas"]["IntelligenceAnalysisArchiveRead"][];
             /** Media Filename */
@@ -13898,7 +13915,7 @@ export interface components {
             direction_title: string;
             status: components["schemas"]["QuestionClusterStatus"];
             /** Processing State */
-            processing_state?: ("ai_processing" | "manual_review" | "waiting_for_ai") | null;
+            processing_state?: ("ai_processing" | "manual_review" | "waiting_for_ai" | "waiting_for_sources") | null;
             /** Canonical Question */
             canonical_question: string;
             learning_object_type: components["schemas"]["LearningObjectType"];
@@ -14173,6 +14190,11 @@ export interface components {
              * @default 0
              */
             waiting_for_ai_total: number;
+            /**
+             * Waiting For Sources Total
+             * @default 0
+             */
+            waiting_for_sources_total: number;
             /** Limit */
             limit: number;
             /** Offset */
@@ -14216,7 +14238,7 @@ export interface components {
             direction_title: string;
             status: components["schemas"]["QuestionClusterStatus"];
             /** Processing State */
-            processing_state?: ("ai_processing" | "manual_review" | "waiting_for_ai") | null;
+            processing_state?: ("ai_processing" | "manual_review" | "waiting_for_ai" | "waiting_for_sources") | null;
             /** Canonical Question */
             canonical_question: string;
             learning_object_type: components["schemas"]["LearningObjectType"];
@@ -21087,7 +21109,10 @@ export interface operations {
     };
     admin_restart_ai_analysis_api_v1_admin_interviews_ai_operations__interview_id__restart_post: {
         parameters: {
-            query?: never;
+            query?: {
+                force?: boolean;
+                economy?: boolean;
+            };
             header?: {
                 authorization?: string | null;
                 "x-dev-user-id"?: string | null;
@@ -21328,6 +21353,7 @@ export interface operations {
                 needs_action_only?: boolean;
                 processing_only?: boolean;
                 waiting_only?: boolean;
+                sources_only?: boolean;
                 sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
                 sort_order?: "asc" | "desc";
                 limit?: number;
@@ -22149,6 +22175,7 @@ export interface operations {
                 needs_action_only?: boolean;
                 processing_only?: boolean;
                 waiting_only?: boolean;
+                sources_only?: boolean;
                 sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
                 sort_order?: "asc" | "desc";
                 limit?: number;

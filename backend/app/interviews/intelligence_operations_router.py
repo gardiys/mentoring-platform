@@ -64,9 +64,15 @@ async def admin_requeue_ai_processing(
 
 @router.post("/{interview_id}/restart", response_model=IntelligenceInterviewDetail)
 async def admin_restart_ai_analysis(
-    interview_id: UUID, session: Session, admin: AdminUser
+    interview_id: UUID,
+    session: Session,
+    admin: AdminUser,
+    force: bool = False,
+    economy: bool = False,
 ) -> IntelligenceInterviewDetail:
-    interview = await prepare_analysis_restart(session, admin, interview_id)
+    interview = await prepare_analysis_restart(
+        session, admin, interview_id, force=force, economy=economy
+    )
     try:
         await enqueue_intelligence_job(
             "extract_interview_structure",

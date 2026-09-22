@@ -18,6 +18,10 @@ from app.interviews.intelligence_ai import (
     EXTRACTION_PROMPT_VERSION,
     LIGHT_REVIEW_PROMPT,
     LIGHT_REVIEW_PROMPT_VERSION,
+    SUMMARY_EVIDENCE_MAX_OUTPUT_TOKENS,
+    SUMMARY_EVIDENCE_PROMPT,
+    SUMMARY_EVIDENCE_PROMPT_VERSION,
+    SUMMARY_MIN_OUTPUT_TOKENS,
     SUMMARY_PROMPT,
     SUMMARY_PROMPT_VERSION,
     TECHNICAL_REVIEW_PROMPT,
@@ -25,11 +29,14 @@ from app.interviews.intelligence_ai import (
     AIAnswerRecoveryResult,
     AIExtractionResult,
     AIReviewResult,
+    AISummaryEvidenceResult,
     AISummaryResult,
     AIUsageResult,
     AnswerRecoveryOutput,
     ExtractionOutput,
+    InterviewAIError,
     InterviewAIProvider,
+    InterviewSummaryEvidence,
     InterviewSummaryOutput,
     ReviewOutput,
 )
@@ -37,6 +44,12 @@ from app.interviews.intelligence_models import (
     IntelligenceAICheckpoint,
     IntelligenceAIUsage,
     IntelligenceQuestionKind,
+)
+from app.interviews.intelligence_request_policy import (
+    INTERVIEW_STAGE_CONTINUE,
+    ServiceTier,
+    interview_request_scope,
+    review_request_policy,
 )
 from app.interviews.intelligence_transcript_context import transcript_context
 
@@ -64,10 +77,14 @@ class InterviewAICheckpoints:
         session_factory: async_sessionmaker[AsyncSession],
         interview_id: UUID,
         ai: InterviewAIProvider,
+        *,
+        service_tier: ServiceTier = "default",
     ) -> None:
         self.session_factory = session_factory
         self.interview_id = interview_id
         self.ai = ai
+        self.service_tier = service_tier
+        self.paid_operations = 0
 
     async def _run(
         self,
@@ -81,10 +98,13 @@ class InterviewAICheckpoints:
         schema: type[_T],
         call: Callable[[], Awaitable[_Result[_T]]],
         question_id: UUID | None = None,
+        reasoning_effort: str | None = None,
     ) -> tuple[_T, AIUsageResult]:
         key = hashlib.sha256(
             json.dumps(
                 {
+                    # Preserve existing default-reasoning checkpoints.
+                    **({"reasoning_effort": reasoning_effort} if reasoning_effort else {}),
                     "inputs": inputs,
                     "prompt": prompt,
                     "prompt_version": prompt_version,
@@ -107,7 +127,18 @@ class InterviewAICheckpoints:
             )
             if cached is not None:
                 return schema.model_validate(cached.output), AIUsageResult(None, cached.model, 0, 0)
-        result = await call()
+        # A logical operation may make two provider calls (structured-output recovery).
+        # One new operation per Flex pass keeps the job inside its 2 * timeout budget.
+        if self.service_tier == "flex" and self.paid_operations:
+            raise InterviewAIError(
+                INTERVIEW_STAGE_CONTINUE,
+                "Continue saved interview analysis in the next job",
+                retryable=True,
+                retry_after_seconds=1,
+            )
+        self.paid_operations += 1
+        with interview_request_scope(self.service_tier):
+            result = await call()
         async with self.session_factory() as session:
             await session.execute(
                 insert(IntelligenceAICheckpoint)
@@ -175,10 +206,12 @@ class InterviewAICheckpoints:
         direction: str | None,
     ) -> AIReviewResult:
         technical = question_kind is IntelligenceQuestionKind.TECHNICAL
+        policy = review_request_policy(self.ai, question_kind, question, answer, context)
+        # Question UUIDs change on re-extraction. Cache the actual review input within
+        # this interview; keep the UUID only as financial attribution for a new call.
         output, usage = await self._run(
             operation="technical_evaluation" if technical else "light_evaluation",
             inputs={
-                "question_id": str(question_id),
                 "question": question,
                 "answer": answer,
                 "category": category,
@@ -191,9 +224,8 @@ class InterviewAICheckpoints:
             prompt_version=TECHNICAL_REVIEW_PROMPT_VERSION
             if technical
             else LIGHT_REVIEW_PROMPT_VERSION,
-            model=getattr(
-                self.ai, "analysis_model" if technical else "light_review_model", self.ai.name
-            ),
+            model=policy.model,
+            reasoning_effort=policy.reasoning_effort,
             max_output_tokens=getattr(self.ai, "review_max_output_tokens", 4_000),
             schema=ReviewOutput,
             question_id=question_id,
@@ -215,8 +247,23 @@ class InterviewAICheckpoints:
             prompt=SUMMARY_PROMPT,
             prompt_version=SUMMARY_PROMPT_VERSION,
             model=getattr(self.ai, "light_review_model", self.ai.name),
-            max_output_tokens=getattr(self.ai, "summary_max_output_tokens", 4_000),
+            max_output_tokens=max(
+                getattr(self.ai, "summary_max_output_tokens", 4_000), SUMMARY_MIN_OUTPUT_TOKENS
+            ),
             schema=InterviewSummaryOutput,
             call=lambda: self.ai.summarize(content),
         )
         return AISummaryResult(output, usage)
+
+    async def summarize_evidence(self, content: str) -> AISummaryEvidenceResult:
+        output, usage = await self._run(
+            operation="summary_evidence",
+            inputs={"content": content},
+            prompt=SUMMARY_EVIDENCE_PROMPT,
+            prompt_version=SUMMARY_EVIDENCE_PROMPT_VERSION,
+            model=getattr(self.ai, "light_review_model", self.ai.name),
+            max_output_tokens=SUMMARY_EVIDENCE_MAX_OUTPUT_TOKENS,
+            schema=InterviewSummaryEvidence,
+            call=lambda: self.ai.summarize_evidence(content),
+        )
+        return AISummaryEvidenceResult(output, usage)

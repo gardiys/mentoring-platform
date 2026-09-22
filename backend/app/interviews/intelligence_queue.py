@@ -30,6 +30,7 @@ OPENAI_FUNCTIONS = frozenset(
         "promote_question_cluster",
         "generate_cluster_candidate",
         "validate_cluster_answer",
+        "review_cluster_for_automation",
         "create_personal_review_item",
         "backfill_existing_questions",
         "reprocess_question_occurrence",

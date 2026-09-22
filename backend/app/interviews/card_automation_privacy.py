@@ -14,6 +14,45 @@ _TELEGRAM_USERNAME_RE = re.compile(
     r"(?<![\w@])@[A-Z][A-Z0-9_]{4,}\b(?!\.[A-Z_])",
     re.IGNORECASE,
 )
+# Preserve a decorator only in recognizable Python syntax or a technical explanation.
+# Merely putting a contact in backticks must not exempt it from redaction.
+_PYTHON_DECORATORS = frozenset(
+    {
+        "staticmethod",
+        "classmethod",
+        "property",
+        "abstractmethod",
+        "dataclass",
+        "overload",
+        "cache",
+        "lru_cache",
+        "wraps",
+        "fixture",
+        "decorator",
+    }
+)
+
+
+def _redact_handles(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        name = match.group()[1:].casefold()
+        before, after = value[: match.start()], value[match.end() :]
+        contact_context = re.search(
+            r"(?i)(?:напиш\w*|контакт\w*|telegram|телеграм\w*|username|handle|ник)\s*[:—-]?\s*`?$",
+            before[-80:],
+        )
+        inline = before.endswith("`") and after.startswith("`")
+        declaration = re.match(r"(?:\([^\n]*\))?\s*\n\s*(?:async\s+)?(?:def|class)\s", after)
+        explanation = re.search(r"(?i)(?:декоратор\w*|decorator|python|что такое)", value)
+        if not contact_context and (
+            declaration or (name in _PYTHON_DECORATORS and (inline or explanation))
+        ):
+            return match.group()
+        return "[TELEGRAM]"
+
+    return _TELEGRAM_USERNAME_RE.sub(replace, value)
+
+
 _FINANCIAL_RE = re.compile(
     r"(?i)\b(?:salary|compensation|зарплат(?:а|ы|е|у)?|оклад|доход)\b"
     r"\s*[:=\-]?\s*(?:[$€₽]\s*)?\d[\d\s.,]*"
@@ -97,7 +136,7 @@ def redact_untrusted_text(
     redacted = _redact_person_names(redacted)
     redacted = _EMAIL_RE.sub("[EMAIL]", redacted)
     redacted = _TELEGRAM_URL_RE.sub("[TELEGRAM]", redacted)
-    redacted = _TELEGRAM_USERNAME_RE.sub("[TELEGRAM]", redacted)
+    redacted = _redact_handles(redacted)
     redacted = _FINANCIAL_RE.sub("[FINANCIAL]", redacted)
     redacted = _CURRENCY_AMOUNT_RE.sub("[FINANCIAL]", redacted)
     return _LONG_NUMBER_RE.sub("[LONG_NUMBER]", redacted)

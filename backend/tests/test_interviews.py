@@ -52,6 +52,41 @@ async def create_deck(client: AsyncClient, seeded: SeededData) -> dict:
     return response.json()
 
 
+async def test_observed_frequent_card_is_in_all_views_despite_manual_rare(
+    client: AsyncClient, seeded: SeededData
+) -> None:
+    deck = await create_deck(client, seeded)
+    target = next(card for card in deck["cards"] if card["slug"] == "python-metaclass")
+    async with TestSession() as session:
+        card = await session.get(InterviewCard, UUID(target["id"]))
+        # Legacy/manual rare label and stale persisted frequency, as on production.
+        card.asked_count = 5
+        assert card.frequency_override is InterviewCardFrequency.OCCASIONAL
+        await session.commit()
+    root = "/api/v1/interviews/decks/python-core-interview"
+    selected = await client.put(
+        root + "/topics",
+        headers=auth(seeded.student_id),
+        json={"categories": ["Основы Python", "Продвинутый Python"]},
+    )
+    assert selected.status_code == 200
+    for path, params, key in [
+        ("/session", {"frequent_only": True}, "cards"),
+        ("/questions", {"frequent_only": True, "sort": "frequency", "order": "desc"}, "items"),
+        ("/cards/search", {"query": "metaclass", "frequent_only": True}, None),
+    ]:
+        response = await client.get(root + path, params=params, headers=auth(seeded.student_id))
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        rows = payload[key] if key else payload
+        item = next(row for row in rows if row["id"] == target["id"])
+        assert item["frequency"] == "frequent"
+        if key == "items":
+            assert rows[0]["id"] == target["id"]
+        if key == "cards":
+            assert payload["deck"]["stats"]["total_cards"] == 2
+
+
 async def test_only_admin_can_manage_interview_decks(
     client: AsyncClient, seeded: SeededData
 ) -> None:
@@ -352,12 +387,8 @@ async def test_frequency_sort_is_applied_before_question_table_pagination(
 
     assert first_page.status_code == 200, first_page.text
     assert second_page.status_code == 200, second_page.text
-    assert [item["asked_count"] for item in first_page.json()["items"]] == list(
-        range(30, 20, -1)
-    )
-    assert [item["asked_count"] for item in second_page.json()["items"]] == list(
-        range(20, 10, -1)
-    )
+    assert [item["asked_count"] for item in first_page.json()["items"]] == list(range(30, 20, -1))
+    assert [item["asked_count"] for item in second_page.json()["items"]] == list(range(20, 10, -1))
 
 
 async def test_student_selects_topics_before_study(client: AsyncClient, seeded: SeededData) -> None:

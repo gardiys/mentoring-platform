@@ -78,11 +78,13 @@ async def completed_analysis(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("force", [False, True])
 async def test_restart_archives_reviews_preserves_cards_and_ignores_old_jobs(
     client: AsyncClient,
     seeded: SeededData,
     monkeypatch: pytest.MonkeyPatch,
     completed_analysis,
+    force: bool,
 ) -> None:
     interview_id, ctx, ai = completed_analysis
     async with TestSession() as session:
@@ -138,7 +140,7 @@ async def test_restart_archives_reviews_preserves_cards_and_ignores_old_jobs(
     enqueue = AsyncMock(return_value="queued")
     monkeypatch.setattr(intelligence_operations_router, "enqueue_intelligence_job", enqueue)
     url = f"/api/v1/admin/interviews/ai-operations/{interview_id}/restart"
-    response = await client.post(url, headers=auth(seeded.admin_id))
+    response = await client.post(url, params={"force": force}, headers=auth(seeded.admin_id))
     assert response.status_code == 200, response.text
     detail = response.json()
     assert detail["analysis_revision"] == 2
@@ -165,7 +167,8 @@ async def test_restart_archives_reviews_preserves_cards_and_ignores_old_jobs(
         card = await session.get(InterviewCard, card_id)
         assert card.is_published and card.answer_markdown == "Проверенный ответ"
         assert await session.scalar(select(func.count(IntelligenceAIUsage.id))) == usage_count
-        assert await session.scalar(select(func.count(IntelligenceAICheckpoint.id))) == 0
+        checkpoint_count = await session.scalar(select(func.count(IntelligenceAICheckpoint.id)))
+        assert (checkpoint_count == 0) if force else (checkpoint_count > 0)
         interview = await session.get(IntelligenceInterview, interview_id)
         stage = await session.get(InterviewProcessStage, interview.stage_id)
         assert stage.media_storage_key
@@ -184,7 +187,8 @@ async def test_restart_archives_reviews_preserves_cards_and_ignores_old_jobs(
     assert final.json()["processing_status"] == "ready"
     assert len(final.json()["questions"]) == 2
     assert len(final.json()["analysis_archives"]) == 1
-    assert len(ai.extraction_calls) == calls_before[0] + 1
+    assert len(ai.extraction_calls) == calls_before[0] + int(force)
+    assert len(ai.review_calls) == calls_before[1] + (2 if force else 0)
 
 
 @pytest.mark.asyncio

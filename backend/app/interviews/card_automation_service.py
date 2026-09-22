@@ -108,6 +108,7 @@ from app.interviews.card_cluster_workflow import (
     ai_processing_condition,
     manual_review_condition,
     waiting_for_ai_condition,
+    waiting_for_sources_condition,
 )
 from app.interviews.card_duplicate_cache import (
     CACHE_STALE_SECONDS,
@@ -512,7 +513,10 @@ async def _cluster_summaries(
             direction_title=track.title,
             status=cluster.status,
             processing_state=(
-                "waiting_for_ai"
+                "waiting_for_sources"
+                if cluster.answer_status == AnswerContractStatus.NEEDS_EXPERT_SOURCE
+                and cluster.ai_error_code == "no_trusted_sources"
+                else "waiting_for_ai"
                 if cluster.answer_status == AnswerContractStatus.WAITING_FOR_AI
                 else "ai_processing"
                 if cluster.id in ai_processing_ids
@@ -699,8 +703,11 @@ async def list_question_clusters(
     processing = ai_processing_condition()
     manual = manual_review_condition()
     waiting = waiting_for_ai_condition()
+    sources_waiting = waiting_for_sources_condition()
     selected_work = (
-        waiting
+        sources_waiting
+        if filters.sources_only
+        else waiting
         if filters.waiting_only
         else processing
         if filters.processing_only
@@ -715,6 +722,7 @@ async def list_question_clusters(
                 func.count(QuestionCluster.id).filter(processing),
                 func.count(QuestionCluster.id).filter(manual),
                 func.count(QuestionCluster.id).filter(waiting),
+                func.count(QuestionCluster.id).filter(sources_waiting),
             ).where(*conditions)
         )
     ).one()
@@ -751,6 +759,7 @@ async def list_question_clusters(
         ai_processing_total=totals[1],
         manual_review_total=totals[2],
         waiting_for_ai_total=totals[3],
+        waiting_for_sources_total=totals[4],
         limit=filters.limit,
         offset=filters.offset,
     )

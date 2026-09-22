@@ -1,4 +1,4 @@
-import { Button, Card, Group, Stack, Text } from "@mantine/core";
+import { Button, Card, Checkbox, Group, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 
@@ -13,6 +13,8 @@ export function AdminAnalysisRestartPanel({
 }) {
   const restart = useAdminRestartIntelligenceInterview();
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [force, setForce] = useState(false);
+  const [economy, setEconomy] = useState(false);
   const canRestart =
     ["ready", "failed"].includes(interview.processing_status) &&
     interview.transcript.some((row) => row.speaker_role === "candidate");
@@ -59,30 +61,59 @@ export function AdminAnalysisRestartPanel({
             onClick={() => {
               if (
                 !window.confirm(
-                  "Пересчитать AI-разбор по сохранённой транскрибации? Вопросы и оценки будут построены заново. Предыдущая версия с ручными рецензиями сохранится в архиве; опубликованные карточки останутся в базе.",
+                  (force
+                    ? "Полностью пересчитать AI-разбор? Все AI-этапы разбора будут выполнены заново. "
+                    : "Обновить AI-разбор? Неизменённые результаты будут использованы повторно. ") +
+                    "Предыдущая версия с ручными рецензиями сохранится в архиве; опубликованные карточки останутся в базе.",
                 )
               )
                 return;
-              restart.mutate(interview.id, {
-                onSuccess: () =>
-                  notifications.show({
-                    color: "green",
-                    message: "Пересчёт AI-разбора запущен",
-                  }),
-                onError: (error) =>
-                  notifications.show({ color: "red", message: error.message }),
-              });
+              restart.mutate(
+                { id: interview.id, force, economy },
+                {
+                  onSuccess: () =>
+                    notifications.show({
+                      color: "green",
+                      message: "Пересчёт AI-разбора запущен",
+                    }),
+                  onError: (error) =>
+                    notifications.show({
+                      color: "red",
+                      message: error.message,
+                    }),
+                },
+              );
             }}
           >
             Пересчитать AI-разбор
           </Button>
         </Group>
         <Text size="sm" c="dimmed">
-          Заново выделит вопросы и оценит ответы по текущей транскрибации.
+          Обновит разбор по текущей транскрибации и правилам оценки.
+          Неизменённые результаты используются повторно без нового запроса к AI.
           Предыдущие оценки и ручные рецензии сохранятся в архиве для
           скачивания. Повторный запуск доступен после завершения обработки или
           ошибки.
         </Text>
+        <Checkbox
+          label="Полностью пересчитать все этапы"
+          description="Запросить новые результаты AI, даже если исходные данные не изменились. Это увеличит расходы."
+          checked={force}
+          disabled={!canRestart || restart.isPending}
+          onChange={(event) => setForce(event.currentTarget.checked)}
+        />
+        <Checkbox
+          label="Экономичный разбор (Flex)"
+          description="Более дешёвая обработка той же моделью. Может занять больше времени; при ожидании готовые этапы сохраняются."
+          checked={economy}
+          disabled={!canRestart || restart.isPending}
+          onChange={(event) => setEconomy(event.currentTarget.checked)}
+        />
+        {interview.ai_service_tier === "flex" && (
+          <Text size="sm" c="dimmed">
+            Текущий разбор: экономичный режим Flex.
+          </Text>
+        )}
         {(interview.analysis_archives ?? []).map((archive) => (
           <Button
             key={archive.id}

@@ -35,6 +35,7 @@ from app.interviews.card_automation_jobs import (
     reconcile_card_automation_jobs,
     refresh_interview_card_duplicate_cache,
     reprocess_question_occurrence,
+    review_cluster_for_automation,
     route_question_occurrence,
     validate_cluster_answer,
 )
@@ -91,7 +92,9 @@ from app.interviews.intelligence_queue import (
 from app.interviews.intelligence_recovery import (
     intelligence_recovery_job_name as _recovery_job_name,
 )
+from app.interviews.intelligence_request_policy import INTERVIEW_STAGE_CONTINUE
 from app.interviews.intelligence_service import safe_processing_message
+from app.interviews.intelligence_summary_evidence import summarize_review_evidence
 from app.interviews.intelligence_transcript_context import ground_annotations
 from app.interviews.media_guardrails import (
     MediaGuardrailError,
@@ -574,7 +577,12 @@ async def extract_interview_structure(
             for item in utterances
         ]
         extracted = []
-        checkpoints = InterviewAICheckpoints(async_session_factory, interview.id, _ai(ctx))
+        checkpoints = InterviewAICheckpoints(
+            async_session_factory,
+            interview.id,
+            _ai(ctx),
+            service_tier="flex" if interview.ai_service_tier == "flex" else "default",
+        )
         track = await session.get(LearningTrack, process.track_id)
         direction = track.slug if track else None
         try:
@@ -584,6 +592,11 @@ async def extract_interview_structure(
                 result = await checkpoints.extract(chunk, direction=direction)
                 extracted.extend(result.output.questions)
         except InterviewAIError as error:
+            if error.code == INTERVIEW_STAGE_CONTINUE:
+                # This is progress, not a failed attempt. Persist finished reviews and
+                # remove the temporary attempt before ARQ releases the lock and slot.
+                await session.delete(attempt)
+                await session.commit()
             await defer_model_cooldown(ctx, error)
             will_retry = _will_retry(ctx, error.retryable)
             await _ai_failure(session, interview, attempt, error, retryable=will_retry)
@@ -623,6 +636,11 @@ async def extract_interview_structure(
                 direction=direction,
             )
         except InterviewAIError as error:
+            if error.code == INTERVIEW_STAGE_CONTINUE:
+                # This is progress, not a failed attempt. Persist finished reviews and
+                # remove the temporary attempt before ARQ releases the lock and slot.
+                await session.delete(attempt)
+                await session.commit()
             await defer_model_cooldown(ctx, error)
             will_retry = _will_retry(ctx, error.retryable)
             await _ai_failure(session, interview, attempt, error, retryable=will_retry)
@@ -814,7 +832,12 @@ async def generate_answer_reviews(
                 select(IntelligenceSpeaker).where(IntelligenceSpeaker.interview_id == interview.id)
             )
         }
-        checkpoints = InterviewAICheckpoints(async_session_factory, interview.id, _ai(ctx))
+        checkpoints = InterviewAICheckpoints(
+            async_session_factory,
+            interview.id,
+            _ai(ctx),
+            service_tier="flex" if interview.ai_service_tier == "flex" else "default",
+        )
         direction_ids = {question.direction_id for question, _ in rows if question.direction_id}
         directions = {
             track.id: track.slug
@@ -926,59 +949,31 @@ async def generate_answer_reviews(
                         )
                     )
                 ).all()
-                summary_rows = _effective_summary_rows(summary_rows)
+                summary_rows = _effective_summary_rows(list(summary_rows))
                 blocks = _summary_evidence_blocks(summary_rows)
-                if not blocks:
-                    blocks = [
-                        _utterance_block(
-                            item,
-                            "Candidate"
-                            if item.speaker_id == interview.candidate_speaker_id
-                            else f"Speaker {speakers[item.speaker_id].provider_speaker_key}",
-                        )
-                        for item in utterances
-                    ]
-                summary_results = [
-                    await checkpoints.summarize(chunk)
-                    for chunk in transcript_chunks(
-                        blocks,
-                        size=20,
-                        overlap=0,
-                        max_chars=45_000,
-                    )
-                ]
-                if summary_results:
-                    overview = _merge_interview_summaries(
-                        [result.output for result in summary_results]
-                    )
-                    # Long interviews are split into bounded chunks. Their partial
-                    # summaries must become one coherent verdict, not a concatenated
-                    # wall of text that eventually gets truncated.
-                    if len(summary_results) > 1:
-                        try:
-                            final_summary = await checkpoints.summarize(
-                                _summary_rollup_payload(overview)
-                            )
-                        except InterviewAIError as error:
-                            if error.code not in {
-                                "OPENAI_INVALID_RESPONSE",
-                                "OPENAI_OUTPUT_TRUNCATED",
-                            }:
-                                raise
-                            logger.warning(
-                                "Using deterministic interview summary rollup after invalid "
-                                "final AI response interview_id=%s code=%s",
-                                interview.id,
-                                error.code,
-                            )
-                        else:
-                            summary_results.append(final_summary)
-                            overview = final_summary.output
-                    overview = _ground_technical_assessment(overview, summary_rows)
+                if blocks:
+                    summary_result = await summarize_review_evidence(checkpoints, blocks)
+                    overview = _ground_technical_assessment(summary_result.output, summary_rows)
                     interview.ai_summary_payload = overview.model_dump(mode="json")
-                    interview.ai_summary_model = summary_results[-1].usage.model
+                    interview.ai_summary_model = summary_result.usage.model
                     interview.ai_summary_prompt_version = SUMMARY_PROMPT_VERSION
+                else:
+                    # No reviewed answers means no evidence for an AI verdict.
+                    interview.ai_summary_payload = InterviewSummaryOutput(
+                        overall_summary="В записи нет ответов, доступных для оценки.",
+                        technical_summary="Недостаточно данных для технической оценки.",
+                        communication_summary="Недостаточно данных для оценки коммуникации.",
+                        caveats=["Проверьте полноту записи и выделение вопросов и ответов."],
+                    ).model_dump(mode="json")
+                    interview.ai_summary_model = "source-grounding"
+                    interview.ai_summary_prompt_version = SUMMARY_PROMPT_VERSION
+
         except InterviewAIError as error:
+            if error.code == INTERVIEW_STAGE_CONTINUE:
+                # This is progress, not a failed attempt. Persist finished reviews and
+                # remove the temporary attempt before ARQ releases the lock and slot.
+                await session.delete(attempt)
+                await session.commit()
             await defer_model_cooldown(ctx, error)
             will_retry = _will_retry(ctx, error.retryable)
             await _ai_failure(session, interview, attempt, error, retryable=will_retry)
@@ -1318,7 +1313,7 @@ def _effective_summary_rows(rows: list[Any]) -> list[Any]:
 def _summary_evidence_blocks(rows: list[Any]) -> list[str]:
     blocks: list[str] = []
     seen_questions: set[UUID] = set()
-    for question, answer, review in rows:
+    for question, _answer, review in rows:
         if question.id in seen_questions:
             continue
         seen_questions.add(question.id)
@@ -1328,7 +1323,6 @@ def _summary_evidence_blocks(rows: list[Any]) -> list[str]:
             "topic": question.category,
             "subcategory": question.subcategory,
             "question": question.question_text[:2_000],
-            "candidate_answer": answer.answer_text[:6_000],
             "extraction_confidence": question.confidence,
             "transcription_quality": {
                 key: (question.transcription_annotations or {}).get(key, False)
@@ -1342,7 +1336,6 @@ def _summary_evidence_blocks(rows: list[Any]) -> list[str]:
                 "problems": review.problems[:3],
                 "missing_points": review.missing_points[:5],
                 "incorrect_statements": review.incorrect_statements[:3],
-                "suggested_better_answer": ((review.suggested_better_answer or "")[:4_000] or None),
             },
         }
         blocks.append(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
@@ -1734,6 +1727,7 @@ class WorkerSettings:
         promote_question_cluster,
         generate_cluster_candidate,
         validate_cluster_answer,
+        review_cluster_for_automation,
         create_personal_review_item,
         backfill_existing_questions,
         reprocess_question_occurrence,
@@ -1792,6 +1786,7 @@ class AIWorkerSettings:
         promote_question_cluster,
         generate_cluster_candidate,
         validate_cluster_answer,
+        review_cluster_for_automation,
         create_personal_review_item,
         backfill_existing_questions,
         reprocess_question_occurrence,

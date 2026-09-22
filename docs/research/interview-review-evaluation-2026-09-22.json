@@ -1,0 +1,1277 @@
+{
+  "prompt_version": "technical-answer-review-v7-concise",
+  "baseline_model": "gpt-5.6-terra",
+  "candidate_model": "gpt-5.6-luna",
+  "cases": [
+    {
+      "name": "correct_list",
+      "question": "Чем отличается list от tuple в Python?",
+      "answer": "Оба хранят упорядоченную последовательность. Список изменяемый, кортеж неизменяемый. При этом объект внутри кортежа может быть изменяемым.",
+      "assessments": [
+        "correct"
+      ],
+      "context": "",
+      "direction": "python",
+      "finding_required": false
+    },
+    {
+      "name": "reversed_list",
+      "question": "Чем отличается list от tuple в Python?",
+      "answer": "Кортеж изменяемый, а список нельзя менять после создания.",
+      "assessments": [
+        "incorrect"
+      ],
+      "context": "",
+      "direction": "python",
+      "finding_required": true
+    },
+    {
+      "name": "negated_identity",
+      "question": "Чем отличается == от is в Python?",
+      "answer": "is не сравнивает значения: он проверяет идентичность объектов. А == сравнивает значения через методы сравнения.",
+      "assessments": [
+        "correct"
+      ],
+      "context": "",
+      "direction": "python",
+      "finding_required": false
+    },
+    {
+      "name": "incomplete_list",
+      "question": "Чем отличается list от tuple в Python?",
+      "answer": "В списке квадратные скобки, а в кортеже круглые. Больше не знаю.",
+      "assessments": [
+        "partial",
+        "mostly_incorrect",
+        "incorrect"
+      ],
+      "context": "",
+      "direction": "python",
+      "finding_required": true
+    },
+    {
+      "name": "damaged_answer",
+      "question": "Чем отличается list от tuple в Python?",
+      "answer": "[Неразборчиво, основная часть ответа отсутствует]",
+      "assessments": [
+        "unable_to_assess"
+      ],
+      "context": "Transcription interpretation hints: answer_unreliable; lost audio.",
+      "direction": "python",
+      "finding_required": false
+    },
+    {
+      "name": "interviewer_hint",
+      "question": "Чем отличается == от is в Python?",
+      "answer": "Не знаю, не могу объяснить.",
+      "assessments": [
+        "incorrect",
+        "unable_to_assess"
+      ],
+      "context": "Interviewer: is проверяет идентичность объектов, == сравнивает значения. This is an interviewer hint, not candidate knowledge.",
+      "direction": "python",
+      "finding_required": false
+    },
+    {
+      "name": "wrong_speaker_label",
+      "question": "Чем отличается list от tuple в Python?",
+      "answer": "Список можно менять, а кортеж после создания нельзя. Изменяемые объекты внутри кортежа при этом менять можно.",
+      "assessments": [
+        "correct"
+      ],
+      "context": "Transcription interpretation hints: speaker_attribution_conflict. The supplied candidate answer is grounded and confidently attributed. Candidate-labelled utterance: А список можно менять?",
+      "direction": "python",
+      "finding_required": false
+    },
+    {
+      "name": "nil_interface",
+      "question": "Почему интерфейс с nil-указателем не равен nil в Go?",
+      "answer": "Он тоже всегда равен nil, ведь значение указателя nil.",
+      "assessments": [
+        "incorrect"
+      ],
+      "context": "",
+      "direction": "go",
+      "finding_required": true
+    }
+  ],
+  "results": [
+    {
+      "case": "correct_list",
+      "variant": "baseline",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "correct",
+        "score": 1.0,
+        "summary": "Ответ корректно называет общее свойство list и tuple и их ключевое различие — изменяемость. Уточнение о возможности изменяемых объектов внутри tuple также верно.",
+        "strengths": [
+          {
+            "point": "Верно указано, что оба типа представляют упорядоченные последовательности.",
+            "evidence": "«Оба хранят упорядоченную последовательность.»"
+          },
+          {
+            "point": "Корректно выделено основное различие: list изменяем, а tuple неизменяем.",
+            "evidence": "«Список изменяемый, кортеж неизменяемый.»"
+          },
+          {
+            "point": "Учтено, что неизменяемость tuple не запрещает изменять изменяемый объект, содержащийся в нём.",
+            "evidence": "«объект внутри кортежа может быть изменяемым.»"
+          }
+        ],
+        "problems": [],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "correct_list",
+      "variant": "main_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "correct",
+        "score": 1.0,
+        "summary": "Ответ корректно называет главное различие: `list` изменяем, а `tuple` неизменяем, при сохранении упорядоченности. Верно отмечена важная оговорка о возможной изменяемости объектов, находящихся внутри кортежа.",
+        "strengths": [
+          {
+            "point": "Корректно указаны упорядоченность обеих структур и различие в изменяемости.",
+            "evidence": "«Оба хранят упорядоченную последовательность. Список изменяемый, кортеж неизменяемый.»"
+          },
+          {
+            "point": "Верно разграничена неизменяемость контейнера и изменяемость его элементов.",
+            "evidence": "«объект внутри кортежа может быть изменяемым»"
+          }
+        ],
+        "problems": [],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "correct_list",
+      "variant": "simple_model_low",
+      "policy": {
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "correct",
+        "score": 0.95,
+        "summary": "Ответ правильно описывает общую особенность обоих типов и ключевое различие: `list` изменяем, а `tuple` неизменяем. Также корректно отмечено, что изменяемый объект внутри кортежа может менять своё состояние.",
+        "strengths": [
+          {
+            "point": "Верно указана изменяемость списка и неизменяемость кортежа.",
+            "evidence": "«Список изменяемый, кортеж неизменяемый»"
+          },
+          {
+            "point": "Корректно уточнено, что неизменяемость кортежа не делает автоматически неизменяемыми объекты, на которые он ссылается.",
+            "evidence": "«объект внутри кортежа может быть изменяемым»"
+          }
+        ],
+        "problems": [],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "reversed_list",
+      "variant": "baseline",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "incorrect",
+        "score": 1.0,
+        "summary": "Ответ меняет свойства типов местами: в Python изменяемым является список, а кортеж после создания изменить нельзя.",
+        "strengths": [],
+        "problems": [],
+        "missing_points": [],
+        "incorrect_statements": [
+          {
+            "statement": "«Кортеж изменяемый, а список нельзя менять после создания».",
+            "correction": "Список (`list`) изменяемый: его элементы можно добавлять, удалять и заменять. Кортеж (`tuple`) неизменяемый: после создания нельзя изменить его состав.",
+            "evidence": "«Кортеж изменяемый, а список нельзя менять после создания.»"
+          }
+        ],
+        "suggested_better_answer": "`list` — изменяемый тип: можно менять элементы, добавлять и удалять их. `tuple` — неизменяемый: после создания его элементы нельзя заменить, добавить или удалить."
+      },
+      "quality_failures": [
+        "invalid_review"
+      ]
+    },
+    {
+      "case": "reversed_list",
+      "variant": "main_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "incorrect",
+        "score": 0.0,
+        "summary": "Ответ меняет свойства типов местами: в Python изменяем список, а кортеж неизменяем. Существенные различия между типами не названы.",
+        "strengths": [],
+        "problems": [],
+        "missing_points": [
+          "Кортеж обычно записывают через круглые скобки или запятую, а список — через квадратные скобки.",
+          "Не упомянуто, что неизменяемый кортеж при условии хешируемости всех его элементов может использоваться как ключ словаря или элемент множества, а список — нет."
+        ],
+        "incorrect_statements": [
+          {
+            "statement": "«Кортеж изменяемый, а список нельзя менять после создания.»",
+            "correction": "Список (`list`) изменяемый: его элементы можно добавлять, удалять и заменять. Кортеж (`tuple`) неизменяемый: после создания нельзя изменить его состав или заменить элемент.",
+            "evidence": "Кортеж изменяемый, а список нельзя менять после создания."
+          }
+        ],
+        "suggested_better_answer": "`list` изменяемый: можно добавлять, удалять и заменять элементы. `tuple` неизменяемый: после создания его состав изменить нельзя. Списки записывают в `[]`, кортежи — в `()` или через запятую; кортеж с хешируемыми элементами может быть ключом словаря, список — нет."
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "reversed_list",
+      "variant": "simple_model_low",
+      "policy": {
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "incorrect",
+        "score": 0.0,
+        "summary": "Ответ инвертирует ключевое различие между `list` и `tuple` в Python. Другие существенные отличия не указаны.",
+        "strengths": [],
+        "problems": [],
+        "missing_points": [
+          "`list` — изменяемая последовательность, а `tuple` — неизменяемая после создания.",
+          "Обычно `list` записывают через квадратные скобки, а `tuple` — через круглые скобки или без них в случае кортежа из нескольких элементов.",
+          "Кортеж может использоваться как хешируемый ключ или элемент множества, если все его элементы хешируемы; список для этого не подходит."
+        ],
+        "incorrect_statements": [
+          {
+            "statement": "Кортеж изменяемый, а список нельзя менять после создания.",
+            "correction": "Кортеж (`tuple`) неизменяемый, а список (`list`) изменяемый.",
+            "evidence": "«Кортеж изменяемый, а список нельзя менять после создания.»"
+          }
+        ],
+        "suggested_better_answer": "`list` — изменяемая последовательность, которую можно менять после создания, а `tuple` — неизменяемая. Список обычно создают через `[]`, кортеж — через `()`; кортеж может быть хешируемым, если все его элементы хешируемы."
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "negated_identity",
+      "variant": "baseline",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "correct",
+        "score": 0.95,
+        "summary": "Ответ корректно описывает основное различие: `is` проверяет идентичность объектов, а `==` — равенство значений через механизм сравнения объектов.",
+        "strengths": [
+          {
+            "point": "Верно разграничены идентичность объекта и равенство значений.",
+            "evidence": "«is не сравнивает значения: он проверяет идентичность объектов. А == сравнивает значения через методы сравнения.»"
+          },
+          {
+            "point": "Указан механизм перегрузки сравнения для `==`, обычно реализуемый через `__eq__`.",
+            "evidence": "«== сравнивает значения через методы сравнения.»"
+          }
+        ],
+        "problems": [],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "negated_identity",
+      "variant": "main_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "correct",
+        "score": 1.0,
+        "summary": "Ответ корректно различает сравнение идентичности объектов через `is` и сравнение значений через `==`. Уместно отмечено, что `==` использует методы сравнения объектов.",
+        "strengths": [
+          {
+            "point": "Верно указано назначение `is`: проверка идентичности объектов.",
+            "evidence": "«is не сравнивает значения: он проверяет идентичность объектов»"
+          },
+          {
+            "point": "Верно описано `==` как сравнение значений с участием методов сравнения.",
+            "evidence": "«А == сравнивает значения через методы сравнения.»"
+          }
+        ],
+        "problems": [],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "negated_identity",
+      "variant": "simple_model_low",
+      "policy": {
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "correct",
+        "score": 1.0,
+        "summary": "Ответ правильно описывает ключевое различие: `is` проверяет идентичность объектов, а `==` — равенство их значений через соответствующую логику сравнения.",
+        "strengths": [
+          {
+            "point": "Точно указано назначение обоих операторов и проведено корректное различие между идентичностью и равенством.",
+            "evidence": "«is не сравнивает значения: он проверяет идентичность объектов. А == сравнивает значения через методы сравнения.»"
+          }
+        ],
+        "problems": [],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "incomplete_list",
+      "variant": "baseline",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "partial",
+        "score": 0.25,
+        "summary": "Ответ верно называет обычный синтаксис литералов, но не раскрывает ключевое семантическое отличие. Для полной оценки нужно указать изменяемость `list` и неизменяемость `tuple`.",
+        "strengths": [
+          {
+            "point": "Корректно указаны стандартные скобки в литералах: для `list` — квадратные, для `tuple` — круглые.",
+            "evidence": "«В списке квадратные скобки, а в кортеже круглые.»"
+          }
+        ],
+        "problems": [
+          {
+            "problem": "Ответ ограничен синтаксическим различием и не отвечает на основной смысл вопроса.",
+            "explanation": "Скобки не являются главным различием типов; например, одноэлементный `tuple` задаётся запятой: `(1,)`.",
+            "evidence": "«Больше не знаю.»"
+          }
+        ],
+        "missing_points": [
+          "`list` изменяемый: в него можно добавлять, удалять и заменять элементы.",
+          "`tuple` неизменяемый: после создания его элементы нельзя заменить, добавить или удалить.",
+          "`tuple` часто используют для фиксированных данных; при хешируемых элементах он может быть ключом словаря или элементом множества, в отличие от `list`."
+        ],
+        "incorrect_statements": [],
+        "suggested_better_answer": "`list` и `tuple` оба хранят упорядоченные элементы, но `list` изменяемый, а `tuple` — неизменяемый. Литерал списка обычно пишут как `[1, 2]`, кортежа — `(1, 2)`; для одноэлементного кортежа нужна запятая: `(1,)`. `tuple` с хешируемыми элементами можно использовать как ключ словаря, `list` — нельзя."
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "incomplete_list",
+      "variant": "main_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "partial",
+        "score": 0.25,
+        "summary": "Ответ верно называет обычный синтаксис литералов, но не раскрывает ключевое семантическое различие: изменяемость списка и неизменяемость кортежа.",
+        "strengths": [
+          {
+            "point": "Корректно указаны стандартные скобки для литералов list и tuple.",
+            "evidence": "«В списке квадратные скобки, а в кортеже круглые.»"
+          }
+        ],
+        "problems": [
+          {
+            "problem": "Ответ намеренно неполный и не отвечает на основное различие типов.",
+            "explanation": "Скобки описывают синтаксис записи литералов, а не поведение объектов; без различия в изменяемости практическая суть не раскрыта.",
+            "evidence": "«Больше не знаю.»"
+          }
+        ],
+        "missing_points": [
+          "list изменяем: его элементы можно добавлять, удалять и заменять после создания.",
+          "tuple неизменяем: после создания его элементы нельзя заменить, добавить или удалить.",
+          "Кортеж обычно записывается запятыми; круглые скобки часто необязательны, а одноэлементный кортеж требует запятой."
+        ],
+        "incorrect_statements": [],
+        "suggested_better_answer": "list — изменяемая последовательность: в него можно добавлять, удалять и заменять элементы. tuple — неизменяемая: после создания изменить его нельзя. Обычно list записывают через [], а tuple — через запятые, часто в ()."
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "incomplete_list",
+      "variant": "simple_model_low",
+      "policy": {
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "partial",
+        "score": 0.3,
+        "summary": "Кандидат правильно назвал распространённый синтаксис создания `list` и `tuple`, но не описал их ключевые различия. Ответ явно неполный.",
+        "strengths": [
+          {
+            "point": "Верно указано, что `list` обычно записывается в квадратных скобках, а `tuple` — в круглых.",
+            "evidence": "«В списке квадратные скобки, а в кортеже круглые»"
+          }
+        ],
+        "problems": [],
+        "missing_points": [
+          "`list` изменяемый: его элементы можно добавлять, удалять и заменять; `tuple` неизменяемый после создания.",
+          "`tuple` может использоваться как ключ `dict` или элемент `set`, если все его элементы хешируемы; `list` для этого не подходит.",
+          "Кортеж часто применяют для фиксированного набора значений, а список — для изменяемой последовательности."
+        ],
+        "incorrect_statements": [],
+        "suggested_better_answer": "`list` — изменяемая последовательность, обычно записывается в квадратных скобках: `[1, 2]`. `tuple` — неизменяемая последовательность, обычно записывается в круглых скобках: `(1, 2)`. Поэтому элементы списка можно менять, а кортеж при подходящих элементах можно использовать как ключ `dict`."
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "damaged_answer",
+      "variant": "baseline",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "unable_to_assess",
+        "score": null,
+        "summary": "Оценка невозможна: основная часть ответа отсутствует, а контекст прямо указывает на потерю аудио.",
+        "strengths": [],
+        "problems": [
+          {
+            "problem": "Ответ не содержит доступного для проверки содержания.",
+            "explanation": "Нельзя установить, объяснил ли кандидат различия между list и tuple, поскольку транскрипция помечена как неразборчивая и неполная.",
+            "evidence": "«[Неразборчиво, основная часть ответа отсутствует]»"
+          }
+        ],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "damaged_answer",
+      "variant": "main_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "unable_to_assess",
+        "score": null,
+        "summary": "Оценка невозможна: основная часть ответа отсутствует, а контекст прямо указывает на потерю аудио.",
+        "strengths": [],
+        "problems": [
+          {
+            "problem": "Недостаточно распознанного материала для проверки ответа.",
+            "explanation": "Нельзя установить, назвал ли кандидат различия между list и tuple, поскольку содержательная часть ответа не сохранена.",
+            "evidence": "Candidate answer: «[Неразборчиво, основная часть ответа отсутствует]»; контекст: «answer_unreliable; lost audio»."
+          }
+        ],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "damaged_answer",
+      "variant": "simple_model_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "unable_to_assess",
+        "score": null,
+        "summary": "Оценка невозможна: основная часть ответа отсутствует, а контекст прямо указывает на потерю аудио.",
+        "strengths": [],
+        "problems": [
+          {
+            "problem": "Ответ не содержит доступного для проверки содержания.",
+            "explanation": "Нельзя установить, назвал ли кандидат различия между list и tuple, поскольку запись помечена как неразборчивая и неполная.",
+            "evidence": "«[Неразборчиво, основная часть ответа отсутствует]»"
+          }
+        ],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "interviewer_hint",
+      "variant": "baseline",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "incorrect",
+        "score": 0.0,
+        "summary": "Кандидат прямо сообщил, что не может объяснить различие между операторами. Ответ не содержит технического объяснения.",
+        "strengths": [],
+        "problems": [],
+        "missing_points": [
+          "`==` сравнивает значения объектов через механизм сравнения, включая `__eq__`.",
+          "`is` проверяет идентичность: являются ли две ссылки одним и тем же объектом в памяти.",
+          "Практическое применение `is` для проверки на `None`, например `value is None`."
+        ],
+        "incorrect_statements": [],
+        "suggested_better_answer": "`==` сравнивает равенство значений объектов, обычно вызывая `__eq__`. `is` проверяет идентичность объектов — ссылаются ли переменные на один и тот же объект. Например, для проверки отсутствия значения используют `x is None`, а не `x == None`."
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "interviewer_hint",
+      "variant": "main_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "incorrect",
+        "score": 0.0,
+        "summary": "Кандидат прямо сообщил, что не может объяснить различие между операторами. Ответ не раскрывает проверку равенства значений через == и идентичности объекта через is.",
+        "strengths": [],
+        "problems": [],
+        "missing_points": [
+          "Оператор == сравнивает значения объектов; его поведение может определяться методом __eq__.",
+          "Оператор is проверяет идентичность: ссылаются ли две переменные на один и тот же объект.",
+          "Типичный корректный случай применения is — сравнение с None, например x is None."
+        ],
+        "incorrect_statements": [],
+        "suggested_better_answer": "== сравнивает значения объектов и может вызывать __eq__. is проверяет, является ли это одним и тем же объектом в памяти. Например, [1] == [1] — True, но [1] is [1] — False; с None обычно сравнивают через is: x is None."
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "interviewer_hint",
+      "variant": "simple_model_low",
+      "policy": {
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "incorrect",
+        "score": 0.0,
+        "summary": "Кандидат не ответил на вопрос и не продемонстрировал понимания различия между операторами `==` и `is`. Подсказка интервьюера не учитывается как знание кандидата.",
+        "strengths": [],
+        "problems": [
+          {
+            "problem": "Отсутствует содержательный ответ.",
+            "explanation": "Фраза «Не знаю, не могу объяснить» не позволяет оценить знание требуемого различия.",
+            "evidence": "«Не знаю, не могу объяснить.»"
+          }
+        ],
+        "missing_points": [
+          "`==` сравнивает значения объектов.",
+          "`is` проверяет идентичность объектов, то есть указывают ли они на один и тот же объект."
+        ],
+        "incorrect_statements": [],
+        "suggested_better_answer": "`==` сравнивает значения объектов, а `is` проверяет, являются ли они одним и тем же объектом в памяти."
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "wrong_speaker_label",
+      "variant": "baseline",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "correct",
+        "score": 0.95,
+        "summary": "Ответ корректно называет главное различие: `list` изменяем, а `tuple` неизменяем после создания. Верно отмечено важное уточнение о возможности менять изменяемые объекты, хранящиеся внутри кортежа.",
+        "strengths": [
+          {
+            "point": "Корректно указана изменяемость `list` и неизменяемость `tuple`.",
+            "evidence": "«Список можно менять, а кортеж после создания нельзя.»"
+          },
+          {
+            "point": "Учтено, что неизменяемость кортежа не запрещает мутацию вложенного изменяемого объекта.",
+            "evidence": "«Изменяемые объекты внутри кортежа при этом менять можно.»"
+          }
+        ],
+        "problems": [],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "wrong_speaker_label",
+      "variant": "main_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "correct",
+        "score": 0.95,
+        "summary": "Ответ корректно называет ключевое отличие: `list` изменяем, а `tuple` неизменяем после создания. Также верно отмечено, что неизменяемость кортежа не запрещает изменять изменяемые объекты, на которые он ссылается.",
+        "strengths": [
+          {
+            "point": "Верно указана изменяемость `list` и неизменяемость `tuple`.",
+            "evidence": "«Список можно менять, а кортеж после создания нельзя.»"
+          },
+          {
+            "point": "Учтён важный нюанс о вложенных изменяемых объектах.",
+            "evidence": "«Изменяемые объекты внутри кортежа при этом менять можно.»"
+          }
+        ],
+        "problems": [],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "wrong_speaker_label",
+      "variant": "simple_model_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "correct",
+        "score": 0.95,
+        "summary": "Ответ корректно называет ключевое различие: list изменяем, а tuple неизменяем после создания. Также верно отмечено, что неизменяемость tuple не запрещает изменять изменяемые объекты, которые он содержит.",
+        "strengths": [
+          {
+            "point": "Верно указана изменяемость list и неизменяемость tuple.",
+            "evidence": "«Список можно менять, а кортеж после создания нельзя.»"
+          },
+          {
+            "point": "Учтён важный нюанс о мутации вложенных изменяемых объектов.",
+            "evidence": "«Изменяемые объекты внутри кортежа при этом менять можно.»"
+          }
+        ],
+        "problems": [],
+        "missing_points": [],
+        "incorrect_statements": [],
+        "suggested_better_answer": null
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "nil_interface",
+      "variant": "baseline",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "incorrect",
+        "score": 0.0,
+        "summary": "Ответ фактически утверждает обратное: интерфейс со значением nil-указателя обычно не равен nil. Не объяснено различие между nil-интерфейсом и интерфейсом, содержащим типизированный nil.",
+        "strengths": [],
+        "problems": [],
+        "missing_points": [
+          "Интерфейсное значение включает динамический тип и динамическое значение; оно равно nil только когда отсутствуют оба.",
+          "При присваивании nil-указателя интерфейсу динамический тип указателя сохраняется, поэтому сам интерфейс не nil."
+        ],
+        "incorrect_statements": [
+          {
+            "statement": "«Он тоже всегда равен nil, ведь значение указателя nil.»",
+            "correction": "Интерфейс, содержащий nil-указатель, не равен nil: у него есть динамический тип указателя, хотя динамическое значение равно nil.",
+            "evidence": "«Он тоже всегда равен nil, ведь значение указателя nil.»"
+          }
+        ],
+        "suggested_better_answer": "В Go интерфейс равен nil только если у него нет и динамического типа, и значения. Если присвоить интерфейсу nil-указатель, значение указателя будет nil, но динамический тип, например *T, сохранится; поэтому интерфейс != nil."
+      },
+      "quality_failures": []
+    },
+    {
+      "case": "nil_interface",
+      "variant": "main_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "low"
+      },
+      "output": {
+        "assessment": "incorrect",
+        "score": 1.0,
+        "summary": "Ответ неверен: интерфейс с динамическим типом указателя и nil-значением этого указателя не равен nil. Проверка на nil для интерфейса учитывает не только значение, но и наличие динамического типа.",
+        "strengths": [],
+        "problems": [],
+        "missing_points": [
+          "Не объяснено, что значение интерфейса включает динамический тип и динамическое значение.",
+          "Не указано условие, при котором интерфейс равен nil: отсутствуют и динамический тип, и динамическое значение."
+        ],
+        "incorrect_statements": [
+          {
+            "statement": "«Он тоже всегда равен nil, ведь значение указателя nil».",
+            "correction": "Интерфейс, содержащий nil-указатель, обычно не равен nil, поскольку его динамический тип уже задан. Например, var p *int = nil; var x interface{} = p; x != nil.",
+            "evidence": "Candidate answer: «Он тоже всегда равен nil, ведь значение указателя nil»."
+          }
+        ],
+        "suggested_better_answer": "Интерфейс в Go хранит динамический тип и значение. Если в него записан nil-указатель, значение nil, но тип указателя есть, поэтому интерфейс не равен nil. Интерфейс равен nil только когда отсутствуют и тип, и значение."
+      },
+      "quality_failures": [
+        "invalid_review"
+      ]
+    },
+    {
+      "case": "nil_interface",
+      "variant": "simple_model_low",
+      "policy": {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": null
+      },
+      "output": {
+        "assessment": "incorrect",
+        "score": 1.0,
+        "summary": "Ответ неверен: nil-значение, помещённое в интерфейс, сохраняет динамический тип указателя, поэтому сам интерфейс не равен nil.",
+        "strengths": [],
+        "problems": [],
+        "missing_points": [
+          "Интерфейс в Go концептуально содержит динамический тип и значение; он равен nil только когда отсутствуют оба.",
+          "Нужно различать nil-интерфейс и интерфейс с динамическим типом указателя, чьё значение равно nil."
+        ],
+        "incorrect_statements": [
+          {
+            "statement": "«Он тоже всегда равен nil, ведь значение указателя nil.»",
+            "correction": "Интерфейс, содержащий nil-указатель типа *T, не равен nil: его динамический тип — *T, хотя динамическое значение равно nil. Равенство nil возможно лишь у интерфейса без динамического типа и значения.",
+            "evidence": "«Он тоже всегда равен nil, ведь значение указателя nil.»"
+          }
+        ],
+        "suggested_better_answer": "Интерфейс хранит динамический тип и значение. Если в него присвоить nil-указатель типа *T, значение будет nil, но тип *T останется, поэтому интерфейс != nil. Только интерфейс без типа и значения равен nil."
+      },
+      "quality_failures": [
+        "invalid_review"
+      ]
+    }
+  ],
+  "note": "Synthetic smoke evaluation only; human review is required before enabling routing.",
+  "requests": [
+    {
+      "case": "correct_list",
+      "variant": "baseline",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:09.300867+00:00",
+      "provider_request_id": "req_a95a8034a2b442989efac723917a0eaf",
+      "response_id": "resp_0ac7b25d7f71a144006ab262c1baec87d2b2a8b6c453371c97",
+      "input_tokens": 1465,
+      "cached_input_tokens": 0,
+      "cache_write_tokens": 1462,
+      "output_tokens": 212,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0062050000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0062050000",
+      "estimated_cost_upper_usd": "0.0062050000"
+    },
+    {
+      "case": "correct_list",
+      "variant": "main_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:13.651177+00:00",
+      "provider_request_id": "req_0dd4ed366dd64507ae991dcea0d3a336",
+      "response_id": "resp_02f4aa26d612a0bd006ab262c5a96c87d29546f6fd52b7dc44",
+      "input_tokens": 1465,
+      "cached_input_tokens": 0,
+      "cache_write_tokens": 1462,
+      "output_tokens": 197,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0060250000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0060250000",
+      "estimated_cost_upper_usd": "0.0060250000"
+    },
+    {
+      "case": "correct_list",
+      "variant": "simple_model_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-luna",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:17.695554+00:00",
+      "provider_request_id": "req_0eb876224c48475b9d113c8e592b0f6e",
+      "response_id": "resp_02a4892761145173006ab262c9dfc487d2b3258231b7ec6f0b",
+      "input_tokens": 1465,
+      "cached_input_tokens": 0,
+      "cache_write_tokens": 1462,
+      "output_tokens": 242,
+      "reasoning_tokens": 45,
+      "estimated_cost_usd": "0.0006565000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0006565000",
+      "estimated_cost_upper_usd": "0.0006565000"
+    },
+    {
+      "case": "reversed_list",
+      "variant": "baseline",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:23.351777+00:00",
+      "provider_request_id": "req_07d63960738e4fd8ba5055c85577f24e",
+      "response_id": "resp_0962e9a53e8a82ce006ab262cded1887d2828d2ead22565469",
+      "input_tokens": 1439,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 39,
+      "output_tokens": 218,
+      "reasoning_tokens": 28,
+      "estimated_cost_usd": "0.0029989000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0029989000",
+      "estimated_cost_upper_usd": "0.0029989000"
+    },
+    {
+      "case": "reversed_list",
+      "variant": "main_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:28.887011+00:00",
+      "provider_request_id": "req_2a024e51ae0e4ee3890c40b302370ef7",
+      "response_id": "resp_085f060e1692f3e5006ab262d3923087d2aa18b29555a39a11",
+      "input_tokens": 1439,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 39,
+      "output_tokens": 309,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0040909000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0040909000",
+      "estimated_cost_upper_usd": "0.0040909000"
+    },
+    {
+      "case": "reversed_list",
+      "variant": "simple_model_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-luna",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:33.763365+00:00",
+      "provider_request_id": "req_f659e554a6ac484fa5aaed1bd2ec7f10",
+      "response_id": "resp_0131b8404698da96006ab262d92d8487d2b3f1d5c6b08f445f",
+      "input_tokens": 1439,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 39,
+      "output_tokens": 290,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0003862900",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0003862900",
+      "estimated_cost_upper_usd": "0.0003862900"
+    },
+    {
+      "case": "negated_identity",
+      "variant": "baseline",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:36.895791+00:00",
+      "provider_request_id": "req_20a424f038d5409c9fef47fda3611244",
+      "response_id": "resp_0b5924a62e4cb438006ab262ddf67887d2930e3cc352c951f0",
+      "input_tokens": 1451,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 51,
+      "output_tokens": 173,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0024889000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0024889000",
+      "estimated_cost_upper_usd": "0.0024889000"
+    },
+    {
+      "case": "negated_identity",
+      "variant": "main_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:39.990318+00:00",
+      "provider_request_id": "req_927802f8347d4f6290561c8eadf87e63",
+      "response_id": "resp_0823847dc433432b006ab262e1196087d299e18573c972d94e",
+      "input_tokens": 1451,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 51,
+      "output_tokens": 163,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0023689000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0023689000",
+      "estimated_cost_upper_usd": "0.0023689000"
+    },
+    {
+      "case": "negated_identity",
+      "variant": "simple_model_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-luna",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:43.170023+00:00",
+      "provider_request_id": "req_9fe2b8b6ec5a46e48c5ba5595ed0a9ad",
+      "response_id": "resp_0de1b7651c49000d006ab262e4334c87d2a8fffff8c670a375",
+      "input_tokens": 1451,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 51,
+      "output_tokens": 145,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0002152900",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0002152900",
+      "estimated_cost_upper_usd": "0.0002152900"
+    },
+    {
+      "case": "incomplete_list",
+      "variant": "baseline",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:49.636013+00:00",
+      "provider_request_id": "req_868e5f67699a489fb5acf0d61296e967",
+      "response_id": "resp_02e1406bdfa9241a006ab262e75f0c87d2b4242a872440f247",
+      "input_tokens": 1447,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 47,
+      "output_tokens": 392,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0051069000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0051069000",
+      "estimated_cost_upper_usd": "0.0051069000"
+    },
+    {
+      "case": "incomplete_list",
+      "variant": "main_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:13:55.808734+00:00",
+      "provider_request_id": "req_6c398f8ac8fa4f5894ed0f75b8aa3a64",
+      "response_id": "resp_04e76cdeaf2316c5006ab262edd60887d28294429c5a85f5c6",
+      "input_tokens": 1447,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 47,
+      "output_tokens": 318,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0042189000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0042189000",
+      "estimated_cost_upper_usd": "0.0042189000"
+    },
+    {
+      "case": "incomplete_list",
+      "variant": "simple_model_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-luna",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:01.649575+00:00",
+      "provider_request_id": "req_7a5fece904e44048aba329e41c5792c1",
+      "response_id": "resp_07c073efb40dadfd006ab262f405cc87d2aaaa13bda4b0f7a7",
+      "input_tokens": 1447,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 47,
+      "output_tokens": 353,
+      "reasoning_tokens": 49,
+      "estimated_cost_usd": "0.0004638900",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0004638900",
+      "estimated_cost_upper_usd": "0.0004638900"
+    },
+    {
+      "case": "damaged_answer",
+      "variant": "baseline",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:05.160936+00:00",
+      "provider_request_id": "req_808767b44f3c4a79bff579ca5848d2b5",
+      "response_id": "resp_0bb6068cb43c19ef006ab262f9dcb487d2bb09a8d21b6353ad",
+      "input_tokens": 1453,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 53,
+      "output_tokens": 142,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0021219000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0021219000",
+      "estimated_cost_upper_usd": "0.0021219000"
+    },
+    {
+      "case": "damaged_answer",
+      "variant": "main_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:08.518544+00:00",
+      "provider_request_id": "req_8c1270cbcf3e43ba865c454660fc343d",
+      "response_id": "resp_0f9e1b3a77af4149006ab262fd620c87d2a522f72e920b48d6",
+      "input_tokens": 1453,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 53,
+      "output_tokens": 152,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0022419000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0022419000",
+      "estimated_cost_upper_usd": "0.0022419000"
+    },
+    {
+      "case": "damaged_answer",
+      "variant": "simple_model_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:13.089352+00:00",
+      "provider_request_id": "req_1f5f3d7699b74b13986ea3696422aaaa",
+      "response_id": "resp_004fbb8e336053c0006ab26300bba887d2ae04a3a4cc1e1d0a",
+      "input_tokens": 1453,
+      "cached_input_tokens": 1450,
+      "cache_write_tokens": 0,
+      "output_tokens": 139,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0019640000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0019640000",
+      "estimated_cost_upper_usd": "0.0019640000"
+    },
+    {
+      "case": "interviewer_hint",
+      "variant": "baseline",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:18.112321+00:00",
+      "provider_request_id": "req_14e26930c5124373bc648d2d8cb98a8d",
+      "response_id": "resp_0d8eeb8343a1f87a006ab263054a3487d2a73baa0f23236eb2",
+      "input_tokens": 1460,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 60,
+      "output_tokens": 198,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0028114000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0028114000",
+      "estimated_cost_upper_usd": "0.0028114000"
+    },
+    {
+      "case": "interviewer_hint",
+      "variant": "main_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:22.717854+00:00",
+      "provider_request_id": "req_643eed33b52f4694bcebaa8b6020407b",
+      "response_id": "resp_02ebfc7ead9e7b98006ab2630a500887d2a92c472dd3db832e",
+      "input_tokens": 1460,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 60,
+      "output_tokens": 209,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0029434000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0029434000",
+      "estimated_cost_upper_usd": "0.0029434000"
+    },
+    {
+      "case": "interviewer_hint",
+      "variant": "simple_model_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-luna",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:27.567989+00:00",
+      "provider_request_id": "req_99767907244d4e09b88d6fa282f06b88",
+      "response_id": "resp_0c674c3f3d72f5a0006ab2630eee5c87d2afa187b063e05b17",
+      "input_tokens": 1460,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 60,
+      "output_tokens": 290,
+      "reasoning_tokens": 89,
+      "estimated_cost_usd": "0.0003915400",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0003915400",
+      "estimated_cost_upper_usd": "0.0003915400"
+    },
+    {
+      "case": "wrong_speaker_label",
+      "variant": "baseline",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:32.413367+00:00",
+      "provider_request_id": "req_93b1bfdb134443df935aa340f668ef77",
+      "response_id": "resp_0692910bbd3ce3cc006ab26313c37c87d2a1fa6f6b74a4f79f",
+      "input_tokens": 1485,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 85,
+      "output_tokens": 189,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0027659000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0027659000",
+      "estimated_cost_upper_usd": "0.0027659000"
+    },
+    {
+      "case": "wrong_speaker_label",
+      "variant": "main_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:35.789583+00:00",
+      "provider_request_id": "req_3bb0f0196ef9439489b8556f43fa153c",
+      "response_id": "resp_02d625f7b156e978006ab263189df487d287011cc4088b5d40",
+      "input_tokens": 1485,
+      "cached_input_tokens": 1397,
+      "cache_write_tokens": 85,
+      "output_tokens": 185,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0027179000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0027179000",
+      "estimated_cost_upper_usd": "0.0027179000"
+    },
+    {
+      "case": "wrong_speaker_label",
+      "variant": "simple_model_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:40.287159+00:00",
+      "provider_request_id": "req_659b526a0d76472a99a669a9d6659740",
+      "response_id": "resp_000af3a02c45ad49006ab2631c016c87d2af20548820e1aae6",
+      "input_tokens": 1485,
+      "cached_input_tokens": 1482,
+      "cache_write_tokens": 0,
+      "output_tokens": 172,
+      "reasoning_tokens": 0,
+      "estimated_cost_usd": "0.0023664000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0023664000",
+      "estimated_cost_upper_usd": "0.0023664000"
+    },
+    {
+      "case": "nil_interface",
+      "variant": "baseline",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:50.299655+00:00",
+      "provider_request_id": "req_0441744b06d44964b16aef72125b0123",
+      "response_id": "resp_0b0b0f5c903a1b03006ab263208e8087d2aed201ac277296af",
+      "input_tokens": 1429,
+      "cached_input_tokens": 0,
+      "cache_write_tokens": 1426,
+      "output_tokens": 347,
+      "reasoning_tokens": 69,
+      "estimated_cost_usd": "0.0077350000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0077350000",
+      "estimated_cost_upper_usd": "0.0077350000"
+    },
+    {
+      "case": "nil_interface",
+      "variant": "main_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:14:56.354858+00:00",
+      "provider_request_id": "req_878960d53ab744d2ba5b975c923d8adc",
+      "response_id": "resp_03deebc4e5d52e9d006ab2632a826c87d28eeff7d77c7ba650",
+      "input_tokens": 1429,
+      "cached_input_tokens": 0,
+      "cache_write_tokens": 1426,
+      "output_tokens": 327,
+      "reasoning_tokens": 39,
+      "estimated_cost_usd": "0.0074950000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0074950000",
+      "estimated_cost_upper_usd": "0.0074950000"
+    },
+    {
+      "case": "nil_interface",
+      "variant": "simple_model_low",
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "recovery": false,
+      "status": "received",
+      "finished_at": "2026-09-22 11:15:02.094904+00:00",
+      "provider_request_id": "req_ee55f5a971cc4c54b29c0d33432bd0fc",
+      "response_id": "resp_02e3663db1902acc006ab26330951887d2bad7d3d9a457c4c4",
+      "input_tokens": 1429,
+      "cached_input_tokens": 1426,
+      "cache_write_tokens": 0,
+      "output_tokens": 319,
+      "reasoning_tokens": 38,
+      "estimated_cost_usd": "0.0041192000",
+      "pricing_version": "openai-public-2026-09-22",
+      "estimated_cost_lower_usd": "0.0041192000",
+      "estimated_cost_upper_usd": "0.0041192000"
+    }
+  ],
+  "rescoring_note": "Corrected fixture label partially_correct to the actual schema enum partial; rescored stored outputs without additional API calls. Added explicit detection of score/assessment contradictions discovered during inspection."
+}

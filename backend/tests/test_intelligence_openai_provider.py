@@ -324,7 +324,7 @@ async def test_openai_summary_recovers_from_non_russian_response() -> None:
     assert result.output is russian
     assert parse.await_count == 2
     recovery_request = parse.await_args_list[1].kwargs
-    assert recovery_request["max_output_tokens"] == 8_000
+    assert recovery_request["max_output_tokens"] == 16_000
     assert "RETRY REQUIREMENTS" in recovery_request["input"][0]["content"]
 
 
@@ -363,7 +363,8 @@ async def test_openai_summary_recovers_from_output_length_limit() -> None:
 
     assert result.output is russian
     assert parse.await_count == 2
-    assert parse.await_args_list[1].kwargs["max_output_tokens"] == 8_000
+    assert parse.await_args_list[0].kwargs["max_output_tokens"] == 8_000
+    assert parse.await_args_list[1].kwargs["max_output_tokens"] == 16_000
 
 
 @pytest.mark.asyncio

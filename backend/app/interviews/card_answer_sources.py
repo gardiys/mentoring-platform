@@ -4,7 +4,7 @@ import re
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import exists, func, literal_column, select
+from sqlalchemy import case, exists, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -18,6 +18,7 @@ _STOP_WORDS = frozenset(
 при про или без если между после перед есть быть будет были был было может можно нужно
 расскажите объясните кратко устроен устроены устроена обычно работает работают
 работа работы используется используют
+решить проблему проблемы базовом сценарии рассказать расскажи привести пример
 использовали использовал используете у вас ваш ваша вашем свои свой например вопрос
 ли бы вы мы они он она оно их его ее ты нам вам нас мне тебе собой
 """.split()
@@ -39,11 +40,15 @@ def _source_query(question: str) -> str:
         dict.fromkeys(
             token
             for token in re.findall(r"[\w]+", question.casefold())
-            if len(token) >= 3 and token not in _STOP_WORDS
+            if (len(token) >= 3 or token in {"go", "gc", "io", "id", "is"})
+            and token not in _STOP_WORDS
         )
     )[:24]
     for term in list(terms):
         terms.extend(_ALIASES.get(term, "").split())
+    if re.search(r"\bn\s*\+\s*1\b", question, re.I):
+        # PostgreSQL parses the punctuation too: keep it as a phrase, not discarded n/1.
+        return '"n+1"'
     return " OR ".join(dict.fromkeys(terms))
 
 
@@ -57,7 +62,42 @@ def _source_rank(query: str, title: Any, content: Any) -> ColumnElement[float]:
         body_vector = func.setweight(func.to_tsvector(language, content), literal_column("'D'"))
         vector = title_vector.op("||")(body_vector)
         scores.append(func.ts_rank_cd(vector, func.websearch_to_tsquery(language, query)))
+    if query == '"n+1"':
+        # Prevent generic words from crowding the actual technical concept out of top-k.
+        return case(
+            (func.concat_ws(" ", title, content).op("~*")(r"\mn\s*\+\s*1\M"), 10.0),
+            else_=0.0,
+        )
     return scores[0] + scores[1]
+
+
+def _relevant_excerpt(content: str, question: str, *, limit: int = 8_000) -> str:
+    """Keep the matched passage of long sources, rather than always its introduction."""
+    if len(content) <= limit:
+        return content
+    if re.search(r"\bn\s*\+\s*1\b", question, re.I):
+        matches = list(re.finditer(r"\bn\s*\+\s*1\b", content, re.I))
+    else:
+        terms = [
+            t
+            for t in re.findall(r"\w+", question.casefold())
+            if len(t) >= 4 and t not in _STOP_WORDS
+        ]
+        pattern = "|".join(re.escape(t) for t in dict.fromkeys(terms))
+        matches = list(re.finditer(pattern, content, re.I)) if pattern else []
+    if not matches:
+        return content[:limit]
+    # Choose a dense window around actual query terms; preserve surrounding explanation.
+    positions = [m.start() for m in matches]
+    best, right = positions[0], 0
+    best_count = 0
+    for left, position in enumerate(positions):
+        while right < len(positions) and positions[right] < position + limit - 1_000:
+            right += 1
+        if right - left > best_count:
+            best, best_count = position, right - left
+    start = max(0, best - 500)
+    return content[start : start + limit]
 
 
 async def load_trusted_sources(
@@ -91,7 +131,7 @@ async def load_trusted_sources(
     from app.roadmaps.models import Roadmap, RoadmapSection, Topic
     from app.tracks.models import LearningTrackRoadmap
 
-    query = _source_query(cluster.normalized_canonical_question)
+    query = _source_query(cluster.canonical_question)
     if source_ids is None and not query:
         return []
     card_rank = _source_rank(
@@ -197,7 +237,9 @@ async def load_trusted_sources(
         {
             "source_id": source_id,
             "title": redact_untrusted_text(title)[:500],
-            "content": redact_untrusted_text(content)[:8_000],
+            "content": redact_untrusted_text(
+                _relevant_excerpt(content, cluster.canonical_question)
+            ),
         }
         for _score, source_id, title, content in ranked
     ]

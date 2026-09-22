@@ -30,16 +30,14 @@ from app.interviews.card_automation_types import (
     QuestionClusterStatus,
     QuestionOccurrenceStatus,
 )
+from app.interviews.card_topic_resolution import resolved_topic
 from app.interviews.intelligence_models import (
     IntelligenceQuestion,
     IntelligenceQuestionModerationStatus,
 )
 from app.interviews.models import InterviewCard, InterviewCardFrequency, InterviewDeck
 from app.interviews.question_matching import (
-    QuestionCandidate,
-    QuestionVariant,
     normalize_question,
-    rank_question_candidates,
 )
 
 AUTO_PUBLISH_CONFIDENCE = 0.9
@@ -70,7 +68,12 @@ async def publication_preflight_reason(
             select(IntelligenceQuestion).where(IntelligenceQuestion.cluster_id == cluster.id)
         )
     )
-    reason = await _question_review_blocker(session, cluster, questions)
+    reason = await _question_review_blocker(
+        session,
+        cluster,
+        questions,
+        independent_question_check=True,
+    )
     if reason:
         return reason
     return (await _publication_target(session, cluster, settings)).reason
@@ -86,7 +89,11 @@ def _transcript_uncertainty_only(question: IntelligenceQuestion) -> bool:
 
 
 async def _question_review_blocker(
-    session: AsyncSession, cluster: QuestionCluster, questions: list[IntelligenceQuestion]
+    session: AsyncSession,
+    cluster: QuestionCluster,
+    questions: list[IntelligenceQuestion],
+    *,
+    independent_question_check: bool = False,
 ) -> str | None:
     human_decision = await session.scalar(
         select(AutomationDecision.id)
@@ -111,7 +118,14 @@ async def _question_review_blocker(
             or not q.is_real_interviewer_question
             or (q.routing_confidence or 0) < AUTO_PUBLISH_CONFIDENCE
             or (q.confidence < 0.85 and not _transcript_uncertainty_only(q))
-            or CRITICAL_QUALITY_FLAGS.intersection(q.quality_flags or [])
+            or (
+                CRITICAL_QUALITY_FLAGS
+                - (
+                    {"bad_transcription", "missing_context"}
+                    if independent_question_check
+                    else set()
+                )
+            ).intersection(q.quality_flags or [])
             for q in questions
         )
     ):
@@ -122,55 +136,31 @@ async def _question_review_blocker(
 async def _publication_target(
     session: AsyncSession, cluster: QuestionCluster, settings: CardAutomationSettings
 ) -> PublicationTarget:
-    cards = list(
-        await session.scalars(
-            select(InterviewCard)
-            .join(InterviewDeck)
-            .where(
-                InterviewDeck.track_id == cluster.direction_id,
-                InterviewDeck.is_published.is_(True),
-                InterviewCard.is_published.is_(True),
-            )
-        )
+    from app.interviews.card_cluster_matching import (
+        all_distinct,
+        current_cluster_matches,
+        matching_card,
+        publication_cards,
     )
-    candidates = [
-        QuestionCandidate(
-            card_id=c.id,
-            asked_count=c.asked_count,
-            variants=(
-                QuestionVariant(
-                    text=c.question_markdown,
-                    embedding=tuple(c.question_embedding)
-                    if c.question_embedding is not None
-                    and c.question_embedding_model == cluster.embedding_model
-                    and c.question_embedding_dimensions == cluster.embedding_dimensions
-                    else None,
-                    source="canonical",
-                ),
-            ),
-        )
-        for c in cards
-    ]
-    matches = rank_question_candidates(
-        cluster.canonical_question, cluster.embedding, candidates, limit=2
-    )
+
+    cards = await publication_cards(session, cluster)
+    matches = await current_cluster_matches(session, cluster, settings, cards)
     exact = [
         c
         for c in cards
         if normalize_question(c.question_markdown) == normalize_question(cluster.canonical_question)
     ]
-    if len(exact) > 1 or (
-        not exact and matches and matches[0].similarity >= settings.cluster_match_threshold
-    ):
+    card = exact[0] if len(exact) == 1 else matching_card(matches, settings)
+    if len(exact) > 1 or (not exact and card is None and not all_distinct(matches)):
         return PublicationTarget(reason="Possible duplicate found during the publication check")
-    card = exact[0] if exact else None
     if card is None:
         # Resolve the existing broad topic; do not invent a deck or taxonomy from AI text.
+        topic = resolved_topic(cluster.topic_name, {c.category for c in cards})
         destinations = {
             (c.deck_id, c.category)
             for c in cards
-            if cluster.topic_name
-            and c.category.casefold().strip() == cluster.topic_name.casefold().strip()
+            if topic is not None
+            and c.category == topic
             and (cluster.deck_id is None or c.deck_id == cluster.deck_id)
         }
         if len(destinations) != 1:
@@ -219,7 +209,17 @@ async def publish_validated_cluster(
         return None
 
     async def defer(reason: str) -> None:
-        cluster.answer_status = AnswerContractStatus.NEEDS_MANUAL_REVIEW
+        recoverable = reason == "Possible duplicate found during the publication check" or (
+            reason == "Answer did not pass automatic publication quality/source checks"
+            and redact_untrusted_text(cluster.canonical_question) == cluster.canonical_question
+            and cluster.answer_repair_attempts < 2
+            and (cluster.answer_validation or {}).get("question_is_self_contained") is not False
+        )
+        cluster.answer_status = (
+            AnswerContractStatus.REVIEW_PENDING
+            if recoverable
+            else AnswerContractStatus.NEEDS_MANUAL_REVIEW
+        )
         cluster.version += 1
         await record_automation_decision(
             session,
@@ -240,25 +240,7 @@ async def publish_validated_cluster(
     except ValueError:
         await defer("Automatic publication requires a valid answer and independent validation")
         return None
-    public_answer = contract.model_dump(mode="json", exclude={"source_references"})
-    if (
-        cluster.learning_object_type not in CARD_ELIGIBLE_TYPES
-        or not normalize_question(cluster.canonical_question)
-        or not validation.supported
-        or validation.question_is_self_contained is False
-        or contract.confidence < AUTO_PUBLISH_CONFIDENCE
-        or validation.confidence < AUTO_PUBLISH_CONFIDENCE
-        or contract.unsupported_claims
-        or validation.unsupported_claims
-        or validation.contradictions
-        or validation.missing_required_points
-        or validation.version_sensitive_claims
-        or not contract.source_references
-        or not set(contract.source_references) <= allowed_source_ids
-        or not contract.short_answer.strip()
-        or redact_untrusted_text(cluster.canonical_question) != cluster.canonical_question
-        or redact_untrusted_value(public_answer) != public_answer
-    ):
+    if not publication_quality_passes(cluster, contract, validation, allowed_source_ids):
         await defer("Answer did not pass automatic publication quality/source checks")
         return None
     question_count = await session.scalar(
@@ -283,7 +265,12 @@ async def publish_validated_cluster(
     ):
         await defer("Question wording needs independent verification after uncertain transcription")
         return None
-    reason = await _question_review_blocker(session, cluster, questions)
+    reason = await _question_review_blocker(
+        session,
+        cluster,
+        questions,
+        independent_question_check=validation.question_is_self_contained is True,
+    )
     if reason:
         await defer(reason)
         return None
@@ -336,11 +323,47 @@ async def publish_validated_cluster(
         )
         session.add(card)
         await session.flush()
+    else:
+        selected_id = card.id
+        await session.get(InterviewDeck, card.deck_id, with_for_update=True, populate_existing=True)
+        await session.get(InterviewCard, selected_id, with_for_update=True, populate_existing=True)
+        locked_target = await _publication_target(session, cluster, settings)
+        if locked_target.card is None or locked_target.card.id != selected_id:
+            await defer("Possible duplicate found during the publication check")
+            return None
+        card = locked_target.card
     reason = (
         "Automatically published after independent answer validation"
         if created
-        else "Automatically linked to an exact card found before publication"
+        else "Automatically linked to a verified existing card before publication"
     )
+    return await _finish_cluster_card(
+        session,
+        cluster,
+        settings,
+        questions,
+        card,
+        created=created,
+        reason=reason,
+        confidence=min(contract.confidence, validation.confidence),
+        source_references=contract.source_references,
+        evidence=validation.model_dump(mode="json"),
+    )
+
+
+async def _finish_cluster_card(
+    session: AsyncSession,
+    cluster: QuestionCluster,
+    settings: CardAutomationSettings,
+    questions: list[IntelligenceQuestion],
+    card: InterviewCard,
+    *,
+    created: bool,
+    reason: str,
+    confidence: float,
+    source_references: list[str],
+    evidence: dict[str, object],
+) -> UUID:
     for q in questions:
         await link_occurrence_to_card(session, q, card.id, AutomationDecisionSource.RULE, reason)
         q.moderation_status = IntelligenceQuestionModerationStatus.APPROVED
@@ -367,20 +390,145 @@ async def publish_validated_cluster(
         session,
         entity_type="cluster",
         entity_id=cluster.id,
-        idempotency_key=f"cluster:{cluster.id}:auto-publish:{revision}",
+        idempotency_key=f"cluster:{cluster.id}:auto-publish:{cluster.membership_revision}",
         decision_type=AutomationDecisionType.CARD_CREATED
         if created
         else AutomationDecisionType.CLUSTER_LINKED,
         decision_source=AutomationDecisionSource.RULE,
         reason=reason,
-        confidence=min(contract.confidence, validation.confidence),
+        confidence=confidence,
         settings=settings,
         selected_card_id=card.id,
         selected_cluster_id=cluster.id,
         retrieval_scores={
             "occurrence_ids": [str(q.id) for q in questions],
-            "source_references": contract.source_references,
+            "source_references": source_references,
         },
-        judge_result=validation.model_dump(mode="json"),
+        judge_result=evidence,
     )
     return card.id
+
+
+async def link_verified_cluster_match(
+    session: AsyncSession,
+    cluster_id: UUID,
+    revision: int,
+) -> UUID | None:
+    """Attach to an existing answer after a fresh pairwise verdict, without rewriting it."""
+    from app.interviews.card_cluster_matching import current_cluster_matches, matching_card
+
+    direction_id = await session.scalar(
+        select(QuestionCluster.direction_id).where(
+            QuestionCluster.id == cluster_id,
+        )
+    )
+    if direction_id is None:
+        return None
+    lock_key = int.from_bytes(
+        hashlib.blake2b(
+            f"card-publish:{direction_id}".encode(),
+            digest_size=8,
+        ).digest(),
+        "big",
+        signed=True,
+    )
+    await session.execute(select(func.pg_advisory_xact_lock(lock_key)))
+    cluster = await session.get(
+        QuestionCluster, cluster_id, with_for_update=True, populate_existing=True
+    )
+    settings = await session.get(CardAutomationSettings, direction_id, populate_existing=True)
+    if (
+        cluster is None
+        or settings is None
+        or not settings.enabled
+        or settings.shadow_mode
+        or not settings.global_auto_publish_enabled
+        or not settings.cluster_moderation_enabled
+        or not settings.auto_link_semantic_enabled
+        or cluster.membership_revision != revision
+        or cluster.status is not QuestionClusterStatus.NEEDS_REVIEW
+        or cluster.answer_status is not AnswerContractStatus.REVIEW_PENDING
+        or cluster.linked_card_id is not None
+        or cluster.learning_object_type not in CARD_ELIGIBLE_TYPES
+        or not normalize_question(cluster.canonical_question)
+        or redact_untrusted_text(cluster.canonical_question) != cluster.canonical_question
+    ):
+        return None
+    count = await session.scalar(
+        select(func.count())
+        .select_from(IntelligenceQuestion)
+        .where(
+            IntelligenceQuestion.cluster_id == cluster_id,
+        )
+    )
+    questions = list(
+        await session.scalars(
+            select(IntelligenceQuestion)
+            .where(
+                IntelligenceQuestion.cluster_id == cluster_id,
+            )
+            .order_by(IntelligenceQuestion.id)
+            .with_for_update(skip_locked=True)
+        )
+    )
+    if len(questions) != count or await _question_review_blocker(session, cluster, questions):
+        return None
+    candidate = matching_card(await current_cluster_matches(session, cluster, settings), settings)
+    if candidate is None:
+        return None
+    await session.get(
+        InterviewDeck, candidate.deck_id, with_for_update=True, populate_existing=True
+    )
+    await session.get(InterviewCard, candidate.id, with_for_update=True, populate_existing=True)
+    # Re-run the lookup under locks: edits/deletions must invalidate the verdict.
+    current = matching_card(await current_cluster_matches(session, cluster, settings), settings)
+    if current is None or current.id != candidate.id:
+        return None
+    return await _finish_cluster_card(
+        session,
+        cluster,
+        settings,
+        questions,
+        current,
+        created=False,
+        reason="Automatically linked after a current independent same-card check",
+        confidence=0.98,
+        source_references=[],
+        evidence={"decision": "same_card"},
+    )
+
+
+def publication_quality_passes(
+    cluster: QuestionCluster,
+    contract: AnswerContract,
+    validation: AnswerValidationResult,
+    allowed_source_ids: set[str],
+) -> bool:
+    public_answer = contract.model_dump(mode="json", exclude={"source_references"})
+    independently_verified = (
+        validation.question_is_self_contained is True
+        and validation.answer_is_substantive is True
+        and validation.generator_warnings_resolved
+        and not validation.unverified_personal_claims
+        and validation.confidence >= 0.95
+    )
+    return not (
+        cluster.learning_object_type not in CARD_ELIGIBLE_TYPES
+        or not normalize_question(cluster.canonical_question)
+        or not validation.supported
+        or validation.question_is_self_contained is False
+        or validation.answer_is_substantive is False
+        or validation.unverified_personal_claims
+        or (contract.confidence < AUTO_PUBLISH_CONFIDENCE and not independently_verified)
+        or validation.confidence < AUTO_PUBLISH_CONFIDENCE
+        or (contract.unsupported_claims and not independently_verified)
+        or validation.unsupported_claims
+        or validation.contradictions
+        or validation.missing_required_points
+        or validation.version_sensitive_claims
+        or not contract.source_references
+        or not set(contract.source_references) <= allowed_source_ids
+        or not contract.short_answer.strip()
+        or redact_untrusted_text(cluster.canonical_question) != cluster.canonical_question
+        or redact_untrusted_value(public_answer) != public_answer
+    )

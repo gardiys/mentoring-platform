@@ -193,7 +193,8 @@ async def test_version_warning_is_distinct_from_unresolved_version_problem(ready
 async def test_source_search_finds_body_and_inflections_outside_old_top_100(ready):
     async with TestSession() as session:
         cluster = await session.get(QuestionCluster, ready[0])
-        cluster.normalized_canonical_question = "Как устроены составные индексы?"
+        cluster.canonical_question = "Как устроены составные индексы?"
+        cluster.normalized_canonical_question = "как устроены составные индексы"
         source = await session.get(InterviewCard, ready[2].card_id)
         source.question_markdown = "Оптимизация хранилища"
         source.category = "Базы данных"
@@ -222,7 +223,8 @@ async def test_source_search_finds_body_and_inflections_outside_old_top_100(read
 async def test_source_search_does_not_fill_context_with_common_question_words(ready):
     async with TestSession() as session:
         cluster = await session.get(QuestionCluster, ready[0])
-        cluster.normalized_canonical_question = "Что это такое и как оно работает?"
+        cluster.canonical_question = "Что это такое и как оно работает?"
+        cluster.normalized_canonical_question = "что это такое и как оно работает"
         assert await load_trusted_sources(session, cluster) == []
 
 

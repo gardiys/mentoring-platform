@@ -1,6 +1,6 @@
 """Shared SQL definitions for automatic work and the human review queue."""
 
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.interviews.card_automation_models import (
@@ -53,6 +53,7 @@ def ai_processing_condition() -> ColumnElement[bool]:
         or_(
             QuestionCluster.answer_status.is_(None),
             QuestionCluster.answer_status == AnswerContractStatus.REPAIR_PENDING,
+            QuestionCluster.answer_status == AnswerContractStatus.REVIEW_PENDING,
             and_(
                 QuestionCluster.answer_status == AnswerContractStatus.GENERATED_FROM_SOURCES,
                 auto_publish,
@@ -69,9 +70,19 @@ def waiting_for_ai_condition() -> ColumnElement[bool]:
     )
 
 
+def waiting_for_sources_condition() -> ColumnElement[bool]:
+    return and_(
+        QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
+        QuestionCluster.answer_status.is_not(None),
+        QuestionCluster.answer_status == AnswerContractStatus.NEEDS_EXPERT_SOURCE,
+        func.coalesce(QuestionCluster.ai_error_code, "") == "no_trusted_sources",
+    )
+
+
 def manual_review_condition() -> ColumnElement[bool]:
     return and_(
         QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
         ~ai_processing_condition(),
         ~waiting_for_ai_condition(),
+        ~waiting_for_sources_condition(),
     )

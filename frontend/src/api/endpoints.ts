@@ -308,6 +308,7 @@ function questionClusterSearchParams(
     needs_action_only: String(filters.needsActionOnly),
     processing_only: String(filters.processingOnly ?? false),
     waiting_only: String(filters.waitingOnly ?? false),
+    sources_only: String(filters.sourcesOnly ?? false),
     sort_by: filters.sortBy,
     sort_order: filters.sortOrder,
   });
@@ -1056,9 +1057,13 @@ export const api = {
       `/api/v1/admin/interviews/ai-operations/${id}/requeue`,
       { method: "POST" },
     ),
-  adminRestartIntelligenceInterview: (id: string) =>
+  adminRestartIntelligenceInterview: (
+    id: string,
+    force = false,
+    economy = false,
+  ) =>
     apiRequest<IntelligenceInterviewDetail>(
-      `/api/v1/admin/interviews/ai-operations/${id}/restart`,
+      `/api/v1/admin/interviews/ai-operations/${id}/restart?force=${force}&economy=${economy}`,
       { method: "POST" },
     ),
   adminIntelligenceArchive: (id: string, archiveId: string) =>
