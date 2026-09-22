@@ -134,7 +134,11 @@ async def _question_review_blocker(
 
 
 async def _publication_target(
-    session: AsyncSession, cluster: QuestionCluster, settings: CardAutomationSettings
+    session: AsyncSession,
+    cluster: QuestionCluster,
+    settings: CardAutomationSettings,
+    *,
+    refresh: bool = False,
 ) -> PublicationTarget:
     from app.interviews.card_cluster_matching import (
         all_distinct,
@@ -143,7 +147,7 @@ async def _publication_target(
         publication_cards,
     )
 
-    cards = await publication_cards(session, cluster)
+    cards = await publication_cards(session, cluster, refresh=refresh)
     matches = await current_cluster_matches(session, cluster, settings, cards)
     exact = [
         c
@@ -274,7 +278,7 @@ async def publish_validated_cluster(
     if reason:
         await defer(reason)
         return None
-    target = await _publication_target(session, cluster, settings)
+    target = await _publication_target(session, cluster, settings, refresh=True)
     if target.reason:
         await defer(target.reason)
         return None
@@ -327,7 +331,7 @@ async def publish_validated_cluster(
         selected_id = card.id
         await session.get(InterviewDeck, card.deck_id, with_for_update=True, populate_existing=True)
         await session.get(InterviewCard, selected_id, with_for_update=True, populate_existing=True)
-        locked_target = await _publication_target(session, cluster, settings)
+        locked_target = await _publication_target(session, cluster, settings, refresh=True)
         if locked_target.card is None or locked_target.card.id != selected_id:
             await defer("Possible duplicate found during the publication check")
             return None
@@ -481,7 +485,9 @@ async def link_verified_cluster_match(
     )
     await session.get(InterviewCard, candidate.id, with_for_update=True, populate_existing=True)
     # Re-run the lookup under locks: edits/deletions must invalidate the verdict.
-    current = matching_card(await current_cluster_matches(session, cluster, settings), settings)
+    current = matching_card(
+        await current_cluster_matches(session, cluster, settings, refresh=True), settings
+    )
     if current is None or current.id != candidate.id:
         return None
     return await _finish_cluster_card(

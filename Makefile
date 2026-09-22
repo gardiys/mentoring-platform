@@ -6,7 +6,7 @@ first_name ?= Администратор
 CARD_AUTOMATION_ARGS ?=
 CARD_TOPIC_REPROCESS_ARGS ?=
 
-.PHONY: install up down backend frontend worker worker-ai worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings card-automation-backfill prod-card-automation-backfill card-automation-reprocess-missing-topics prod-card-automation-reprocess-missing-topics card-automation-evaluate prod-card-automation-evaluate check-s3-multipart prod-check-s3-multipart tochka-webhook prod-tochka-webhook ensure-test-db prod-env-sync prod-preflight prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
+.PHONY: install up down backend frontend worker worker-ai worker-maintenance worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings card-automation-backfill prod-card-automation-backfill card-automation-reprocess-missing-topics prod-card-automation-reprocess-missing-topics card-automation-evaluate prod-card-automation-evaluate check-s3-multipart prod-check-s3-multipart tochka-webhook prod-tochka-webhook ensure-test-db prod-env-sync prod-preflight prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
@@ -29,6 +29,9 @@ worker:
 
 worker-ai:
 	cd backend && poetry run arq app.interviews.intelligence_jobs.AIWorkerSettings
+
+worker-maintenance:
+	cd backend && poetry run arq app.interviews.intelligence_jobs.MaintenanceWorkerSettings
 
 worker-media:
 	cd backend && poetry run arq app.media.normalization_jobs.ContentMediaWorkerSettings
@@ -171,11 +174,11 @@ prod-migrate: prod-preflight prod-volume-check prod-config
 	$(PROD_COMPOSE) run --rm --no-deps migrate
 
 prod-up: prod-preflight prod-volume-check prod-config
-	$(PROD_COMPOSE) build postgres migrate backend intelligence-worker intelligence-ai-worker content-media-worker notification-worker frontend caddy
+	$(PROD_COMPOSE) build postgres migrate backend intelligence-worker intelligence-ai-worker intelligence-maintenance-worker content-media-worker notification-worker frontend caddy
 	$(PROD_COMPOSE) run --rm --no-deps postgres-permissions
 	$(PROD_COMPOSE) up -d --wait --wait-timeout 120 postgres redis
 	$(PROD_COMPOSE) run --rm migrate
-	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 180 backend intelligence-worker intelligence-ai-worker content-media-worker notification-worker frontend
+	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 180 backend intelligence-worker intelligence-ai-worker intelligence-maintenance-worker content-media-worker notification-worker frontend
 	$(PROD_COMPOSE) run --rm --no-deps caddy-permissions
 	$(PROD_COMPOSE) up -d --no-deps --force-recreate --wait --wait-timeout 60 caddy
 	$(PROD_COMPOSE) ps

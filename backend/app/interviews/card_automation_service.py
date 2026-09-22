@@ -701,6 +701,9 @@ async def list_question_clusters(
         )
 
     processing = ai_processing_condition()
+    from app.interviews.card_queue_observability import running_card_cluster_ids
+
+    running_ids = await running_card_cluster_ids()
     manual = manual_review_condition()
     waiting = waiting_for_ai_condition()
     sources_waiting = waiting_for_sources_condition()
@@ -723,9 +726,36 @@ async def list_question_clusters(
                 func.count(QuestionCluster.id).filter(manual),
                 func.count(QuestionCluster.id).filter(waiting),
                 func.count(QuestionCluster.id).filter(sources_waiting),
+                func.count(QuestionCluster.id).filter(
+                    and_(processing, QuestionCluster.id.in_(running_ids or set()))
+                ),
+                func.count(QuestionCluster.id).filter(
+                    and_(
+                        processing,
+                        QuestionCluster.answer_status == AnswerContractStatus.REPAIR_PENDING,
+                    )
+                ),
             ).where(*conditions)
         )
     ).one()
+    # Throughput is direction-scoped, independent of the current pending/status filter:
+    # completed cards would otherwise disappear from the count by definition.
+    completed = await session.scalar(
+        select(func.count(func.distinct(AutomationDecision.entity_id)))
+        .join(QuestionCluster, QuestionCluster.id == AutomationDecision.entity_id)
+        .where(
+            _cluster_scope_condition(track_ids),
+            AutomationDecision.entity_type == "cluster",
+            AutomationDecision.decision_source != AutomationDecisionSource.HUMAN,
+            AutomationDecision.decision_type.in_(
+                [
+                    AutomationDecisionType.CARD_CREATED,
+                    AutomationDecisionType.CLUSTER_LINKED,
+                ]
+            ),
+            AutomationDecision.created_at >= datetime.now(UTC) - timedelta(hours=1),
+        )
+    )
     conditions.append(selected_work)
     sort_columns = {
         "priority_score": QuestionCluster.priority_score,
@@ -757,6 +787,10 @@ async def list_question_clusters(
         ),
         total=totals[0],
         ai_processing_total=totals[1],
+        ai_running_total=totals[5] if running_ids is not None else None,
+        ai_queued_total=max(totals[1] - totals[5], 0) if running_ids is not None else None,
+        ai_repair_total=totals[6],
+        completed_last_hour=completed or 0,
         manual_review_total=totals[2],
         waiting_for_ai_total=totals[3],
         waiting_for_sources_total=totals[4],

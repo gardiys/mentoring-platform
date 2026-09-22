@@ -211,6 +211,10 @@ class QuestionClusterPage(StrictAPIModel):
     items: list[QuestionClusterSummary]
     total: int = Field(ge=0)
     ai_processing_total: int = Field(default=0, ge=0)
+    ai_running_total: int | None = Field(default=None, ge=0)
+    ai_queued_total: int | None = Field(default=None, ge=0)
+    ai_repair_total: int = Field(default=0, ge=0)
+    completed_last_hour: int = Field(default=0, ge=0)
     manual_review_total: int = Field(default=0, ge=0)
     waiting_for_ai_total: int = Field(default=0, ge=0)
     waiting_for_sources_total: int = Field(default=0, ge=0)

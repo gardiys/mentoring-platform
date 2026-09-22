@@ -1393,6 +1393,10 @@ export interface QuestionClusterPage {
   items: QuestionClusterSummary[];
   total: number;
   ai_processing_total?: number;
+  ai_running_total?: number | null;
+  ai_queued_total?: number | null;
+  ai_repair_total?: number;
+  completed_last_hour?: number;
   manual_review_total?: number;
   waiting_for_ai_total?: number;
   waiting_for_sources_total?: number;

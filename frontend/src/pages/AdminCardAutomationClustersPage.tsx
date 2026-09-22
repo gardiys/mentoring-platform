@@ -436,7 +436,7 @@ export function CardAutomationClustersPage({
                 }
                 data={[
                   { value: "manual", label: "Нужно решение человека" },
-                  { value: "ai", label: "Обрабатывает AI" },
+                  { value: "ai", label: "На AI-обработке" },
                   { value: "waiting", label: "Ожидает восстановления AI" },
                   { value: "sources", label: "Ожидает материалов" },
                   { value: "all", label: "Все кластеры" },
@@ -504,13 +504,22 @@ export function CardAutomationClustersPage({
           <Text fw={600}>Кластеров по фильтрам: {query.data.total}</Text>
           <Group gap="sm">
             <Badge color="blue">
-              Обрабатывает AI: {query.data.ai_processing_total ?? 0}
+              На AI-обработке: {query.data.ai_processing_total ?? 0}
+            </Badge>
+            <Badge color="blue">
+              Выполняются сейчас: {query.data.ai_running_total ?? "—"}
+            </Badge>
+            <Badge color="gray">
+              В очереди: {query.data.ai_queued_total ?? "—"}
+            </Badge>
+            <Badge color="yellow">
+              На этапе исправления: {query.data.ai_repair_total ?? 0}
             </Badge>
             <Badge color="orange">
               Нужно решение человека: {query.data.manual_review_total ?? 0}
             </Badge>
             <Badge color="orange">
-              Ожидают AI: {query.data.waiting_for_ai_total ?? 0}
+              Пауза AI: {query.data.waiting_for_ai_total ?? 0}
             </Badge>
             <Badge color="gray">
               Ожидают материалов: {query.data.waiting_for_sources_total ?? 0}
@@ -519,7 +528,13 @@ export function CardAutomationClustersPage({
         </Stack>
         <Stack gap={2} align="flex-end">
           <Text size="sm" c="dimmed">
-            Обработка AI и решения модератора показаны отдельно
+            Завершено AI за час в выбранных направлениях:{" "}
+            {query.data.completed_last_hour ?? 0}
+          </Text>
+          <Text size="xs" c="dimmed">
+            {query.data.ai_running_total == null
+              ? "Данные о выполнении временно недоступны"
+              : "Выполнение и очередь — снимок на момент обновления"}
           </Text>
           <Text size="xs" c="dimmed" visibleFrom="sm">
             Клавиши J/K — строка, Enter — открыть
@@ -693,7 +708,7 @@ export function CardAutomationClustersPage({
                           : cluster.processing_state === "waiting_for_ai"
                             ? "Ожидает восстановления AI"
                             : cluster.processing_state === "ai_processing"
-                              ? "Обрабатывает AI"
+                              ? "На AI-обработке"
                               : clusterStatusLabels[cluster.status]}
                       </Badge>
                     </Table.Td>

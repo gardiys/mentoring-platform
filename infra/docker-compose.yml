@@ -207,6 +207,7 @@ services:
       OPENAI_FLEX_TIMEOUT_SECONDS: ${OPENAI_FLEX_TIMEOUT_SECONDS:-900}
       OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-0}
       OPENAI_MAX_CONCURRENCY: ${OPENAI_MAX_CONCURRENCY:-4}
+      CARD_REVIEW_BACKLOG_MAX_ACTIVE: ${CARD_REVIEW_BACKLOG_MAX_ACTIVE:-50}
       OPENAI_JOB_TIMEOUT_SECONDS: ${OPENAI_JOB_TIMEOUT_SECONDS:-3600}
       OPENAI_EXTRACTION_MAX_OUTPUT_TOKENS: ${OPENAI_EXTRACTION_MAX_OUTPUT_TOKENS:-8000}
       OPENAI_REVIEW_MAX_OUTPUT_TOKENS: ${OPENAI_REVIEW_MAX_OUTPUT_TOKENS:-4000}
@@ -271,6 +272,7 @@ services:
       OPENAI_FLEX_TIMEOUT_SECONDS: ${OPENAI_FLEX_TIMEOUT_SECONDS:-900}
       OPENAI_MAX_RETRIES: ${OPENAI_MAX_RETRIES:-0}
       OPENAI_MAX_CONCURRENCY: ${OPENAI_MAX_CONCURRENCY:-4}
+      CARD_REVIEW_BACKLOG_MAX_ACTIVE: ${CARD_REVIEW_BACKLOG_MAX_ACTIVE:-50}
       OPENAI_JOB_TIMEOUT_SECONDS: ${OPENAI_JOB_TIMEOUT_SECONDS:-3600}
       OPENAI_EXTRACTION_MAX_OUTPUT_TOKENS: ${OPENAI_EXTRACTION_MAX_OUTPUT_TOKENS:-8000}
       OPENAI_REVIEW_MAX_OUTPUT_TOKENS: ${OPENAI_REVIEW_MAX_OUTPUT_TOKENS:-4000}
@@ -336,6 +338,25 @@ services:
           "-m",
           "app.arq_healthcheck",
           "arq:queue:interview-openai:health-check",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  intelligence-maintenance-worker:
+    <<: *intelligence-worker
+    command: arq app.interviews.intelligence_jobs.MaintenanceWorkerSettings
+    mem_limit: 768m
+    cpus: 0.75
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-m",
+          "app.arq_healthcheck",
+          "arq:queue:interview-maintenance:health-check",
         ]
       interval: 15s
       timeout: 5s

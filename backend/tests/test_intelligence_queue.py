@@ -89,7 +89,7 @@ def test_jobs_are_routed_to_independent_provider_queues() -> None:
     )
     assert (
         intelligence_queue.intelligence_queue_name("refresh_interview_card_duplicate_cache")
-        == intelligence_queue.OPENAI_QUEUE_NAME
+        == intelligence_queue.MAINTENANCE_QUEUE_NAME
     )
     with pytest.raises(ValueError, match="Unknown interview intelligence job"):
         intelligence_queue.intelligence_queue_name("unexpected_job")
@@ -180,6 +180,14 @@ def test_worker_keeps_deterministic_ids_reusable_and_runs_reconciliation() -> No
         TranscriptionWorkerSettings.health_check_interval
         == intelligence_jobs.WORKER_HEALTH_CHECK_INTERVAL_SECONDS
     )
+    assert AIWorkerSettings.cron_jobs == []
+    legacy_handlers = {getattr(handler, "name", "") for handler in AIWorkerSettings.functions}
+    assert {
+        "cron:reconcile_card_automation_jobs",
+        "cron:refresh_interview_card_duplicate_cache",
+        "cron:expire_career_objection_periods",
+    } <= legacy_handlers
+    assert intelligence_jobs.MaintenanceWorkerSettings.max_jobs == 1
     assert AIWorkerSettings.queue_name == intelligence_queue.OPENAI_QUEUE_NAME
     assert AIWorkerSettings.max_jobs == intelligence_jobs.settings.openai_max_concurrency
     assert AIWorkerSettings.job_timeout == intelligence_jobs.settings.openai_job_timeout_seconds
@@ -187,7 +195,11 @@ def test_worker_keeps_deterministic_ids_reusable_and_runs_reconciliation() -> No
         intelligence_jobs.reconcile_card_automation_jobs,
         intelligence_jobs.refresh_interview_card_duplicate_cache,
     ):
-        cron_job = next(job for job in AIWorkerSettings.cron_jobs if job.coroutine is coroutine)
+        cron_job = next(
+            job
+            for job in intelligence_jobs.MaintenanceWorkerSettings.cron_jobs
+            if job.coroutine is coroutine
+        )
         assert cron_job.run_at_startup is True
     assert intelligence_jobs.refresh_interview_question_embeddings in AIWorkerSettings.functions
     assert intelligence_jobs.refresh_interview_card_duplicate_cache in AIWorkerSettings.functions

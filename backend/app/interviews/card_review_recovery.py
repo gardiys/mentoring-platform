@@ -4,10 +4,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.core.config import get_settings
 from app.interviews.ai_rate_limit import CONTINUE_ERROR, defer_model_cooldown
 from app.interviews.card_auto_publish import (
     link_verified_cluster_match,
@@ -27,6 +28,7 @@ from app.interviews.card_automation_types import AutomationDecisionSource as Sou
 from app.interviews.card_automation_types import AutomationDecisionType as Decision
 from app.interviews.card_automation_types import QuestionClusterStatus
 from app.interviews.card_cluster_matching import current_cluster_matches, match_fingerprint
+from app.interviews.card_cluster_workflow import ai_processing_condition, waiting_for_ai_condition
 from app.interviews.intelligence_ai import InterviewAIError, InterviewAIProvider
 from app.interviews.intelligence_queue import enqueue_card_automation_job
 from app.interviews.models import InterviewCard, InterviewDeck
@@ -49,6 +51,16 @@ async def queue_review_backlog(
     factory: async_sessionmaker[AsyncSession], *, limit: int = 50
 ) -> int:
     async with factory() as session:
+        # Serialize admission, including the capacity check, across maintenance workers.
+        await session.execute(select(func.pg_advisory_xact_lock(731_092_201)))
+        occupied = await session.scalar(
+            select(func.count())
+            .select_from(QuestionCluster)
+            .where(or_(ai_processing_condition(), waiting_for_ai_condition()))
+        )
+        limit = min(limit, get_settings().card_review_backlog_max_active - (occupied or 0))
+        if limit <= 0:
+            return 0
         rows = list(
             await session.scalars(
                 select(QuestionCluster)
@@ -72,6 +84,7 @@ async def queue_review_backlog(
                     CardAutomationSettings.global_auto_publish_enabled.is_(True),
                     CardAutomationSettings.cluster_moderation_enabled.is_(True),
                     no_human_decision(),
+                    ~ai_processing_condition(),
                 )
                 .order_by(QuestionCluster.id)
                 .limit(limit)
@@ -144,18 +157,18 @@ async def review_cluster(
         _validation_sources,
     )
 
-    # Acquire publication locks in their normal order, never while already holding a cluster lock.
+    candidate = None
+    next_job = None
     async with factory() as session:
+        # One transaction lets preflight reuse the duplicate lookup. Keep direction -> cluster
+        # lock ordering and the final fresh lookup inside link_verified_cluster_match.
         state = await session.get(QuestionCluster, cluster_id)
         if state is None or state.answer_status != Status.REVIEW_PENDING:
             return
         linked = await link_verified_cluster_match(session, cluster_id, revision)
-        await session.commit()
         if linked is not None:
+            await session.commit()
             return
-    candidate = None
-    next_job = None
-    async with factory() as session:
         cluster = await session.get(QuestionCluster, cluster_id, with_for_update=True)
         settings = (
             await session.get(CardAutomationSettings, cluster.direction_id) if cluster else None

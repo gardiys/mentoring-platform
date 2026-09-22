@@ -216,6 +216,7 @@ class Settings(BaseSettings):
     # ARQ owns observable retries and persists every attempt; avoid nested SDK retries.
     openai_max_retries: int = Field(default=0, ge=0, le=5)
     openai_max_concurrency: int = Field(default=4, ge=1, le=32)
+    card_review_backlog_max_active: int = Field(default=50, ge=0, le=1000)
     openai_job_timeout_seconds: int = Field(default=3_600, ge=60, le=14_400)
     openai_extraction_max_output_tokens: int = Field(default=8_000, ge=256, le=32_000)
     openai_review_max_output_tokens: int = Field(default=4_000, ge=256, le=16_000)

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -8,6 +9,7 @@ from app.core.config import get_settings
 DEFAULT_INTELLIGENCE_JOB_EXPIRES_SECONDS = 7 * 24 * 60 * 60
 TRANSCRIPTION_QUEUE_NAME = "arq:queue:interview-transcription"
 OPENAI_QUEUE_NAME = "arq:queue:interview-openai"
+MAINTENANCE_QUEUE_NAME = "arq:queue:interview-maintenance"
 REVISIONED_ANALYSIS_FUNCTIONS = frozenset(
     {
         "extract_interview_structure",
@@ -42,9 +44,26 @@ OPENAI_FUNCTIONS = frozenset(
 def intelligence_queue_name(function: str) -> str:
     if function in TRANSCRIPTION_FUNCTIONS:
         return TRANSCRIPTION_QUEUE_NAME
+    if function == "refresh_interview_card_duplicate_cache":
+        return MAINTENANCE_QUEUE_NAME
     if function in OPENAI_FUNCTIONS:
         return OPENAI_QUEUE_NAME
     raise ValueError(f"Unknown interview intelligence job: {function}")
+
+
+def _priority_options(function: str, defer_seconds: int | float | None) -> dict[str, Any]:
+    # ARQ sorts due jobs by timestamp. A bounded head start prioritizes new interviews and
+    # continuation stages while old jobs still age past them. Explicit API cooldowns always win.
+    if defer_seconds is not None:
+        return {"_defer_by": defer_seconds}
+    seconds = (
+        900
+        if function in REVISIONED_ANALYSIS_FUNCTIONS
+        else 300
+        if function in {"generate_cluster_candidate", "validate_cluster_answer"}
+        else 0
+    )
+    return {"_defer_until": datetime.now(UTC) - timedelta(seconds=seconds)} if seconds else {}
 
 
 def intelligence_job_id(function: str, interview_id: str) -> str:
@@ -90,8 +109,7 @@ async def enqueue_intelligence_job(
             "_job_id": job_id,
             "_queue_name": intelligence_queue_name(function),
         }
-        if defer_seconds is not None:
-            options["_defer_by"] = defer_seconds
+        options.update(_priority_options(function, defer_seconds))
         job = await redis.enqueue_job(function, *args, **options)
         return job.job_id if job is not None else job_id
     finally:
@@ -138,8 +156,7 @@ async def enqueue_card_automation_job(
             "_job_id": job_id,
             "_queue_name": intelligence_queue_name(function),
         }
-        if defer_seconds is not None:
-            options["_defer_by"] = defer_seconds
+        options.update(_priority_options(function, defer_seconds))
         if manual_draft:
             options["manual_draft"] = True
         job = await redis.enqueue_job(function, entity_id, revision, **options)
@@ -160,7 +177,7 @@ async def enqueue_duplicate_cache_refresh(*, redis: ArqRedis | None = None) -> s
             function,
             _expires=_job_expires_seconds(),
             _job_id=job_id,
-            _queue_name=OPENAI_QUEUE_NAME,
+            _queue_name=MAINTENANCE_QUEUE_NAME,
         )
         return job.job_id if job is not None else job_id
     finally:

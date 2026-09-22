@@ -14180,6 +14180,20 @@ export interface components {
              * @default 0
              */
             ai_processing_total: number;
+            /** Ai Running Total */
+            ai_running_total?: number | null;
+            /** Ai Queued Total */
+            ai_queued_total?: number | null;
+            /**
+             * Ai Repair Total
+             * @default 0
+             */
+            ai_repair_total: number;
+            /**
+             * Completed Last Hour
+             * @default 0
+             */
+            completed_last_hour: number;
             /**
              * Manual Review Total
              * @default 0

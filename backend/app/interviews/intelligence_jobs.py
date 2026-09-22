@@ -84,6 +84,7 @@ from app.interviews.intelligence_providers import (
     build_transcription_provider,
 )
 from app.interviews.intelligence_queue import (
+    MAINTENANCE_QUEUE_NAME,
     OPENAI_QUEUE_NAME,
     TRANSCRIPTION_QUEUE_NAME,
     enqueue_card_automation_job,
@@ -1773,7 +1774,7 @@ class TranscriptionWorkerSettings:
 
 
 class AIWorkerSettings:
-    functions = [
+    functions: list[Any] = [
         generate_employment_ai_suggestion,
         generate_career_package,
         extract_interview_structure,
@@ -1792,6 +1793,31 @@ class AIWorkerSettings:
         reprocess_question_occurrence,
         refresh_interview_card_duplicate_cache,
     ]
+    # Keep these handlers for jobs already queued before the maintenance split.
+    functions += [
+        arq_func(reconcile_card_automation_jobs, name="cron:reconcile_card_automation_jobs"),
+        arq_func(
+            refresh_interview_card_duplicate_cache,
+            name="cron:refresh_interview_card_duplicate_cache",
+        ),
+        arq_func(expire_career_objection_periods, name="cron:expire_career_objection_periods"),
+    ]
+    cron_jobs: list[Any] = []
+    on_startup = ai_startup
+    on_shutdown = ai_shutdown
+    redis_settings = RedisSettings.from_dsn(settings.redis_url)
+    queue_name = OPENAI_QUEUE_NAME
+    max_jobs = settings.openai_max_concurrency
+    job_timeout = settings.openai_job_timeout_seconds
+    max_tries = MAX_JOB_TRIES
+    keep_result = 0
+    health_check_interval = WORKER_HEALTH_CHECK_INTERVAL_SECONDS
+
+
+class MaintenanceWorkerSettings:
+    """Database/cache maintenance has one independent slot and makes no provider calls."""
+
+    functions = [reconcile_card_automation_jobs, refresh_interview_card_duplicate_cache]
     cron_jobs = [
         cron(
             expire_career_objection_periods,
@@ -1815,12 +1841,10 @@ class AIWorkerSettings:
             keep_result=0,
         ),
     ]
-    on_startup = ai_startup
-    on_shutdown = ai_shutdown
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
-    queue_name = OPENAI_QUEUE_NAME
-    max_jobs = settings.openai_max_concurrency
-    job_timeout = settings.openai_job_timeout_seconds
+    queue_name = MAINTENANCE_QUEUE_NAME
+    max_jobs = 1
+    job_timeout = 3600
     max_tries = MAX_JOB_TRIES
     keep_result = 0
     health_check_interval = WORKER_HEALTH_CHECK_INTERVAL_SECONDS

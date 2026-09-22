@@ -425,11 +425,12 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
 
     from app.interviews.card_review_recovery import queue_review_backlog
 
-    await queue_review_backlog(async_session_factory)
     await repair_missing_source_validations()
     await recheck_source_blocked_clusters()
     await resume_service_blocked_clusters()
     await schedule_answer_repairs()
+    # Recover unfinished work first; only admit legacy reviews into the remaining capacity.
+    await queue_review_backlog(async_session_factory)
 
     async with async_session_factory() as session:
         occurrences = (

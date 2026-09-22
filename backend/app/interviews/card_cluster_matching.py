@@ -1,8 +1,11 @@
 """Fresh, content-bound pairwise evidence for the final publication duplicate check."""
 
+import asyncio
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,8 +57,35 @@ def match_fingerprint(cluster: QuestionCluster, card: InterviewCard) -> str:
     ).hexdigest()
 
 
-async def publication_cards(session: AsyncSession, cluster: QuestionCluster) -> list[InterviewCard]:
-    return list(
+@dataclass
+class _PublicationCache:
+    transaction: object
+    cards: dict[UUID, list[InterviewCard]] = field(default_factory=dict)
+    matches: dict[tuple[Any, ...], list[ClusterMatch]] = field(default_factory=dict)
+
+
+def _transaction_cache(session: AsyncSession, *, refresh: bool = False) -> _PublicationCache:
+    """Reuse reads only inside this transaction, never across jobs or commits."""
+    transaction = session.sync_session.get_transaction()
+    cached = session.info.get("publication_lookup")
+    if (
+        refresh
+        or not isinstance(cached, _PublicationCache)
+        or cached.transaction is not transaction
+    ):
+        cached = _PublicationCache(transaction)
+        session.info["publication_lookup"] = cached
+    return cached
+
+
+async def publication_cards(
+    session: AsyncSession, cluster: QuestionCluster, *, refresh: bool = False
+) -> list[InterviewCard]:
+    await session.connection()  # Establish the transaction before choosing its cache.
+    cache = _transaction_cache(session, refresh=refresh).cards
+    if cluster.direction_id in cache:
+        return cache[cluster.direction_id]
+    cards = list(
         await session.scalars(
             select(InterviewCard)
             .join(InterviewDeck)
@@ -64,8 +94,11 @@ async def publication_cards(session: AsyncSession, cluster: QuestionCluster) -> 
                 InterviewDeck.is_published.is_(True),
                 InterviewCard.is_published.is_(True),
             )
+            .execution_options(populate_existing=True)
         )
     )
+    cache[cluster.direction_id] = cards
+    return cards
 
 
 async def current_cluster_matches(
@@ -73,8 +106,29 @@ async def current_cluster_matches(
     cluster: QuestionCluster,
     settings: CardAutomationSettings,
     cards: list[InterviewCard] | None = None,
+    *,
+    refresh: bool = False,
 ) -> list[ClusterMatch]:
+    await session.connection()
+    cache = _transaction_cache(session, refresh=refresh).matches
+    key = (
+        cluster.id,
+        cluster.version,
+        cluster.membership_revision,
+        cluster.canonical_question,
+        tuple(cluster.embedding or []),
+        cluster.embedding_model,
+        cluster.embedding_dimensions,
+        settings.cluster_match_threshold,
+        settings.pairwise_judge_confidence_threshold,
+    )
+    if cards is None and key in cache:
+        return cache[key]
     cards = await publication_cards(session, cluster) if cards is None else cards
+    # Callers passing the transaction's card snapshot can reuse the same ranking too.
+    cacheable = cards is _transaction_cache(session).cards.get(cluster.direction_id)
+    if cacheable and key in cache:
+        return cache[key]
     candidates = [
         QuestionCandidate(
             card_id=c.id,
@@ -93,8 +147,8 @@ async def current_cluster_matches(
         )
         for c in cards
     ]
-    ranked = rank_question_candidates(
-        cluster.canonical_question, cluster.embedding, candidates, limit=4
+    ranked = await asyncio.to_thread(
+        rank_question_candidates, cluster.canonical_question, cluster.embedding, candidates, limit=4
     )
     by_id = {c.id: c for c in cards}
     matches = [
@@ -128,6 +182,8 @@ async def current_cluster_matches(
                 result.get("missing_in_existing_card") or result.get("extra_in_existing_card")
             ):
                 match.verdict = "uncertain"
+    if cacheable:
+        cache[key] = matches
     return matches
 
 

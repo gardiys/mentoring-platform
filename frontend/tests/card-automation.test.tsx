@@ -1315,6 +1315,10 @@ it("отделяет обработку AI от ручной очереди и �
     items: [{ ...cluster, processing_state: "ai_processing" }],
     total: 1,
     ai_processing_total: 12,
+    ai_running_total: 2,
+    ai_queued_total: 10,
+    ai_repair_total: 3,
+    completed_last_hour: 18,
     manual_review_total: 3,
     limit: 20,
     offset: 0,
@@ -1324,10 +1328,16 @@ it("отделяет обработку AI от ручной очереди и �
     "/admin/card-automation/clusters?processing_only=true",
     "/admin/card-automation/clusters",
   );
-  expect(await screen.findByText("Обрабатывает AI: 12")).toBeInTheDocument();
+  expect(await screen.findByText("На AI-обработке: 12")).toBeInTheDocument();
   expect(screen.getByText("Нужно решение человека: 3")).toBeInTheDocument();
+  expect(screen.getByText("Выполняются сейчас: 2")).toBeInTheDocument();
+  expect(screen.getByText("В очереди: 10")).toBeInTheDocument();
+  expect(screen.getByText("На этапе исправления: 3")).toBeInTheDocument();
   expect(
-    within(screen.getByRole("table")).getByText("Обрабатывает AI"),
+    screen.getByText("Завершено AI за час в выбранных направлениях: 18"),
+  ).toBeInTheDocument();
+  expect(
+    within(screen.getByRole("table")).getByText("На AI-обработке"),
   ).toBeInTheDocument();
   expect(list).toHaveBeenLastCalledWith(
     expect.objectContaining({ processingOnly: true, needsActionOnly: false }),
@@ -1359,7 +1369,11 @@ it("отделяет ожидание AI от очереди ручных реш
     "/admin/card-automation/clusters?waiting_only=true",
     "/admin/card-automation/clusters",
   );
-  expect(await screen.findByText("Ожидают AI: 1")).toBeInTheDocument();
+  expect(await screen.findByText("Пауза AI: 1")).toBeInTheDocument();
+  expect(screen.getByText("В очереди: —")).toBeInTheDocument();
+  expect(
+    screen.getByText("Данные о выполнении временно недоступны"),
+  ).toBeInTheDocument();
   expect(screen.getByText("Нужно решение человека: 0")).toBeInTheDocument();
   expect(list).toHaveBeenCalledWith(
     expect.objectContaining({
