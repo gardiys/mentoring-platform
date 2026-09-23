@@ -8120,6 +8120,8 @@ export interface components {
         AnswerValidationResult: {
             /** Supported */
             supported: boolean;
+            /** Supporting Source References */
+            supporting_source_references?: string[];
             /** Unsupported Claims */
             unsupported_claims?: string[];
             /** Contradictions */

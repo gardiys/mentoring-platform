@@ -1229,6 +1229,7 @@ export interface CardAutomationAnswerContract {
 }
 
 export interface CardAutomationAnswerValidation {
+  supporting_source_references?: string[];
   answer_is_substantive?: boolean | null;
   unverified_personal_claims?: string[];
   generator_warnings_resolved?: boolean;

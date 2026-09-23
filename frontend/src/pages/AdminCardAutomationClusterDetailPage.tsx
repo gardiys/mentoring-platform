@@ -1345,9 +1345,22 @@ function ClusterDetail({
             )}
             {cluster.answer_validation && (
               <Stack gap="xs">
+                {cluster.answer_validation.question_is_self_contained ===
+                  false && (
+                  <Alert color="orange" title="Вопросу не хватает контекста">
+                    Нужны исходный код, данные или уточнение условия. Правки
+                    одного ответа могут быть недостаточны.
+                  </Alert>
+                )}
+                {cluster.answer_validation.answer_is_substantive === false && (
+                  <Alert color="yellow" title="Ответ не раскрывает вопрос">
+                    Черновик нужно дополнить или превратить рекомендации ученику
+                    в самостоятельный ответ.
+                  </Alert>
+                )}
                 {[
                   [
-                    "Неподтверждённые утверждения",
+                    "Не подтверждено материалами",
                     cluster.answer_validation.unsupported_claims,
                   ],
                   ["Противоречия", cluster.answer_validation.contradictions],

@@ -805,7 +805,8 @@ async def test_routing_uses_existing_broad_topic_and_persists_detailed_subtopic(
         assert cluster.subtopic_name == "Дескрипторы и протокол атрибутов"
         assert cluster.answer_contract is not None
         assert cluster.answer_contract["short_answer"] == "Краткий корректный ответ."
-        assert "требует проверки" in str(cluster.answer_contract["unsupported_claims"])
+        assert cluster.answer_contract["unsupported_claims"] == []
+        assert "требует проверки" in str(cluster.answer_contract["source_limitations"])
 
 
 @pytest.mark.asyncio

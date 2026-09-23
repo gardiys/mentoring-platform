@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Protocol, TypeVar
 from uuid import UUID
 
@@ -204,6 +204,7 @@ class InterviewAICheckpoints:
         question_kind: IntelligenceQuestionKind,
         context: str,
         direction: str | None,
+        reference_answer: Mapping[str, str] | None = None,
     ) -> AIReviewResult:
         technical = question_kind is IntelligenceQuestionKind.TECHNICAL
         policy = review_request_policy(self.ai, question_kind, question, answer, context)
@@ -218,6 +219,7 @@ class InterviewAICheckpoints:
                 "question_kind": question_kind.value,
                 "context": context,
                 "direction": direction,
+                **({"reference_answer": dict(reference_answer)} if reference_answer else {}),
             },
             prompt=(TECHNICAL_REVIEW_PROMPT if technical else LIGHT_REVIEW_PROMPT)
             + transcript_context(direction),
@@ -236,6 +238,7 @@ class InterviewAICheckpoints:
                 question_kind=question_kind,
                 context=context,
                 direction=direction,
+                **({"reference_answer": reference_answer} if reference_answer else {}),
             ),
         )
         return AIReviewResult(output, usage)

@@ -162,7 +162,8 @@ def answer_contract_from_analysis_draft(answer: str) -> dict[str, object]:
         required_points=[],
         optional_points=[],
         common_mistakes=[],
-        unsupported_claims=["Ответ перенесён из AI-разбора собеседования и требует проверки."],
+        unsupported_claims=[],
+        source_limitations=["Ответ перенесён из AI-разбора собеседования и требует проверки."],
         follow_up_questions=[],
         difficulty="mixed",
         version_scope=[],
@@ -1076,9 +1077,6 @@ async def _cluster_occurrence(
             await session.commit()
             return
         settings = current_settings
-        if settings.global_auto_publish_enabled:
-            # Interview feedback is an unverified draft, not a publishable source.
-            analysis_answer_contract = None
         _set_occurrence_status(question, QuestionOccurrenceStatus.SEARCHING_CLUSTER)
         canonical = question.canonical_question_candidate or question.question_text
         normalized = normalize_question(canonical)

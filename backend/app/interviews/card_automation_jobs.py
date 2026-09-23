@@ -636,24 +636,8 @@ async def recalculate_cluster_stats(
         # queued for an older revision. This makes stale jobs useful rather
         # than allowing them to overwrite newer aggregate values.
         await recalculate_cluster_stats_model(session, cluster, settings)
-        if (
-            settings.global_auto_publish_enabled
-            and cluster.answer_status is None
-            and cluster.answer_contract is not None
-            and not cluster.answer_contract.get("source_references")
-            and not await session.scalar(
-                select(AutomationDecision.id)
-                .where(
-                    AutomationDecision.entity_type == "cluster",
-                    AutomationDecision.entity_id == cluster.id,
-                    AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
-                )
-                .limit(1)
-            )
-        ):
-            cluster.answer_contract = None
-            cluster.answer_validation = None
-            cluster.version += 1
+        # Preserve interview-review drafts. Missing citations trigger independent
+        # source attribution during validation, not deletion and paid regeneration.
         current_revision = cluster.membership_revision
         should_generate = (
             settings.enabled
@@ -780,7 +764,7 @@ async def generate_cluster_candidate(
             return
         analysis_draft = (
             None
-            if settings.global_auto_publish_enabled or repair_context is not None
+            if repair_context is not None
             else await analysis_answer_draft_for_cluster(session, cluster.id)
         )
         provider = _ai(ctx)
@@ -1220,10 +1204,29 @@ async def validate_cluster_answer(
         decision_source = AutomationDecisionSource.SEMANTIC_JUDGE
         reason = "Independent structured answer validation completed"
     references = contract_payload.get("source_references")
+    discovered = list(dict.fromkeys(validation_payload.get("supporting_source_references", [])))
+    if set(discovered) - allowed_ids:
+        validation_supported = False
+        validation_payload["supported"] = False
+        validation_payload["unsupported_claims"] = [
+            *validation_payload.get("unsupported_claims", []),
+            "Проверка ссылается на непереданные источники.",
+        ]
+    if validation_supported and not references and not discovered:
+        validation_supported = False
+        validation_payload["supported"] = False
+        validation_payload["unsupported_claims"] = [
+            *validation_payload.get("unsupported_claims", []),
+            "Проверка не указала источники, подтверждающие готовый ответ.",
+        ]
+    # A supplied draft is not evidence. Only the independent validator can
+    # attribute its claims to actual allowlisted material; never attach all hits.
+    attributed_references = references or discovered
     supported = bool(
         validation_supported
-        and isinstance(references, list)
-        and references
+        and isinstance(attributed_references, list)
+        and attributed_references
+        and set(attributed_references) <= allowed_ids
         and validation_payload.get("question_is_self_contained") is True
         and validation_payload.get("answer_is_substantive") is True
         and not validation_payload.get("unverified_personal_claims")
@@ -1246,6 +1249,11 @@ async def validate_cluster_answer(
         settings = await session.get(CardAutomationSettings, cluster.direction_id)
         if settings is None or not settings.enabled or not settings.cluster_moderation_enabled:
             return
+        if supported and not references:
+            cluster.answer_contract = {
+                **contract_payload,
+                "source_references": attributed_references,
+            }
         cluster.answer_validation = validation_payload
         cluster.answer_status = (
             AnswerContractStatus.GENERATED_FROM_SOURCES
@@ -1446,7 +1454,11 @@ async def _publish_ready_cluster(cluster_id: UUID, revision: int) -> bool:
 
 def _publication_sources_hash(sources: list[dict[str, str]]) -> str:
     return hashlib.sha256(
-        json.dumps(sources, ensure_ascii=False, sort_keys=True).encode()
+        json.dumps(
+            sorted(sources, key=lambda source: source["source_id"]),
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode()
     ).hexdigest()
 
 

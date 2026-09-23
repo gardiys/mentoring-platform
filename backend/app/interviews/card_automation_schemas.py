@@ -97,6 +97,7 @@ class AnswerContract(StrictAPIModel):
 
 class AnswerValidationResult(StrictAPIModel):
     supported: bool
+    supporting_source_references: list[str] = Field(default_factory=list)
     unsupported_claims: list[str] = Field(default_factory=list)
     contradictions: list[str] = Field(default_factory=list)
     missing_required_points: list[str] = Field(default_factory=list)

@@ -93,6 +93,7 @@ from app.interviews.intelligence_queue import (
 from app.interviews.intelligence_recovery import (
     intelligence_recovery_job_name as _recovery_job_name,
 )
+from app.interviews.intelligence_reference_answers import published_review_reference
 from app.interviews.intelligence_request_policy import INTERVIEW_STAGE_CONTINUE
 from app.interviews.intelligence_service import safe_processing_message
 from app.interviews.intelligence_summary_evidence import summarize_review_evidence
@@ -894,6 +895,15 @@ async def generate_answer_reviews(
                         question_kind=question.question_kind,
                         context=context,
                         direction=directions.get(question.direction_id),
+                        reference_answer=(
+                            await published_review_reference(
+                                session,
+                                question=question.question_text,
+                                direction_id=question.direction_id,
+                            )
+                            if question.question_kind is IntelligenceQuestionKind.TECHNICAL
+                            else None
+                        ),
                     )
                     review = result.output
                     review_model = result.usage.model
@@ -1462,17 +1472,17 @@ def _merge_interview_summaries(
             dimensions.setdefault(dimension.name.casefold(), []).append(dimension)
 
     merged_dimensions: list[CommunicationDimension] = []
-    for rows in dimensions.values():
-        scores = [row.score for row in rows if row.score is not None]
+    for dimension_group in dimensions.values():
+        scores = [row.score for row in dimension_group if row.score is not None]
         merged_dimensions.append(
             CommunicationDimension(
-                name=rows[0].name,
+                name=dimension_group[0].name,
                 score=sum(scores) / len(scores) if scores else None,
-                summary=" ".join(_unique(row.summary for row in rows)),
+                summary=" ".join(_unique(row.summary for row in dimension_group)),
                 evidence_utterance_ids=_unique(
-                    evidence for row in rows for evidence in row.evidence_utterance_ids
+                    evidence for row in dimension_group for evidence in row.evidence_utterance_ids
                 ),
-                confidence=sum(row.confidence for row in rows) / len(rows),
+                confidence=sum(row.confidence for row in dimension_group) / len(dimension_group),
             )
         )
 

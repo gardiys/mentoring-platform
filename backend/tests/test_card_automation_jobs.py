@@ -460,7 +460,8 @@ async def test_generation_transfers_existing_ai_review_answer_into_cluster_draft
         assert cluster.answer_contract is not None
         assert cluster.answer_contract["short_answer"] == "Краткий корректный ответ."
         assert cluster.answer_contract["confidence"] == 0.5
-        assert "требует проверки" in str(cluster.answer_contract["unsupported_claims"])
+        assert cluster.answer_contract["unsupported_claims"] == []
+        assert "требует проверки" in str(cluster.answer_contract["source_limitations"])
         assert decision is not None
         assert "transferred" in decision.reason
     assert ai.answer_contract_calls == []
