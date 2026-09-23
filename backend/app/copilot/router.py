@@ -1,4 +1,4 @@
-"""Private desktop releases. Students cannot list or download builds during the pilot."""
+"""Private desktop releases, guarded by the Copilot rollout and user eligibility."""
 
 from pathlib import Path
 from typing import Annotated, Literal

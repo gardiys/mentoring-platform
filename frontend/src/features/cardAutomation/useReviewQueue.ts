@@ -74,6 +74,7 @@ export function useReviewQueue(scope: CardAutomationScope, currentId: string) {
     // Refresh once, without repeatedly fetching for a direct link to a closed card.
     if (
       session &&
+      !busy &&
       !isFetching &&
       !isError &&
       !session.ids.includes(currentId) &&
@@ -82,7 +83,7 @@ export function useReviewQueue(scope: CardAutomationScope, currentId: string) {
       refreshedMissingId.current = currentId;
       void refetch();
     }
-  }, [currentId, session, isFetching, isError, refetch]);
+  }, [currentId, session, busy, isFetching, isError, refetch]);
   const go = (id: string | null) => {
     if (id && mounted.current && activeId.current === currentId)
       void navigate({
@@ -128,6 +129,7 @@ export function useReviewQueue(scope: CardAutomationScope, currentId: string) {
     previous: () => go(previousId),
     complete,
     refresh: async () => {
+      if (busy || query.isFetching) return;
       const result = await query.refetch();
       if (result.isSuccess) go(result.data.ids[0] ?? null);
     },

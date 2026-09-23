@@ -117,6 +117,9 @@ export function useQuestionCluster(
         ? api.adminCardAutomationCluster(clusterId)
         : api.mentorCardAutomationCluster(clusterId),
     enabled: Boolean(clusterId),
+    // Reuse the prefetched next card. A focus refresh must not remount a dirty form.
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 }
 

@@ -1,0 +1,31 @@
+{
+  "scope": "Real Chrome, synthetic API, actual detail component and theme; without full AppLayout",
+  "layouts": [
+    {
+      "width": 1440,
+      "horizontalOverflow": false,
+      "clippedButtons": []
+    },
+    {
+      "width": 1024,
+      "horizontalOverflow": false,
+      "clippedButtons": []
+    },
+    {
+      "width": 390,
+      "horizontalOverflow": false,
+      "clippedButtons": []
+    }
+  ],
+  "mutations": [
+    {
+      "id": "50000000-0000-4000-8000-000000000001",
+      "action": "create-card"
+    },
+    {
+      "id": "50000000-0000-4000-8000-000000000002",
+      "action": "ignore"
+    }
+  ],
+  "consoleErrors": []
+}

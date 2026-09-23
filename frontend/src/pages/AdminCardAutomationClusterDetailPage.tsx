@@ -7,7 +7,6 @@ import {
   Group,
   MultiSelect,
   NumberInput,
-  Radio,
   Select,
   SimpleGrid,
   Stack,
@@ -44,10 +43,10 @@ import {
   clusterStatusLabels,
   decisionSourceLabels,
   decisionTypeLabels,
-  judgeDecisionLabels,
   learningObjectLabels,
   percent,
 } from "../features/cardAutomation/presentation";
+import { ReviewCardMatches } from "../features/cardAutomation/ReviewCardMatches";
 import { ReviewQueueProgress } from "../features/cardAutomation/ReviewQueueProgress";
 import {
   useReviewQueue,
@@ -267,6 +266,7 @@ function ClusterDetail({
   const actionInFlight = useRef(false);
   const mutation =
     queue.busy ||
+    queue.query.isFetching ||
     link.isPending ||
     create.isPending ||
     generateAnswer.isPending ||
@@ -381,6 +381,8 @@ function ClusterDetail({
   const can = (action: QuestionClusterAction) =>
     cluster.allowed_actions.includes(action) &&
     (scope === "admin" || mentorActions.has(action));
+  const canEditProposal =
+    can("update_draft") || (scope === "admin" && can("create_card"));
 
   const notifySuccess = (message: string) =>
     notifications.show({ color: "green", message });
@@ -514,30 +516,31 @@ function ClusterDetail({
           short_answer: answer.trim(),
         }
       : null;
-    updateDraft.mutate(
-      {
-        clusterId: cluster.id,
-        payload: {
-          ...(proposalQuestionChanged
-            ? { canonical_question: question.trim() }
-            : {}),
-          ...(proposalTopicChanged ? { topic_name: selectedCreateTopic } : {}),
-          ...(proposalSubtopicChanged
-            ? { subtopic_name: proposalSubtopic }
-            : {}),
-          ...(proposalAnswerChanged && answerContract
-            ? { answer_contract: answerContract }
-            : {}),
-          preserve_answer_status:
-            !proposalQuestionChanged && !proposalAnswerChanged,
-          expected_version: cluster.version,
-          reason,
-        },
-      },
-      {
-        onSuccess: () => notifySuccess("Исправления карточки сохранены"),
-        onError: notifyError,
-      },
+    void performDecision(
+      () =>
+        updateDraft.mutateAsync({
+          clusterId: cluster.id,
+          payload: {
+            ...(proposalQuestionChanged
+              ? { canonical_question: question.trim() }
+              : {}),
+            ...(proposalTopicChanged
+              ? { topic_name: selectedCreateTopic }
+              : {}),
+            ...(proposalSubtopicChanged
+              ? { subtopic_name: proposalSubtopic }
+              : {}),
+            ...(proposalAnswerChanged && answerContract
+              ? { answer_contract: answerContract }
+              : {}),
+            preserve_answer_status:
+              !proposalQuestionChanged && !proposalAnswerChanged,
+            expected_version: cluster.version,
+            reason,
+          },
+        }),
+      "Исправления карточки сохранены",
+      false,
     );
   };
 
@@ -566,33 +569,29 @@ function ClusterDetail({
       !answerContractValid
     )
       return;
-    updateDraft.mutate(
-      {
-        clusterId: cluster.id,
-        payload: {
-          ...(canonicalQuestionChanged
-            ? { canonical_question: reviewedDraft.canonicalQuestion.trim() }
-            : {}),
-          ...(topicNameChanged ? { topic_name: reviewedTopicName } : {}),
-          ...(subtopicNameChanged
-            ? { subtopic_name: reviewedSubtopicName }
-            : {}),
-          ...(answerContractChanged && reviewedAnswerContract
-            ? { answer_contract: reviewedAnswerContract }
-            : {}),
-          preserve_answer_status:
-            !canonicalQuestionChanged && !answerContractChanged,
-          expected_version: cluster.version,
-          reason: "Проверенный черновик отредактирован вручную",
-        },
-      },
-      {
-        onSuccess: () =>
-          notifySuccess(
-            "Проверенный черновик сохранён без создания общей карточки",
-          ),
-        onError: notifyError,
-      },
+    void performDecision(
+      () =>
+        updateDraft.mutateAsync({
+          clusterId: cluster.id,
+          payload: {
+            ...(canonicalQuestionChanged
+              ? { canonical_question: reviewedDraft.canonicalQuestion.trim() }
+              : {}),
+            ...(topicNameChanged ? { topic_name: reviewedTopicName } : {}),
+            ...(subtopicNameChanged
+              ? { subtopic_name: reviewedSubtopicName }
+              : {}),
+            ...(answerContractChanged && reviewedAnswerContract
+              ? { answer_contract: reviewedAnswerContract }
+              : {}),
+            preserve_answer_status:
+              !canonicalQuestionChanged && !answerContractChanged,
+            expected_version: cluster.version,
+            reason: "Проверенный черновик отредактирован вручную",
+          },
+        }),
+      "Проверенный черновик сохранён без создания общей карточки",
+      false,
     );
   };
 
@@ -724,15 +723,7 @@ function ClusterDetail({
         </Button>
       </Group>
       <CardAutomationNavigation scope={scope} />
-      <Card
-        withBorder
-        shadow="sm"
-        style={{
-          position: "sticky",
-          top: "calc(var(--app-shell-header-offset, 0px) + 8px)",
-          zIndex: 20,
-        }}
-      >
+      <Card withBorder shadow="sm" className="card-review-actions">
         <Group>
           {can("create_card") && (
             <Button
@@ -857,7 +848,10 @@ function ClusterDetail({
       )}
 
       <Tabs defaultValue="answer" keepMounted={false}>
-        <Tabs.List className="responsive-tabs">
+        <Tabs.List
+          className="responsive-tabs"
+          style={{ width: "100%", minWidth: 0, overflowX: "auto" }}
+        >
           <Tabs.Tab value="answer">Проверка карточки</Tabs.Tab>
           <Tabs.Tab value="occurrences">
             Исходные вопросы ({cluster.occurrences.length})
@@ -1401,14 +1395,6 @@ function ClusterDetail({
                 )}
               </Stack>
             )}
-            <Alert color="blue" title="Что нужно проверить">
-              <Text size="sm">
-                AI уже собрал предложение карточки. Проверьте широкую тему,
-                формулировку вопроса и ответ, затем убедитесь, что такой
-                карточки ещё нет в базе. Любое поле можно исправить до
-                публикации.
-              </Text>
-            </Alert>
             <Group gap="xs">
               <Badge variant="light">
                 {cluster.occurrences_count} появлений
@@ -1429,204 +1415,139 @@ function ClusterDetail({
               )}
             </Group>
 
-            <Card withBorder style={{ order: 2 }}>
-              <Stack>
-                <div>
-                  <Title order={3}>4. Проверьте возможный дубль</Title>
-                  <Text size="sm" c="dimmed" mt={4}>
-                    Если существующая карточка проверяет тот же объём знаний,
-                    свяжите вопрос с ней. Иначе создайте новую карточку ниже.
-                  </Text>
-                </div>
-                {cluster.top_card_matches.length === 0 ? (
-                  <Alert color="green" title="Похожих карточек не найдено">
-                    Можно проверять и создавать новую карточку.
-                  </Alert>
-                ) : (
-                  <Radio.Group
-                    label="Похожие карточки"
-                    value={selectedCardId ?? ""}
-                    onChange={setSelectedCardId}
-                  >
-                    <Stack mt="sm">
-                      {cluster.top_card_matches.map((candidate) => (
-                        <Radio.Card
-                          key={candidate.card_id}
-                          value={candidate.card_id}
-                          withBorder
-                          p="md"
-                          radius="md"
-                        >
-                          <Group wrap="nowrap" align="flex-start">
-                            <Radio.Indicator />
-                            <Stack gap="xs" style={{ flex: 1 }}>
-                              <Group justify="space-between" align="flex-start">
-                                <Text fw={700}>
-                                  {candidate.question_markdown}
-                                </Text>
-                                <Badge variant="light">
-                                  {percent(candidate.semantic_score)} похоже
-                                </Badge>
-                              </Group>
-                              <Group gap="xs">
-                                <Badge variant="outline">
-                                  {candidate.category}
-                                </Badge>
-                                {cluster.linked_card_id ===
-                                  candidate.card_id && (
-                                  <Badge color="green">
-                                    Уже связано системой
-                                  </Badge>
-                                )}
-                                {candidate.judge_decision && (
-                                  <Badge variant="light" color="blue">
-                                    AI:{" "}
-                                    {
-                                      judgeDecisionLabels[
-                                        candidate.judge_decision
-                                      ]
-                                    }
-                                  </Badge>
-                                )}
-                              </Group>
-                              <Text
-                                size="sm"
-                                style={{ whiteSpace: "pre-wrap" }}
-                              >
-                                {candidate.answer_markdown}
-                              </Text>
-                              {candidate.judge_reason && (
-                                <Text size="xs" c="dimmed">
-                                  {candidate.judge_reason}
-                                </Text>
-                              )}
-                            </Stack>
-                          </Group>
-                        </Radio.Card>
-                      ))}
-                    </Stack>
-                  </Radio.Group>
-                )}
-              </Stack>
-            </Card>
-            {(can("update_draft") ||
-              (scope === "admin" && can("create_card"))) && (
-              <Card withBorder style={{ order: 1 }}>
-                <Stack>
-                  <div>
-                    <Title order={3}>Предложение AI</Title>
-                    <Text size="sm" c="dimmed" mt={4}>
-                      Ниже — итог автоматического разбора. Исправьте всё, с чем
-                      не согласны. Изменения попадут в карточку только после
-                      вашего подтверждения.
-                    </Text>
-                  </div>
-                  {availableDecks.length === 0 && (
-                    <Alert color="red">
-                      Для направления нет опубликованной колоды с существующими
-                      темами. Сначала добавьте хотя бы одну карточку в нужную
-                      широкую тему.
-                    </Alert>
-                  )}
-                  {scope === "admin" && availableDecks.length > 1 && (
+            <SimpleGrid
+              cols={{ base: 1, lg: canEditProposal ? 2 : 1 }}
+              style={{ alignItems: "start" }}
+            >
+              {canEditProposal && (
+                <Card withBorder style={{ minWidth: 0 }}>
+                  <Stack>
+                    <div>
+                      <Title order={3}>Предложение AI</Title>
+                      <Text size="sm" c="dimmed" mt={4}>
+                        Ниже — итог автоматического разбора. Исправьте всё, с
+                        чем не согласны. Изменения попадут в карточку только
+                        после вашего подтверждения.
+                      </Text>
+                    </div>
+                    {availableDecks.length === 0 && (
+                      <Alert color="red">
+                        Для направления нет опубликованной колоды с
+                        существующими темами. Сначала добавьте хотя бы одну
+                        карточку в нужную широкую тему.
+                      </Alert>
+                    )}
+                    {scope === "admin" && availableDecks.length > 1 && (
+                      <Select
+                        label="Колода"
+                        value={deckId}
+                        onChange={(value) => {
+                          setDeckId(value);
+                          const nextDeck = availableDecks.find(
+                            (deck) => deck.deck_id === value,
+                          );
+                          const options = uniqueTopics(nextDeck?.topics ?? []);
+                          setCategory(
+                            existingTopic(options, category) ??
+                              options[0] ??
+                              "",
+                          );
+                        }}
+                        disabled={availableDecks.length === 0}
+                        data={availableDecks.map((deck) => ({
+                          value: deck.deck_id,
+                          label: deck.deck_title,
+                        }))}
+                      />
+                    )}
                     <Select
-                      label="Колода"
-                      value={deckId}
-                      onChange={(value) => {
-                        setDeckId(value);
-                        const nextDeck = availableDecks.find(
-                          (deck) => deck.deck_id === value,
-                        );
-                        const options = uniqueTopics(nextDeck?.topics ?? []);
-                        setCategory(
-                          existingTopic(options, category) ?? options[0] ?? "",
-                        );
-                      }}
-                      disabled={availableDecks.length === 0}
-                      data={availableDecks.map((deck) => ({
-                        value: deck.deck_id,
-                        label: deck.deck_title,
-                      }))}
+                      label="1. Широкая тема"
+                      description="Карточка попадёт в одну из уже существующих групп для учеников."
+                      placeholder="Выберите тему"
+                      required
+                      searchable
+                      allowDeselect={false}
+                      data={selectedDeckTopics}
+                      value={selectedCreateTopic}
+                      onChange={(value) => value && setCategory(value)}
+                      nothingFoundMessage="В выбранной колоде пока нет тем"
                     />
-                  )}
-                  <Select
-                    label="1. Широкая тема"
-                    description="Карточка попадёт в одну из уже существующих групп для учеников."
-                    placeholder="Выберите тему"
-                    required
-                    searchable
-                    allowDeselect={false}
-                    data={selectedDeckTopics}
-                    value={selectedCreateTopic}
-                    onChange={(value) => value && setCategory(value)}
-                    nothingFoundMessage="В выбранной колоде пока нет тем"
-                  />
-                  {!selectedCreateTopic && availableDecks.length > 0 && (
-                    <Alert color="yellow" title="AI не выбрал широкую тему">
-                      Выберите подходящую существующую тему вручную. Платформа
-                      больше не подставляет первую тему колоды автоматически.
-                    </Alert>
-                  )}
-                  <TextInput
-                    label="Детальная подтема (необязательно)"
-                    description="Необязательно. Не влияет на широкую группировку карточек."
-                    value={subcategory}
-                    onChange={(event) =>
-                      setSubcategory(event.currentTarget.value)
-                    }
-                  />
-                  <Textarea
-                    label="2. Формулировка вопроса"
-                    autosize
-                    minRows={2}
-                    maxRows={6}
-                    value={question}
-                    onChange={(event) => setQuestion(event.currentTarget.value)}
-                  />
-                  <Textarea
-                    label="3. Ответ карточки"
-                    autosize
-                    minRows={6}
-                    maxRows={18}
-                    value={answer}
-                    onChange={(event) => setAnswer(event.currentTarget.value)}
-                  />
-                  {!answer.trim() && (
-                    <Alert color="yellow" title="AI-ответ ещё не сформирован">
-                      <Stack align="flex-start" gap="sm">
-                        <Text size="sm">
-                          Запустите генерацию: при наличии материалов ответ
-                          будет проверен по ним, иначе появится AI-черновик с
-                          пометкой о необходимости ручной проверки.
-                        </Text>
-                        {scope === "admin" ? (
-                          <Button
-                            variant="light"
-                            loading={generateAnswer.isPending}
-                            disabled={mutation || answerGenerationRequested}
-                            onClick={requestAnswerGeneration}
-                          >
-                            {answerGenerationRequested
-                              ? "AI формирует ответ…"
-                              : "Сгенерировать AI-ответ"}
-                          </Button>
-                        ) : (
+                    {!selectedCreateTopic && availableDecks.length > 0 && (
+                      <Alert color="yellow" title="AI не выбрал широкую тему">
+                        Выберите подходящую существующую тему вручную. Платформа
+                        больше не подставляет первую тему колоды автоматически.
+                      </Alert>
+                    )}
+                    <TextInput
+                      label="Детальная подтема (необязательно)"
+                      description="Необязательно. Не влияет на широкую группировку карточек."
+                      value={subcategory}
+                      onChange={(event) =>
+                        setSubcategory(event.currentTarget.value)
+                      }
+                    />
+                    <Textarea
+                      label="2. Формулировка вопроса"
+                      autosize
+                      minRows={2}
+                      maxRows={6}
+                      value={question}
+                      onChange={(event) =>
+                        setQuestion(event.currentTarget.value)
+                      }
+                    />
+                    <Textarea
+                      label="3. Ответ карточки"
+                      autosize
+                      minRows={6}
+                      maxRows={18}
+                      value={answer}
+                      onChange={(event) => setAnswer(event.currentTarget.value)}
+                    />
+                    {!answer.trim() && (
+                      <Alert color="yellow" title="AI-ответ ещё не сформирован">
+                        <Stack align="flex-start" gap="sm">
                           <Text size="sm">
-                            Заполните ответ вручную и сохраните исправления.
+                            Запустите генерацию: при наличии материалов ответ
+                            будет проверен по ним, иначе появится AI-черновик с
+                            пометкой о необходимости ручной проверки.
                           </Text>
-                        )}
-                      </Stack>
-                    </Alert>
-                  )}
-                  {cluster.answer_status === "needs_expert_source" && (
-                    <Alert color="red" title="Нужна экспертная проверка">
-                      Во внутренней базе недостаточно подтверждающих материалов.
-                      Проверьте ответ вручную перед созданием карточки.
-                    </Alert>
-                  )}
-                </Stack>
-              </Card>
-            )}
+                          {scope === "admin" ? (
+                            <Button
+                              variant="light"
+                              loading={generateAnswer.isPending}
+                              disabled={mutation || answerGenerationRequested}
+                              onClick={requestAnswerGeneration}
+                            >
+                              {answerGenerationRequested
+                                ? "AI формирует ответ…"
+                                : "Сгенерировать AI-ответ"}
+                            </Button>
+                          ) : (
+                            <Text size="sm">
+                              Заполните ответ вручную и сохраните исправления.
+                            </Text>
+                          )}
+                        </Stack>
+                      </Alert>
+                    )}
+                    {cluster.answer_status === "needs_expert_source" && (
+                      <Alert color="red" title="Нужна экспертная проверка">
+                        Во внутренней базе недостаточно подтверждающих
+                        материалов. Проверьте ответ вручную перед созданием
+                        карточки.
+                      </Alert>
+                    )}
+                  </Stack>
+                </Card>
+              )}
+              <ReviewCardMatches
+                matches={cluster.top_card_matches}
+                selectedId={selectedCardId}
+                linkedId={cluster.linked_card_id}
+                onSelect={setSelectedCardId}
+              />
+            </SimpleGrid>
           </Stack>
         </Tabs.Panel>
 
@@ -1759,11 +1680,14 @@ export function CardAutomationClusterDetailPage({
   scope: CardAutomationScope;
 }) {
   const { clusterId = "" } = useParams();
+  const location = useLocation();
   const pageTop = useRef<HTMLDivElement>(null);
   const query = useQuestionCluster(clusterId, scope);
   const queue = useReviewQueue(scope, clusterId);
   const queueFinished =
-    queue.query.isSuccess && queue.completed === queue.total;
+    queue.query.isSuccess && queue.total > 0 && queue.completed === queue.total;
+  const showCompletion =
+    queue.isManualReview && queueFinished && queue.currentCompleted;
   useEffect(() => {
     pageTop.current?.scrollIntoView?.({ block: "start" });
     pageTop.current?.focus({ preventScroll: true });
@@ -1772,6 +1696,7 @@ export function CardAutomationClusterDetailPage({
     if (
       !queue.isManualReview ||
       queue.busy ||
+      queue.query.isFetching ||
       !queue.containsCurrent ||
       queue.currentCompleted
     )
@@ -1795,7 +1720,24 @@ export function CardAutomationClusterDetailPage({
       }}
     >
       <ReviewQueueProgress queue={queue} />
-      {query.isPending ? (
+      {showCompletion ? (
+        <Card withBorder>
+          <Stack align="flex-start">
+            <Title order={2}>Проверка завершена</Title>
+            <Text>
+              Все {queue.total} карточек этой очереди обработаны. Обновите
+              очередь, чтобы проверить, появились ли новые карточки.
+            </Text>
+            <Button
+              component={Link}
+              to={`/${scope}/card-automation/clusters${location.search}`}
+              variant="light"
+            >
+              К очереди
+            </Button>
+          </Stack>
+        </Card>
+      ) : query.isPending ? (
         <LoadingState label="Загружаем карточку…" />
       ) : query.isError ? (
         <ErrorState error={query.error} retry={() => void query.refetch()} />

@@ -78,7 +78,9 @@ def test_desktop_scope_adds_only_read_only_preparation():
     assert permitted("GET", valid)
     assert permitted("GET", "/api/v1/copilot/preparation/options")
     assert not permitted("DELETE", valid)
-    assert not permitted("GET", "/api/v1/copilot/releases")
+    # Desktop updates may read releases; eligibility is enforced by the route.
+    assert permitted("GET", "/api/v1/copilot/releases")
+    assert not permitted("POST", "/api/v1/copilot/releases")
     assert not permitted("GET", "/api/v1/copilot/preparation/sources/document/../../me")
 
 

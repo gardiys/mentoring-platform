@@ -1,0 +1,21 @@
+{
+  "final_prompt_version": "p7-ed523cee17f8d1a2",
+  "copilot_root": "/Users/antonserbak/Projects/mentoring-copilot",
+  "files": {
+    "services/interview-api/app/llm/prompt_registry.py": "616e1d1341c055da0ae42888952b8323e1481a54c33772ee7282e4f4a3a7469f",
+    "services/interview-api/app/llm/gateway.py": "a58f0f50fda0675bc5c2064c8b10748f3a7216db554fdb37487105ff93af1504",
+    "services/interview-api/app/rag/prompt_budget.py": "8cf8f1c524d51bc2d254af1b7f0ef6aa107620d22123d605330986ffc7cee24a",
+    "services/interview-api/app/rag/context_builder.py": "c549daf8fa992427f61ed67e966636da7d0dac3aed59dda1ebf7627a32ecb755",
+    "services/interview-api/app/llm/prompts/experience.txt": "1fe1ac4b4e518446680ef4858f18f66d633eed74f527559d55c8e49df3d65a4e",
+    "tests/test_answer_stream_contract.py": "92d609a75fb55700b458f09959b5671b9fdd7b5fba507b882adf07b70291248a",
+    "tests/test_context_quality.py": "12927a3fd52455f8cb67c8f40c0787d054b20c7ed854ef6680556f1a245feb26",
+    "tests/test_preparation.py": "690f32b33df6dcaa283de6c2fede46a0e3559359320b61908a28e4217718e3fa"
+  },
+  "accepted_gateway_cloud_latency_ms": {
+    "samples": 33,
+    "min": 766,
+    "median": 1177,
+    "max": 2294
+  },
+  "scope": "Local code only, no deployment. Source hashes include pre-existing user edits."
+}

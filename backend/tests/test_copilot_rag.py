@@ -147,9 +147,14 @@ def test_desktop_scope_only_adds_exact_read_only_material_endpoints():
         BASE + "/sources/kb/" + str(uuid4()),
         BASE + "/sources/card/" + str(uuid4()),
         BASE + "/sources/resume/" + str(uuid4()),
+        "/api/v1/copilot/releases",
+        "/api/v1/copilot/releases/mac-arm64/download",
+        "/api/v1/copilot/releases/mac-x64/download",
+        "/api/v1/copilot/releases/win-x64/download",
     ]
     bad = [
-        "/api/v1/copilot/releases",
+        "/api/v1/copilot/releases/unknown/download",
+        "/api/v1/copilot/releases/win-x64/delete",
         "/api/v1/admin/interviews/decks",
         BASE + "/sources/profile/" + str(uuid4()),
         BASE + "/sources/kb/../../me",

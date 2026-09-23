@@ -19,7 +19,7 @@ export function ReviewQueueProgress({ queue }: { queue: ReviewQueue }) {
             <Button
               variant="subtle"
               onClick={() => void queue.refresh()}
-              disabled={queue.busy}
+              disabled={queue.busy || queue.query.isFetching}
             >
               Повторить загрузку очереди
             </Button>
@@ -57,14 +57,16 @@ export function ReviewQueueProgress({ queue }: { queue: ReviewQueue }) {
             <Button
               variant="default"
               onClick={queue.previous}
-              disabled={queue.busy || !queue.previousId}
+              disabled={
+                queue.busy || queue.query.isFetching || !queue.previousId
+              }
             >
               ← Предыдущая
             </Button>
             <Button
               variant="light"
               onClick={queue.next}
-              disabled={queue.busy || !queue.nextId}
+              disabled={queue.busy || queue.query.isFetching || !queue.nextId}
             >
               Пропустить →
             </Button>

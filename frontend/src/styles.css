@@ -1282,6 +1282,15 @@ a {
   flex-wrap: nowrap;
 }
 
+/* Keep the action bar in reach without covering the editor on narrow screens. */
+@media (min-width: 48em) {
+  .card-review-actions {
+    position: sticky;
+    top: calc(var(--app-shell-header-offset, 0px) + 8px);
+    z-index: 20;
+  }
+}
+
 .student-card,
 .student-roadmap,
 .builder-section-card {
@@ -1455,6 +1464,22 @@ a {
 .markdown-content img {
   max-width: 100%;
   border-radius: 1rem;
+}
+
+.markdown-content.card-review-markdown {
+  max-width: none;
+  padding: 0 !important;
+  line-height: 1.6;
+  background: none;
+  box-shadow: none;
+}
+
+.card-review-markdown > :first-child {
+  margin-top: 0;
+}
+
+.card-review-markdown > :last-child {
+  margin-bottom: 0;
 }
 
 .login-shell {

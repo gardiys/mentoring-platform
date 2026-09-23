@@ -1493,6 +1493,14 @@ it("отклоняет одним нажатием, не перескакива�
   ).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Отклонить" }));
   expect(await screen.findByText("Очередь проверена")).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Проверка завершена" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByLabelText("3. Ответ карточки")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "К очереди" })).toHaveAttribute(
+    "href",
+    "/admin/card-automation/clusters?topic_name=Python+core&needs_action_only=true",
+  );
   expect(reject.mock.calls.map(([id]) => id)).toEqual([
     clusterId,
     secondClusterId,
@@ -1503,6 +1511,69 @@ it("отклоняет одним нажатием, не перескакива�
   );
   expect(prompt).not.toHaveBeenCalled();
   expect(confirm).not.toHaveBeenCalled();
+});
+
+it("блокирует решения при обновлении очереди и продолжает с новым снимком", async () => {
+  const user = userEvent.setup();
+  reviewFlow();
+  await screen.findByRole("button", { name: "Создать карточку" });
+  let resolveQueue!: (ids: string[]) => void;
+  vi.mocked(api.cardAutomationReviewQueue).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveQueue = resolve;
+      }),
+  );
+  const create = vi.spyOn(api, "createCardFromAdminCardAutomationCluster");
+  await user.click(screen.getByRole("button", { name: "Обновить очередь" }));
+  expect(
+    screen.getByRole("button", { name: "Создать карточку" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Отклонить" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Пропустить →" })).toBeDisabled();
+  await user.keyboard("{Control>}{Enter}{/Control}");
+  expect(create).not.toHaveBeenCalled();
+  await act(async () => resolveQueue([secondClusterId]));
+  expect(
+    await screen.findByRole("heading", {
+      name: secondCluster.canonical_question,
+    }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Осталось в этой очереди: 1 из 1"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Создать карточку" }),
+  ).toBeEnabled();
+});
+
+it("после завершения можно загрузить новые карточки и продолжить проверку", async () => {
+  const user = userEvent.setup();
+  vi.mocked(api.cardAutomationReviewQueue).mockResolvedValueOnce([clusterId]);
+  vi.spyOn(api, "adminCardAutomationCluster").mockImplementation(async (id) =>
+    id === clusterId
+      ? { ...clusterDetail, status: "ignored", allowed_actions: [] }
+      : { ...clusterDetail, ...secondCluster },
+  );
+  renderPage(
+    <AdminCardAutomationClusterDetailPage />,
+    `/admin/card-automation/clusters/${clusterId}`,
+    "/admin/card-automation/clusters/:clusterId",
+  );
+  expect(
+    await screen.findByRole("heading", { name: "Проверка завершена" }),
+  ).toBeInTheDocument();
+  vi.mocked(api.cardAutomationReviewQueue).mockResolvedValue([secondClusterId]);
+  await user.click(screen.getByRole("button", { name: "Обновить очередь" }));
+  expect(
+    await screen.findByRole("heading", {
+      name: secondCluster.canonical_question,
+    }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Осталось в этой очереди: 1 из 1"),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Проверка завершена")).not.toBeInTheDocument();
 });
 
 it("пропуск не считается решением, а переход назад сохраняет очередь", async () => {
@@ -1522,6 +1593,51 @@ it("пропуск не считается решением, а переход �
     await screen.findByRole("heading", { name: cluster.canonical_question }),
   ).toBeInTheDocument();
   expect(screen.getByText("Завершено: 0")).toBeInTheDocument();
+});
+
+it("сохранение исправлений блокирует очередь до обновления формы и не завершает карточку", async () => {
+  const user = userEvent.setup();
+  const { details, router } = reviewFlow();
+  let finish!: () => void;
+  const save = vi
+    .spyOn(api, "updateAdminCardAutomationClusterDraft")
+    .mockImplementation(
+      async (id, payload) =>
+        new Promise((resolve) => {
+          finish = () => {
+            const updated = {
+              ...details.get(id)!,
+              answer_contract: payload.answer_contract!,
+              version: 5,
+            };
+            details.set(id, updated);
+            resolve({
+              cluster: updated,
+              decision_id: decision.id,
+              affected_cluster_ids: [id],
+            });
+          };
+        }),
+    );
+  const answer = await screen.findByLabelText("3. Ответ карточки");
+  await user.type(answer, " Проверенное уточнение.");
+  const button = screen.getByRole("button", { name: "Сохранить исправления" });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  expect(
+    screen.getByRole("button", { name: "Обновить очередь" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Пропустить →" })).toBeDisabled();
+  await act(async () => finish());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Пропустить →" })).toBeEnabled(),
+  );
+  expect(router.state.location.pathname).toContain(clusterId);
+  expect(screen.getByText("Завершено: 0")).toBeInTheDocument();
+  expect(
+    (screen.getByLabelText("3. Ответ карточки") as HTMLTextAreaElement).value,
+  ).toContain("Проверенное уточнение.");
 });
 
 it("ошибка решения оставляет карточку и прогресс на месте", async () => {
@@ -1657,6 +1773,70 @@ it("привязка дубля одним кликом также открыв�
   );
   expect(confirm).not.toHaveBeenCalled();
   expect(prompt).not.toHaveBeenCalled();
+});
+
+it("сравнивает только выбранный дубль, сохраняет правки и связывает именно выбранную карточку", async () => {
+  const user = userEvent.setup();
+  const alternative = {
+    ...cluster.best_match!,
+    card_id: "60000000-0000-4000-8000-000000000002",
+    question_markdown: "Когда освобождается GIL?",
+    answer_markdown: "При **ожидании ввода-вывода**.",
+    judge_reason: "Второй вариант совпадения",
+  };
+  vi.spyOn(api, "adminCardAutomationCluster").mockResolvedValue({
+    ...clusterDetail,
+    top_card_matches: [cluster.best_match!, alternative],
+  });
+  const link = vi
+    .spyOn(api, "linkAdminCardAutomationCluster")
+    .mockResolvedValue({
+      cluster: {
+        ...cluster,
+        status: "linked",
+        version: 5,
+        allowed_actions: [],
+      },
+      decision_id: decision.id,
+      affected_cluster_ids: [clusterId],
+    });
+  renderPage(
+    <AdminCardAutomationClusterDetailPage />,
+    `/admin/card-automation/clusters/${clusterId}`,
+    "/admin/card-automation/clusters/:clusterId",
+  );
+  const preview = await screen.findByRole("region", {
+    name: "Выбранный возможный дубль",
+  });
+  expect(
+    within(preview).getByText(cluster.best_match!.answer_markdown),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("ожидании ввода-вывода")).not.toBeInTheDocument();
+  const answer = screen.getByLabelText("3. Ответ карточки");
+  await user.type(answer, " Уточнение ответа.");
+  await user.click(
+    screen.getByRole("radio", { name: /Когда освобождается GIL/ }),
+  );
+  expect(within(preview).getByText("ожидании ввода-вывода").tagName).toBe(
+    "STRONG",
+  );
+  expect(
+    within(preview).queryByText(cluster.best_match!.answer_markdown),
+  ).not.toBeInTheDocument();
+  expect((answer as HTMLTextAreaElement).value).toContain("Уточнение ответа.");
+  await user.click(
+    screen.getByRole("button", { name: "Связать с выбранной карточкой" }),
+  );
+  await waitFor(() =>
+    expect(link).toHaveBeenCalledWith(
+      clusterId,
+      expect.objectContaining({
+        card_id: alternative.card_id,
+        expected_version: 4,
+      }),
+      expect.any(String),
+    ),
+  );
 });
 
 it("не перелистывает архивную карточку, открытую намеренно", async () => {
