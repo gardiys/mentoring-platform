@@ -218,11 +218,11 @@ async def review_cluster(
             else:
                 contract, validation = cluster.answer_contract, cluster.answer_validation
                 references = set(_contract_source_ids(contract))
-                need_generation = (
-                    contract is None
-                    or not references
-                    or not references <= {s["source_id"] for s in sources}
-                )
+                # An uncited draft can gain evidence through independent validation.
+                # Missing references alone do not justify another generation/repair.
+                need_generation = contract is None or not references <= {
+                    s["source_id"] for s in sources
+                }
                 modern = validation is not None and "answer_is_substantive" in validation
                 quality_passes = False
                 if modern and contract:

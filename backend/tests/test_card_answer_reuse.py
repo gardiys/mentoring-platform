@@ -108,6 +108,37 @@ async def test_statistics_preserve_unverified_review_and_schedule_validation(rea
     assert [name for name, _, _ in redis.calls] == ["validate_cluster_answer"]
 
 
+@pytest.mark.parametrize("validation", [None, {"supported": True, "confidence": 0.98}])
+@pytest.mark.parametrize("repair_attempts", [0, jobs.MAX_ANSWER_REPAIRS])
+async def test_recovery_validates_uncited_draft_without_spending_repair_budget(
+    ready, validation, repair_attempts
+):
+    await prepare_draft(ready)
+    async with TestSession() as session:
+        cluster = await session.get_one(QuestionCluster, ready[0])
+        cluster.answer_status = AnswerContractStatus.REVIEW_PENDING
+        cluster.answer_validation = validation
+        cluster.answer_repair_attempts = repair_attempts
+        await session.commit()
+    ai, redis = AttributingProvider(), RecordingRedis()
+    ctx = {"ai_provider": ai, "redis": redis}
+    await jobs.review_cluster_for_automation(ctx, str(ready[0]), 1)
+    async with TestSession() as session:
+        cluster = await session.get_one(QuestionCluster, ready[0])
+        assert cluster.answer_contract["short_answer"] == DRAFT
+        assert cluster.answer_status is None
+        assert cluster.answer_validation is None
+        assert cluster.answer_repair_attempts == repair_attempts
+    assert [name for name, _, _ in redis.calls] == ["validate_cluster_answer"]
+    await jobs.validate_cluster_answer(ctx, str(ready[0]), 1)
+    async with TestSession() as session:
+        cluster = await session.get_one(QuestionCluster, ready[0])
+        assert cluster.status == QuestionClusterStatus.CARD_CREATED
+        assert cluster.answer_repair_attempts == repair_attempts
+    assert ai.answer_contract_calls == []
+    assert len(ai.answer_validation_calls) == 1
+
+
 @pytest.mark.parametrize(
     "changes",
     [
