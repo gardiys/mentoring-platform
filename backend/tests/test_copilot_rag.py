@@ -237,3 +237,78 @@ async def test_resume_requires_owner_delivery_track_and_enabled_module(client, s
     ]
     monkeypatch.setattr(get_settings(), "career_package_enabled", False)
     assert (await client.get(path, headers=headers)).status_code == 404
+
+
+async def test_scoped_manifest_works_above_catalogue_limit_and_checks_access(client, seeded):
+    deck_id = uuid4()
+    ids = [uuid4() for _ in range(1001)]
+    async with TestSession() as db:
+        db.add(
+            InterviewDeck(
+                id=deck_id,
+                track_id=seeded.python_track_id,
+                slug="large-copilot",
+                title="Large",
+                is_published=True,
+            )
+        )
+        await db.flush()
+        db.add_all(
+            [
+                InterviewCard(
+                    id=cid,
+                    deck_id=deck_id,
+                    slug=f"large-{i}",
+                    category="Python",
+                    question_markdown=f"Question {i}",
+                    answer_markdown="Answer",
+                    frequency=list(InterviewCardFrequency)[0],
+                    position=i,
+                    is_published=True,
+                )
+                for i, cid in enumerate(ids)
+            ]
+        )
+        await db.commit()
+    headers = auth(seeded.student_id)
+    assert (await client.get(BASE + "/manifest?track=python", headers=headers)).status_code == 413
+    keys = [f"card:{cid}" for cid in ids[:100]]
+    params = [("track", "python")] + [("keys", k) for k in keys]
+    response = await client.get(BASE + "/manifest", params=params, headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["scope"] == "selected" and data["complete"] is True
+    assert {x["key"] for x in data["items"]} == set(keys)
+    assert "content" not in response.text
+    direct = await client.get(BASE + f"/sources/card/{ids[0]}?track=python", headers=headers)
+    assert (
+        next(x["version"] for x in data["items"] if x["key"] == keys[0]) == direct.json()["version"]
+    )
+    assert (
+        await client.get(
+            BASE + "/manifest", params=params + [("keys", f"card:{ids[100]}")], headers=headers
+        )
+    ).status_code == 422
+    assert (
+        await client.get(
+            BASE + "/manifest?track=python&keys=card:------------------------------------",
+            headers=headers,
+        )
+    ).status_code == 422
+    async with TestSession() as db:
+        card = await db.get(InterviewCard, ids[0])
+        card.is_published = False
+        await db.commit()
+    current = (await client.get(BASE + "/manifest", params=params, headers=headers)).json()
+    assert keys[0] not in {x["key"] for x in current["items"]}
+    async with TestSession() as db:
+        await db.execute(
+            delete(LearningTrackEnrollment).where(
+                LearningTrackEnrollment.user_id == seeded.student_id
+            )
+        )
+        await db.commit()
+    assert (await client.get(BASE + "/manifest", params=params, headers=headers)).json()[
+        "items"
+    ] == []
+    assert (await client.get(BASE + "/manifest", params=params)).status_code == 401

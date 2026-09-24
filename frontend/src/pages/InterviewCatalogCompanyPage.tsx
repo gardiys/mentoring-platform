@@ -38,7 +38,7 @@ import type {
   InterviewProcessStatus,
   InterviewStageType,
 } from "../types/api";
-import { mediaKind } from "../utils/media";
+import { mediaKind, mediaPlaybackFailureMessage } from "../utils/media";
 import { openExternalResource } from "../utils/openExternalResource";
 
 const stageLabels: Record<InterviewStageType, string> = {
@@ -198,10 +198,7 @@ function CatalogStage({
     setPlayerUrl(null);
     notifications.show({
       color: "yellow",
-      message:
-        storedMediaKind === "video"
-          ? "Не удалось воспроизвести запись. Проверьте, что видео использует MP4 H.264/AAC с Fast Start или WebM VP8/VP9."
-          : "Не удалось воспроизвести аудио. Проверьте формат записи.",
+      message: mediaPlaybackFailureMessage(element.error?.code),
     });
   };
 

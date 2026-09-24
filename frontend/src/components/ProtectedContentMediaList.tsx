@@ -19,16 +19,13 @@ import {
   contentMediaPlaybackAvailable,
   contentMediaProcessingStatus,
 } from "../utils/contentMedia";
+import { mediaPlaybackFailureMessage } from "../utils/media";
 
 interface Props {
   media: ProtectedContentMediaRead[];
   resourceKey: string;
   loadPlayback: (mediaId: string) => Promise<ContentMediaPlayback>;
 }
-
-const MEDIA_ERR_NETWORK = 2;
-const MEDIA_ERR_DECODE = 3;
-const MEDIA_ERR_SRC_NOT_SUPPORTED = 4;
 
 const PREPARATION_STATUS = {
   queued: {
@@ -50,24 +47,6 @@ const PREPARATION_STATUS = {
       "Видео не удалось подготовить. Администратор может запустить подготовку повторно.",
   },
 } as const;
-
-function playbackFailureMessage(
-  element: HTMLMediaElement,
-  kind: ProtectedContentMediaRead["kind"],
-) {
-  switch (element.error?.code) {
-    case MEDIA_ERR_NETWORK:
-      return "Соединение с хранилищем прервалось. Обновите доступ и продолжите просмотр.";
-    case MEDIA_ERR_DECODE:
-      return "Браузер не смог декодировать запись. Возможно, файл повреждён или использует неподдерживаемый кодек.";
-    case MEDIA_ERR_SRC_NOT_SUPPORTED:
-      return kind === "video"
-        ? "Файл доступен, но браузер не поддерживает его формат или кодек. Используйте MP4 с H.264/AAC и Fast Start либо WebM с VP8/VP9."
-        : "Файл доступен, но браузер не поддерживает его аудиоформат или кодек. Используйте MP3, M4A/AAC или WebM/Opus.";
-    default:
-      return "Не удалось воспроизвести запись. Обновите доступ и попробуйте ещё раз.";
-  }
-}
 
 function ProtectedContentMediaPlayer({
   item,
@@ -172,7 +151,7 @@ function ProtectedContentMediaPlayer({
       void renewPlaybackSource(true);
       return;
     }
-    setFailureMessage(playbackFailureMessage(element, item.kind));
+    setFailureMessage(mediaPlaybackFailureMessage(element.error?.code));
   };
 
   const handleLoadedMetadata = (element: HTMLMediaElement) => {

@@ -32,8 +32,7 @@ from app.core.config import Settings
 from app.core.errors import api_error
 
 EXTERNAL_STORAGE_KEY_PREFIX = "external:"
-LEGACY_INTERVIEW_MEDIA_PREFIX = "https://s3.firstvds.ru:443/interviews/"
-LEGACY_S3_ENDPOINT_URL = "https://s3.firstvds.ru"
+LEGACY_S3_ENDPOINT_URL = "https://firsts3.ru"
 LEGACY_S3_REGION = "default"
 MULTIPART_UPLOAD_TOKEN_KIND = "private_s3_multipart_upload"
 MULTIPART_UPLOAD_ABORT_URL = "/api/v1/uploads/multipart/abort"
@@ -336,7 +335,7 @@ class InterviewUploadStore:
         )
         # Imported recordings use the historical FirstVDS bucket URL. They
         # used to be fetched anonymously, which stops working as soon as that
-        # bucket becomes private. Keep them on the original endpoint, but sign
+        # bucket becomes private. Use FirstVDS's current endpoint, but sign
         # every browser GET and use authenticated GetObject for proxy streams.
         self.legacy_client: Any = boto3.client(
             "s3",
@@ -1437,13 +1436,13 @@ class InterviewUploadStore:
         if not storage_key.startswith(EXTERNAL_STORAGE_KEY_PREFIX):
             return None
         url = storage_key.removeprefix(EXTERNAL_STORAGE_KEY_PREFIX)
-        if not url.startswith(LEGACY_INTERVIEW_MEDIA_PREFIX):
-            return None
         parsed = urlsplit(url)
         path_parts = unquote(parsed.path).lstrip("/").split("/", 1)
         if (
             parsed.scheme != "https"
-            or parsed.netloc != "s3.firstvds.ru:443"
+            or parsed.netloc
+            not in {"s3.firstvds.ru", "s3.firstvds.ru:443", "firsts3.ru", "firsts3.ru:443"}
+            or not parsed.path.startswith("/interviews/")
             or parsed.query
             or parsed.fragment
             or len(path_parts) != 2

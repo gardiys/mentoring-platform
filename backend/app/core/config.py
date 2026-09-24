@@ -361,6 +361,14 @@ class Settings(BaseSettings):
             and parsed.query
         ):
             raise ValueError(f"{field_name} must not contain a query string")
+        # FirstVDS retired s3.firstvds.ru after moving S3 to firsts3.ru.
+        # Normalize before creating clients/signatures, including existing .env files.
+        if (
+            info.field_name in {"s3_endpoint_url", "s3_public_endpoint_url"}
+            and parsed.scheme == "https"
+            and parsed.netloc.lower() in {"s3.firstvds.ru", "s3.firstvds.ru:443"}
+        ):
+            return parsed._replace(netloc="firsts3.ru").geturl()
         return value
 
     @field_validator(

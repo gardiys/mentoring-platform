@@ -1,5 +1,19 @@
 export type MediaKind = "audio" | "video";
 
+export function mediaPlaybackFailureMessage(errorCode?: number): string {
+  switch (errorCode) {
+    case 2:
+      return "Не удалось загрузить запись из хранилища. Проверьте соединение и попробуйте открыть её ещё раз.";
+    case 3:
+      return "Браузер не смог декодировать запись. Возможно, файл повреждён или использует неподдерживаемый кодек.";
+    case 4:
+      // Browsers also report SRC_NOT_SUPPORTED when the resource cannot be fetched.
+      return "Не удалось загрузить или воспроизвести запись. Возможно, хранилище временно недоступно либо браузер не поддерживает формат файла. Попробуйте открыть запись позже.";
+    default:
+      return "Не удалось воспроизвести запись. Попробуйте открыть её ещё раз. Если ошибка повторяется, сообщите администратору.";
+  }
+}
+
 export const VIDEO_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 export const CONTENT_VIDEO_MAX_BYTES = 5 * 1024 * 1024 * 1024;
 export const AUDIO_MAX_BYTES = 500 * 1024 * 1024;
