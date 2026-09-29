@@ -28,7 +28,7 @@ export function ReviewCardMatches({
     (candidate) => candidate.card_id === selectedId,
   );
   return (
-    <Card withBorder style={{ minWidth: 0 }}>
+    <Card withBorder className="min-width-zero">
       <Stack>
         <div>
           <Title order={3}>4. Проверьте возможный дубль</Title>
@@ -59,7 +59,7 @@ export function ReviewCardMatches({
                   >
                     <Group wrap="nowrap" align="flex-start">
                       <Radio.Indicator />
-                      <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
+                      <Stack gap={4} className="layout-review-card-matches-5">
                         <Text fw={600}>{candidate.question_markdown}</Text>
                         <Group gap="xs">
                           <Badge variant="light">

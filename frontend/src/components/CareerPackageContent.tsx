@@ -71,7 +71,9 @@ function ContentGrid({
       {Object.entries(labels).map(([key, label]) => (
         <div key={key}>
           <Text className="technical-label">{label}</Text>
-          <Text style={{ whiteSpace: "pre-line" }}>{display(data[key])}</Text>
+          <Text className="layout-career-package-content-1">
+            {display(data[key])}
+          </Text>
         </div>
       ))}
     </SimpleGrid>

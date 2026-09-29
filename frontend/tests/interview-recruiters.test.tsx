@@ -128,7 +128,7 @@ it("показывает статистику рекрутера и сохран
   expect(
     await screen.findByText("13 пользователей открыли контакт"),
   ).toBeInTheDocument();
-  expect(screen.getByText("Вы открывали этот контакт")).toBeInTheDocument();
+  expect(screen.getByText("Ты открывал этот контакт")).toBeInTheDocument();
   await userEvent.click(
     screen.getByRole("button", { name: "Хороший контакт" }),
   );

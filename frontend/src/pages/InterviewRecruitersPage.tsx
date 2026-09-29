@@ -1,3 +1,4 @@
+import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import {
   Alert,
   Badge,
@@ -161,7 +162,7 @@ export function InterviewRecruitersPage() {
     if (issueKind === "other" && !reason.trim()) {
       notifications.show({
         color: "yellow",
-        message: "Опишите, что случилось",
+        message: "Опиши, что случилось",
       });
       return;
     }
@@ -218,13 +219,13 @@ export function InterviewRecruitersPage() {
         title="Рекрутеры"
         description={
           isStudent
-            ? "Пользуйтесь полной базой рекрутеров или подборкой до 10 новых контактов по будням. Отмечайте ответы и приглашения — это помогает улучшать подборки."
-            : "Ищите контакты по Telegram или компании. Переходы и оценки помогают понять, какие контакты действительно актуальны."
+            ? "Пользуйся полной базой рекрутеров или подборкой до 10 новых контактов по будням. Отмечай ответы и приглашения — это помогает улучшать подборки."
+            : "Ищи контакты по Telegram или компании. Переходы и оценки помогают понять, какие контакты действительно актуальны."
         }
       />
 
       <Group>
-        <Button component={Link} to="/interviews" variant="light">
+        <Button component={Link} to="/interviews/journal" variant="light">
           ← К собеседованиям
         </Button>
         <Button component={Link} to="/interviews/catalog" variant="subtle">
@@ -234,7 +235,7 @@ export function InterviewRecruitersPage() {
 
       {view === "daily" && daily && !daily.eligible && (
         <Alert color="blue" title="Подборка доступна на этапе собеседований">
-          Чтобы получать контакты, попросите ментора установить статус «ходит на
+          Чтобы получать контакты, попроси ментора установить статус «ходит на
           собеседования». Полная база доступна на вкладке «Все рекрутеры».
         </Alert>
       )}
@@ -266,6 +267,7 @@ export function InterviewRecruitersPage() {
                       {daily.assigned_count}
                     </Text>
                     <Progress
+                      aria-label="Контакты из дневной подборки"
                       value={
                         daily.assigned_count
                           ? (daily.contacted_count / daily.assigned_count) * 100
@@ -274,7 +276,7 @@ export function InterviewRecruitersPage() {
                     />
                     <Text size="sm" c="dimmed">
                       Переход в Telegram отмечает открытие контакта. Само
-                      сообщение отправляете вы.
+                      сообщение отправляешь ты.
                     </Text>
                     <Text size="sm" c="dimmed">
                       Сначала предлагаем разные компании. Если их не хватает,
@@ -301,13 +303,13 @@ export function InterviewRecruitersPage() {
             )}
             {view === "history" && (
               <Text c="dimmed">
-                Ваши выданные и ранее открытые контакты. Здесь можно отметить
+                Твои выданные и ранее открытые контакты. Здесь можно отметить
                 приглашение, полученное позже.
               </Text>
             )}
             {view === "all" && (
               <Text c="dimmed">
-                Полная база контактов по доступным вам направлениям. Можно
+                Полная база контактов по доступным тебе направлениям. Можно
                 искать рекрутеров, писать им и оставлять отзывы без ограничения
                 подборкой дня.
               </Text>
@@ -371,7 +373,7 @@ export function InterviewRecruitersPage() {
       {view === "daily" &&
       daily &&
       !daily.eligible ? null : recruiters.isPending ? (
-        <LoadingState label="Ищем рекрутеров…" />
+        <CardGridSkeleton label="Ищем рекрутеров…" />
       ) : recruiters.isError ? (
         <ErrorState
           error={recruiters.error}
@@ -385,7 +387,7 @@ export function InterviewRecruitersPage() {
               "В этой подборке нет контактов, подходящих под выбранные фильтры. Можно открыть «Мои контакты» или дождаться следующего рабочего дня."
             ) : (
               <>
-                Попробуйте изменить запрос или направление. Контакты появляются
+                Попробуй изменить запрос или направление. Контакты появляются
                 здесь после добавления Telegram username рекрутера в трек
                 собеседований.
               </>
@@ -419,7 +421,11 @@ export function InterviewRecruitersPage() {
                       recruiter.account_missing_count +
                       recruiter.other_issue_count;
                     return (
-                      <Card key={recruiter.id} withBorder>
+                      <Card
+                        key={recruiter.id}
+                        withBorder
+                        className="recruiter-card"
+                      >
                         <Stack h="100%" gap="md">
                           <Group justify="space-between" align="flex-start">
                             <div>
@@ -453,7 +459,7 @@ export function InterviewRecruitersPage() {
 
                           {recruiter.has_contacted && (
                             <Badge color="blue" variant="light" w="fit-content">
-                              Вы открывали этот контакт
+                              Ты открывал этот контакт
                             </Badge>
                           )}
 
@@ -548,7 +554,7 @@ export function InterviewRecruitersPage() {
                           {recruiter.my_feedback && (
                             <Group gap="xs">
                               <Text size="sm" c="dimmed">
-                                Ваша отметка:{" "}
+                                Твоя отметка:{" "}
                                 {feedbackLabels[recruiter.my_feedback.kind]}
                               </Text>
                               <Button
@@ -575,7 +581,7 @@ export function InterviewRecruitersPage() {
                               Написать в Telegram ↗
                             </Button>
                             {canRate && (
-                              <SimpleGrid cols={{ base: 1, xs: 2 }}>
+                              <div className="recruiter-feedback-actions">
                                 <Button
                                   variant={
                                     recruiter.my_feedback?.kind === "helpful"
@@ -625,7 +631,7 @@ export function InterviewRecruitersPage() {
                                 >
                                   Сообщить о проблеме
                                 </Button>
-                              </SimpleGrid>
+                              </div>
                             )}
                           </Stack>
                         </Stack>
@@ -668,7 +674,7 @@ export function InterviewRecruitersPage() {
             label={
               issueKind === "other" ? "Причина" : "Комментарий — необязательно"
             }
-            placeholder="Добавьте полезные детали без личных данных"
+            placeholder="Добавь полезные детали без личных данных"
             minRows={3}
             maxLength={1000}
             value={reason}

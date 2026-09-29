@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import { screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -43,5 +44,39 @@ it("объясняет, что бот ещё не выдал доступ", asyn
   );
 
   expect(await screen.findByText("Не удалось войти")).toBeInTheDocument();
-  expect(screen.getByText(/Завершите оплату в боте/)).toBeInTheDocument();
+  expect(screen.getByText(/Заверши оплату в боте/)).toBeInTheDocument();
+});
+
+it("отправляет форму локального входа по Enter", async () => {
+  const { DevLoginPage } = await import("../src/pages/DevLoginPage");
+  const { getDevUserId, clearDevUserId } =
+    await import("../src/features/auth/devAuth");
+  const user = userEvent.setup();
+  clearDevUserId();
+  try {
+    const page = renderPage(<DevLoginPage />, "/dev-login", "/dev-login");
+    const id = "20000000-0000-4000-8000-000000000001";
+    await user.type(
+      screen.getByRole("textbox", { name: "UUID пользователя" }),
+      `${id}{Enter}`,
+    );
+    expect(getDevUserId()).toBe(id);
+    expect(page.router.state.location.pathname).toBe("/roadmaps");
+  } finally {
+    clearDevUserId();
+  }
+});
+
+it("объясняет ошибку UUID после отправки и оставляет возможность исправить ввод", async () => {
+  const { DevLoginPage } = await import("../src/pages/DevLoginPage");
+  const { getDevUserId, clearDevUserId } =
+    await import("../src/features/auth/devAuth");
+  clearDevUserId();
+  const page = renderPage(<DevLoginPage />, "/dev-login", "/dev-login");
+  const submit = screen.getByRole("button", { name: "Войти" });
+  expect(submit).toBeEnabled();
+  await userEvent.click(submit);
+  expect(screen.getByText("Введи корректный UUID")).toBeInTheDocument();
+  expect(page.router.state.location.pathname).toBe("/dev-login");
+  expect(getDevUserId()).toBeNull();
 });

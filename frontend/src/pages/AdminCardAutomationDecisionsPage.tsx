@@ -21,7 +21,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
+import { TableSkeleton } from "../components/TableSkeleton";
 import { PageHeader } from "../components/PageHeader";
 import { useAdminTracks } from "../features/admin/queries";
 import { CardAutomationNavigation } from "../features/cardAutomation/CardAutomationNavigation";
@@ -427,21 +427,13 @@ export function CardAutomationDecisionsPage({
       { replace: true },
     );
   };
-
-  if (query.isPending)
-    return <LoadingState label="Загружаем журнал решений…" />;
-  if (query.isError)
-    return (
-      <ErrorState error={query.error} retry={() => void query.refetch()} />
-    );
-
   const pageCount = Math.max(
     1,
-    Math.ceil(query.data.total / CARD_AUTOMATION_PAGE_SIZE),
+    Math.ceil((query.data?.total ?? 0) / CARD_AUTOMATION_PAGE_SIZE),
   );
 
   return (
-    <Stack gap="xl">
+    <Stack gap="xl" className="brand-ai-scope">
       <PageHeader
         eyebrow={
           scope === "admin"
@@ -580,169 +572,177 @@ export function CardAutomationDecisionsPage({
         </SimpleGrid>
       </Card>
 
-      <Group justify="space-between">
-        <Text fw={600}>Решений: {query.data.total}</Text>
-        {query.isFetching && (
-          <Text size="xs" c="dimmed" role="status">
-            Обновляем журнал…
-          </Text>
-        )}
-      </Group>
-
-      {query.data.items.length === 0 ? (
-        <Card withBorder>
-          <Text fw={600}>Решений по этим фильтрам нет</Text>
-          <Text size="sm" c="dimmed" mt={4}>
-            Сбросьте фильтры или дождитесь следующего запуска pipeline.
-          </Text>
-        </Card>
+      {query.isPending || query.isPlaceholderData ? (
+        <TableSkeleton />
+      ) : query.isError ? (
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
       ) : (
-        <Card withBorder p={0}>
-          <Table.ScrollContainer minWidth={1560}>
-            <Table verticalSpacing="sm" horizontalSpacing="md" stickyHeader>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Решение</Table.Th>
-                  <Table.Th>Вопрос</Table.Th>
-                  <Table.Th>Выбранный объект</Table.Th>
-                  <Table.Th>Confidence / similarity</Table.Th>
-                  <Table.Th>Модель</Table.Th>
-                  <Table.Th>Дата</Table.Th>
-                  <Table.Th>Аудит</Table.Th>
-                  <Table.Th>Статус</Table.Th>
-                  <Table.Th aria-label="Действия" />
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {query.data.items.map((decision) => (
-                  <Table.Tr key={decision.id}>
-                    <Table.Td miw={210}>
-                      <Badge
-                        color={decisionTypeColors[decision.decision_type]}
-                        variant="light"
-                      >
-                        {decisionTypeLabels[decision.decision_type]}
-                      </Badge>
-                      <Text size="xs" c="dimmed">
-                        {decisionSourceLabels[decision.decision_source]}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td miw={300}>
-                      <Text lineClamp={3}>
-                        {decision.question_text ?? "Без текста вопроса"}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {decision.entity_type} · {decision.entity_id}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td miw={260}>
-                      <Text lineClamp={3}>{targetLabel(decision)}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text>{percent(decision.confidence)}</Text>
-                      <Text size="xs" c="dimmed">
-                        similarity {percent(decision.similarity_score)}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td miw={180}>
-                      <Text size="sm">
-                        {[decision.model_provider, decision.model_name]
-                          .filter(Boolean)
-                          .join(" / ") || "Правило без модели"}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        prompt {decision.prompt_version ?? "—"}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>{formatDate(decision.created_at)}</Table.Td>
-                    <Table.Td>
-                      {decision.is_audit_sample && (
-                        <Badge variant="light">В выборке</Badge>
-                      )}
-                      <Text size="xs" mt={4}>
-                        {decision.review_result
-                          ? reviewResultLabels[decision.review_result]
-                          : "Не проверено"}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      {decision.is_overridden ? (
-                        <Badge color="orange">Отменено</Badge>
-                      ) : (
-                        <Badge color="green" variant="light">
-                          Действует
-                        </Badge>
-                      )}
-                      {decision.override_reason && (
-                        <Text size="xs" c="dimmed" mt={4} lineClamp={2}>
-                          {decision.override_reason}
-                        </Text>
-                      )}
-                    </Table.Td>
-                    <Table.Td>
-                      <Stack gap="xs">
-                        <Button
-                          size="xs"
-                          variant="light"
-                          onClick={() => setReviewedDecision(decision)}
-                        >
-                          Проверить техрешение
-                        </Button>
-                        {!decision.is_overridden && (
-                          <Button
-                            size="xs"
-                            variant="subtle"
-                            color="orange"
-                            onClick={() => setOverriddenDecision(decision)}
-                            disabled={decision.entity_version == null}
-                          >
-                            Отменить
-                          </Button>
-                        )}
-                        {decision.selected_cluster_id && (
-                          <Button
-                            component={Link}
-                            to={`/${scope}/card-automation/clusters/${decision.selected_cluster_id}`}
-                            size="xs"
-                            variant="transparent"
-                          >
-                            Открыть карточку
-                          </Button>
-                        )}
-                      </Stack>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
-        </Card>
-      )}
+        <>
+          <Group justify="space-between">
+            <Text fw={600}>Решений: {query.data.total}</Text>
+            {query.isFetching && (
+              <Text size="xs" c="dimmed" role="status">
+                Обновляем журнал…
+              </Text>
+            )}
+          </Group>
 
-      {pageCount > 1 && (
-        <Pagination
-          value={page}
-          total={pageCount}
-          disabled={query.isPlaceholderData}
-          onChange={(value) => updateFilter("page", String(value))}
-          mx="auto"
-        />
-      )}
+          {query.data.items.length === 0 ? (
+            <Card withBorder>
+              <Text fw={600}>Решений по этим фильтрам нет</Text>
+              <Text size="sm" c="dimmed" mt={4}>
+                Сбросьте фильтры или дождитесь следующего запуска pipeline.
+              </Text>
+            </Card>
+          ) : (
+            <Card withBorder p={0}>
+              <Table.ScrollContainer minWidth={1560}>
+                <Table verticalSpacing="sm" horizontalSpacing="md" stickyHeader>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Решение</Table.Th>
+                      <Table.Th>Вопрос</Table.Th>
+                      <Table.Th>Выбранный объект</Table.Th>
+                      <Table.Th>Confidence / similarity</Table.Th>
+                      <Table.Th>Модель</Table.Th>
+                      <Table.Th>Дата</Table.Th>
+                      <Table.Th>Аудит</Table.Th>
+                      <Table.Th>Статус</Table.Th>
+                      <Table.Th aria-label="Действия" />
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {query.data.items.map((decision) => (
+                      <Table.Tr key={decision.id}>
+                        <Table.Td miw={210}>
+                          <Badge
+                            color={decisionTypeColors[decision.decision_type]}
+                            variant="light"
+                          >
+                            {decisionTypeLabels[decision.decision_type]}
+                          </Badge>
+                          <Text size="xs" c="dimmed">
+                            {decisionSourceLabels[decision.decision_source]}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td miw={300}>
+                          <Text lineClamp={3}>
+                            {decision.question_text ?? "Без текста вопроса"}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {decision.entity_type} · {decision.entity_id}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td miw={260}>
+                          <Text lineClamp={3}>{targetLabel(decision)}</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text>{percent(decision.confidence)}</Text>
+                          <Text size="xs" c="dimmed">
+                            similarity {percent(decision.similarity_score)}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td miw={180}>
+                          <Text size="sm">
+                            {[decision.model_provider, decision.model_name]
+                              .filter(Boolean)
+                              .join(" / ") || "Правило без модели"}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            prompt {decision.prompt_version ?? "—"}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>{formatDate(decision.created_at)}</Table.Td>
+                        <Table.Td>
+                          {decision.is_audit_sample && (
+                            <Badge variant="light">В выборке</Badge>
+                          )}
+                          <Text size="xs" mt={4}>
+                            {decision.review_result
+                              ? reviewResultLabels[decision.review_result]
+                              : "Не проверено"}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          {decision.is_overridden ? (
+                            <Badge color="orange">Отменено</Badge>
+                          ) : (
+                            <Badge color="green" variant="light">
+                              Действует
+                            </Badge>
+                          )}
+                          {decision.override_reason && (
+                            <Text size="xs" c="dimmed" mt={4} lineClamp={2}>
+                              {decision.override_reason}
+                            </Text>
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          <Stack gap="xs">
+                            <Button
+                              size="xs"
+                              variant="light"
+                              onClick={() => setReviewedDecision(decision)}
+                            >
+                              Проверить техрешение
+                            </Button>
+                            {!decision.is_overridden && (
+                              <Button
+                                size="xs"
+                                variant="subtle"
+                                color="orange"
+                                onClick={() => setOverriddenDecision(decision)}
+                                disabled={decision.entity_version == null}
+                              >
+                                Отменить
+                              </Button>
+                            )}
+                            {decision.selected_cluster_id && (
+                              <Button
+                                component={Link}
+                                to={`/${scope}/card-automation/clusters/${decision.selected_cluster_id}`}
+                                size="xs"
+                                variant="transparent"
+                              >
+                                Открыть карточку
+                              </Button>
+                            )}
+                          </Stack>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            </Card>
+          )}
 
-      <ReviewDialog
-        key={`review:${reviewedDecision?.id ?? "closed"}`}
-        decision={reviewedDecision}
-        onClose={() => setReviewedDecision(null)}
-        reload={() => query.refetch()}
-        scope={scope}
-      />
-      <OverrideDialog
-        key={`override:${overriddenDecision?.id ?? "closed"}`}
-        decision={overriddenDecision}
-        onClose={() => setOverriddenDecision(null)}
-        reload={() => query.refetch()}
-        scope={scope}
-      />
+          {pageCount > 1 && (
+            <Pagination
+              value={page}
+              total={pageCount}
+              disabled={query.isPlaceholderData}
+              onChange={(value) => updateFilter("page", String(value))}
+              mx="auto"
+            />
+          )}
+
+          <ReviewDialog
+            key={`review:${reviewedDecision?.id ?? "closed"}`}
+            decision={reviewedDecision}
+            onClose={() => setReviewedDecision(null)}
+            reload={() => query.refetch()}
+            scope={scope}
+          />
+          <OverrideDialog
+            key={`override:${overriddenDecision?.id ?? "closed"}`}
+            decision={overriddenDecision}
+            onClose={() => setOverriddenDecision(null)}
+            reload={() => query.refetch()}
+            scope={scope}
+          />
+        </>
+      )}
     </Stack>
   );
 }

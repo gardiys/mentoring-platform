@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import { InterviewTrackContext } from "../features/interviews/InterviewTrackContext";
 import {
   Alert,
@@ -179,7 +180,7 @@ function StageMedia({
     if (!file || !selectedMediaKind) {
       notifications.show({
         color: "red",
-        message: "Выберите аудио- или видеофайл",
+        message: "Выбери аудио- или видеофайл",
       });
       return;
     }
@@ -304,12 +305,12 @@ function StageMedia({
                 notifications.show({
                   color: "yellow",
                   message:
-                    "Не удалось воспроизвести видео. Нажмите «Посмотреть запись», чтобы повторить.",
+                    "Не удалось воспроизвести видео. Нажми «Посмотреть запись», чтобы повторить.",
                 });
               }}
-              style={{ width: "100%", maxHeight: 520, borderRadius: 12 }}
+              className="layout-interview-process-page-13"
             >
-              Ваш браузер не поддерживает воспроизведение видео.
+              Твой браузер не поддерживает воспроизведение видео.
             </video>
           )}
           {playerUrl && storedMediaKind === "audio" && (
@@ -322,12 +323,12 @@ function StageMedia({
                 notifications.show({
                   color: "yellow",
                   message:
-                    "Не удалось воспроизвести аудио. Нажмите «Прослушать запись», чтобы повторить.",
+                    "Не удалось воспроизвести аудио. Нажми «Прослушать запись», чтобы повторить.",
                 });
               }}
-              style={{ width: "100%" }}
+              className="full-width"
             >
-              Ваш браузер не поддерживает воспроизведение аудио.
+              Твой браузер не поддерживает воспроизведение аудио.
             </audio>
           )}
           <Group justify="flex-end">
@@ -596,7 +597,7 @@ function StageAttachments({
             flex={1}
             multiple
             label="Добавить файлы или изображения"
-            placeholder="Выберите один или несколько файлов"
+            placeholder="Выбери один или несколько файлов"
             description="До 50 МБ на файл, максимум 20 файлов"
             value={files}
             onChange={setFiles}
@@ -740,7 +741,7 @@ function EditStageModal({
           />
           <Textarea
             label="Описание"
-            placeholder="Опишите вопросы, задачи, участников и важные детали этапа"
+            placeholder="Опиши вопросы, задачи, участников и важные детали этапа"
             autosize
             minRows={10}
             maxRows={20}
@@ -904,7 +905,7 @@ export function InterviewProcessPage() {
     ) {
       notifications.show({
         color: "red",
-        message: "Выберите PDF или изображение",
+        message: "Выбери PDF или изображение",
       });
       return;
     }
@@ -1009,7 +1010,7 @@ export function InterviewProcessPage() {
           title={process.company_name}
           description={`${process.track_title} · ${process.stage_count} этапов в процессе`}
         />
-        <Button component={Link} to="/interviews" variant="subtle">
+        <Button component={Link} to="/interviews/journal" variant="subtle">
           ← Все собеседования
         </Button>
       </Group>
@@ -1028,7 +1029,6 @@ export function InterviewProcessPage() {
                     ? "brandYellow"
                     : "gray"
               }
-              c={process.status === "offer" ? "brandNavy.9" : undefined}
             >
               {process.status === "active"
                 ? "Активный"
@@ -1105,7 +1105,7 @@ export function InterviewProcessPage() {
           <TagsInput
             label="Telegram никнеймы"
             placeholder="@recruiter_name"
-            description="Можно добавить до 20 рекрутеров. Нажимайте Enter после каждого никнейма."
+            description="Можно добавить до 20 рекрутеров. Нажимай Enter после каждого никнейма."
             value={recruiterUsernames}
             onChange={setRecruiterUsernames}
             maxTags={20}
@@ -1127,7 +1127,10 @@ export function InterviewProcessPage() {
         <Title order={2}>Этапы</Title>
         {process.stages.length === 0 ? (
           <Card withBorder>
-            <Text c="dimmed">Собеседований в этом треке пока нет.</Text>
+            <EmptyState
+              title="Собеседований в этом треке пока нет."
+              description="Здесь появятся доступные записи. Проверь выбранный раздел или вернись позже."
+            />
           </Card>
         ) : (
           process.stages.map((stage, index) => (
@@ -1223,9 +1226,7 @@ export function InterviewProcessPage() {
                               : undefined
                         }
                       >
-                        <Text style={{ whiteSpace: "pre-wrap" }}>
-                          {comment.body}
-                        </Text>
+                        <Text className="preserve-lines">{comment.body}</Text>
                         <Text size="xs" c="dimmed" mt="xs">
                           {comment.is_ai_feedback
                             ? "AI · автоматический разбор"
@@ -1313,7 +1314,7 @@ export function InterviewProcessPage() {
                 )}
                 <Button
                   color="brandYellow"
-                  c="brandNavy.9"
+
                   loading={offerMutation.isPending}
                   onClick={markOffer}
                 >
@@ -1377,7 +1378,7 @@ export function InterviewProcessPage() {
         </Card>
       )}
 
-      <Card withBorder style={{ borderColor: "var(--mantine-color-red-6)" }}>
+      <Card withBorder className="danger-border">
         <Group justify="space-between" align="center">
           <div>
             <Text fw={700}>Удалить трек собеседований</Text>
@@ -1414,7 +1415,7 @@ export function InterviewProcessPage() {
                     color: "green",
                     message: "Трек собеседований удалён",
                   });
-                  navigate("/interviews", { replace: true });
+                  navigate("/interviews/journal", { replace: true });
                 },
                 onError: (error) =>
                   notifications.show({

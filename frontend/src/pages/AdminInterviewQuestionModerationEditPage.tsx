@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Alert,
   Badge,
@@ -17,7 +18,6 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
@@ -223,7 +223,7 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
   };
 
   return (
-    <Stack gap="xl">
+    <Stack gap="xl" className="brand-ai-scope">
       <Group justify="space-between" align="flex-start">
         <PageHeader
           eyebrow={`${item.track_title} · ${item.company_name}`}
@@ -312,7 +312,7 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
                         <Text
                           size="sm"
                           ml={30}
-                          style={{ whiteSpace: "pre-wrap" }}
+                          className="preserve-lines"
                           lineClamp={4}
                         >
                           <Text component="span" fw={600}>
@@ -400,9 +400,7 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
           />
           {item.candidate_answer && (
             <Alert color="gray" title="Ответ кандидата">
-              <Text style={{ whiteSpace: "pre-wrap" }}>
-                {item.candidate_answer}
-              </Text>
+              <Text className="preserve-lines">{item.candidate_answer}</Text>
             </Alert>
           )}
           {isCreateNew && (
@@ -517,7 +515,7 @@ function ModerationForm({ item }: { item: AdminQuestionModerationDetail }) {
 export function AdminInterviewQuestionModerationEditPage() {
   const { questionId = "" } = useParams();
   const query = useAdminQuestionModerationDetail(questionId);
-  if (query.isPending) return <LoadingState label="Загружаем вопрос…" />;
+  if (query.isPending) return <TableSkeleton label="Загружаем вопрос…" />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />

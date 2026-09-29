@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import {
   Alert,
   Badge,
@@ -180,7 +181,7 @@ export function MentorRewardsPage() {
                 thousandSeparator=" "
                 value={amount}
                 onChange={setAmount}
-                style={{ flex: 1 }}
+                className="flex-fill"
               />
               <Button
                 disabled={data.available_kopecks === 0}
@@ -195,7 +196,7 @@ export function MentorRewardsPage() {
       </Card>
 
       <Card withBorder p={0}>
-        <div style={{ padding: "var(--mantine-spacing-lg)" }}>
+        <div className="panel-padding">
           <Title order={3}>Выплаты и чеки</Title>
           <Text size="sm" c="dimmed">
             Чек необязателен. Если вы работаете как самозанятый, приложите PDF
@@ -280,7 +281,7 @@ export function MentorRewardsPage() {
                                 [payout.id]: file,
                               }))
                             }
-                            style={{ minWidth: 220 }}
+                            className="layout-mentor-rewards-page-16"
                           />
                           <Button
                             size="compact-sm"
@@ -322,7 +323,10 @@ export function MentorRewardsPage() {
           Из чего сложился баланс
         </Title>
         {data.rewards.length === 0 ? (
-          <Text c="dimmed">Подтверждённых начислений пока нет.</Text>
+          <EmptyState
+            title="Подтверждённых начислений пока нет."
+            description="Здесь появятся доступные записи. Проверь выбранный раздел или вернись позже."
+          />
         ) : (
           <ScrollArea type="auto">
             <Table verticalSpacing="md" miw={820}>

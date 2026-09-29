@@ -66,7 +66,7 @@ it("после передачи файла показывает отдельну
 
   expect(screen.getByText("Проверяем и сохраняем…")).toBeInTheDocument();
   expect(
-    screen.getByText(/Файл уже загружен. Не закрывайте страницу/),
+    screen.getByText(/Файл уже загружен. Не закрывай страницу/),
   ).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Отменить" }),

@@ -59,6 +59,6 @@ it("показывает пустое состояние без истории",
   );
 
   expect(
-    await screen.findByText("Вы пока ничего не смотрели"),
+    await screen.findByText("Ты пока ничего не смотрел"),
   ).toBeInTheDocument();
 });

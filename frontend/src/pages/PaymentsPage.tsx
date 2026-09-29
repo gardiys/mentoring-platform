@@ -67,10 +67,7 @@ export function PaymentsPage() {
             "$1-$2-$3-$4-$5",
           );
         if (installmentId) {
-          await api.reportFailedPaymentAttempt(
-            installmentId,
-            paymentLinkId,
-          );
+          await api.reportFailedPaymentAttempt(installmentId, paymentLinkId);
         }
       }
       await query.refetch();
@@ -85,7 +82,7 @@ export function PaymentsPage() {
       void query.refetch();
       notifications.show({
         color: "red",
-        message: "Платёж не завершён. Обновите страницу и повторите попытку.",
+        message: "Платёж не завершён. Обнови страницу и повтори попытку.",
       });
     });
   }, [query, searchParams, setSearchParams]);
@@ -111,7 +108,7 @@ export function PaymentsPage() {
         </Stack>
       </Card>
       {!me.data?.email && (
-        <Alert color="orange" title="Укажите email перед оплатой">
+        <Alert color="orange" title="Укажи email перед оплатой">
           Точка отправляет электронный чек на почту, поэтому без сохранённого
           email создать платёжную ссылку нельзя.
         </Alert>
@@ -132,7 +129,7 @@ export function PaymentsPage() {
               value={email}
               onChange={(event) => setEmail(event.currentTarget.value)}
               placeholder="name@example.com"
-              style={{ flex: "1 1 18rem" }}
+              className="flex-field"
             />
             <Button
               loading={updateEmail.isPending}

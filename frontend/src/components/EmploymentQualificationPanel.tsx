@@ -493,7 +493,7 @@ function StudentCaseActions({ item }: { item: EmploymentCase }) {
           <Stack>
             <Textarea
               label="Что вы регулярно делаете на работе"
-              description="Опишите свои задачи, а не стек всей компании"
+              description="Опиши свои задачи, а не стек всей компании"
               minRows={5}
               value={actualDuties}
               onChange={(e) => setActualDuties(e.currentTarget.value)}
@@ -637,9 +637,8 @@ function StudentCaseActions({ item }: { item: EmploymentCase }) {
         <Accordion.Panel>
           <Stack>
             <Text size="sm" c="dimmed">
-              Подойдут PDF, изображение или текстовый файл до 20 МБ. Не
-              загружайте исходный код, секреты работодателя и лишние
-              персональные данные.
+              Подойдут PDF, изображение или текстовый файл до 20 МБ. Не загружай
+              исходный код, секреты работодателя и лишние персональные данные.
             </Text>
             <Select
               label="Тип подтверждения"
@@ -663,7 +662,11 @@ function StudentCaseActions({ item }: { item: EmploymentCase }) {
               clearable
             />
             {uploadEvidence.isPending && (
-              <Progress value={uploadProgress} animated />
+              <Progress
+                aria-label="Загрузка документа"
+                value={uploadProgress}
+                animated
+              />
             )}
             <Button
               variant="light"
@@ -793,7 +796,7 @@ export function EmploymentQualificationStudentPanel() {
     <Stack gap="lg">
       <Alert
         color="blue"
-        title="Сообщайте о любой оплачиваемой работе в разработке ПО"
+        title="Сообщай о любой оплачиваемой работе в разработке ПО"
       >
         Даже если должность называется PHP Developer, Java Developer, Software
         Engineer или иначе. Само сообщение не создаёт начисление: учитываются
@@ -1007,7 +1010,7 @@ export function EmploymentQualificationStaffPanel({
                   <Stack>
                     <Alert color="orange">
                       Решение может создать или пересчитать результативный
-                      компонент. Проверьте дату начала профильной деятельности,
+                      компонент. Проверь дату начала профильной деятельности,
                       версию договора и контрольный период.
                     </Alert>
                     {item.policy_is_legacy && (

@@ -9,18 +9,25 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import api_error
-from app.interviews.journal_service import list_processes, process_detail
+from app.interviews.journal_service import (
+    get_process_model,
+    list_processes,
+    process_detail,
+    set_process_outcome,
+)
 from app.interviews.models import (
     InterviewCardProgress,
     InterviewProcess,
     InterviewProcessStage,
     InterviewProcessStageAttachment,
+    InterviewProcessStatus,
     InterviewStageComment,
 )
 from app.interviews.schemas import (
     InterviewAttachmentRead,
     InterviewCatalogAuthorRead,
     InterviewCatalogCommentRead,
+    InterviewProcessOutcomeMutation,
 )
 from app.interviews.uploads import StoredUpload
 from app.mentors.models import (
@@ -1435,6 +1442,28 @@ async def mentor_interview_detail(
             for stage_id in stage_ids
         ],
     )
+
+
+async def mark_interview_offer(
+    session: AsyncSession,
+    mentor: User,
+    student_id: UUID,
+    process_id: UUID,
+) -> MentorInterviewDetail:
+    student, _ = await assigned_student(
+        session, mentor, student_id, allow_any_user_for_admin=True, lock=True
+    )
+    process = await get_process_model(session, student, process_id, lock=True)
+    if process.track_id not in await accessible_track_ids(session, mentor):
+        api_error(404, "interview_process_not_found", "Interview process was not found")
+    await set_process_outcome(
+        session,
+        student,
+        process_id,
+        InterviewProcessOutcomeMutation(status=InterviewProcessStatus.OFFER),
+        actor=mentor,
+    )
+    return await mentor_interview_detail(session, mentor, student_id, process_id)
 
 
 async def add_interview_feedback(

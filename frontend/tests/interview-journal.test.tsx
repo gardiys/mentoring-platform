@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api } from "../src/api/endpoints";
 import { InterviewProcessCreatePage } from "../src/pages/InterviewProcessCreatePage";
 import { InterviewProcessPage } from "../src/pages/InterviewProcessPage";
-import { InterviewsPage } from "../src/pages/InterviewsPage";
+import { InterviewJournalPage } from "../src/pages/InterviewsPage";
 import type {
   InterviewProcessDetail,
   InterviewProcessSummary,
@@ -108,7 +108,7 @@ it("показывает активные и завершённые треки �
     },
   ]);
 
-  renderPage(<InterviewsPage />);
+  renderPage(<InterviewJournalPage />);
 
   expect(await screen.findByText("Яндекс")).toBeInTheDocument();
   expect(screen.getByText("Активный процесс")).toBeInTheDocument();

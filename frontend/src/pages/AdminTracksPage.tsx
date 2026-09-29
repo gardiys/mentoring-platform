@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import {
   Badge,
   Button,
@@ -11,18 +12,12 @@ import {
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
+import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import { PageHeader } from "../components/PageHeader";
 import { useAdminTracks } from "../features/admin/queries";
 
 export function AdminTracksPage() {
   const query = useAdminTracks();
-  if (query.isPending) return <LoadingState label="Загружаем треки…" />;
-  if (query.isError)
-    return (
-      <ErrorState error={query.error} retry={() => void query.refetch()} />
-    );
-
   return (
     <Stack gap="xl">
       <Group justify="space-between" align="flex-end">
@@ -36,8 +31,15 @@ export function AdminTracksPage() {
         </Button>
       </Group>
 
-      {query.data.length === 0 ? (
-        <Text c="dimmed">Треков пока нет.</Text>
+      {query.isPending ? (
+        <CardGridSkeleton />
+      ) : query.isError ? (
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
+      ) : query.data.length === 0 ? (
+        <EmptyState
+          title="Треков пока нет."
+          description="Добавьте запись с помощью действий на этой странице."
+        />
       ) : (
         <SimpleGrid cols={{ base: 1, md: 2 }}>
           {query.data.map((track) => (
@@ -50,7 +52,6 @@ export function AdminTracksPage() {
                 <Group justify="space-between">
                   <Badge
                     color={track.is_published ? "brandYellow" : "brandSand"}
-                    c="brandNavy.9"
                   >
                     {track.is_published ? "Доступен" : "Черновик"}
                   </Badge>

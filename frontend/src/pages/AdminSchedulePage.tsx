@@ -1,3 +1,5 @@
+import { TableSkeleton } from "../components/TableSkeleton";
+import { EmptyState } from "../components/EmptyState";
 import {
   Badge,
   Button,
@@ -233,11 +235,14 @@ export function AdminSchedulePage() {
       </Card>
 
       {query.isPending ? (
-        <LoadingState label="Загружаем расписание…" />
+        <TableSkeleton label="Загружаем расписание…" />
       ) : query.isError ? (
         <ErrorState error={query.error} retry={() => void query.refetch()} />
       ) : query.data.items.length === 0 ? (
-        <Text c="dimmed">Событий с выбранными фильтрами пока нет.</Text>
+        <EmptyState
+          title="Событий с выбранными фильтрами пока нет."
+          description="Попробуй изменить поиск или фильтры."
+        />
       ) : (
         <>
           <Table.ScrollContainer minWidth={900}>

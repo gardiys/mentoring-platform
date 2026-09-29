@@ -155,7 +155,7 @@ export function MentorEfficiencyAnalytics({
 
           <Card withBorder p={0}>
             <Stack gap={0}>
-              <div style={{ padding: "var(--mantine-spacing-lg)" }}>
+              <div className="panel-padding">
                 <Title order={3}>Состояние учеников по менторам</Title>
                 <Text size="sm" c="dimmed">
                   Этапы и записи учеников в статусе «учится» тоже учитываются.
@@ -253,6 +253,7 @@ export function MentorEfficiencyAnalytics({
                                   </Badge>
                                 </Group>
                                 <Progress
+                                  aria-label="Активность учеников"
                                   value={mentor.participation_percent}
                                   color={participationColor}
                                   size="xs"

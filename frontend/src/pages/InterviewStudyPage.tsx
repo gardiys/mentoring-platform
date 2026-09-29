@@ -1,3 +1,4 @@
+import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import {
   Accordion,
   Alert,
@@ -15,7 +16,7 @@ import {
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
@@ -36,41 +37,35 @@ const ratings: Array<{
   label: string;
   hint: string;
   color: string;
-  description: string;
 }> = [
   {
     rating: "again",
     label: "Не помню",
-    hint: "через 10 минут",
-    description: "Нужен быстрый повтор",
+    hint: "10 минут",
     color: "red",
   },
   {
     rating: "hard",
     label: "Сложно",
-    hint: "через 1 день",
-    description: "Нужно повторить чаще",
+    hint: "1 день",
     color: "orange",
   },
   {
     rating: "good",
     label: "Помню",
-    hint: "примерно 2 дня",
-    description: "Дальше через регулярный повтор",
+    hint: "~2 дня",
     color: "brandBlue",
   },
   {
     rating: "easy",
     label: "Легко",
-    hint: "примерно 4 дня",
-    description: "Редкий пересмотр",
+    hint: "~4 дня",
     color: "green",
   },
   {
     rating: "known",
-    label: "Знаю отлично",
-    hint: "через 1 месяц",
-    description: "Можно надолго отложить",
+    label: "Знаю",
+    hint: "1 месяц",
     color: "teal",
   },
 ];
@@ -84,6 +79,8 @@ function questionPreview(markdown: string) {
 
 export function InterviewStudyPage() {
   const { deckSlug = "" } = useParams();
+  const studyCard = useRef<HTMLDivElement>(null);
+  const previousReveal = useRef<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const frequentOnly = searchParams.get("frequent_only") === "true";
   const searchText = searchParams.get("q") ?? "";
@@ -97,6 +94,12 @@ export function InterviewStudyPage() {
   );
   const review = useReviewInterviewCard();
   const [revealedCardId, setRevealedCardId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (previousReveal.current === revealedCardId) return;
+    previousReveal.current = revealedCardId;
+    studyCard.current?.scrollIntoView?.({ block: "start" });
+  }, [revealedCardId]);
 
   if (query.isPending || topics.isPending) {
     return <LoadingState label="Готовим учебную сессию…" />;
@@ -118,11 +121,13 @@ export function InterviewStudyPage() {
   const revealed = card?.id === revealedCardId;
 
   const rate = (rating: InterviewReviewRating) => {
-    if (!card || review.isPending) return;
+    if (!card || review.isPending || query.isPlaceholderData) return;
     review.mutate(
       { cardId: card.id, rating },
       {
-        onSuccess: () => setRevealedCardId(null),
+        onSuccess: () => {
+          setRevealedCardId(null);
+        },
         onError: (error) =>
           notifications.show({ color: "red", message: error.message }),
       },
@@ -149,6 +154,7 @@ export function InterviewStudyPage() {
           </Badge>
         </Group>
         <Progress
+          aria-label="Прогресс повторения карточек"
           value={deck.stats.progress_percent}
           mt="md"
           size="lg"
@@ -209,7 +215,7 @@ export function InterviewStudyPage() {
       )}
 
       {searchText.trim().length === 1 ? (
-        <Alert color="blue" title="Введите ещё один символ">
+        <Alert color="blue" title="Введи ещё один символ">
           Поиск начинается с двух символов.
         </Alert>
       ) : debouncedSearch.length >= 2 ? (
@@ -225,7 +231,7 @@ export function InterviewStudyPage() {
             <Stack align="center" ta="center">
               <Title order={2}>Ничего не найдено</Title>
               <Text c="dimmed">
-                Проверьте формулировку, выбранные темы и фильтр частых вопросов.
+                Проверь формулировку, выбранные темы и фильтр частых вопросов.
               </Text>
             </Stack>
           </Card>
@@ -246,7 +252,7 @@ export function InterviewStudyPage() {
                       {item.frequency === "frequent" && (
                         <Badge
                           color="brandYellow"
-                          c="brandNavy.9"
+
                           visibleFrom="sm"
                         >
                           Частый
@@ -284,14 +290,16 @@ export function InterviewStudyPage() {
             </Accordion>
           </Stack>
         )
+      ) : query.isPlaceholderData ? (
+        <CardGridSkeleton />
       ) : deck.stats.selected_categories === 0 ? (
         <Card withBorder className="interview-complete-card">
           <Stack align="center" ta="center">
             <Text fz="2.5rem">↑</Text>
-            <Title order={2}>Сначала выберите темы</Title>
+            <Title order={2}>Сначала выбери темы</Title>
             <Text c="dimmed" maw={560}>
-              Отметьте только пройденные разделы. Так в тренировке не появятся
-              вопросы из тем, до которых вы ещё не дошли по роадмапу.
+              Отметь только пройденные разделы. Так в тренировке не появятся
+              вопросы из тем, до которых ты ещё не дошли по роадмапу.
             </Text>
           </Stack>
         </Card>
@@ -302,7 +310,7 @@ export function InterviewStudyPage() {
             <Title order={2}>На сегодня всё</Title>
             <Text c="dimmed" maw={560}>
               Новых карточек и запланированных повторений сейчас нет.
-              Возвращайтесь к ним по расписанию — так знания закрепляются лучше.
+              Возвращайся к ним по расписанию — так знания закрепляются лучше.
             </Text>
             <Button component={Link} to="/interviews" variant="light">
               Вернуться к колодам
@@ -317,7 +325,6 @@ export function InterviewStudyPage() {
                 color={
                   card.frequency === "frequent" ? "brandYellow" : "brandSand"
                 }
-                c="brandNavy.9"
               >
                 {card.frequency === "frequent"
                   ? "Частый вопрос"
@@ -332,7 +339,7 @@ export function InterviewStudyPage() {
             <Text className="technical-label">В сессии: {cards.length}</Text>
           </Group>
 
-          <Card withBorder className="interview-study-card">
+          <Card ref={studyCard} withBorder className="interview-study-card">
             <Stack justify="space-between" h="100%">
               <div className="markdown-content interview-question">
                 <ReactMarkdown>{card.question_markdown}</ReactMarkdown>
@@ -340,7 +347,9 @@ export function InterviewStudyPage() {
               {!revealed ? (
                 <Button
                   size="xl"
-                  onClick={() => setRevealedCardId(card.id)}
+                  onClick={() => {
+                    setRevealedCardId(card.id);
+                  }}
                   className="reveal-answer-button"
                 >
                   Показать ответ
@@ -366,28 +375,28 @@ export function InterviewStudyPage() {
           {revealed && (
             <div>
               <Text ta="center" c="dimmed" mb="sm">
-                Насколько легко вы вспомнили ответ?
+                Насколько легко ты вспомнил ответ?
               </Text>
               <div className="interview-rating-grid">
                 {ratings.map((item) => (
                   <Button
                     key={item.rating}
+                    aria-label={
+                      item.rating === "known"
+                        ? `Знаю отлично · ${item.hint}`
+                        : undefined
+                    }
                     color={item.color}
                     variant={item.rating === "good" ? "filled" : "light"}
                     loading={review.isPending}
                     size="xl"
                     onClick={() => rate(item.rating)}
                     className="interview-rating-button"
-                    h="auto"
-                    py="sm"
                   >
                     <Stack gap={0} align="center">
                       <span>{item.label}</span>
-                      <Text component="span" size="xs" fw={400}>
+                      <Text component="span" size="sm" c="inherit" fw={400}>
                         {item.hint}
-                      </Text>
-                      <Text component="span" size="xs" c="dimmed" fw={500}>
-                        {item.description}
                       </Text>
                     </Stack>
                   </Button>

@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Badge,
   Button,
@@ -16,7 +17,6 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useAdminStudents } from "../features/admin/studentQueries";
 import type { StudentAccessFilter, StudentLearningStatus } from "../types/api";
@@ -173,7 +173,7 @@ export function AdminStudentsPage() {
           </Group>
 
           {query.isPending ? (
-            <LoadingState label="Загружаем учеников…" />
+            <TableSkeleton label="Загружаем учеников…" />
           ) : query.isError ? (
             <ErrorState
               error={query.error}

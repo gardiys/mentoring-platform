@@ -47,7 +47,7 @@ export function InlineInterviewMediaPlayer({ media, loadUrl }: Props) {
     setUrl(null);
     notifications.show({
       color: "yellow",
-      message: "Не удалось воспроизвести запись. Откройте её повторно.",
+      message: "Не удалось воспроизвести запись. Открой её повторно.",
     });
   };
 
@@ -75,7 +75,7 @@ export function InlineInterviewMediaPlayer({ media, loadUrl }: Props) {
           src={url}
           onContextMenu={(event) => event.preventDefault()}
           onError={handleError}
-          style={{ width: "100%", maxHeight: 560, borderRadius: 12 }}
+          className="layout-inline-interview-media-player-2"
         />
       )}
       {url && kind === "audio" && (
@@ -87,7 +87,7 @@ export function InlineInterviewMediaPlayer({ media, loadUrl }: Props) {
           src={url}
           onContextMenu={(event) => event.preventDefault()}
           onError={handleError}
-          style={{ width: "100%" }}
+          className="full-width"
         />
       )}
     </Stack>

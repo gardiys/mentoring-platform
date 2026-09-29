@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Alert,
   Button,
@@ -13,7 +14,6 @@ import {
 import { useSearchParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useAdminTracks } from "../features/admin/queries";
 import { CardAutomationNavigation } from "../features/cardAutomation/CardAutomationNavigation";
@@ -257,7 +257,7 @@ export function AdminCardAutomationMetricsPage() {
   };
 
   return (
-    <Stack gap="xl">
+    <Stack gap="xl" className="brand-ai-scope">
       <PageHeader
         eyebrow="Администрирование · наблюдаемость"
         title="Метрики автоматизации карточек"
@@ -314,7 +314,7 @@ export function AdminCardAutomationMetricsPage() {
           окончания.
         </Alert>
       ) : query.isPending ? (
-        <LoadingState label="Рассчитываем метрики…" />
+        <TableSkeleton label="Рассчитываем метрики…" />
       ) : query.isError ? (
         <ErrorState error={query.error} retry={() => void query.refetch()} />
       ) : (

@@ -44,8 +44,8 @@ export function OpportunitiesPage() {
         <Alert color="blue" title="Локальная тестовая оплата">
           <Stack gap="sm">
             <Text size="sm">
-              Подтвердите тестовую оплату, чтобы проверить сценарий без
-              обращения к банку.
+              Подтверди тестовую оплату, чтобы проверить сценарий без обращения
+              к банку.
             </Text>
             <Button
               w="fit-content"
@@ -114,7 +114,7 @@ export function OpportunitiesPage() {
               <Text>
                 {query.data.has_alumni_access
                   ? "Консультации с менторами и специальные программы для следующего карьерного шага."
-                  : "Посмотрите консультации с менторами и условия перехода Python → Go. Оформление станет доступно после завершения программы."}
+                  : "Посмотри консультации с менторами и условия перехода Python → Go. Оформление станет доступно после завершения программы."}
               </Text>
               <Button component={Link} to="/opportunities/alumni" mt="auto">
                 {query.data.has_alumni_access

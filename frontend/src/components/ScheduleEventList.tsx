@@ -59,7 +59,7 @@ export function ScheduleEventList({
                   {isRescheduled && (
                     <Badge
                       color="brandYellow"
-                      c="brandNavy.9"
+
                       size="lg"
                       variant="filled"
                     >

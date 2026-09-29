@@ -49,7 +49,7 @@ export function AdminOverduePaymentsPage() {
       />
       <AdminPaymentsNavigation active="overdue" />
       <Group align="stretch">
-        <Card withBorder style={{ borderColor: "var(--mantine-color-red-6)" }}>
+        <Card withBorder className="danger-border">
           <Text className="technical-label">Просрочено</Text>
           <Title order={3} c="red">
             {formatRubles(data.overdue_kopecks)}
@@ -78,9 +78,7 @@ export function AdminOverduePaymentsPage() {
               {data.items.map((item) => (
                 <Table.Tr
                   key={item.installment_id}
-                  style={{
-                    boxShadow: "inset 0 0 0 2px var(--mantine-color-red-6)",
-                  }}
+                  className="layout-admin-overdue-payments-page-8"
                 >
                   <Table.Td>
                     <Text fw={700}>{item.student_name}</Text>

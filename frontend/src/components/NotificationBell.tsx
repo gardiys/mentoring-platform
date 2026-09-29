@@ -28,7 +28,7 @@ function BellIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -78,7 +78,6 @@ export function NotificationBell() {
           size={18}
           offset={4}
           color="yellow"
-          processing
         >
           <ActionIcon
             variant="light"
@@ -123,7 +122,11 @@ export function NotificationBell() {
               <Text size="sm" ta="center" c="dimmed">
                 Не удалось загрузить уведомления
               </Text>
-              <Button size="compact-sm" variant="light" onClick={() => query.refetch()}>
+              <Button
+                size="compact-sm"
+                variant="light"
+                onClick={() => query.refetch()}
+              >
                 Повторить
               </Button>
             </Stack>
@@ -136,7 +139,10 @@ export function NotificationBell() {
                   onClick={() => openNotification(item)}
                 >
                   <Group gap="sm" align="flex-start" wrap="nowrap">
-                    <span className="notification-unread-dot" aria-hidden="true" />
+                    <span
+                      className="notification-unread-dot"
+                      aria-hidden="true"
+                    />
                     <Box className="notification-item-copy">
                       <Text size="sm" fw={item.read_at ? 600 : 750}>
                         {item.title}

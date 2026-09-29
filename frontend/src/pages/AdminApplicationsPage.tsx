@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Badge,
   Button,
@@ -20,7 +21,6 @@ import { notifications } from "@mantine/notifications";
 import { useEffect, useMemo, useState } from "react";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import {
   useAdminApplication,
@@ -831,7 +831,7 @@ export function AdminApplicationsPage() {
           </Group>
 
           {applications.isPending ? (
-            <LoadingState label="Загружаем заявки…" />
+            <TableSkeleton label="Загружаем заявки…" />
           ) : applications.isError ? (
             <ErrorState
               error={applications.error}
@@ -931,7 +931,7 @@ export function AdminApplicationsPage() {
         size="xl"
       >
         {detail.isPending ? (
-          <LoadingState label="Загружаем карточку…" />
+          <TableSkeleton label="Загружаем карточку…" />
         ) : detail.isError ? (
           <ErrorState
             error={detail.error}

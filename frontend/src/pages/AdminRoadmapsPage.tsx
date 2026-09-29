@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import {
   Badge,
   Button,
@@ -12,7 +13,7 @@ import { notifications } from "@mantine/notifications";
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
+import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import { PageHeader } from "../components/PageHeader";
 import {
   useAdminRoadmaps,
@@ -23,12 +24,6 @@ import type { AdminRoadmapSummary } from "../types/api";
 export function AdminRoadmapsPage() {
   const query = useAdminRoadmaps();
   const deleteRoadmap = useDeleteAdminRoadmap();
-  if (query.isPending) return <LoadingState label="Загружаем роадмапы…" />;
-  if (query.isError)
-    return (
-      <ErrorState error={query.error} retry={() => void query.refetch()} />
-    );
-
   const remove = (roadmap: AdminRoadmapSummary) => {
     if (
       !window.confirm(
@@ -56,8 +51,15 @@ export function AdminRoadmapsPage() {
           + Создать роадмап
         </Button>
       </Group>
-      {query.data.length === 0 ? (
-        <Text c="dimmed">Роадмапов пока нет.</Text>
+      {query.isPending ? (
+        <CardGridSkeleton />
+      ) : query.isError ? (
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
+      ) : query.data.length === 0 ? (
+        <EmptyState
+          title="Роадмапов пока нет."
+          description="Добавьте запись с помощью действий на этой странице."
+        />
       ) : (
         <SimpleGrid cols={{ base: 1, md: 2 }}>
           {query.data.map((roadmap) => {
@@ -71,7 +73,6 @@ export function AdminRoadmapsPage() {
                   <Group justify="space-between">
                     <Badge
                       color={roadmap.is_published ? "brandYellow" : "brandSand"}
-                      c="brandNavy.9"
                     >
                       {roadmap.is_published ? "Опубликован" : "Черновик"}
                     </Badge>

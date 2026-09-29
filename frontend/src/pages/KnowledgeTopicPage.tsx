@@ -78,8 +78,7 @@ export function KnowledgeTopicPage() {
                     withBorder
                     component={Link}
                     to={`/knowledge/entries/${entry.slug}`}
-                    className="knowledge-entry-card"
-                    style={{ textDecoration: "none", color: "inherit" }}
+                    className="knowledge-entry-card link-card"
                   >
                     <Stack gap="xs">
                       <Text className="roadmap-slug">/{entry.slug}</Text>

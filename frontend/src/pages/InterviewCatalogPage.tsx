@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Badge,
   Button,
@@ -16,7 +17,6 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import {
   interviewCatalogFiltersFromParams,
@@ -100,7 +100,7 @@ export function InterviewCatalogPage() {
         <PageHeader
           eyebrow="Собеседования · опыт учеников"
           title="Каталог компаний"
-          description="Изучайте реальные этапы собеседований, записи, материалы и обратную связь учеников."
+          description="Изучай реальные этапы собеседований, записи, материалы и обратную связь учеников."
         />
         <Group gap="xs">
           <Button
@@ -110,7 +110,7 @@ export function InterviewCatalogPage() {
           >
             История просмотров
           </Button>
-          <Button component={Link} to="/interviews" variant="subtle">
+          <Button component={Link} to="/interviews/journal" variant="subtle">
             ← К собеседованиям
           </Button>
         </Group>
@@ -234,19 +234,19 @@ export function InterviewCatalogPage() {
       </Card>
 
       {query.isPending ? (
-        <LoadingState label="Загружаем компании…" />
+        <TableSkeleton label="Загружаем компании…" />
       ) : query.isError ? (
         <ErrorState error={query.error} retry={() => void query.refetch()} />
       ) : query.data.items.length === 0 ? (
         <Card withBorder>
           <Text fw={600}>Компании не найдены</Text>
           <Text c="dimmed" size="sm" mt={4}>
-            Попробуйте другое написание или вернитесь позже, когда ученики
-            добавят новые собеседования.
+            Попробуй другое написание или вернись позже, когда ученики добавят
+            новые собеседования.
           </Text>
         </Card>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+        <SimpleGrid className="interview-catalog-grid">
           {query.data.items.map((company) => (
             <Card key={company.id} withBorder>
               <Stack h="100%">

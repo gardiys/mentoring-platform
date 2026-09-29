@@ -19,7 +19,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
+import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import { PageHeader } from "../components/PageHeader";
 import {
   CARD_AUTOMATION_PAGE_SIZE,
@@ -97,19 +97,13 @@ export function PersonalReviewPage() {
     );
   };
 
-  if (query.isPending) return <LoadingState label="Готовим личные вопросы…" />;
-  if (query.isError)
-    return (
-      <ErrorState error={query.error} retry={() => void query.refetch()} />
-    );
-
-  const item = query.data.items[0];
+  const item = query.data?.items[0];
   const revealed = item?.id === revealedItemId;
   const conflict =
     review.error instanceof ApiError && review.error.status === 409;
   const pageCount = Math.max(
     1,
-    Math.ceil(query.data.total / CARD_AUTOMATION_PAGE_SIZE),
+    Math.ceil((query.data?.total ?? 0) / CARD_AUTOMATION_PAGE_SIZE),
   );
 
   const rate = (rating: InterviewReviewRating) => {
@@ -141,10 +135,10 @@ export function PersonalReviewPage() {
         <PageHeader
           eyebrow="Собеседования · персональная подготовка"
           title="Личные вопросы"
-          description="Вопросы из ваших разборов, для которых общей проверенной карточки пока нет. Они видны только вам."
+          description="Вопросы из твоих разборов, для которых общей проверенной карточки пока нет. Они видны только тебе."
         />
         <Badge size="lg" variant="light">
-          {query.data.total} к повторению
+          {query.data?.total ?? "…"} к повторению
         </Badge>
       </Group>
 
@@ -200,7 +194,11 @@ export function PersonalReviewPage() {
         </Alert>
       )}
 
-      {!item ? (
+      {query.isPending ? (
+        <CardGridSkeleton />
+      ) : query.isError ? (
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
+      ) : !item ? (
         <Card withBorder>
           <Stack align="center" ta="center" py="xl">
             <Text fz="2.5rem">✓</Text>

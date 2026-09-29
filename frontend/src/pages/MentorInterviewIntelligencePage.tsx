@@ -1,3 +1,5 @@
+import { TableSkeleton } from "../components/TableSkeleton";
+import { EmptyState } from "../components/EmptyState";
 import {
   Alert,
   Badge,
@@ -54,18 +56,17 @@ export function MentorInterviewIntelligencePage() {
   const requeue = useAdminRequeueIntelligenceInterview();
   const retry = useRetryIntelligenceInterview();
   const remove = useDeleteIntelligenceInterview();
-  if (me.isPending || (me.data && query.isPending)) return <LoadingState />;
-  if (me.isError || query.isError)
+  if (me.isPending) return <LoadingState />;
+  if (me.isError)
     return (
       <ErrorState
-        error={query.error ?? me.error}
+        error={me.error}
         retry={() => {
           void query.refetch();
           void me.refetch();
         }}
       />
     );
-  if (!query.data) return <LoadingState />;
 
   const deleteInterview = (interview: IntelligenceInterviewSummary) => {
     if (
@@ -75,7 +76,7 @@ export function MentorInterviewIntelligencePage() {
     ) {
       remove.mutate(interview.id, {
         onSuccess: () => {
-          if (query.data.items.length === 1 && page > 1) setPage(page - 1);
+          if (query.data?.items.length === 1 && page > 1) setPage(page - 1);
         },
         onError: (error) =>
           notifications.show({ color: "red", message: error.message }),
@@ -130,7 +131,7 @@ export function MentorInterviewIntelligencePage() {
   const queueUnavailable = operations.data?.queues.available === false;
 
   return (
-    <Stack gap="xl">
+    <Stack gap="xl" className="brand-ai-scope">
       <PageHeader
         eyebrow="Ментор · Interview Intelligence"
         title="Разборы учеников"
@@ -196,156 +197,178 @@ export function MentorInterviewIntelligencePage() {
         onChange={changeStatus}
         data={visibleStatusOptions}
       />
-      {query.isFetching && !query.isPending && (
-        <Text size="xs" c="dimmed" role="status">
-          Обновляем очередь…
-        </Text>
-      )}
-      {query.data.items.length === 0 ? (
-        <Card withBorder>
-          <Text c="dimmed">В этой очереди пока нет интервью.</Text>
-        </Card>
-      ) : (
-        query.data.items.map((interview) => {
-          const staleSince =
-            Date.now() - new Date(interview.updated_at).getTime();
-          const canDeleteFromQueue =
-            me.data.role === "admin" &&
-            (interview.processing_status === "failed" ||
-              (!["ready", "awaiting_candidate_speaker"].includes(
-                interview.processing_status,
-              ) &&
-                staleSince >= 60 * 60 * 1_000));
-          return (
-            <Card key={interview.id} withBorder>
-              <Stack gap="md">
-                <Group
-                  justify="space-between"
-                  align="flex-start"
-                  className="responsive-card-header"
-                >
-                  <div className="min-width-zero">
-                    <Text className="technical-label">
-                      {interview.student_name} · {interview.track_title}
-                    </Text>
-                    <TelegramChatLink
-                      username={interview.student_telegram_username}
-                    />
-                    <Title order={3}>{interview.company_name}</Title>
-                    <Text c="dimmed">{interview.position_name}</Text>
-                    <Text size="xs" c="dimmed" mt="xs">
-                      Запрошен{" "}
-                      {new Date(interview.created_at).toLocaleString("ru-RU")}
-                    </Text>
-                  </div>
-                  <Stack align="flex-end" gap="xs">
-                    <Badge
+      <Stack
+        gap="xl"
+        className="interview-queue-results"
+        aria-busy={query.isFetching}
+      >
+        {query.isFetching && !query.isPending && (
+          <Text
+            size="xs"
+            c="dimmed"
+            role="status"
+            className="interview-queue-refresh"
+          >
+            Обновляем очередь…
+          </Text>
+        )}
+        {query.isPending ? (
+          <TableSkeleton label="Загружаем очередь…" />
+        ) : query.isError ? (
+          <ErrorState error={query.error} retry={() => void query.refetch()} />
+        ) : query.data.items.length === 0 ? (
+          <Card withBorder>
+            <EmptyState
+              title="В этой очереди пока нет интервью."
+              description="Попробуй изменить поиск или фильтры."
+            />
+          </Card>
+        ) : (
+          query.data.items.map((interview) => {
+            const staleSince =
+              Date.now() - new Date(interview.updated_at).getTime();
+            const canDeleteFromQueue =
+              me.data.role === "admin" &&
+              (interview.processing_status === "failed" ||
+                (!["ready", "awaiting_candidate_speaker"].includes(
+                  interview.processing_status,
+                ) &&
+                  staleSince >= 60 * 60 * 1_000));
+            return (
+              <Card key={interview.id} withBorder>
+                <Stack gap="md">
+                  <Group
+                    justify="space-between"
+                    align="flex-start"
+                    className="responsive-card-header"
+                  >
+                    <div className="min-width-zero">
+                      <Text className="technical-label">
+                        {interview.student_name} · {interview.track_title}
+                      </Text>
+                      <TelegramChatLink
+                        username={interview.student_telegram_username}
+                      />
+                      <Title order={3}>{interview.company_name}</Title>
+                      <Text c="dimmed">{interview.position_name}</Text>
+                      <Text size="xs" c="dimmed" mt="xs">
+                        Запрошен{" "}
+                        {new Date(interview.created_at).toLocaleString("ru-RU")}
+                      </Text>
+                    </div>
+                    <Stack align="flex-end" gap="xs">
+                      <Badge
+                        color={
+                          interview.processing_status === "failed"
+                            ? "red"
+                            : interview.processing_status === "ready"
+                              ? "green"
+                              : interview.processing_status === "uploaded"
+                                ? "yellow"
+                                : "blue"
+                        }
+                      >
+                        {intelligenceStatusLabels[interview.processing_status]}
+                      </Badge>
+                      <Text size="sm">{interview.question_count} вопросов</Text>
+                    </Stack>
+                  </Group>
+
+                  {interview.processing_error_message && (
+                    <Alert
                       color={
                         interview.processing_status === "failed"
                           ? "red"
-                          : interview.processing_status === "ready"
-                            ? "green"
-                            : interview.processing_status === "uploaded"
-                              ? "yellow"
-                              : "blue"
+                          : "yellow"
+                      }
+                      title={
+                        interview.processing_status === "failed"
+                          ? "Причина остановки"
+                          : "Последняя ошибка обработки"
                       }
                     >
-                      {intelligenceStatusLabels[interview.processing_status]}
-                    </Badge>
-                    <Text size="sm">{interview.question_count} вопросов</Text>
-                  </Stack>
-                </Group>
-
-                {interview.processing_error_message && (
-                  <Alert
-                    color={
-                      interview.processing_status === "failed"
-                        ? "red"
-                        : "yellow"
-                    }
-                    title={
-                      interview.processing_status === "failed"
-                        ? "Причина остановки"
-                        : "Последняя ошибка обработки"
-                    }
-                  >
-                    <Text size="sm">{interview.processing_error_message}</Text>
-                    {interview.processing_error_code && (
-                      <Text size="xs" c="dimmed" mt={4}>
-                        Код: {interview.processing_error_code}
+                      <Text size="sm">
+                        {interview.processing_error_message}
+                      </Text>
+                      {interview.processing_error_code && (
+                        <Text size="xs" c="dimmed" mt={4}>
+                          Код: {interview.processing_error_code}
+                        </Text>
+                      )}
+                    </Alert>
+                  )}
+                  {isAdmin &&
+                    interview.processing_status === "uploaded" &&
+                    !interview.processing_error_message && (
+                      <Text size="sm" c="dimmed">
+                        Файл принят, но воркер ещё не зафиксировал первую
+                        попытку обработки. Задачу можно безопасно вернуть в
+                        очередь.
                       </Text>
                     )}
-                  </Alert>
-                )}
-                {isAdmin &&
-                  interview.processing_status === "uploaded" &&
-                  !interview.processing_error_message && (
-                    <Text size="sm" c="dimmed">
-                      Файл принят, но воркер ещё не зафиксировал первую попытку
-                      обработки. Задачу можно безопасно вернуть в очередь.
-                    </Text>
-                  )}
 
-                <Group justify="flex-end" gap="xs">
-                  {isAdmin &&
-                    (interview.can_requeue_processing ||
-                      interview.processing_status === "failed") && (
+                  <Group justify="flex-end" gap="xs">
+                    {isAdmin &&
+                      (interview.can_requeue_processing ||
+                        interview.processing_status === "failed") && (
+                        <Button
+                          variant="light"
+                          size="xs"
+                          disabled={query.isPlaceholderData || queueUnavailable}
+                          loading={
+                            (requeue.isPending &&
+                              requeue.variables === interview.id) ||
+                            (retry.isPending &&
+                              retry.variables === interview.id)
+                          }
+                          onClick={() => startProcessing(interview)}
+                        >
+                          {interview.processing_status === "uploaded"
+                            ? "Запустить AI-разбор"
+                            : interview.processing_status === "failed"
+                              ? "Повторить обработку"
+                              : "Вернуть этап в очередь"}
+                        </Button>
+                      )}
+                    {canDeleteFromQueue && (
                       <Button
+                        color="red"
                         variant="light"
                         size="xs"
-                        disabled={query.isPlaceholderData || queueUnavailable}
+                        disabled={query.isPlaceholderData}
                         loading={
-                          (requeue.isPending &&
-                            requeue.variables === interview.id) ||
-                          (retry.isPending && retry.variables === interview.id)
+                          remove.isPending && remove.variables === interview.id
                         }
-                        onClick={() => startProcessing(interview)}
+                        onClick={() => deleteInterview(interview)}
                       >
-                        {interview.processing_status === "uploaded"
-                          ? "Запустить AI-разбор"
-                          : interview.processing_status === "failed"
-                            ? "Повторить обработку"
-                            : "Вернуть этап в очередь"}
+                        Удалить разбор
                       </Button>
                     )}
-                  {canDeleteFromQueue && (
                     <Button
-                      color="red"
-                      variant="light"
+                      component={Link}
+                      to={`/mentor/interview-reviews/${interview.id}`}
                       size="xs"
                       disabled={query.isPlaceholderData}
-                      loading={
-                        remove.isPending && remove.variables === interview.id
-                      }
-                      onClick={() => deleteInterview(interview)}
                     >
-                      Удалить разбор
+                      Открыть разбор
                     </Button>
-                  )}
-                  <Button
-                    component={Link}
-                    to={`/mentor/interview-reviews/${interview.id}`}
-                    size="xs"
-                    disabled={query.isPlaceholderData}
-                  >
-                    Открыть разбор
-                  </Button>
-                </Group>
-              </Stack>
-            </Card>
-          );
-        })
-      )}
-      {query.data.total > query.data.limit && (
-        <Pagination
-          value={page}
-          onChange={setPage}
-          total={Math.ceil(query.data.total / query.data.limit)}
-          disabled={query.isPlaceholderData}
-          withEdges
-          mx="auto"
-        />
-      )}
+                  </Group>
+                </Stack>
+              </Card>
+            );
+          })
+        )}
+        {query.data && query.data.total > query.data.limit && (
+          <Pagination
+            value={page}
+            onChange={setPage}
+            total={Math.ceil(query.data.total / query.data.limit)}
+            disabled={query.isPlaceholderData}
+            withEdges
+            mx="auto"
+          />
+        )}
+      </Stack>
     </Stack>
   );
 }

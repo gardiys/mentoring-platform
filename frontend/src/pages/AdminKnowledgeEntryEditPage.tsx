@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Alert,
   Button,
@@ -16,7 +17,6 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { AdminContentMediaManager } from "../components/AdminContentMediaManager";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
@@ -218,7 +218,7 @@ export function AdminKnowledgeEntryEditPage() {
   const { topicId = "", entryId } = useParams();
   const query = useAdminKnowledgeEntry(topicId, entryId);
   if (entryId && query.isPending)
-    return <LoadingState label="Загружаем материал…" />;
+    return <TableSkeleton label="Загружаем материал…" />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />

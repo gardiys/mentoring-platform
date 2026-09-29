@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
+import { TableSkeleton } from "../components/TableSkeleton";
 import { PageHeader } from "../components/PageHeader";
 import { useAdminTracks } from "../features/admin/queries";
 import { CardAutomationNavigation } from "../features/cardAutomation/CardAutomationNavigation";
@@ -68,7 +68,9 @@ export function CardAutomationClustersPage({
   const tracks = useAdminTracks(scope === "admin");
   const [selected, setSelected] = useState<QuestionClusterSummary[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const items = query.data?.items ?? emptyClusters;
+  const items = query.isPlaceholderData
+    ? emptyClusters
+    : (query.data?.items ?? emptyClusters);
   const filterSearch = searchParams.toString();
   const detailBase = `/${scope}/card-automation/clusters`;
 
@@ -124,26 +126,16 @@ export function CardAutomationClustersPage({
       { replace: true },
     );
   };
-
-  if (query.isPending) {
-    return <LoadingState label="Загружаем карточки на проверку…" />;
-  }
-  if (query.isError) {
-    return (
-      <ErrorState error={query.error} retry={() => void query.refetch()} />
-    );
-  }
-
   const pageCount = Math.max(
     1,
-    Math.ceil(query.data.total / CARD_AUTOMATION_PAGE_SIZE),
+    Math.ceil((query.data?.total ?? 0) / CARD_AUTOMATION_PAGE_SIZE),
   );
   const selectedIds = new Set(selected.map((cluster) => cluster.id));
   const allPageSelected =
     items.length > 0 && items.every((cluster) => selectedIds.has(cluster.id));
 
   return (
-    <Stack gap="xl">
+    <Stack gap="xl" className="brand-ai-scope">
       <PageHeader
         eyebrow={
           scope === "admin"
@@ -374,7 +366,7 @@ export function CardAutomationClustersPage({
             </Stack>
             <Button
               variant="subtle"
-              style={{ alignSelf: "flex-end" }}
+              className="align-end"
               onClick={() => setSearchParams({}, { replace: true })}
               disabled={searchParams.size === 0}
             >
@@ -389,259 +381,274 @@ export function CardAutomationClustersPage({
         </Stack>
       </Card>
 
-      <Group justify="space-between">
-        <Stack gap={4}>
-          <Text fw={600}>Кластеров по фильтрам: {query.data.total}</Text>
-          <Group gap="sm">
-            <Badge color="blue">
-              На AI-обработке: {query.data.ai_processing_total ?? 0}
-            </Badge>
-            <Badge color="blue">
-              Выполняются сейчас: {query.data.ai_running_total ?? "—"}
-            </Badge>
-            <Badge color="gray">
-              В очереди: {query.data.ai_queued_total ?? "—"}
-            </Badge>
-            <Badge color="yellow">
-              На этапе исправления: {query.data.ai_repair_total ?? 0}
-            </Badge>
-            <Badge color="orange">
-              Нужно решение человека: {query.data.manual_review_total ?? 0}
-            </Badge>
-            <Badge color="orange">
-              Пауза AI: {query.data.waiting_for_ai_total ?? 0}
-            </Badge>
-            <Badge color="gray">
-              Ожидают материалов: {query.data.waiting_for_sources_total ?? 0}
-            </Badge>
-          </Group>
-        </Stack>
-        <Stack gap={2} align="flex-end">
-          {items[0] && (
-            <Button
-              component={Link}
-              to={{
-                pathname: `${detailBase}/${items[0].id}`,
-                search: filterSearch,
-              }}
-            >
-              Начать проверку
-            </Button>
-          )}
-          <Text size="sm" c="dimmed">
-            Завершено AI за час в выбранных направлениях:{" "}
-            {query.data.completed_last_hour ?? 0}
-          </Text>
-          <Text size="xs" c="dimmed">
-            {query.data.ai_running_total == null
-              ? "Данные о выполнении временно недоступны"
-              : "Выполнение и очередь — снимок на момент обновления"}
-          </Text>
-          <Text size="xs" c="dimmed" visibleFrom="sm">
-            Клавиши J/K — строка, Enter — открыть
-          </Text>
-        </Stack>
-      </Group>
-
-      {scope === "admin" && (
-        <ClusterBulkActions
-          selected={selected}
-          clearSelection={() => setSelected([])}
-          reload={() => query.refetch()}
-        />
-      )}
-
-      {query.data.items.length === 0 ? (
-        <Card withBorder>
-          <Text fw={600}>
-            {filters.waitingOnly
-              ? "Кластеров в ожидании AI нет"
-              : filters.processingOnly
-                ? "Кластеров в обработке AI нет"
-                : "Карточек на проверку нет"}
-          </Text>
-          <Text size="sm" c="dimmed" mt={4}>
-            Измените фильтры или дождитесь новых повторяющихся вопросов.
-          </Text>
-        </Card>
+      {query.isPending || query.isPlaceholderData ? (
+        <TableSkeleton />
+      ) : query.isError ? (
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
       ) : (
-        <Card withBorder p={0}>
-          <Table.ScrollContainer minWidth={1780}>
-            <Table verticalSpacing="sm" horizontalSpacing="md" stickyHeader>
-              <Table.Thead>
-                <Table.Tr>
-                  {scope === "admin" && (
-                    <Table.Th w={48}>
-                      <Checkbox
-                        aria-label="Выбрать все кластеры на странице"
-                        checked={allPageSelected}
-                        indeterminate={selected.length > 0 && !allPageSelected}
-                        onChange={(event) => {
-                          const checked = event.currentTarget.checked;
-                          setSelected(checked ? items : []);
-                        }}
-                      />
-                    </Table.Th>
-                  )}
-                  <Table.Th>Предложение AI</Table.Th>
-                  <Table.Th>Направление и тип</Table.Th>
-                  <Table.Th>Появления</Table.Th>
-                  <Table.Th>Интервью</Table.Th>
-                  <Table.Th>Компании</Table.Th>
-                  <Table.Th>Плохие ответы</Table.Th>
-                  <Table.Th>Лучшее совпадение</Table.Th>
-                  <Table.Th>Semantic</Table.Th>
-                  <Table.Th>Judge</Table.Th>
-                  <Table.Th>Confidence</Table.Th>
-                  <Table.Th>Priority</Table.Th>
-                  <Table.Th>Первое / последнее</Table.Th>
-                  <Table.Th>Статус</Table.Th>
-                  <Table.Th aria-label="Действия" />
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {query.data.items.map((cluster, index) => (
-                  <Table.Tr
-                    key={cluster.id}
-                    data-active={activeIndex === index || undefined}
-                    aria-selected={activeIndex === index}
-                    tabIndex={0}
-                    onClick={(event) => {
-                      const target = event.target;
-                      if (
-                        target instanceof HTMLElement &&
-                        target.closest(
-                          "a, button, input, label, [role='checkbox'], [data-no-row-navigation]",
-                        )
-                      )
-                        return;
-                      void navigate({
-                        pathname: `${detailBase}/${cluster.id}`,
-                        search: filterSearch,
-                      });
-                    }}
-                    onMouseEnter={() => setActiveIndex(index)}
-                    onFocus={() => setActiveIndex(index)}
-                    style={{
-                      cursor: "pointer",
-                      background:
-                        scope === "admin" && selectedIds.has(cluster.id)
-                          ? "var(--mantine-color-blue-light)"
-                          : activeIndex === index
-                            ? "var(--mantine-color-default-hover)"
-                            : undefined,
-                    }}
-                  >
-                    {scope === "admin" && (
-                      <Table.Td>
-                        <Checkbox
-                          aria-label={`Выбрать кластер: ${cluster.canonical_question}`}
-                          checked={selectedIds.has(cluster.id)}
-                          onChange={(event) => {
-                            const checked = event.currentTarget.checked;
-                            setSelected((current) =>
-                              checked
-                                ? current.some((item) => item.id === cluster.id)
-                                  ? current
-                                  : [...current, cluster]
-                                : current.filter(
-                                    (item) => item.id !== cluster.id,
-                                  ),
-                            );
-                          }}
-                        />
-                      </Table.Td>
-                    )}
-                    <Table.Td miw={360}>
-                      <Text fw={650}>{cluster.canonical_question}</Text>
-                      <Text size="xs" c="dimmed">
-                        {cluster.topic_name ?? "Тема не определена"}
-                      </Text>
-                      {cluster.manual_important && (
-                        <Badge color="red" mt={5}>
-                          Важный
-                        </Badge>
-                      )}
-                    </Table.Td>
-                    <Table.Td miw={190}>
-                      <Text fw={600}>{cluster.direction_title}</Text>
-                      <Text size="xs" c="dimmed">
-                        {learningObjectLabels[cluster.learning_object_type]}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>{cluster.occurrences_count}</Table.Td>
-                    <Table.Td>{cluster.distinct_interviews_count}</Table.Td>
-                    <Table.Td>{cluster.distinct_companies_count}</Table.Td>
-                    <Table.Td>{cluster.failed_answers_count}</Table.Td>
-                    <Table.Td miw={250}>
-                      {cluster.best_match ? (
-                        <Text size="sm" fw={600} lineClamp={2}>
-                          {cluster.best_match.question_markdown}
-                        </Text>
-                      ) : (
-                        <Text size="sm" c="dimmed">
-                          Нет кандидата
-                        </Text>
-                      )}
-                    </Table.Td>
-                    <Table.Td>
-                      {cluster.best_match
-                        ? percent(cluster.best_match.semantic_score)
-                        : "—"}
-                    </Table.Td>
-                    <Table.Td miw={150}>
-                      {cluster.best_match?.judge_decision
-                        ? judgeDecisionLabels[cluster.best_match.judge_decision]
-                        : "—"}
-                    </Table.Td>
-                    <Table.Td>{percent(cluster.cluster_confidence)}</Table.Td>
-                    <Table.Td>{cluster.priority_score.toFixed(2)}</Table.Td>
-                    <Table.Td miw={140}>
-                      <Text size="sm">{formatDate(cluster.first_seen_at)}</Text>
-                      <Text size="xs" c="dimmed">
-                        {formatDate(cluster.last_seen_at)}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Badge color={clusterStatusColors[cluster.status]}>
-                        {cluster.processing_state === "waiting_for_sources"
-                          ? "Ожидает материалов"
-                          : cluster.processing_state === "waiting_for_ai"
-                            ? "Ожидает восстановления AI"
-                            : cluster.processing_state === "ai_processing"
-                              ? "На AI-обработке"
-                              : clusterStatusLabels[cluster.status]}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Button
-                        component={Link}
-                        to={{
-                          pathname: `${detailBase}/${cluster.id}`,
-                          search: filterSearch,
-                        }}
-                        size="xs"
-                        variant="light"
-                      >
-                        Проверить карточку
-                      </Button>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Table.ScrollContainer>
-        </Card>
-      )}
+        <>
+          <Group justify="space-between">
+            <Stack gap={4}>
+              <Text fw={600}>Кластеров по фильтрам: {query.data.total}</Text>
+              <Group gap="sm" className="queue-status-summary">
+                <Badge variant="filled" color="brandAi">
+                  На AI-обработке: {query.data.ai_processing_total ?? 0}
+                </Badge>
+                <Badge variant="filled" color="blue">
+                  Выполняются сейчас: {query.data.ai_running_total ?? "—"}
+                </Badge>
+                <Badge variant="filled" color="gray">
+                  В очереди: {query.data.ai_queued_total ?? "—"}
+                </Badge>
+                <Badge variant="filled" color="yellow">
+                  На этапе исправления: {query.data.ai_repair_total ?? 0}
+                </Badge>
+                <Badge variant="filled" color="orange">
+                  Нужно решение человека: {query.data.manual_review_total ?? 0}
+                </Badge>
+                <Badge variant="filled" color="red">
+                  Пауза AI: {query.data.waiting_for_ai_total ?? 0}
+                </Badge>
+                <Badge variant="filled" color="teal">
+                  Ожидают материалов:{" "}
+                  {query.data.waiting_for_sources_total ?? 0}
+                </Badge>
+              </Group>
+            </Stack>
+            <Stack gap={2} align="flex-end">
+              {items[0] && (
+                <Button
+                  component={Link}
+                  to={{
+                    pathname: `${detailBase}/${items[0].id}`,
+                    search: filterSearch,
+                  }}
+                >
+                  Начать проверку
+                </Button>
+              )}
+              <Text size="sm" c="dimmed">
+                Завершено AI за час в выбранных направлениях:{" "}
+                {query.data.completed_last_hour ?? 0}
+              </Text>
+              <Text size="xs" c="dimmed">
+                {query.data.ai_running_total == null
+                  ? "Данные о выполнении временно недоступны"
+                  : "Выполнение и очередь — снимок на момент обновления"}
+              </Text>
+              <Text size="xs" c="dimmed" visibleFrom="sm">
+                Клавиши J/K — строка, Enter — открыть
+              </Text>
+            </Stack>
+          </Group>
 
-      {pageCount > 1 && (
-        <Pagination
-          value={page}
-          total={pageCount}
-          disabled={query.isPlaceholderData}
-          onChange={(value) => updateFilter("page", String(value))}
-          mx="auto"
-        />
+          {scope === "admin" && (
+            <ClusterBulkActions
+              selected={selected}
+              clearSelection={() => setSelected([])}
+              reload={() => query.refetch()}
+            />
+          )}
+
+          {query.data.items.length === 0 ? (
+            <Card withBorder>
+              <Text fw={600}>
+                {filters.waitingOnly
+                  ? "Кластеров в ожидании AI нет"
+                  : filters.processingOnly
+                    ? "Кластеров в обработке AI нет"
+                    : "Карточек на проверку нет"}
+              </Text>
+              <Text size="sm" c="dimmed" mt={4}>
+                Измените фильтры или дождитесь новых повторяющихся вопросов.
+              </Text>
+            </Card>
+          ) : (
+            <Card withBorder p={0}>
+              <Table.ScrollContainer minWidth={1780}>
+                <Table verticalSpacing="sm" horizontalSpacing="md" stickyHeader>
+                  <Table.Thead>
+                    <Table.Tr>
+                      {scope === "admin" && (
+                        <Table.Th w={48}>
+                          <Checkbox
+                            aria-label="Выбрать все кластеры на странице"
+                            checked={allPageSelected}
+                            indeterminate={
+                              selected.length > 0 && !allPageSelected
+                            }
+                            onChange={(event) => {
+                              const checked = event.currentTarget.checked;
+                              setSelected(checked ? items : []);
+                            }}
+                          />
+                        </Table.Th>
+                      )}
+                      <Table.Th>Предложение AI</Table.Th>
+                      <Table.Th>Направление и тип</Table.Th>
+                      <Table.Th>Появления</Table.Th>
+                      <Table.Th>Интервью</Table.Th>
+                      <Table.Th>Компании</Table.Th>
+                      <Table.Th>Плохие ответы</Table.Th>
+                      <Table.Th>Лучшее совпадение</Table.Th>
+                      <Table.Th>Semantic</Table.Th>
+                      <Table.Th>Judge</Table.Th>
+                      <Table.Th>Confidence</Table.Th>
+                      <Table.Th>Priority</Table.Th>
+                      <Table.Th>Первое / последнее</Table.Th>
+                      <Table.Th>Статус</Table.Th>
+                      <Table.Th aria-label="Действия" />
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {query.data.items.map((cluster, index) => (
+                      <Table.Tr
+                        key={cluster.id}
+                        data-active={activeIndex === index || undefined}
+                        aria-selected={activeIndex === index}
+                        tabIndex={0}
+                        onClick={(event) => {
+                          const target = event.target;
+                          if (
+                            target instanceof HTMLElement &&
+                            target.closest(
+                              "a, button, input, label, [role='checkbox'], [data-no-row-navigation]",
+                            )
+                          )
+                            return;
+                          void navigate({
+                            pathname: `${detailBase}/${cluster.id}`,
+                            search: filterSearch,
+                          });
+                        }}
+                        onMouseEnter={() => setActiveIndex(index)}
+                        onFocus={() => setActiveIndex(index)}
+                        className="cluster-table-row"
+                        data-selected={
+                          (scope === "admin" && selectedIds.has(cluster.id)) ||
+                          undefined
+                        }
+                      >
+                        {scope === "admin" && (
+                          <Table.Td>
+                            <Checkbox
+                              aria-label={`Выбрать кластер: ${cluster.canonical_question}`}
+                              checked={selectedIds.has(cluster.id)}
+                              onChange={(event) => {
+                                const checked = event.currentTarget.checked;
+                                setSelected((current) =>
+                                  checked
+                                    ? current.some(
+                                        (item) => item.id === cluster.id,
+                                      )
+                                      ? current
+                                      : [...current, cluster]
+                                    : current.filter(
+                                        (item) => item.id !== cluster.id,
+                                      ),
+                                );
+                              }}
+                            />
+                          </Table.Td>
+                        )}
+                        <Table.Td miw={360}>
+                          <Text fw={650}>{cluster.canonical_question}</Text>
+                          <Text size="xs" c="dimmed">
+                            {cluster.topic_name ?? "Тема не определена"}
+                          </Text>
+                          {cluster.manual_important && (
+                            <Badge color="red" mt={5}>
+                              Важный
+                            </Badge>
+                          )}
+                        </Table.Td>
+                        <Table.Td miw={190}>
+                          <Text fw={600}>{cluster.direction_title}</Text>
+                          <Text size="xs" c="dimmed">
+                            {learningObjectLabels[cluster.learning_object_type]}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>{cluster.occurrences_count}</Table.Td>
+                        <Table.Td>{cluster.distinct_interviews_count}</Table.Td>
+                        <Table.Td>{cluster.distinct_companies_count}</Table.Td>
+                        <Table.Td>{cluster.failed_answers_count}</Table.Td>
+                        <Table.Td miw={250}>
+                          {cluster.best_match ? (
+                            <Text size="sm" fw={600} lineClamp={2}>
+                              {cluster.best_match.question_markdown}
+                            </Text>
+                          ) : (
+                            <Text size="sm" c="dimmed">
+                              Нет кандидата
+                            </Text>
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {cluster.best_match
+                            ? percent(cluster.best_match.semantic_score)
+                            : "—"}
+                        </Table.Td>
+                        <Table.Td miw={150}>
+                          {cluster.best_match?.judge_decision
+                            ? judgeDecisionLabels[
+                                cluster.best_match.judge_decision
+                              ]
+                            : "—"}
+                        </Table.Td>
+                        <Table.Td>
+                          {percent(cluster.cluster_confidence)}
+                        </Table.Td>
+                        <Table.Td>{cluster.priority_score.toFixed(2)}</Table.Td>
+                        <Table.Td miw={140}>
+                          <Text size="sm">
+                            {formatDate(cluster.first_seen_at)}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {formatDate(cluster.last_seen_at)}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge color={clusterStatusColors[cluster.status]}>
+                            {cluster.processing_state === "waiting_for_sources"
+                              ? "Ожидает материалов"
+                              : cluster.processing_state === "waiting_for_ai"
+                                ? "Ожидает восстановления AI"
+                                : cluster.processing_state === "ai_processing"
+                                  ? "На AI-обработке"
+                                  : clusterStatusLabels[cluster.status]}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Button
+                            component={Link}
+                            to={{
+                              pathname: `${detailBase}/${cluster.id}`,
+                              search: filterSearch,
+                            }}
+                            size="xs"
+                            variant="light"
+                          >
+                            Проверить карточку
+                          </Button>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            </Card>
+          )}
+
+          {pageCount > 1 && (
+            <Pagination
+              value={page}
+              total={pageCount}
+              disabled={query.isPlaceholderData}
+              onChange={(value) => updateFilter("page", String(value))}
+              mx="auto"
+            />
+          )}
+        </>
       )}
     </Stack>
   );

@@ -31,10 +31,10 @@ it("проводит ученика по шагам и завершает онб
   renderPage(<OnboardingPage />);
 
   expect(
-    await screen.findByText("Учитесь по понятному плану"),
+    await screen.findByText("Учись по понятному плану"),
   ).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Продолжить" }));
-  expect(screen.getByText("Отмечайте реальный результат")).toBeInTheDocument();
+  expect(screen.getByText("Отмечай реальный результат")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Продолжить" }));
   await user.click(screen.getByRole("button", { name: "Перейти к роадмапам" }));
 

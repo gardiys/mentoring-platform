@@ -83,7 +83,7 @@ export function AlumniConsultationsPage() {
     if (
       activeConsultations.length > 0 &&
       !window.confirm(
-        "У вас уже есть активная заявка. Создать ещё одну консультацию?",
+        "У тебя уже есть активная заявка. Создать ещё одну консультацию?",
       )
     ) {
       return;
@@ -121,12 +121,12 @@ export function AlumniConsultationsPage() {
       <PageHeader
         eyebrow="Кабинет выпускника"
         title="Консультации с менторами"
-        description="Выберите задачу и специалиста. Длительность зависит от формата; после созвона вы получите письменный итог и план дальнейших действий."
+        description="Выбери задачу и специалиста. Длительность зависит от формата; после созвона вы получишь письменный итог и план дальнейших действий."
       />
       <OpportunityFlow
         steps={[
           {
-            title: "Выберите формат",
+            title: "Выбери формат",
             description: "Задачу, длительность и подходящую цену",
           },
           {
@@ -134,11 +134,11 @@ export function AlumniConsultationsPage() {
             description: "Можно выбрать ментора или доверить выбор команде",
           },
           {
-            title: "Согласуйте и оплатите",
+            title: "Согласуй и оплати",
             description: "Оплата появится после подтверждения заявки",
           },
           {
-            title: "Получите результат",
+            title: "Получи результат",
             description: "Созвон, письменный итог и следующие шаги",
           },
         ]}
@@ -162,7 +162,7 @@ export function AlumniConsultationsPage() {
         </Alert>
       )}
       <Stack gap="md">
-        <Title order={2}>Выберите формат</Title>
+        <Title order={2}>Выбери формат</Title>
         <Radio.Group
           label="Формат консультации"
           value={consultationType}
@@ -229,7 +229,7 @@ export function AlumniConsultationsPage() {
             />
             <Textarea
               label="Короткий бриф"
-              description="Опишите контекст, цель встречи и что хотите получить в результате"
+              description="Опиши контекст, цель встречи и что хочешь получить в результате"
               minRows={5}
               minLength={10}
               maxLength={5000}
@@ -238,7 +238,7 @@ export function AlumniConsultationsPage() {
               onChange={(event) => setBrief(event.currentTarget.value)}
               error={
                 brief.length > 0 && briefLength < 10
-                  ? "Добавьте немного деталей — минимум 10 символов"
+                  ? "Добавь немного деталей — минимум 10 символов"
                   : undefined
               }
             />
@@ -275,12 +275,12 @@ export function AlumniConsultationsPage() {
       ) : (
         <Alert color="gray" title="Оформление сейчас недоступно">
           {offer?.unavailable_reason ??
-            "Консультации временно отключены. Вы можете изучить форматы и вернуться позже."}
+            "Консультации временно отключены. Ты можешь изучить форматы и вернуться позже."}
         </Alert>
       )}
 
       {query.data.consultations.length > 0 && (
-        <Stack id="my-consultations" style={{ scrollMarginTop: 24 }}>
+        <Stack id="my-consultations" className="anchor-target">
           <Title order={2}>Мои консультации</Title>
           {query.data.consultations.map((item) => (
             <Card
@@ -300,10 +300,7 @@ export function AlumniConsultationsPage() {
                       ? `Ментор: ${[item.mentor.first_name, item.mentor.last_name].filter(Boolean).join(" ")}`
                       : "Ментор будет назначен после рассмотрения заявки"}
                   </Text>
-                  <Text
-                    mt="xs"
-                    style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
-                  >
+                  <Text mt="xs" className="wrap-copy">
                     {item.brief}
                   </Text>
                   <Text size="sm" c="dimmed" mt="xs">
@@ -318,14 +315,7 @@ export function AlumniConsultationsPage() {
                       mt="sm"
                       title="Комментарий команды"
                     >
-                      <Text
-                        style={{
-                          whiteSpace: "pre-wrap",
-                          overflowWrap: "anywhere",
-                        }}
-                      >
-                        {item.admin_note}
-                      </Text>
+                      <Text className="wrap-copy">{item.admin_note}</Text>
                     </Alert>
                   )}
                   {item.scheduled_at && (
@@ -341,14 +331,7 @@ export function AlumniConsultationsPage() {
                       mt="sm"
                       title="Итог консультации"
                     >
-                      <Text
-                        style={{
-                          whiteSpace: "pre-wrap",
-                          overflowWrap: "anywhere",
-                        }}
-                      >
-                        {item.written_summary}
-                      </Text>
+                      <Text className="wrap-copy">{item.written_summary}</Text>
                     </Alert>
                   )}
                 </div>
@@ -362,8 +345,7 @@ export function AlumniConsultationsPage() {
                         <Alert color="orange" title="Нужен email для чека">
                           <Stack gap="xs">
                             <Text size="sm">
-                              Сохраните email, после этого станет доступна
-                              оплата.
+                              Сохрани email, после этого станет доступна оплата.
                             </Text>
                             <Button
                               component={Link}

@@ -235,7 +235,7 @@ it("показывает треки, запись, файлы и отправл�
   expect(document.querySelector("video[controls]")).not.toBe(firstPlayer);
 
   await userEvent.type(
-    screen.getByRole("textbox", { name: "Ваш комментарий", hidden: true }),
+    screen.getByRole("textbox", { name: "Твой комментарий", hidden: true }),
     "Спасибо, очень полезный разбор",
   );
   await userEvent.click(

@@ -1,3 +1,6 @@
+import { TableSkeleton } from "../components/TableSkeleton";
+import { BackLink } from "../components/BackLink";
+import { EmptyState } from "../components/EmptyState";
 import {
   Alert,
   Badge,
@@ -18,7 +21,6 @@ import { type FormEvent, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
@@ -61,6 +63,7 @@ function RoadmapEditor({ roadmap }: { roadmap: AdminRoadmapOutline }) {
   };
   return (
     <Stack gap="xl">
+      <BackLink to={"/admin/roadmaps"} />
       <PageHeader
         eyebrow="Конструктор · редактирование"
         title={roadmap.title}
@@ -240,13 +243,19 @@ function RoadmapEditor({ roadmap }: { roadmap: AdminRoadmapOutline }) {
               </Table>
             </Table.ScrollContainer>
             {section.topics.length === 0 && (
-              <Text c="dimmed">В разделе пока нет тем.</Text>
+              <EmptyState
+                title="В разделе пока нет тем."
+                description="Добавьте запись с помощью действий на этой странице."
+              />
             )}
           </Stack>
         </Card>
       ))}
       {roadmap.sections.length === 0 && (
-        <Text c="dimmed">Разделов пока нет.</Text>
+        <EmptyState
+          title="Разделов пока нет."
+          description="Добавьте запись с помощью действий на этой странице."
+        />
       )}
     </Stack>
   );
@@ -255,7 +264,7 @@ function RoadmapEditor({ roadmap }: { roadmap: AdminRoadmapOutline }) {
 export function AdminRoadmapEditPage() {
   const { roadmapId = "" } = useParams();
   const query = useAdminRoadmap(roadmapId);
-  if (query.isPending) return <LoadingState label="Загружаем структуру…" />;
+  if (query.isPending) return <TableSkeleton label="Загружаем структуру…" />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />

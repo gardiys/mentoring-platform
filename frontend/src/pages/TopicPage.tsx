@@ -126,7 +126,7 @@ export function TopicPage() {
         {query.data.status !== "completed" && (
           <Button
             color="brandYellow"
-            c="brandNavy.9"
+
             disabled={mutation.isPending}
             loading={mutation.isPending}
             onClick={() => changeStatus("completed")}

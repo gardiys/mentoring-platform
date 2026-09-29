@@ -173,7 +173,10 @@ function SourceEditor({
           </Text>
         </div>
         {!source && (
-          <Alert color="blue" title={`Шаблон для направления ${packageItem.direction}`}>
+          <Alert
+            color="blue"
+            title={`Шаблон для направления ${packageItem.direction}`}
+          >
             Типовые значения уже заполнены. Проверьте уровень, географию,
             зарплату и предпочтения конкретного ученика перед сохранением.
           </Alert>
@@ -671,7 +674,8 @@ export function CareerPackageStaffPanel({ studentId }: { studentId: string }) {
                     setEligibilityConfirmed(false);
                     notifications.show({
                       color: "green",
-                      message: "Обязательство зафиксировано без уведомления ученика",
+                      message:
+                        "Обязательство зафиксировано без уведомления ученика",
                     });
                   })
                   .catch((error: Error) => notifyError(error));
@@ -890,7 +894,7 @@ export function CareerPackageStaffPanel({ studentId }: { studentId: string }) {
                   ? "Срок оплаты запущен"
                   : packageItem.obligation.status === "awaiting_notice"
                     ? "Обязательство зафиксировано — уведомление не отправлено"
-                  : `Обязательство: ${packageItem.obligation.status}`
+                    : `Обязательство: ${packageItem.obligation.status}`
               }
             >
               30 000 ₽
@@ -998,7 +1002,11 @@ export function CareerPackageStaffPanel({ studentId }: { studentId: string }) {
               </Text>
             </div>
             {packageItem.deliveries.map((delivery) => (
-              <Group key={delivery.id} justify="space-between" align="flex-start">
+              <Group
+                key={delivery.id}
+                justify="space-between"
+                align="flex-start"
+              >
                 <div>
                   <Group gap="xs">
                     <Text fw={700}>
@@ -1023,27 +1031,30 @@ export function CareerPackageStaffPanel({ studentId }: { studentId: string }) {
                     </Text>
                   )}
                 </div>
-                {delivery.channel === "email" && delivery.status === "failed" && (
-                  <Button
-                    variant="light"
-                    color="red"
-                    loading={
-                      delivery.purpose === "payment_obligation"
-                        ? actions.retryObligationEmail.isPending
-                        : actions.retryEmail.isPending
-                    }
-                    onClick={() =>
-                      execute(
+                {delivery.channel === "email" &&
+                  delivery.status === "failed" && (
+                    <Button
+                      variant="light"
+                      color="red"
+                      loading={
                         delivery.purpose === "payment_obligation"
-                          ? actions.retryObligationEmail.mutateAsync(packageItem.id)
-                          : actions.retryEmail.mutateAsync(packageItem.id),
-                        "Повторная отправка поставлена в очередь",
-                      )
-                    }
-                  >
-                    Отправить повторно
-                  </Button>
-                )}
+                          ? actions.retryObligationEmail.isPending
+                          : actions.retryEmail.isPending
+                      }
+                      onClick={() =>
+                        execute(
+                          delivery.purpose === "payment_obligation"
+                            ? actions.retryObligationEmail.mutateAsync(
+                                packageItem.id,
+                              )
+                            : actions.retryEmail.mutateAsync(packageItem.id),
+                          "Повторная отправка поставлена в очередь",
+                        )
+                      }
+                    >
+                      Отправить повторно
+                    </Button>
+                  )}
               </Group>
             ))}
           </Stack>

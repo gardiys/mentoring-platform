@@ -138,7 +138,7 @@ export function PaymentSchedule({
           withBorder
           style={
             dashboard.summary.overdue_kopecks > 0
-              ? { borderColor: "var(--mantine-color-red-6)" }
+              ? { borderColor: "var(--c-danger)" }
               : undefined
           }
         >
@@ -167,7 +167,12 @@ export function PaymentSchedule({
                 Осталось {Number(dashboard.summary.remaining_salary_percent)}%
               </Badge>
             </Group>
-            <Progress value={percent} size="lg" radius="xl" />
+            <Progress
+              aria-label="Прогресс оплаты"
+              value={percent}
+              size="lg"
+              radius="xl"
+            />
           </Stack>
         </Card>
       ) : (
@@ -288,8 +293,7 @@ export function PaymentSchedule({
                     style={
                       overdue
                         ? {
-                            boxShadow:
-                              "inset 0 0 0 2px var(--mantine-color-red-6)",
+                            boxShadow: "inset 0 0 0 2px var(--c-danger)",
                             background: "var(--mantine-color-red-light)",
                           }
                         : undefined

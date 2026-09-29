@@ -1,3 +1,4 @@
+import { EmptyState } from "./EmptyState";
 import { Card, ScrollArea, Table, Text, Title } from "@mantine/core";
 import { Link } from "react-router-dom";
 
@@ -35,7 +36,7 @@ export function MentorStudentRewardSummary({
 
   return (
     <Card withBorder p={0}>
-      <div style={{ padding: "var(--mantine-spacing-lg)" }}>
+      <div className="panel-padding">
         <Title order={3}>Сводка по ученикам</Title>
         <Text size="sm" c="dimmed">
           Суммы вознаграждения ментора по всем начислениям каждого ученика.
@@ -86,7 +87,10 @@ export function MentorStudentRewardSummary({
             {totals.size === 0 && (
               <Table.Tr>
                 <Table.Td colSpan={5}>
-                  <Text c="dimmed">Начислений по ученикам пока нет.</Text>
+                  <EmptyState
+                    title="Начислений по ученикам пока нет."
+                    description="Здесь появятся доступные записи. Проверь выбранный раздел или вернись позже."
+                  />
                 </Table.Td>
               </Table.Tr>
             )}

@@ -1,3 +1,5 @@
+import { TableSkeleton } from "../components/TableSkeleton";
+import { EmptyState } from "../components/EmptyState";
 import {
   Alert,
   Badge,
@@ -17,7 +19,6 @@ import { notifications } from "@mantine/notifications";
 import { type FormEvent, useState } from "react";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import {
   useCancelMentorWeeklyCallReschedule,
@@ -417,7 +418,10 @@ function MentorProfileContent({ profile }: { profile: MentorProfileRead }) {
           )}
 
           {scheduleEvents.length === 0 ? (
-            <Text c="dimmed">Созвоны и встречи пока не добавлены.</Text>
+            <EmptyState
+              title="Созвоны и встречи пока не добавлены."
+              description="Здесь появятся доступные записи. Проверь выбранный раздел или вернись позже."
+            />
           ) : (
             <Table.ScrollContainer minWidth={1040}>
               <Table verticalSpacing="sm">
@@ -743,7 +747,7 @@ function MentorProfileContent({ profile }: { profile: MentorProfileRead }) {
 
 export function MentorProfilePage() {
   const query = useMentorProfile();
-  if (query.isPending) return <LoadingState label="Загружаем профиль…" />;
+  if (query.isPending) return <TableSkeleton label="Загружаем профиль…" />;
   if (query.isError) {
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />

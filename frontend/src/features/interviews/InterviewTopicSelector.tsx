@@ -75,10 +75,10 @@ export function InterviewTopicSelector({ deckSlug, topics }: Props) {
         <UnstyledButton onClick={toggle} className="interview-topic-toggle">
           <Group justify="space-between" align="flex-start">
             <div>
-              <Title order={2}>Выберите темы</Title>
+              <Title order={2}>Выбери темы</Title>
               <Text c="dimmed" size="sm">
-                Карточки будут приходить только из тех разделов, которые вы уже
-                проходили.
+                Карточки будут приходить только из тех разделов, которые ты уже
+                проходил.
               </Text>
             </div>
             <Group gap="xs" wrap="nowrap">

@@ -10,19 +10,20 @@ import {
 } from "@mantine/core";
 import { Navigate, useSearchParams } from "react-router-dom";
 
+import { BrandLogo } from "../components/BrandLogo";
 import { API_URL } from "../api/client";
 import { useMe } from "../features/auth/queries";
 import { telegramMiniAppLink } from "../platform/telegramLinks";
 
 const errorMessages: Record<string, string> = {
   platform_access_not_granted:
-    "Ваш Telegram-аккаунт пока не получил доступ. Завершите оплату в боте и попробуйте снова.",
+    "Твой Telegram-аккаунт пока не получил доступ. Заверши оплату в боте и попробуй снова.",
   student_access_suspended:
-    "Доступ к платформе приостановлен. Свяжитесь с ментором или администратором.",
+    "Доступ к платформе приостановлен. Свяжись с ментором или администратором.",
   invalid_login_state:
-    "Запрос на вход устарел или уже был использован. Начните вход заново.",
+    "Запрос на вход устарел или уже был использован. Начни вход заново.",
   telegram_login_failed:
-    "Telegram не подтвердил вход. Попробуйте ещё раз или откройте Mini App.",
+    "Telegram не подтвердил вход. Попробуй ещё раз или открой Mini App.",
 };
 
 function safeNextPath(value: string | null): string {
@@ -45,21 +46,15 @@ export function TelegramRequiredPage() {
   return (
     <Center className="login-shell">
       <Paper className="login-card">
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={0}>
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing={0}>
           <div className="login-brand-panel">
             <Stack gap="md" className="login-brand-copy">
-              <Text className="brand-eyebrow">Потрачено · Mentoring</Text>
+              <BrandLogo />
               <Title order={1}>Время, потраченное не зря.</Title>
               <Text size="lg">
                 Роадмапы, практика и поддержка ментора — в браузере и Telegram.
               </Text>
             </Stack>
-            <img
-              src="/brand/avatar-public.png"
-              alt="Геральт"
-              className="login-mascot"
-              decoding="async"
-            />
           </div>
           <div className="login-form-panel">
             <Stack gap="lg">
@@ -69,9 +64,8 @@ export function TelegramRequiredPage() {
                 </Text>
                 <Title order={2}>Продолжить через Telegram</Title>
                 <Text c="dimmed" size="sm" mt="xs">
-                  Telegram подтвердит аккаунт, а платформа проверит выданный вам
-                  доступ. После входа сайт будет работать как обычное
-                  веб-приложение.
+                  Telegram подтвердит аккаунт, а платформа проверит твой доступ.
+                  После входа сайт будет работать как обычное веб-приложение.
                 </Text>
               </div>
               {error && (
@@ -79,7 +73,12 @@ export function TelegramRequiredPage() {
                   {errorMessages[error] ?? errorMessages.telegram_login_failed}
                 </Alert>
               )}
-              <Button component="a" href={loginUrl} size="md">
+              <Button
+                component="a"
+                href={loginUrl}
+                size="md"
+                color="brandYellow"
+              >
                 Войти через Telegram
               </Button>
               <Button
@@ -90,8 +89,8 @@ export function TelegramRequiredPage() {
                 Открыть Mini App
               </Button>
               <Text c="dimmed" size="xs">
-                Новая регистрация на сайте не создаётся: доступ выдаёт ваш бот
-                после оплаты.
+                Новая регистрация на сайте не создаётся: доступ выдаёт бот после
+                оплаты.
               </Text>
             </Stack>
           </div>

@@ -287,7 +287,7 @@ it("отправляет заявку на переход с введенной 
     "/opportunities/alumni/go-transition",
   );
 
-  const field = await screen.findByLabelText(/Зачем вам Go-направление/);
+  const field = await screen.findByLabelText(/Зачем тебе Go-направление/);
   await userEvent.type(field, "Хочу развиваться в Go backend");
   await userEvent.click(screen.getByRole("button", { name: "Подать заявку" }));
   await waitFor(() =>
@@ -463,7 +463,7 @@ it("отправляет заявку повторного менторства 
   );
 
   await userEvent.type(
-    await screen.findByLabelText(/Какие пробелы хотите закрыть/),
+    await screen.findByLabelText(/Какие пробелы хочешь закрыть/),
     "Хочу системно повторить Python и архитектуру",
   );
   await userEvent.click(

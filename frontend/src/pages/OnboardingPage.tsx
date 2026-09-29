@@ -19,21 +19,21 @@ import { usePlatform } from "../platform/usePlatform";
 const steps = [
   {
     eyebrow: "01 · Маршрут",
-    title: "Учитесь по понятному плану",
+    title: "Учись по понятному плану",
     description:
-      "Роадмап разбит на короткие разделы и темы. Продвигайтесь последовательно или возвращайтесь к нужному материалу.",
+      "Роадмап разбит на короткие разделы и темы. Продвигайся последовательно или возвращайся к нужному материалу.",
   },
   {
     eyebrow: "02 · Прогресс",
-    title: "Отмечайте реальный результат",
+    title: "Отмечай реальный результат",
     description:
-      "Начинайте тему, изучайте материал и отмечайте завершение. Общий прогресс пересчитается автоматически.",
+      "Начинай тему, изучай материал и отмечай завершение. Общий прогресс пересчитается автоматически.",
   },
   {
     eyebrow: "03 · Ментор",
     title: "Ментор видит, где нужна помощь",
     description:
-      "Ваш ментор видит статусы и даты прохождения тем — так созвоны становятся предметнее и полезнее.",
+      "Твой ментор видит статусы и даты прохождения тем — так созвоны становятся предметнее и полезнее.",
   },
 ] as const;
 
@@ -60,12 +60,13 @@ export function OnboardingPage() {
         <Stack gap="xl">
           <Group justify="space-between" align="flex-start">
             <BrandLogo />
-            <Badge color="brandYellow" c="brandNavy.9">
+            <Badge color="brandYellow">
               Добро пожаловать
               {me.data?.first_name ? `, ${me.data.first_name}` : ""}
             </Badge>
           </Group>
           <Progress
+            aria-label="Прогресс знакомства с платформой"
             value={((active + 1) / steps.length) * 100}
             color="brandBlue"
             size={6}
@@ -89,7 +90,7 @@ export function OnboardingPage() {
           </div>
           {mutation.isError && (
             <Text c="red" role="alert">
-              Не удалось завершить онбординг. Попробуйте ещё раз.
+              Не удалось завершить онбординг. Попробуй ещё раз.
             </Text>
           )}
           <Group justify="space-between">

@@ -1,3 +1,4 @@
+import { AiBadge } from "../components/AiBadge";
 import {
   Accordion,
   Alert,
@@ -93,7 +94,7 @@ function OverviewSummary({
   const priorityActions = (overview.priority_actions ?? []).slice(0, 6);
 
   return (
-    <Card withBorder className="analysis-verdict-card">
+    <Card withBorder className="analysis-verdict-card brand-ai-scope">
       <Stack gap="lg">
         <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
           <div className="analysis-verdict-copy">
@@ -196,7 +197,7 @@ function TechnicalTopics({
   const technicalPercent = scorePercent(technicalScore);
 
   return (
-    <Card withBorder className="analysis-technical-card">
+    <Card withBorder className="analysis-technical-card brand-ai-scope">
       <Stack gap="md">
         <Group justify="space-between" align="flex-start" wrap="wrap">
           <div>
@@ -271,7 +272,7 @@ function TechnicalTopics({
                       {percent !== null && (
                         <Progress
                           value={percent}
-                          color={presentation.color}
+                          color="brandAi"
                           size="sm"
                           radius="xl"
                           mt="xs"
@@ -282,6 +283,7 @@ function TechnicalTopics({
                   </Accordion.Control>
                   <Accordion.Panel>
                     <Stack gap="sm">
+                      <AiBadge />
                       <Text size="sm">{topic.summary}</Text>
                       {(topic.strengths.length > 0 ||
                         topic.gaps.length > 0) && (
@@ -369,6 +371,7 @@ function AnalysisSection({
   eyebrow,
   summary,
   defaultOpened = false,
+  ai = false,
   opened,
   onOpenedChange,
   children,
@@ -377,6 +380,7 @@ function AnalysisSection({
   eyebrow?: string;
   summary?: string;
   defaultOpened?: boolean;
+  ai?: boolean;
   opened?: boolean;
   onOpenedChange?: (opened: boolean) => void;
   children: ReactNode;
@@ -386,7 +390,7 @@ function AnalysisSection({
       variant="separated"
       radius="md"
       chevronPosition="right"
-      className="brand-accordion analysis-accordion"
+      className={`brand-accordion analysis-accordion${ai ? " brand-ai-scope" : ""}`}
       defaultValue={opened === undefined && defaultOpened ? "content" : null}
       value={opened === undefined ? undefined : opened ? "content" : null}
       onChange={(value) => onOpenedChange?.(value === "content")}
@@ -482,19 +486,19 @@ function QuestionCard({
               {intelligenceDifficultyLabels[question.difficulty]}
             </Badge>
             {question.is_low_confidence && (
-              <Badge color="yellow">Проверьте текст</Badge>
+              <Badge color="yellow">Проверь текст</Badge>
             )}
           </Group>
         </Group>
         <div>
           <Text fw={700}>Ответ кандидата</Text>
-          <Text style={{ whiteSpace: "pre-wrap" }}>
+          <Text className="preserve-lines">
             {question.answer?.answer_text ||
               "Ответ не удалось выделить из транскрибации"}
           </Text>
         </div>
         {!!question.transcription_annotations?.corrections.length && (
-          <Alert color="blue" title="Уточнения терминов от AI">
+          <Alert color="brandAi" title="Уточнения терминов от AI">
             <Text size="sm">
               Исходный ответ сохранён. При разборе AI предложил прочитать:
             </Text>
@@ -508,7 +512,7 @@ function QuestionCard({
         {!!question.transcription_annotations?.uncertain_utterance_ids
           .length && (
           <Alert color="yellow" title="Есть неуверенно распознанные реплики">
-            Проверьте по записи:{" "}
+            Проверь по записи:{" "}
             {question.transcription_annotations.uncertain_utterance_ids.join(
               ", ",
             )}
@@ -519,7 +523,7 @@ function QuestionCard({
           <Alert color="yellow" title="Разметка спикеров неоднозначна">
             Вопрос и ответ выделены по смыслу разговора: метки спикеров могут
             быть перепутаны или в одной реплике говорят разные участники.
-            Проверьте авторство по записи.
+            Проверь авторство по записи.
           </Alert>
         )}
         {question.transcription_annotations?.answer_unreliable && (
@@ -529,8 +533,19 @@ function QuestionCard({
           </Alert>
         )}
         {review && (
-          <Card withBorder bg="var(--mantine-color-default-hover)">
+          <Card
+            withBorder
+            className={
+              review.source === "ai" ? "brand-ai-note" : "brand-mentor-note"
+            }
+          >
             <Stack gap="xs">
+              <Text
+                className="technical-label"
+                c={review.source === "ai" ? "var(--c-ai)" : "var(--c-link)"}
+              >
+                {review.source === "ai" ? "AI-рекомендация" : "Мнение ментора"}
+              </Text>
               <Group justify="space-between">
                 <Badge color={review.status === "rejected" ? "gray" : "blue"}>
                   {assessmentLabels[review.assessment]}
@@ -734,9 +749,12 @@ export function InterviewIntelligencePage() {
       return;
     remove.mutate(interview.id, {
       onSuccess: () =>
-        navigate(canReview ? "/mentor/interview-reviews" : "/interviews", {
-          replace: true,
-        }),
+        navigate(
+          canReview ? "/mentor/interview-reviews" : "/interviews/analysis",
+          {
+            replace: true,
+          },
+        ),
       onError: notifyMutationError,
     });
   };
@@ -789,7 +807,7 @@ export function InterviewIntelligencePage() {
     notifications.show({
       color: "yellow",
       message:
-        "Не удалось воспроизвести запись. Откройте её снова, чтобы обновить ссылку.",
+        "Не удалось воспроизвести запись. Открой её снова, чтобы обновить ссылку.",
     });
   };
 
@@ -868,13 +886,15 @@ export function InterviewIntelligencePage() {
           <Stack gap="sm">
             <Text>
               {interview.processing_status === "uploaded"
-                ? "Файл уже загружен. Запустите обработку вручную, если задача не была подхвачена воркером."
-                : "Используйте ручной запуск, если статус давно не меняется."}
+                ? "Файл уже загружен. Запусти обработку вручную, если задача не была подхвачена воркером."
+                : "Используй ручной запуск, если статус давно не меняется."}
             </Text>
             <Button
               w="fit-content"
               variant="light"
               disabled={operations.data?.queues.available === false}
+              color="brandAi"
+              leftSection={<span aria-hidden="true">✦</span>}
               loading={requeue.isPending}
               onClick={() =>
                 requeue.mutate(interview.id, {
@@ -901,7 +921,7 @@ export function InterviewIntelligencePage() {
             <div>
               <Title order={2}>Кто из спикеров — кандидат?</Title>
               <Text c="dimmed">
-                Выберите себя по примерам реплик. После этого начнётся анализ
+                Выбери себя по примерам реплик. После этого начнётся анализ
                 ответов.
               </Text>
             </div>
@@ -960,6 +980,7 @@ export function InterviewIntelligencePage() {
             onQuestionNavigate={revealQuestion}
           />
           <AnalysisSection
+            ai
             eyebrow="Soft skills"
             title="Коммуникация и подача"
             summary={
@@ -1054,12 +1075,14 @@ export function InterviewIntelligencePage() {
             <Stack gap="sm">
               <Text>
                 Это мог быть разбор, созданный до добавления оценки
-                коммуникации. Запустите формирование вручную — транскрипция
+                коммуникации. Запусти формирование вручную — транскрипция
                 повторно отправится в сервис анализа.
               </Text>
               <Button
                 w="fit-content"
                 variant="light"
+                color="brandAi"
+                leftSection={<span aria-hidden="true">✦</span>}
                 loading={generateOverview.isPending}
                 onClick={() =>
                   generateOverview.mutate(interview.id, {
@@ -1080,12 +1103,8 @@ export function InterviewIntelligencePage() {
         >
           <Stack>
             {interview.mentor_comments.map((item) => (
-              <Card
-                key={item.id}
-                withBorder
-                style={{ borderColor: "var(--mantine-color-blue-6)" }}
-              >
-                <Text style={{ whiteSpace: "pre-wrap" }}>{item.text}</Text>
+              <Card key={item.id} withBorder className="brand-mentor-note">
+                <Text className="preserve-lines">{item.text}</Text>
                 <Text size="xs" c="dimmed" mt="xs">
                   {item.mentor_name}
                   {item.mentor_telegram_username
@@ -1100,6 +1119,7 @@ export function InterviewIntelligencePage() {
 
       {interview.questions.length > 0 && (
         <AnalysisSection
+          ai
           title="Вопросы и ответы"
           summary={`Вопросов: ${interview.questions.length}`}
           opened={questionsOpened}
@@ -1129,7 +1149,7 @@ export function InterviewIntelligencePage() {
               Запись и расшифровка
             </Title>
             <Text c="dimmed" size="sm">
-              Откройте запись или расшифровку, когда понадобится проверить
+              Открой запись или расшифровку, когда понадобится проверить
               конкретный вывод AI.
             </Text>
           </div>
@@ -1185,7 +1205,7 @@ export function InterviewIntelligencePage() {
                 )}
                 {media && !intelligenceMediaKind && (
                   <Alert color="yellow" title="Формат записи не распознан">
-                    Не удалось определить, это аудио или видео. Проверьте имя и
+                    Не удалось определить, это аудио или видео. Проверь имя и
                     формат исходного файла.
                   </Alert>
                 )}
@@ -1201,7 +1221,7 @@ export function InterviewIntelligencePage() {
               <Stack gap="xs">
                 {interview.media_filename && (
                   <Text size="sm" c="dimmed">
-                    Нажмите на реплику — запись откроется на нужном месте.
+                    Нажми на реплику — запись откроется на нужном месте.
                   </Text>
                 )}
                 <Stack gap={0}>
@@ -1264,7 +1284,7 @@ export function InterviewIntelligencePage() {
             </Group>
             {!interview.reviewed_at && interview.suggested_review_count > 0 && (
               <Text size="sm" c="orange">
-                Сначала подтвердите или отклоните все AI-рекомендации.
+                Сначала подтверди или отклони все AI-рекомендации.
               </Text>
             )}
             <Textarea
@@ -1293,7 +1313,7 @@ export function InterviewIntelligencePage() {
       )}
 
       {canDelete && (
-        <Card withBorder style={{ borderColor: "var(--mantine-color-red-6)" }}>
+        <Card withBorder className="danger-border">
           <Group justify="space-between" align="center">
             <div>
               <Text fw={700}>Удаление AI-разбора</Text>
@@ -1316,7 +1336,7 @@ export function InterviewIntelligencePage() {
 
       <Button
         component={Link}
-        to={canReview ? "/mentor/interview-reviews" : "/interviews"}
+        to={canReview ? "/mentor/interview-reviews" : "/interviews/analysis"}
         variant="subtle"
         w="fit-content"
       >

@@ -56,7 +56,7 @@ export function UploadProgressPanel({ status, detail, onCancel }: Props) {
           )}
           {isFinalizing && (
             <Text size="xs" c="dimmed">
-              Файл уже загружен. Не закрывайте страницу до завершения проверки.
+              Файл уже загружен. Не закрывай страницу до завершения проверки.
             </Text>
           )}
         </div>

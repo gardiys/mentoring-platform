@@ -796,7 +796,6 @@ export function AdminStudentForm({ options, student }: Props) {
                         <Badge
                           size="sm"
                           color={track.is_published ? "brandYellow" : "gray"}
-                          c={track.is_published ? "brandNavy.9" : undefined}
                         >
                           {track.is_published ? "Опубликован" : "Черновик"}
                         </Badge>

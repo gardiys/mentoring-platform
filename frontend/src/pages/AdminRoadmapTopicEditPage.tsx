@@ -1,3 +1,5 @@
+import { TableSkeleton } from "../components/TableSkeleton";
+import { BackLink } from "../components/BackLink";
 import {
   Alert,
   Button,
@@ -15,7 +17,6 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { AdminContentMediaManager } from "../components/AdminContentMediaManager";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
@@ -81,6 +82,7 @@ function TopicForm({
     <Stack gap="xl">
       <form onSubmit={submit}>
         <Stack gap="xl">
+          <BackLink to={`/admin/roadmaps/${roadmapId}/edit`} />
           <PageHeader
             eyebrow="Роадмап · одна тема"
             title={topic ? "Редактирование темы" : "Новая тема"}
@@ -218,7 +220,7 @@ export function AdminRoadmapTopicEditPage() {
   const { roadmapId = "", sectionId = "", topicId } = useParams();
   const query = useAdminRoadmapTopic(roadmapId, sectionId, topicId);
   if (topicId && query.isPending)
-    return <LoadingState label="Загружаем тему…" />;
+    return <TableSkeleton label="Загружаем тему…" />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />

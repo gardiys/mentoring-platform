@@ -29,10 +29,10 @@ export function ProtectedLayout() {
       <Center mih="100vh" p="md">
         <Paper withBorder p="xl" maw={520}>
           <Stack>
-            <Title order={2}>Не удалось войти через Telegram</Title>
+            <Title order={1}>Не удалось войти через Telegram</Title>
             <Text c="dimmed">
-              Откройте приложение заново из меню бота. Telegram не передал
-              данные для входа.
+              Открой приложение заново из меню бота. Telegram не передал данные
+              для входа.
             </Text>
             <Button onClick={() => platform.close()}>Закрыть Mini App</Button>
           </Stack>
@@ -75,12 +75,12 @@ export function ProtectedLayout() {
           <Stack align="flex-start">
             <Text>
               {accessSuspended
-                ? "Доступ к платформе приостановлен. Свяжитесь с ментором или администратором."
+                ? "Доступ к платформе приостановлен. Свяжись с ментором или администратором."
                 : accessNotGranted
-                  ? "Вернитесь в бота и завершите оплату. После подтверждения откройте платформу ещё раз."
+                  ? "Вернись в бота и заверши оплату. После подтверждения открой платформу ещё раз."
                   : expired
-                    ? "Сессия Telegram истекла. Закройте Mini App и откройте его заново."
-                    : "Не удалось проверить данные пользователя. Попробуйте ещё раз."}
+                    ? "Сессия Telegram истекла. Закрой Mini App и открой его заново."
+                    : "Не удалось проверить данные пользователя. Попробуй ещё раз."}
             </Text>
             {(accessNotGranted || accessSuspended) && platform.isTelegram ? (
               <Button variant="light" onClick={() => platform.close()}>

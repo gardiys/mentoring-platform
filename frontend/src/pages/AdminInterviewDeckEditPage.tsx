@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Alert,
   Badge,
@@ -21,7 +22,6 @@ import { type FormEvent, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
@@ -197,7 +197,7 @@ function DeckEditor({ deck }: { deck: AdminInterviewDeckSummary }) {
             }}
           />
           {cards.isPending ? (
-            <LoadingState label="Загружаем вопросы…" />
+            <TableSkeleton label="Загружаем вопросы…" />
           ) : cards.isError ? (
             <ErrorState
               error={cards.error}
@@ -281,7 +281,7 @@ function DeckEditor({ deck }: { deck: AdminInterviewDeckSummary }) {
 export function AdminInterviewDeckEditPage() {
   const { deckId = "" } = useParams();
   const query = useAdminInterviewDeck(deckId);
-  if (query.isPending) return <LoadingState label="Загружаем колоду…" />;
+  if (query.isPending) return <TableSkeleton label="Загружаем колоду…" />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />

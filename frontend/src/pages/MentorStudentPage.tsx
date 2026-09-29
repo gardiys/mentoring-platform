@@ -336,7 +336,7 @@ function MockInterviewCard({
             value={file}
             onChange={setFile}
             disabled={upload.isPending}
-            style={{ flex: 1 }}
+            className="flex-fill"
           />
           <Button
             disabled={!file}
@@ -414,9 +414,7 @@ export function MentorStudentPage() {
       <Card
         withBorder
         style={
-          student.is_overdue
-            ? { borderColor: "var(--mantine-color-red-6)" }
-            : undefined
+          student.is_overdue ? { borderColor: "var(--c-danger)" } : undefined
         }
       >
         <Stack>
@@ -432,7 +430,7 @@ export function MentorStudentPage() {
               onChange={(value) =>
                 value && setLearningStatus(value as StudentLearningStatus)
               }
-              style={{ flex: 1 }}
+              className="flex-fill"
             />
             <Select
               label="Уровень"
@@ -443,7 +441,7 @@ export function MentorStudentPage() {
               onChange={(value) =>
                 setStrengthLevel(value as StudentStrengthLevel | null)
               }
-              style={{ flex: 1 }}
+              className="flex-fill"
             />
             <Button
               loading={updateState.isPending}
@@ -826,7 +824,7 @@ export function MentorStudentPage() {
               <Card key={item.id} withBorder>
                 <Group justify="space-between" align="flex-start">
                   <div>
-                    <Text style={{ whiteSpace: "pre-wrap" }}>{item.body}</Text>
+                    <Text className="preserve-lines">{item.body}</Text>
                     <Text size="xs" c="dimmed" mt="sm">
                       {item.author_name} · {formatDate(item.updated_at)}
                     </Text>

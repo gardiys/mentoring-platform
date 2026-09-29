@@ -18,11 +18,14 @@ import {
   setDevUserId,
 } from "../features/auth/devAuth";
 
+import { BrandLogo } from "../components/BrandLogo";
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function DevLoginPage() {
   const [value, setValue] = useState(getDevUserId() ?? "");
+  const [submitted, setSubmitted] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const valid = UUID_PATTERN.test(value.trim());
@@ -36,24 +39,25 @@ export function DevLoginPage() {
   return (
     <Center className="login-shell">
       <Paper className="login-card">
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={0}>
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing={0}>
           <div className="login-brand-panel">
             <Stack gap="md" className="login-brand-copy">
-              <Text className="brand-eyebrow">Потрачено · Mentoring</Text>
+              <BrandLogo />
               <Title order={1}>Расти в бэкенде. По понятному плану.</Title>
               <Text size="lg">
                 Роадмапы, практика и поддержка ментора — без токсичного
                 техношума.
               </Text>
             </Stack>
-            <img
-              src="/brand/avatar-public.png"
-              alt="Геральт"
-              className="login-mascot"
-              decoding="async"
-            />
           </div>
-          <div className="login-form-panel">
+          <form
+            className="login-form-panel"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSubmitted(true);
+              if (valid) login(value.trim());
+            }}
+          >
             <Stack gap="lg">
               <div>
                 <Text className="brand-eyebrow" mb="xs">
@@ -70,11 +74,13 @@ export function DevLoginPage() {
                 placeholder="00000000-0000-0000-0000-000000000000"
                 value={value}
                 onChange={(event) => setValue(event.currentTarget.value)}
-                error={value && !valid ? "Введите корректный UUID" : undefined}
+                error={
+                  (submitted || value) && !valid
+                    ? "Введи корректный UUID"
+                    : undefined
+                }
               />
-              <Button disabled={!valid} onClick={() => login(value.trim())}>
-                Войти
-              </Button>
+              <Button type="submit">Войти</Button>
               <div>
                 <Text className="technical-label" mb="sm">
                   Быстрый вход
@@ -134,7 +140,7 @@ export function DevLoginPage() {
                 Очистить пользователя
               </Button>
             </Stack>
-          </div>
+          </form>
         </SimpleGrid>
       </Paper>
     </Center>

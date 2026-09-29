@@ -4,6 +4,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
 
+import { brandCssVariables, brandTheme } from "../src/app/theme";
 import { PlatformProvider } from "../src/platform/PlatformProvider";
 
 export function renderPage(
@@ -35,7 +36,11 @@ export function renderPage(
     },
   );
   const result = render(
-    <MantineProvider>
+    <MantineProvider
+      forceColorScheme="dark"
+      theme={brandTheme}
+      cssVariablesResolver={brandCssVariables}
+    >
       <QueryClientProvider client={queryClient}>
         <PlatformProvider>
           <RouterProvider router={router} />

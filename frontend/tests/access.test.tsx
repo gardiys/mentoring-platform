@@ -61,7 +61,7 @@ it("объясняет Telegram-пользователю, что доступ о
 
   expect(await screen.findByText("Доступ ещё не открыт")).toBeInTheDocument();
   expect(
-    screen.getByText(/Вернитесь в бота и завершите оплату/),
+    screen.getByText(/Вернись в бота и заверши оплату/),
   ).toBeInTheDocument();
 });
 
@@ -90,7 +90,7 @@ it("объясняет ученику, что администратор при�
   renderPage(<ProtectedLayout />);
 
   expect(await screen.findByText("Доступ закрыт")).toBeInTheDocument();
-  expect(screen.getByText(/Свяжитесь с ментором/)).toBeInTheDocument();
+  expect(screen.getByText(/Свяжись с ментором/)).toBeInTheDocument();
 });
 
 it("не пускает ученика в административный раздел", async () => {

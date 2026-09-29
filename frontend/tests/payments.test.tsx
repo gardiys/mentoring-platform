@@ -123,7 +123,7 @@ it("ученик сохраняет email перед созданием плат
   renderPage(<PaymentsPage />, "/payments", "/payments");
 
   expect(
-    await screen.findByText("Укажите email перед оплатой"),
+    await screen.findByText("Укажи email перед оплатой"),
   ).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Оплатить" }),

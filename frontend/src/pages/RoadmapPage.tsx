@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import {
   Accordion,
   Alert,
@@ -138,7 +139,7 @@ export function RoadmapPage() {
         </Group>
         {startMutation.isError && (
           <Alert color="red" mt="md">
-            Не удалось запустить роадмап. Попробуйте ещё раз.
+            Не удалось запустить роадмап. Попробуй ещё раз.
           </Alert>
         )}
       </Paper>
@@ -229,7 +230,10 @@ export function RoadmapPage() {
               <Accordion.Panel>
                 <Stack>
                   {section.topics.length === 0 && (
-                    <Text c="dimmed">В разделе пока нет тем.</Text>
+                    <EmptyState
+                      title="В разделе пока нет тем."
+                      description="Здесь появятся доступные записи. Проверь выбранный раздел или вернись позже."
+                    />
                   )}
                   {section.topics.map((topic) => (
                     <Link
@@ -263,7 +267,7 @@ export function RoadmapPage() {
         <Paper withBorder p="lg">
           <Text fw={600}>Темы не найдены</Text>
           <Text size="sm" c="dimmed">
-            Попробуйте сократить запрос или проверить написание.
+            Попробуй сократить запрос или проверить написание.
           </Text>
         </Paper>
       )}

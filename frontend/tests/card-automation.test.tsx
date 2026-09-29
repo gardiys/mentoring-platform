@@ -839,7 +839,7 @@ it("обслуживает audit решений ментора через mentor
       .length,
   ).toBeGreaterThan(0);
   await user.click(
-    screen.getByRole("button", { name: "Проверить техрешение" }),
+    await screen.findByRole("button", { name: "Проверить техрешение" }),
   );
   await user.click(screen.getByRole("button", { name: "Сохранить проверку" }));
 
@@ -1895,5 +1895,36 @@ it("завершение запроса не возвращает пользов
     expect(router.state.location.pathname).toBe(
       "/admin/card-automation/clusters",
     ),
+  );
+});
+
+it("сохраняет фильтры очереди и скрывает старые карточки при смене поиска", async () => {
+  vi.spyOn(api, "adminTracks").mockResolvedValue([]);
+  const response = { items: [cluster], total: 1, limit: 20, offset: 0 };
+  let complete!: (value: typeof response) => void;
+  vi.spyOn(api, "adminCardAutomationClusters")
+    .mockResolvedValueOnce(response)
+    .mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+  renderPage(<AdminCardAutomationClustersPage />);
+  await screen.findByText(cluster.canonical_question);
+  const heading = screen.getByRole("heading", { level: 1 });
+  const filter = screen.getByRole("textbox", { name: "Тема" });
+  await userEvent.type(filter, "Postgres");
+  await screen.findByRole("status", { name: "Загружаем список…" });
+  expect(screen.getByRole("heading", { level: 1 })).toBe(heading);
+  expect(screen.getByRole("textbox", { name: "Тема" })).toBe(filter);
+  expect(
+    screen.queryByText(cluster.canonical_question),
+  ).not.toBeInTheDocument();
+  await act(async () => complete({ ...response, items: [], total: 0 }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("status", { name: "Загружаем список…" }),
+    ).not.toBeInTheDocument(),
   );
 });

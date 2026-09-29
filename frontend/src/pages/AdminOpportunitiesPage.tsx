@@ -332,7 +332,7 @@ export function AdminOpportunitiesPage() {
           </Button>
         </Group>
       </Card>
-      <Stack id="opportunity-settings" style={{ scrollMarginTop: 24 }}>
+      <Stack id="opportunity-settings" className="anchor-target">
         <GoTransitionProgramSettings
           description={query.data.go_transition_description_markdown}
         />
@@ -392,7 +392,7 @@ export function AdminOpportunitiesPage() {
           </SimpleGrid>
         </Stack>
       </Stack>
-      <Stack id="consultation-requests" style={{ scrollMarginTop: 24 }}>
+      <Stack id="consultation-requests" className="anchor-target">
         <Group justify="space-between">
           <Title order={2}>Консультации</Title>
           <Badge color="blue" variant="light">
@@ -777,7 +777,7 @@ export function AdminOpportunitiesPage() {
           </Card>
         ))}
       </Stack>
-      <Stack id="go-requests" style={{ scrollMarginTop: 24 }}>
+      <Stack id="go-requests" className="anchor-target">
         <Group justify="space-between">
           <Title order={2}>Переход Python → Go</Title>
           <Badge color="blue" variant="light">
@@ -804,10 +804,7 @@ export function AdminOpportunitiesPage() {
                     {formatRubles(item.upfront_price_kopecks)} +{" "}
                     {item.success_fee_percent}% после оффера
                   </Text>
-                  <Text
-                    mt="sm"
-                    style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
-                  >
+                  <Text mt="sm" className="wrap-copy">
                     {item.motivation}
                   </Text>
                 </div>

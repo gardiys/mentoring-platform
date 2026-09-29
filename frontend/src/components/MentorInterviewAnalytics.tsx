@@ -97,7 +97,12 @@ function RateRow({
           {value}%
         </Badge>
       </Group>
-      <Progress value={Math.min(100, value)} size="sm" radius="xl" />
+      <Progress
+        aria-label="Активность собеседований"
+        value={Math.min(100, value)}
+        size="sm"
+        radius="xl"
+      />
     </Stack>
   );
 }
@@ -247,7 +252,7 @@ export function MentorInterviewAnalytics({
 
           <Card withBorder p={0}>
             <Stack gap={0}>
-              <div style={{ padding: "var(--mantine-spacing-lg)" }}>
+              <div className="panel-padding">
                 <Title order={3}>Рейтинг активности</Title>
                 <Text size="sm" c="dimmed">
                   По количеству пройденных этапов за выбранный период.

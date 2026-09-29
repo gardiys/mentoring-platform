@@ -3820,6 +3820,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/mentor/students/{student_id}/interviews/{process_id}/offer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Mentor Interview Offer */
+        get: operations["mentor_interview_offer_api_v1_mentor_students__student_id__interviews__process_id__offer_get"];
+        put?: never;
+        /** Mentor Mark Interview Offer */
+        post: operations["mentor_mark_interview_offer_api_v1_mentor_students__student_id__interviews__process_id__offer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/mentor/students/{student_id}/interviews/stages/{stage_id}/feedback": {
         parameters: {
             query?: never;
@@ -3863,23 +3881,6 @@ export interface paths {
         };
         /** Mentor Interview Attachment */
         get: operations["mentor_interview_attachment_api_v1_mentor_students__student_id__interviews__process_id__stages__stage_id__attachments__attachment_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/mentor/students/{student_id}/interviews/{process_id}/offer": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Mentor Interview Offer */
-        get: operations["mentor_interview_offer_api_v1_mentor_students__student_id__interviews__process_id__offer_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -24616,6 +24617,80 @@ export interface operations {
             };
         };
     };
+    mentor_interview_offer_api_v1_mentor_students__student_id__interviews__process_id__offer_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewDownloadUrl"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mentor_mark_interview_offer_api_v1_mentor_students__student_id__interviews__process_id__offer_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+                process_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentorInterviewDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     mentor_interview_feedback_api_v1_mentor_students__student_id__interviews_stages__stage_id__feedback_post: {
         parameters: {
             query?: never;
@@ -24707,43 +24782,6 @@ export interface operations {
                 process_id: string;
                 stage_id: string;
                 attachment_id: string;
-            };
-            cookie?: {
-                mentoring_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InterviewDownloadUrl"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    mentor_interview_offer_api_v1_mentor_students__student_id__interviews__process_id__offer_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path: {
-                student_id: string;
-                process_id: string;
             };
             cookie?: {
                 mentoring_session?: string | null;

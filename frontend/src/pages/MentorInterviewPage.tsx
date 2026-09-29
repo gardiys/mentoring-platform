@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import {
   Badge,
   Button,
@@ -22,6 +23,7 @@ import {
 import { useMe } from "../features/auth/queries";
 import {
   useCreateMentorInterviewFeedback,
+  useMarkMentorInterviewOffer,
   useMentorInterview,
 } from "../features/mentor/queries";
 import type {
@@ -136,7 +138,7 @@ function MentorStage({
           </Group>
         </Group>
         {stage.description && (
-          <Text style={{ whiteSpace: "pre-wrap" }}>{stage.description}</Text>
+          <Text className="preserve-lines">{stage.description}</Text>
         )}
         {stage.media && (
           <Stack gap="xs">
@@ -160,7 +162,7 @@ function MentorStage({
                 src={mediaUrl}
                 onError={handleMediaError}
                 onContextMenu={(event) => event.preventDefault()}
-                style={{ width: "100%", maxHeight: 600, borderRadius: 12 }}
+                className="layout-mentor-interview-page-15"
               />
             )}
             {mediaUrl && storedMediaKind === "audio" && (
@@ -170,7 +172,7 @@ function MentorStage({
                 preload="metadata"
                 src={mediaUrl}
                 onError={handleMediaError}
-                style={{ width: "100%" }}
+                className="full-width"
               />
             )}
           </Stack>
@@ -232,7 +234,7 @@ function MentorStage({
                       : undefined
                 }
               >
-                <Text style={{ whiteSpace: "pre-wrap" }}>{comment.body}</Text>
+                <Text className="preserve-lines">{comment.body}</Text>
                 <Text size="xs" c="dimmed" mt="xs">
                   {comment.is_ai_feedback
                     ? "AI · автоматический разбор"
@@ -282,6 +284,7 @@ export function MentorInterviewPage() {
   const navigate = useNavigate();
   const me = useMe();
   const query = useMentorInterview(studentId, processId);
+  const markOffer = useMarkMentorInterviewOffer(studentId, processId);
   const deleteProcess = useDeleteAdminInterviewProcess();
   if (query.isPending) return <LoadingState />;
   if (query.isError)
@@ -315,6 +318,30 @@ export function MentorInterviewPage() {
                   ? "Трек завершён"
                   : "Активный трек"}
             </Badge>
+            {process.status !== "offer" &&
+              (me.data?.role === "mentor" || me.data?.role === "admin") && (
+                <Button
+                  size="xs"
+                  color="green"
+                  loading={markOffer.isPending}
+                  onClick={() =>
+                    markOffer.mutate(undefined, {
+                      onSuccess: () =>
+                        notifications.show({
+                          color: "green",
+                          message: "Трек отмечен как офферный",
+                        }),
+                      onError: (error) =>
+                        notifications.show({
+                          color: "red",
+                          message: error.message,
+                        }),
+                    })
+                  }
+                >
+                  Отметить оффер
+                </Button>
+              )}
             <Text size="sm" c="dimmed">
               Создан {new Date(process.created_at).toLocaleDateString("ru-RU")}
             </Text>
@@ -328,7 +355,7 @@ export function MentorInterviewPage() {
             </Text>
           )}
           {process.close_reason && (
-            <Text style={{ whiteSpace: "pre-wrap" }}>
+            <Text className="preserve-lines">
               Причина завершения: {process.close_reason}
             </Text>
           )}
@@ -356,7 +383,10 @@ export function MentorInterviewPage() {
         </Stack>
       </Card>
       {process.stages.length === 0 ? (
-        <Text c="dimmed">В этом треке пока нет этапов.</Text>
+        <EmptyState
+          title="В этом треке пока нет этапов."
+          description="Здесь появятся доступные записи. Проверь выбранный раздел или вернись позже."
+        />
       ) : (
         process.stages.map((stage) => (
           <MentorStage
@@ -373,7 +403,7 @@ export function MentorInterviewPage() {
         ))
       )}
       {me.data?.role === "admin" && (
-        <Card withBorder style={{ borderColor: "var(--mantine-color-red-6)" }}>
+        <Card withBorder className="danger-border">
           <Group justify="space-between" align="center">
             <div>
               <Text fw={700}>Удалить трек собеседований</Text>

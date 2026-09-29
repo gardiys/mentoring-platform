@@ -1,7 +1,6 @@
 import {
   ActionIcon,
   AppShell,
-  Badge,
   Burger,
   Group,
   NavLink,
@@ -9,12 +8,10 @@ import {
   ScrollArea,
   Stack,
   Text,
-  useComputedColorScheme,
-  useMantineColorScheme,
 } from "@mantine/core";
-import { useDisclosure } from "@mantine/hooks";
+import { useDisclosure, useMediaQuery } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { copilotApi } from "../features/copilot/api";
 import {
@@ -28,6 +25,8 @@ import {
 import { clearDevUserId } from "../features/auth/devAuth";
 import { useLogout, useMe } from "../features/auth/queries";
 import { usePlatform } from "../platform/usePlatform";
+import { HeaderIcon } from "./HeaderIcon";
+import { NavigationIcon } from "./NavigationIcon";
 import { BrandLogo } from "./BrandLogo";
 import { NotificationBell } from "./NotificationBell";
 
@@ -39,8 +38,8 @@ const roleLabels = {
 
 export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure();
-  const { toggleColorScheme } = useMantineColorScheme();
-  const colorScheme = useComputedColorScheme("dark");
+  const isMobile = useMediaQuery("(max-width: 47.99em)");
+  const menuButton = useRef<HTMLButtonElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -79,7 +78,15 @@ export function AppLayout() {
       location.pathname === "/roadmaps" ||
       location.pathname === "/knowledge" ||
       location.pathname === "/copilot" ||
-      location.pathname === "/interviews" ||
+      [
+        "/interviews",
+        "/interviews/journal",
+        "/interviews/analysis",
+        "/interviews/mocks",
+        "/interviews/materials",
+        "/interviews/catalog",
+        "/interviews/recruiters",
+      ].includes(location.pathname) ||
       location.pathname === "/interviews/personal-review" ||
       location.pathname === "/my-mentor" ||
       location.pathname === "/payments" ||
@@ -111,11 +118,15 @@ export function AppLayout() {
   return (
     <AppShell
       header={{
-        height: "calc(76px + var(--tg-content-safe-area-inset-top, 0px))",
+        height:
+          "calc(var(--header-height) + var(--tg-content-safe-area-inset-top, 0px))",
       }}
       navbar={{ width: 272, breakpoint: "sm", collapsed: { mobile: !opened } }}
       padding={0}
     >
+      <a className="skip-link" href="#main-content" onClick={close}>
+        Перейти к содержимому
+      </a>
       <AppShell.Header className="brand-header">
         <Group
           h="100%"
@@ -126,6 +137,9 @@ export function AppLayout() {
         >
           <Group wrap="nowrap">
             <Burger
+              ref={menuButton}
+              aria-controls="platform-navigation"
+              aria-expanded={opened}
               opened={opened}
               onClick={toggle}
               hiddenFrom="sm"
@@ -146,24 +160,6 @@ export function AppLayout() {
               </Stack>
             )}
             {me.data && <NotificationBell />}
-            <ActionIcon
-              variant="light"
-              size="lg"
-              onClick={toggleColorScheme}
-              aria-label={
-                colorScheme === "dark"
-                  ? "Включить светлую тему"
-                  : "Включить тёмную тему"
-              }
-              title={
-                colorScheme === "dark"
-                  ? "Включить светлую тему"
-                  : "Включить тёмную тему"
-              }
-              className="theme-toggle"
-            >
-              {colorScheme === "dark" ? "☀" : "◐"}
-            </ActionIcon>
             {!platform.isTelegram && (
               <ActionIcon
                 variant="light"
@@ -173,373 +169,282 @@ export function AppLayout() {
                 aria-label="Выйти"
                 title="Выйти"
               >
-                ↪
+                <HeaderIcon name="logout" />
               </ActionIcon>
             )}
           </Group>
         </Group>
       </AppShell.Header>
-      <AppShell.Navbar p="md" className="brand-navbar">
+      <AppShell.Navbar
+        id="platform-navigation"
+        aria-label="Основная навигация"
+        p="md"
+        className="brand-navbar"
+        inert={isMobile && !opened}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && isMobile && opened) {
+            close();
+            menuButton.current?.focus();
+          }
+        }}
+      >
         <AppShell.Section>
           <Text className="brand-eyebrow" px="sm" mb="sm">
             Навигация
           </Text>
         </AppShell.Section>
         <AppShell.Section grow component={ScrollArea} scrollbarSize={6}>
-          <NavLink
-            component={Link}
-            to="/roadmaps"
-            label="Роадмапы"
-            description="Учебные треки"
-            leftSection={<span className="nav-index">01</span>}
-            className="brand-nav-link"
-            active={
-              location.pathname.startsWith("/roadmaps") ||
-              location.pathname.startsWith("/topics")
-            }
-            onClick={close}
-          />
-          <NavLink
-            component={Link}
-            to={admin ? "/admin/opportunities" : "/opportunities"}
-            label="Возможности"
-            description={
-              admin ? "Заявки выпускников" : "Поддержка после программы"
-            }
-            leftSection={<span className="nav-index">+</span>}
-            className="brand-nav-link"
-            active={location.pathname.includes("opportunities")}
-            onClick={close}
-          />
-          <NavLink
-            component={Link}
-            to="/knowledge"
-            label="База знаний"
-            description="Статьи и вопросы"
-            leftSection={<span className="nav-index">02</span>}
-            className="brand-nav-link"
-            active={location.pathname.startsWith("/knowledge")}
-            onClick={close}
-          />
-          {(admin || copilot.data?.student_allowed) && (
-            <NavLink
-              component={Link}
-              to="/copilot"
-              label="Copilot"
-              description={
-                admin ? "AI-помощник · статистика" : "AI-помощник на интервью"
-              }
-              leftSection={<span className="nav-index">AI</span>}
-              className="brand-nav-link"
-              active={location.pathname === "/copilot"}
-              onClick={close}
-            />
-          )}
-          <NavLink
-            component={Link}
-            to="/interviews"
-            label="Собеседования"
-            description="Дневник, каталог и карточки"
-            leftSection={<span className="nav-index">03</span>}
-            className="brand-nav-link"
-            active={
-              location.pathname.startsWith("/interviews") &&
-              location.pathname !== "/interviews/personal-review"
-            }
-            onClick={close}
-          />
-          {student && (
-            <>
-              <NavLink
-                component={Link}
-                to="/interviews/personal-review"
-                label="Личные вопросы"
-                description="Повторение после разборов"
-                leftSection={<span className="nav-index">PR</span>}
-                className="brand-nav-link"
-                active={location.pathname === "/interviews/personal-review"}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/my-mentor"
-                label="Мой ментор"
-                description="Контакты и созвоны"
-                leftSection={<span className="nav-index">ME</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/my-mentor")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/career-package"
-                label="Карьерный пакет"
-                description="Резюме и стратегия поиска"
-                leftSection={<span className="nav-index">CP</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/career-package")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/payments"
-                label="Мои платежи"
-                description="График и оплата"
-                leftSection={<span className="nav-index">₽</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/payments")}
-                onClick={close}
-              />
-            </>
-          )}
-          {mentor && (
-            <>
-              <NavLink
-                component={Link}
-                to="/mentor/rewards"
-                label="Вознаграждения"
-                description="Начисления по ученикам"
-                leftSection={<span className="nav-index">₽</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/mentor/rewards")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/mentor/profile"
-                label="Профиль ментора"
-                description="Консультации и созвоны"
-                leftSection={<span className="nav-index">MP</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/mentor/profile")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/mentor/students"
-                label={admin ? "Прогресс" : "Ученики"}
-                description={admin ? "Учебная активность" : "Прогресс потока"}
-                leftSection={<span className="nav-index">04</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/mentor/students")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/mentor/interview-reviews"
-                label="Разборы интервью"
-                description="AI и менторский фидбек"
-                leftSection={<span className="nav-index">AI</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith(
-                  "/mentor/interview-reviews",
-                )}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to={
-                  admin
-                    ? "/admin/card-automation/clusters"
-                    : "/mentor/card-automation/clusters"
-                }
-                label="Модерация карточек"
-                description={
-                  admin
-                    ? "Проверить тему, вопрос и ответ"
-                    : "Карточки своих направлений"
-                }
-                leftSection={<span className="nav-index">CA</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/mentor/card-automation")}
-                onClick={close}
-              />
-            </>
-          )}
-          {admin && (
-            <>
-              <NavLink
-                component={Link}
-                to="/admin/applications"
-                label="Заявки"
-                description="Воронка от анкеты до доступа"
-                leftSection={<span className="nav-index">APP</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/applications")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/payments"
-                label="Платежи"
-                description="Ученики, просрочки, менторы"
-                leftSection={<span className="nav-index">PAY</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/payments")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/students"
-                label="Ученики"
-                description="Данные и доступы"
-                leftSection={<span className="nav-index">05</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/students")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/mentors"
-                label="Менторы"
-                description="Команда и назначения"
-                leftSection={<span className="nav-index">06</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/mentors")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/schedule"
-                label="Расписание"
-                description="События направлений"
-                leftSection={<span className="nav-index">EV</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/schedule")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/useful-links"
-                label="Полезные ссылки"
-                description="Сервисы и материалы"
-                leftSection={<span className="nav-index">URL</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/useful-links")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/tracks"
-                label="Треки"
-                description="Направления и доступы"
-                leftSection={<span className="nav-index">07</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/tracks")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/roadmaps"
-                label="Роадмапы"
-                description="Материалы курса"
-                leftSection={<span className="nav-index">08</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/roadmaps")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/knowledge"
-                label="Редактор знаний"
-                description="Темы и материалы"
-                leftSection={<span className="nav-index">09</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/knowledge")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/interviews"
-                label="Карточки интервью"
-                description="Колоды Python и Go"
-                leftSection={<span className="nav-index">10</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/interviews")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/card-automation/clusters"
-                label="Модерация AI-карточек"
-                description="Проверить тему, вопрос и ответ"
-                leftSection={<span className="nav-index">CA</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith("/admin/card-automation")}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/interview-question-moderation"
-                label="Вопросы из разборов"
-                description="Очередь добавления карточек"
-                leftSection={<span className="nav-index">AI</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith(
-                  "/admin/interview-question-moderation",
-                )}
-                onClick={close}
-              />
-              <NavLink
-                component={Link}
-                to="/admin/company-alias-proposals"
-                label="Названия компаний"
-                description="Модерация альтернативных имён"
-                leftSection={<span className="nav-index">AKA</span>}
-                className="brand-nav-link"
-                active={location.pathname.startsWith(
-                  "/admin/company-alias-proposals",
-                )}
-                onClick={close}
-              />
-            </>
-          )}
+          {[
+            {
+              label: "Обучение",
+              items: [
+                {
+                  to: "/roadmaps",
+                  label: "Роадмапы",
+                  description: "Учебные треки",
+                },
+                {
+                  to: "/knowledge",
+                  label: "База знаний",
+                  description: "Статьи и вопросы",
+                },
+                {
+                  to: admin ? "/admin/opportunities" : "/opportunities",
+                  label: "Возможности",
+                  description: admin
+                    ? "Заявки выпускников"
+                    : "Поддержка после программы",
+                },
+                ...(student
+                  ? [{ to: "/career-package", label: "Карьерный пакет" }]
+                  : []),
+              ],
+            },
+            {
+              label: "Собеседования",
+              items: [
+                {
+                  to: "/interviews",
+                  label: "Вопросы с собеседований",
+                  description: "Карточки и таблица вопросов",
+                  active:
+                    location.pathname === "/interviews" ||
+                    (/^\/interviews\/[^/]+(?:\/questions)?$/.test(
+                      location.pathname,
+                    ) &&
+                      ![
+                        "catalog",
+                        "recruiters",
+                        "analysis",
+                        "journal",
+                        "mocks",
+                        "materials",
+                        "personal-review",
+                      ].includes(location.pathname.split("/")[2] ?? "")),
+                },
+                ...(student
+                  ? [
+                      {
+                        to: "/interviews/analysis",
+                        label: "AI-разборы собеседований",
+                      },
+                    ]
+                  : []),
+                { to: "/interviews/journal", label: "Дневник собеседований" },
+                ...(student
+                  ? [
+                      { to: "/interviews/mocks", label: "Мок-собеседования" },
+                      {
+                        to: "/interviews/materials",
+                        label: "Резюме и легенда",
+                      },
+                    ]
+                  : []),
+                { to: "/interviews/catalog", label: "Каталог записей" },
+                { to: "/interviews/recruiters", label: "База рекрутеров" },
+                ...(admin || copilot.data?.student_allowed
+                  ? [
+                      {
+                        to: "/copilot",
+                        label: "Copilot",
+                        description: "AI-помощник на интервью",
+                      },
+                    ]
+                  : []),
+                ...(student
+                  ? [
+                      {
+                        to: "/interviews/personal-review",
+                        label: "Личные вопросы",
+                      },
+                    ]
+                  : []),
+                ...(mentor
+                  ? [
+                      {
+                        to: "/mentor/interview-reviews",
+                        label: "Разборы интервью",
+                        description: "AI и менторский фидбек",
+                      },
+                    ]
+                  : []),
+              ],
+            },
+            {
+              label: "Люди",
+              items: [
+                ...(student ? [{ to: "/my-mentor", label: "Мой ментор" }] : []),
+                ...(mentor
+                  ? [
+                      { to: "/mentor/profile", label: "Профиль ментора" },
+                      {
+                        to: "/mentor/students",
+                        label: admin ? "Прогресс учеников" : "Ученики",
+                      },
+                    ]
+                  : []),
+                ...(admin
+                  ? [
+                      { to: "/admin/applications", label: "Заявки" },
+                      { to: "/admin/students", label: "Управление учениками" },
+                      { to: "/admin/mentors", label: "Менторы" },
+                    ]
+                  : []),
+              ],
+            },
+            {
+              label: "Деньги",
+              items: [
+                ...(student ? [{ to: "/payments", label: "Мои платежи" }] : []),
+                ...(mentor
+                  ? [{ to: "/mentor/rewards", label: "Вознаграждения" }]
+                  : []),
+                ...(admin
+                  ? [{ to: "/admin/payments", label: "Платежи учеников" }]
+                  : []),
+              ],
+            },
+            {
+              label: "Модерация",
+              collapsible: true,
+              items: [
+                ...(mentor
+                  ? [
+                      {
+                        to: admin
+                          ? "/admin/card-automation/clusters"
+                          : "/mentor/card-automation/clusters",
+                        label: "Модерация AI-карточек",
+                        active: location.pathname.includes("/card-automation"),
+                      },
+                    ]
+                  : []),
+                ...(admin
+                  ? [
+                      {
+                        to: "/admin/interview-question-moderation",
+                        label: "Вопросы из разборов",
+                      },
+                      {
+                        to: "/admin/company-alias-proposals",
+                        label: "Названия компаний",
+                      },
+                    ]
+                  : []),
+              ],
+            },
+            {
+              label: "Справочники",
+              items: admin
+                ? [
+                    { to: "/admin/schedule", label: "Расписание" },
+                    { to: "/admin/useful-links", label: "Полезные ссылки" },
+                    { to: "/admin/tracks", label: "Направления обучения" },
+                    { to: "/admin/roadmaps", label: "Роадмапы — редактор" },
+                    { to: "/admin/knowledge", label: "Редактор знаний" },
+                    { to: "/admin/interviews", label: "Редактор карточек" },
+                  ]
+                : [],
+            },
+          ]
+            .filter((group) => group.items.length > 0)
+            .map((group) => {
+              const links = group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  component={Link}
+                  to={item.to}
+                  label={item.label}
+                  leftSection={<NavigationIcon to={item.to} />}
+                  description={
+                    "description" in item ? item.description : undefined
+                  }
+                  className="brand-nav-link"
+                  active={
+                    "active" in item
+                      ? item.active
+                      : location.pathname.startsWith(item.to) ||
+                        (item.to === "/roadmaps" &&
+                          location.pathname.startsWith("/topics"))
+                  }
+                  onClick={close}
+                />
+              ));
+              return (
+                <AppShell.Section key={group.label} className="nav-group">
+                  {group.collapsible ? (
+                    <NavLink
+                      component="button"
+                      type="button"
+                      label={group.label}
+                      leftSection={
+                        <NavigationIcon to="/admin/card-automation/clusters" />
+                      }
+                      className="brand-nav-link"
+                      childrenOffset={12}
+                      defaultOpened={group.items.some((item) =>
+                        "active" in item
+                          ? item.active
+                          : location.pathname.startsWith(item.to),
+                      )}
+                    >
+                      {links}
+                    </NavLink>
+                  ) : (
+                    <>
+                      <Text className="nav-group-label" px="sm">
+                        {group.label}
+                      </Text>
+                      {links}
+                    </>
+                  )}
+                </AppShell.Section>
+              );
+            })}
           {import.meta.env.DEV && !platform.isTelegram && (
             <NavLink
               component={Link}
               to="/dev-login"
               label="Сменить роль"
-              leftSection={<span className="nav-index">→</span>}
+              leftSection={<NavigationIcon to="/dev-login" />}
               className="brand-nav-link change-user-link"
               onClick={close}
             />
           )}
         </AppShell.Section>
-        <AppShell.Section>
-          <div className="mentor-note">
-            <Group wrap="nowrap" align="center">
-              <img
-                src="/brand/avatar-memes-small.png"
-                alt=""
-                className="mentor-note-avatar"
-                loading="lazy"
-                decoding="async"
-              />
-              <div>
-                <Badge color="brandYellow" c="brandNavy.9" mb={4}>
-                  Геральт рядом
-                </Badge>
-                <Text size="xs" c="dimmed">
-                  Сегодня деплоим без паники.
-                </Text>
-              </div>
-            </Group>
-          </div>
-        </AppShell.Section>
       </AppShell.Navbar>
-      <AppShell.Main>
+      <AppShell.Main inert={isMobile && opened}>
         {navigation.state !== "idle" && (
           <Progress
             value={100}
-            animated
             size="xs"
             className="route-progress"
             aria-label="Загружаем раздел"
           />
         )}
-        <main className="page-container">
+        <div className="page-container" id="main-content" tabIndex={-1}>
           <Outlet />
-        </main>
+        </div>
       </AppShell.Main>
     </AppShell>
   );

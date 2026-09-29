@@ -150,7 +150,7 @@ function SettingsForm({ settings, reload }: SettingsFormProps) {
       <Card
         withBorder
         p="sm"
-        style={{ position: "sticky", top: 12, zIndex: 20 }}
+        className="layout-admin-card-automation-settings-page-7"
       >
         <Group justify="space-between" align="center">
           <Group gap="sm">
@@ -502,7 +502,7 @@ export function AdminCardAutomationSettingsPage() {
     ) ?? query.data.items[0];
 
   return (
-    <Stack gap="xl">
+    <Stack gap="xl" className="brand-ai-scope">
       <PageHeader
         eyebrow="Администрирование · rollout"
         title="Настройки автоматизации"

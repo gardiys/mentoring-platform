@@ -1,3 +1,5 @@
+import { TableSkeleton } from "../components/TableSkeleton";
+import { EmptyState } from "../components/EmptyState";
 import {
   Badge,
   Button,
@@ -18,7 +20,6 @@ import { notifications } from "@mantine/notifications";
 import { type FormEvent, useState } from "react";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import {
   useAdminMentorCandidates,
@@ -151,9 +152,7 @@ function MentorCard({
           <Group gap="sm">
             <Title order={2}>{name}</Title>
             {isAdmin && (
-              <Badge color="brandYellow" c="brandNavy.9">
-                Администратор · ментор
-              </Badge>
+              <Badge color="brandYellow">Администратор · ментор</Badge>
             )}
           </Group>
           <Badge variant="light">{mentor.student_count} учеников</Badge>
@@ -235,7 +234,7 @@ function MentorCard({
                           [student.id]: value,
                         }))
                       }
-                      style={{ flex: 1 }}
+                      className="flex-fill"
                     />
                     <Button
                       size="sm"
@@ -492,7 +491,7 @@ export function AdminMentorsPage() {
                   ? `${fullName(candidate.first_name, candidate.last_name)} · @${candidate.telegram_username}`
                   : fullName(candidate.first_name, candidate.last_name),
               }))}
-              style={{ flex: 1 }}
+              className="flex-fill"
               disabled={candidates.isPending || candidates.isError}
             />
             <Button
@@ -507,7 +506,7 @@ export function AdminMentorsPage() {
       </Card>
 
       {mentors.isPending || options.isPending ? (
-        <LoadingState label="Загружаем менторов…" />
+        <TableSkeleton label="Загружаем менторов…" />
       ) : mentors.isError || options.isError ? (
         <ErrorState
           error={mentors.error ?? options.error}
@@ -517,7 +516,10 @@ export function AdminMentorsPage() {
           }}
         />
       ) : mentors.data.length === 0 ? (
-        <Text c="dimmed">Менторы пока не добавлены.</Text>
+        <EmptyState
+          title="Менторы пока не добавлены."
+          description="Добавьте запись с помощью действий на этой странице."
+        />
       ) : (
         <SimpleGrid cols={{ base: 1, md: 2 }}>
           {mentors.data.map((mentor) => (

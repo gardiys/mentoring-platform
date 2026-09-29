@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Anchor,
   Badge,
@@ -17,7 +18,7 @@ import {
 } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
@@ -174,10 +175,20 @@ export function InterviewQuestionsPage() {
     );
   };
 
-  if (topics.isPending || questions.isPending) {
+  const [deckHeader, setDeckHeader] = useState<{
+    slug: string;
+    title: string;
+    track_title: string;
+  } | null>(null);
+  useEffect(() => {
+    if (questions.data)
+      setDeckHeader({ ...questions.data.deck, slug: deckSlug });
+  }, [questions.data, deckSlug]);
+
+  if (topics.isPending) {
     return <LoadingState label="Загружаем таблицу вопросов…" />;
   }
-  if (topics.isError || questions.isError) {
+  if (topics.isError) {
     return (
       <ErrorState
         error={topics.error ?? questions.error}
@@ -189,7 +200,13 @@ export function InterviewQuestionsPage() {
     );
   }
 
-  const { deck, items, total } = questions.data;
+  const deck =
+    questions.data?.deck ??
+    (deckHeader?.slug === deckSlug
+      ? deckHeader
+      : { title: "Таблица вопросов", track_title: "Собеседования" });
+  const items = questions.data?.items ?? [];
+  const total = questions.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const toggleAnswer = (cardId: string) => {
@@ -294,12 +311,19 @@ export function InterviewQuestionsPage() {
         </Stack>
       </Card>
 
-      {items.length === 0 ? (
+      {questions.isPending ? (
+        <TableSkeleton />
+      ) : questions.isError ? (
+        <ErrorState
+          error={questions.error}
+          retry={() => void questions.refetch()}
+        />
+      ) : items.length === 0 ? (
         <Card withBorder>
           <Stack align="center" ta="center" py="xl">
             <Title order={2}>Вопросы не найдены</Title>
             <Text c="dimmed">
-              Попробуйте изменить тему, статус изучения, поиск или фильтр частых
+              Попробуй изменить тему, статус изучения, поиск или фильтр частых
               вопросов.
             </Text>
           </Stack>
@@ -422,11 +446,6 @@ export function InterviewQuestionsPage() {
                               item.frequency === "frequent"
                                 ? "brandYellow"
                                 : "gray"
-                            }
-                            c={
-                              item.frequency === "frequent"
-                                ? "brandNavy.9"
-                                : undefined
                             }
                           >
                             {item.frequency === "frequent"

@@ -28,7 +28,7 @@ export function RoleGuard({ roles }: Props) {
       <Alert color="brandYellow" title="Недостаточно прав">
         <Stack align="flex-start">
           <Text>
-            Если вам нужен доступ, обратитесь к администратору платформы.
+            Если тебе нужен доступ, обратись к администратору платформы.
           </Text>
           <Button component={Link} to="/roadmaps" variant="light">
             Вернуться к роадмапам

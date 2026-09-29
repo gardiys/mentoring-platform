@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Anchor,
   Badge,
@@ -317,7 +318,9 @@ export function MentorStudentsPage() {
           )}
         </SimpleGrid>
       </Card>
-      {view === "analytics" ? (
+      {query.isPlaceholderData && view === "students" ? (
+        <TableSkeleton />
+      ) : view === "analytics" ? (
         <MentorInterviewAnalytics
           period={analyticsPeriod}
           onPeriodChange={setAnalyticsPeriod}

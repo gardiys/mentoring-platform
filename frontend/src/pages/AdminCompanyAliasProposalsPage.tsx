@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import {
   Alert,
   Badge,
@@ -18,7 +19,7 @@ import { notifications } from "@mantine/notifications";
 import { useState } from "react";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
+import { TableSkeleton } from "../components/TableSkeleton";
 import { PageHeader } from "../components/PageHeader";
 import {
   useAdminCompanyAliasProposals,
@@ -89,15 +90,10 @@ export function AdminCompanyAliasProposalsPage() {
       },
     );
   };
-
-  if (query.isPending) return <LoadingState label="Загружаем предложения…" />;
-  if (query.isError) {
-    return (
-      <ErrorState error={query.error} retry={() => void query.refetch()} />
-    );
-  }
-
-  const pages = Math.max(1, Math.ceil(query.data.total / query.data.limit));
+  const pages = Math.max(
+    1,
+    Math.ceil((query.data?.total ?? 0) / (query.data?.limit ?? 20)),
+  );
   return (
     <Stack gap="xl">
       <PageHeader
@@ -130,9 +126,16 @@ export function AdminCompanyAliasProposalsPage() {
           }}
         />
       </Group>
-      {query.data.items.length === 0 ? (
+      {query.isPending ? (
+        <TableSkeleton />
+      ) : query.isError ? (
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
+      ) : query.data.items.length === 0 ? (
         <Card withBorder>
-          <Text c="dimmed">В этой очереди пока нет предложений.</Text>
+          <EmptyState
+            title="В этой очереди пока нет предложений."
+            description="Попробуй изменить поиск или фильтры."
+          />
         </Card>
       ) : (
         <Card withBorder p={0}>

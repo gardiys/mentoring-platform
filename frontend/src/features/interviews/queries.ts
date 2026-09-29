@@ -44,6 +44,8 @@ export function useInterviewDecks() {
 export function useInterviewSession(slug: string, frequentOnly = false) {
   return useQuery({
     queryKey: interviewKeys.session(slug, frequentOnly),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === slug ? previous : undefined,
     queryFn: () => api.interviewSession(slug, frequentOnly),
   });
 }

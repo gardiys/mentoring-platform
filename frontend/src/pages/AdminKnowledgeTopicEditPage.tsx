@@ -1,3 +1,5 @@
+import { TableSkeleton } from "../components/TableSkeleton";
+import { EmptyState } from "../components/EmptyState";
 import {
   Alert,
   Badge,
@@ -19,7 +21,6 @@ import { type FormEvent, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
@@ -233,7 +234,10 @@ function TopicEditor({ topic }: { topic: AdminKnowledgeTopicOutline }) {
             </Table>
           </Table.ScrollContainer>
           {topic.entries.length === 0 && (
-            <Text c="dimmed">Материалов пока нет.</Text>
+            <EmptyState
+              title="Материалов пока нет."
+              description="Добавьте запись с помощью действий на этой странице."
+            />
           )}
         </Stack>
       </Card>
@@ -244,7 +248,7 @@ function TopicEditor({ topic }: { topic: AdminKnowledgeTopicOutline }) {
 export function AdminKnowledgeTopicEditPage() {
   const { topicId = "" } = useParams();
   const query = useAdminKnowledgeTopic(topicId);
-  if (query.isPending) return <LoadingState label="Загружаем материалы…" />;
+  if (query.isPending) return <TableSkeleton label="Загружаем материалы…" />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />

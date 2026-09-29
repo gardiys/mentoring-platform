@@ -11,7 +11,7 @@ function errorCopy(error: unknown): { title: string; message: string } {
   if (!(error instanceof ApiError)) {
     return {
       title: "Не удалось загрузить данные",
-      message: "Проверьте соединение и попробуйте ещё раз.",
+      message: "Проверь соединение и попробуй ещё раз.",
     };
   }
   if (error.code === "network_error" || error.status === 0) {
@@ -20,7 +20,7 @@ function errorCopy(error: unknown): { title: string; message: string } {
   if (error.status === 403) {
     return {
       title: "Недостаточно прав",
-      message: "Этот раздел недоступен для вашей роли.",
+      message: "Этот раздел недоступен для твоей роли.",
     };
   }
   if (error.status === 404) {
@@ -33,7 +33,7 @@ function errorCopy(error: unknown): { title: string; message: string } {
     title: "Не удалось загрузить данные",
     message:
       error.status >= 500
-        ? "Сервис временно недоступен. Попробуйте ещё раз чуть позже."
+        ? "Сервис временно недоступен. Попробуй ещё раз чуть позже."
         : error.message,
   };
 }
@@ -41,11 +41,16 @@ function errorCopy(error: unknown): { title: string; message: string } {
 export function ErrorState({ error, retry }: Props) {
   const copy = errorCopy(error);
   return (
-    <Alert color="brandYellow" title={copy.title} className="brand-alert">
+    <Alert
+      color="red"
+      icon={<span aria-hidden="true">!</span>}
+      title={copy.title}
+      className="brand-alert"
+    >
       <Stack align="flex-start" gap="sm">
         {copy.message}
         {retry && (
-          <Button variant="light" color="brandNavy" onClick={retry}>
+          <Button variant="light" onClick={retry}>
             Повторить
           </Button>
         )}

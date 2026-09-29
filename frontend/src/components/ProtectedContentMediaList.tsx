@@ -91,7 +91,7 @@ function ProtectedContentMediaPlayer({
       if (result.isError || !result.data) {
         if (reportFailure) {
           setFailureMessage(
-            "Не удалось обновить доступ к записи. Проверьте соединение и повторите попытку.",
+            "Не удалось обновить доступ к записи. Проверь соединение и повтори попытку.",
           );
         }
         return false;
@@ -276,13 +276,7 @@ function ProtectedContentMediaPlayer({
                   handleLoadedMetadata(event.currentTarget)
                 }
                 onCanPlay={handleCanPlay}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  maxHeight: 640,
-                  borderRadius: 12,
-                  background: "#07182a",
-                }}
+                className="layout-protected-content-media-list-3"
               />
             ) : (
               <audio
@@ -303,7 +297,7 @@ function ProtectedContentMediaPlayer({
                   handleLoadedMetadata(event.currentTarget)
                 }
                 onCanPlay={handleCanPlay}
-                style={{ width: "100%" }}
+                className="full-width"
               />
             )}
           </div>

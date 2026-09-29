@@ -238,7 +238,6 @@ export function AdminTrackForm({ options, track }: Props) {
                           color={
                             roadmap.is_published ? "brandYellow" : "brandSand"
                           }
-                          c="brandNavy.9"
                         >
                           {roadmap.is_published ? "Опубликован" : "Черновик"}
                         </Badge>

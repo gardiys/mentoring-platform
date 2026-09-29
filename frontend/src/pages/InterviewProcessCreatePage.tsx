@@ -147,7 +147,7 @@ export function InterviewProcessCreatePage() {
         <PageHeader
           eyebrow="Собеседования · дневник"
           title="Новый трек"
-          description="Создайте отдельный процесс для компании, в которую проходите собеседования."
+          description="Создай отдельный процесс для компании, в которую проходишь собеседования."
         />
         <Card withBorder>
           <Stack>
@@ -156,7 +156,7 @@ export function InterviewProcessCreatePage() {
             )}
             <Select
               label="Направление"
-              placeholder="Выберите Python или Go"
+              placeholder="Выбери Python или Go"
               required
               searchable
               disabled={directions.isPending || directions.isError}
@@ -242,7 +242,7 @@ export function InterviewProcessCreatePage() {
             <TagsInput
               label="Telegram рекрутеров"
               placeholder="@recruiter_name"
-              description="Можно указать до 20 никнеймов. Нажимайте Enter после каждого."
+              description="Можно указать до 20 никнеймов. Нажимай Enter после каждого."
               value={recruiterUsernames}
               onChange={setRecruiterUsernames}
               maxTags={20}
@@ -254,7 +254,7 @@ export function InterviewProcessCreatePage() {
           <Button
             type="button"
             variant="subtle"
-            onClick={() => navigate("/interviews")}
+            onClick={() => navigate("/interviews/journal")}
           >
             Отмена
           </Button>

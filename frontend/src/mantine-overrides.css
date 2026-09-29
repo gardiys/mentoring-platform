@@ -1,0 +1,414 @@
+/* Shared component styling. Import after project styles. */
+
+.brand-nav-link[data-active] .mantine-NavLink-description {
+  color: var(--c-muted);
+}
+
+.interview-question-mode-navigation .mantine-Button-root {
+  flex: 1 1 220px;
+  min-height: 3rem;
+}
+
+.interview-rating-button .mantine-Button-label {
+  overflow: visible;
+  white-space: normal;
+}
+
+.interview-rating-button .mantine-Text-root {
+  line-height: 1.4;
+}
+
+.page-heading h1,
+.mantine-Title-root {
+  color: var(--brand-text);
+  letter-spacing: -0.025em;
+}
+
+.mantine-Card-root,
+.mantine-Paper-root[data-with-border] {
+  border-color: var(--brand-border);
+}
+
+.mantine-Card-root {
+  background: var(--c-surface);
+  box-shadow: none;
+}
+
+@media (max-width: 48em) {
+  .opportunity-request-actions .mantine-Button-root {
+    width: 100%;
+  }
+}
+
+.mantine-Input-input {
+  background: var(--c-field);
+  border-color: var(--c-line-strong);
+  border-radius: var(--r-field);
+}
+
+.mantine-Input-input:focus,
+.mantine-Input-input:focus-within {
+  border-color: var(--c-action);
+}
+
+.brand-hero .mantine-Text-root {
+  color: var(--c-white);
+}
+
+.brand-progress .mantine-Progress-root {
+  overflow: visible;
+  background: var(--c-disabled);
+}
+
+.brand-progress .mantine-Progress-section {
+  background: var(--c-service);
+  box-shadow: none;
+}
+
+.brand-accordion .mantine-Accordion-item {
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--brand-sand) 68%, var(--brand-warm));
+  border: 1px solid var(--brand-border);
+  border-radius: var(--r-card);
+}
+
+.brand-accordion .mantine-Accordion-control {
+  padding: 1.1rem 1.25rem;
+  font-family: var(--f-body);
+  font-weight: 600;
+}
+
+.analysis-accordion .mantine-Accordion-item {
+  position: relative;
+  max-width: 100%;
+  margin-bottom: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 96% 8%,
+      color-mix(in srgb, var(--brand-blue) 10%, transparent),
+      transparent 9rem
+    ),
+    color-mix(in srgb, var(--brand-sand) 65%, var(--brand-warm));
+  box-shadow: 0 12px 36px rgb(25 53 95 / 6%);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.analysis-accordion .mantine-Accordion-item::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  content: "";
+  background: var(--brand-blue);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.analysis-accordion .mantine-Accordion-item[data-active] {
+  border-color: color-mix(in srgb, var(--brand-blue) 55%, var(--brand-border));
+  box-shadow: 0 18px 44px rgb(25 53 95 / 10%);
+}
+
+.analysis-accordion .mantine-Accordion-item[data-active]::before {
+  opacity: 1;
+}
+
+.analysis-accordion .mantine-Accordion-control {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 5rem;
+  padding: 1rem 1.25rem;
+  color: var(--brand-text);
+}
+
+.analysis-accordion .mantine-Accordion-control:hover {
+  background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
+}
+
+.analysis-accordion .mantine-Accordion-label {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.analysis-accordion .mantine-Accordion-chevron {
+  display: grid;
+  flex: 0 0 auto;
+  width: 1.75rem;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  margin-left: 0.65rem;
+  place-items: center;
+  color: var(--brand-blue);
+  background: color-mix(in srgb, var(--brand-blue) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-blue) 25%, transparent);
+  border-radius: var(--r-circle);
+}
+
+.analysis-accordion .mantine-Accordion-panel {
+  border-top: 1px solid var(--brand-border);
+}
+
+.analysis-accordion .mantine-Accordion-content {
+  padding: 1.25rem;
+}
+
+.analysis-topic-accordion .mantine-Accordion-item {
+  margin-bottom: 0.55rem;
+  background: color-mix(in srgb, var(--brand-warm) 82%, transparent);
+  border-radius: var(--r-field);
+}
+
+.analysis-topic-accordion .mantine-Accordion-item:last-child {
+  margin-bottom: 0;
+}
+
+.analysis-topic-accordion .mantine-Accordion-control {
+  min-height: 0;
+  padding: 0.8rem 0.95rem;
+  color: var(--brand-text);
+  font-family: "Golos Text", sans-serif;
+}
+
+.analysis-topic-accordion .mantine-Accordion-control:hover {
+  background: color-mix(in srgb, var(--brand-blue) 6%, transparent);
+}
+
+.analysis-topic-accordion .mantine-Accordion-chevron {
+  flex: 0 0 auto;
+  margin-left: 0.65rem;
+  color: var(--brand-blue);
+}
+
+.analysis-topic-accordion .mantine-Accordion-content {
+  padding: 0.15rem 0.95rem 1rem;
+}
+
+@media (max-width: 36em) {
+  .analysis-accordion .mantine-Accordion-control {
+    min-height: 4.5rem;
+    padding: 0.85rem 0.9rem;
+  }
+
+  .analysis-accordion .mantine-Accordion-chevron {
+    width: 1.6rem;
+    min-width: 1.6rem;
+    height: 1.6rem;
+    margin-left: 0.45rem;
+  }
+
+  .analysis-accordion .mantine-Accordion-content {
+    padding: 1rem 0.9rem;
+  }
+
+  .analysis-topic-accordion .mantine-Accordion-control {
+    padding: 0.75rem 0.8rem;
+  }
+
+  .analysis-topic-accordion .mantine-Accordion-content {
+    padding: 0.1rem 0.8rem 0.85rem;
+  }
+
+  .analysis-media-card .mantine-Button-root {
+    width: 100%;
+    min-height: 2.75rem;
+  }
+}
+
+@media (max-width: 47.99em) {
+  .file-actions .mantine-Button-root,
+  .upload-control-row > .mantine-Button-root {
+    flex: 1 1 auto;
+    min-height: 2.75rem;
+  }
+
+  .interview-question-mode-navigation .mantine-Button-root {
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .brand-header-inner > .mantine-Group-root {
+    gap: 0.5rem;
+  }
+
+  .page-heading + .mantine-Button-root {
+    width: 100%;
+  }
+}
+.mantine-Button-root {
+  font-family: var(--f-body);
+  font-weight: 600;
+  border-radius: var(--r-pill);
+  --button-height-xs: 2rem;
+  --button-height-sm: 2.5rem;
+  --button-height-md: 3rem;
+  --button-height-lg: 3.5rem;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.mantine-Button-root:is(:disabled, [data-disabled]),
+.mantine-ActionIcon-root:is(:disabled, [data-disabled]) {
+  color: var(--c-on-disabled);
+  opacity: 1;
+  background: var(--c-disabled);
+}
+:is(.mantine-Button-root, .mantine-ActionIcon-root):is(
+    :disabled,
+    [data-disabled]
+  ):is(
+    [data-variant="subtle"],
+    [data-variant="transparent"],
+    [data-variant="outline"]
+  ) {
+  background: transparent;
+  border-color: transparent;
+}
+:is(.mantine-Button-root, .mantine-ActionIcon-root):is(
+    :disabled,
+    [data-disabled]
+  )[data-variant="outline"] {
+  border-color: var(--c-neutral-border);
+}
+
+.mantine-Badge-root {
+  max-width: 100%;
+  height: auto;
+  padding-block: 0.25rem;
+  font-family: var(--f-mono);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  font-size: var(--mantine-font-size-xs);
+  min-height: 1.5rem;
+}
+
+.mantine-NavLink-label {
+  font-weight: 600;
+  font-size: var(--mantine-font-size-sm);
+}
+.mantine-NavLink-description {
+  color: var(--c-muted);
+}
+.brand-nav-link .mantine-NavLink-section[data-position="left"] {
+  align-self: flex-start;
+  margin-inline-end: 0.625rem;
+}
+.brand-nav-link .mantine-NavLink-body {
+  min-width: 0;
+}
+.brand-nav-link .mantine-NavLink-label,
+.brand-nav-link .mantine-NavLink-description {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.brand-nav-link[data-active] .mantine-Table-table {
+  font-variant-numeric: tabular-nums;
+}
+.mantine-Modal-content {
+  background: var(--c-surface);
+  border-radius: var(--r-modal);
+}
+.mantine-Modal-header {
+  background: var(--c-surface);
+}
+.mantine-Modal-title {
+  font-family: var(--f-display);
+  font-size: var(--mantine-font-size-xl);
+  font-weight: 700;
+}
+.mantine-Input-input:focus-within {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-action) 25%, transparent);
+}
+.mantine-Input-input[data-error] {
+  border-color: var(--c-danger);
+}
+.mantine-InputWrapper-error {
+  color: var(--c-danger);
+}
+.mantine-Indicator-indicator {
+  color: var(--c-on-accent);
+}
+.mantine-Alert-message {
+  color: var(--c-text);
+}
+.mantine-Kbd-root {
+  background: var(--c-field);
+  border-color: var(--c-line-strong);
+}
+.mantine-Card-root.brand-ai-note {
+  background: var(--c-ai-tint);
+  border-color: var(--c-ai);
+}
+.mantine-Card-root.brand-mentor-note {
+  background: var(--c-selected);
+  border-left: 3px solid var(--c-service);
+}
+
+.mantine-Alert-root {
+  border: 1px solid color-mix(in srgb, var(--alert-color) 50%, transparent);
+}
+.mantine-Title-root[data-order="3"] {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.mantine-Button-root[data-variant="filled"]:active {
+  background: var(--button-active-bg);
+}
+.mantine-Button-root[data-variant="filled"]:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 3px;
+}
+
+@media (max-width: 36em) {
+  .brand-header-inner > .mantine-Group-root {
+    gap: 0.375rem;
+  }
+  .brand-header .brand-logo .mantine-Group-root {
+    gap: 0.375rem;
+  }
+}
+.mantine-Button-root[data-size="xs"] {
+  font-size: var(--mantine-font-size-sm);
+}
+
+.mantine-focus-auto:focus-visible,
+.mantine-focus-always:focus {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
+}
+.mantine-Button-root.interview-rating-button .mantine-Button-label {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mantine-Input-input:disabled {
+  color: var(--c-on-disabled);
+  background: var(--c-disabled);
+  opacity: 1;
+}
+.responsive-card-header > .mantine-Button-root {
+  flex-shrink: 0;
+}
+.mantine-Title-root {
+  overflow-wrap: anywhere;
+}
+
+.mantine-Button-root[data-size^="compact-"] {
+  font-size: var(--button-fz);
+}
+.interview-rating-grid .mantine-Text-root {
+  font-size: var(--mantine-font-size-sm);
+}
+.brand-header :is(.mantine-ActionIcon-root, .mantine-Burger-root) {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.mantine-Badge-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

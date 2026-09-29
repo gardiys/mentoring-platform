@@ -65,6 +65,7 @@ from app.mentors.service import (
     get_document,
     get_mock,
     list_students,
+    mark_interview_offer,
     mentor_interview_detail,
     set_document_file,
     set_document_text,
@@ -533,6 +534,19 @@ async def mentor_interview(
     mentor: MentorUser,
 ) -> MentorInterviewDetail:
     return await mentor_interview_detail(session, mentor, student_id, process_id)
+
+
+@router.post(
+    "/students/{student_id}/interviews/{process_id}/offer",
+    response_model=MentorInterviewDetail,
+)
+async def mentor_mark_interview_offer(
+    student_id: UUID,
+    process_id: UUID,
+    session: Session,
+    mentor: MentorUser,
+) -> MentorInterviewDetail:
+    return await mark_interview_offer(session, mentor, student_id, process_id)
 
 
 @router.post(

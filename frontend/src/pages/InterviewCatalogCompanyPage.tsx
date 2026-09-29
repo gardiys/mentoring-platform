@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import {
   Accordion,
   Alert,
@@ -65,7 +66,6 @@ function statusBadgeProps(status: InterviewProcessStatus) {
     return {
       color: "brandYellow",
       label: "Получен оффер",
-      c: "brandNavy.9" as const,
     };
   return { color: "gray", label: "Закрыт" };
 }
@@ -261,7 +261,7 @@ function CatalogStage({
               <Badge variant="outline" size="sm">
                 {track.track_title}
               </Badge>
-              <Badge size="sm" color={status.color} c={status.c}>
+              <Badge size="sm" color={status.color}>
                 {status.label}
               </Badge>
             </Group>
@@ -379,7 +379,7 @@ function CatalogStage({
         )}
 
         {stage.description ? (
-          <Text style={{ whiteSpace: "pre-wrap" }}>{stage.description}</Text>
+          <Text className="preserve-lines">{stage.description}</Text>
         ) : (
           <Text c="dimmed" size="sm">
             Автор не добавил описание этого этапа.
@@ -408,14 +408,7 @@ function CatalogStage({
               </Group>
             </Group>
             {playerUrl && storedMediaKind === "video" && (
-              <div
-                style={{
-                  position: "relative",
-                  overflow: "hidden",
-                  borderRadius: 12,
-                  background: "#07182a",
-                }}
-              >
+              <div className="layout-interview-catalog-company-page-10">
                 <video
                   key={playerReloadKey}
                   controls
@@ -433,27 +426,13 @@ function CatalogStage({
                   onCanPlay={() => {
                     automaticRecoveryAttemptedRef.current = false;
                   }}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    maxHeight: 560,
-                  }}
+                  className="layout-interview-catalog-company-page-11"
                 />
                 <Text
                   aria-hidden="true"
                   size="xs"
                   c="white"
-                  style={{
-                    position: "absolute",
-                    top: 12,
-                    right: 12,
-                    padding: "5px 8px",
-                    borderRadius: 6,
-                    background: "rgba(7, 24, 42, 0.58)",
-                    opacity: 0.72,
-                    pointerEvents: "none",
-                    userSelect: "none",
-                  }}
+                  className="layout-interview-catalog-company-page-12"
                 >
                   Персональный просмотр · Копирование запрещено
                 </Text>
@@ -474,7 +453,7 @@ function CatalogStage({
                 onCanPlay={() => {
                   automaticRecoveryAttemptedRef.current = false;
                 }}
-                style={{ width: "100%" }}
+                className="full-width"
               />
             )}
             <Text size="xs" c="dimmed">
@@ -547,7 +526,7 @@ function CatalogStage({
           <Text fw={600}>Обсуждение</Text>
           {stage.comments.length === 0 ? (
             <Text c="dimmed" size="sm">
-              Комментариев пока нет. Поделитесь замечанием или полезным советом.
+              Комментариев пока нет. Поделись замечанием или полезным советом.
             </Text>
           ) : (
             stage.comments.map((item) => (
@@ -601,7 +580,8 @@ function CatalogStage({
                         deleteMutation.variables === item.id
                       }
                       onClick={() => {
-                        if (!window.confirm("Удалить ваш комментарий?")) return;
+                        if (!window.confirm("Удалить твой комментарий?"))
+                          return;
                         deleteMutation.mutate(item.id, {
                           onError: (error) =>
                             notifications.show({
@@ -615,14 +595,14 @@ function CatalogStage({
                     </Button>
                   )}
                 </Group>
-                <Text mt="xs" style={{ whiteSpace: "pre-wrap" }}>
+                <Text mt="xs" className="preserve-lines">
                   {item.body}
                 </Text>
               </Card>
             ))
           )}
           <Textarea
-            label="Ваш комментарий"
+            label="Твой комментарий"
             placeholder="Оставьте фидбек, замечание или совет по подготовке"
             minRows={3}
             maxLength={5000}
@@ -718,11 +698,17 @@ export function InterviewCatalogCompanyPage() {
 
       {company.tracks.length === 0 ? (
         <Card withBorder>
-          <Text c="dimmed">Для этой компании пока нет доступных треков.</Text>
+          <EmptyState
+            title="Для этой компании пока нет доступных треков."
+            description="Здесь появятся доступные записи. Проверь выбранный раздел или вернись позже."
+          />
         </Card>
       ) : sections.length === 0 ? (
         <Card withBorder>
-          <Text c="dimmed">В треках этой компании пока нет этапов.</Text>
+          <EmptyState
+            title="В треках этой компании пока нет этапов."
+            description="Здесь появятся доступные записи. Проверь выбранный раздел или вернись позже."
+          />
         </Card>
       ) : (
         <Accordion

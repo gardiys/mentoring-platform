@@ -1,3 +1,4 @@
+import { EmptyState } from "./EmptyState";
 import {
   Alert,
   Badge,
@@ -276,12 +277,15 @@ export function AdminMentorPayoutsPanel() {
       </SimpleGrid>
       {query.data.balances.length === 0 && (
         <Card withBorder>
-          <Text c="dimmed">Начислений менторам пока нет.</Text>
+          <EmptyState
+            title="Начислений менторам пока нет."
+            description="Добавьте запись с помощью действий на этой странице."
+          />
         </Card>
       )}
 
       <Card withBorder p={0}>
-        <div style={{ padding: "var(--mantine-spacing-lg)" }}>
+        <div className="panel-padding">
           <Title order={3}>История выплат</Title>
           <Text size="sm" c="dimmed">
             Чеки самозанятых появятся здесь после загрузки ментором.

@@ -1,3 +1,5 @@
+import { TableSkeleton } from "../components/TableSkeleton";
+import { EmptyState } from "../components/EmptyState";
 import {
   Accordion,
   Alert,
@@ -22,7 +24,6 @@ import { Link, useLocation, useParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { CardAutomationNavigation } from "../features/cardAutomation/CardAutomationNavigation";
 import {
@@ -707,7 +708,7 @@ function ClusterDetail({
   };
 
   return (
-    <Stack gap="xl">
+    <Stack gap="xl" className="brand-ai-scope">
       <Group justify="space-between" align="flex-start">
         <PageHeader
           eyebrow={`${cluster.direction_title} · проверка карточки`}
@@ -848,10 +849,7 @@ function ClusterDetail({
       )}
 
       <Tabs defaultValue="answer" keepMounted={false}>
-        <Tabs.List
-          className="responsive-tabs"
-          style={{ width: "100%", minWidth: 0, overflowX: "auto" }}
-        >
+        <Tabs.List className="responsive-tabs layout-card-automation-navigation-4">
           <Tabs.Tab value="answer">Проверка карточки</Tabs.Tab>
           <Tabs.Tab value="occurrences">
             Исходные вопросы ({cluster.occurrences.length})
@@ -899,7 +897,10 @@ function ClusterDetail({
                 <Stack>
                   <Title order={3}>Варианты формулировок</Title>
                   {cluster.question_variants.length === 0 ? (
-                    <Text c="dimmed">Вариантов пока нет.</Text>
+                    <EmptyState
+                      title="Вариантов пока нет."
+                      description="Добавьте запись с помощью действий на этой странице."
+                    />
                   ) : (
                     cluster.question_variants.map((variant) => (
                       <div key={variant.normalized_question_text}>
@@ -1184,7 +1185,7 @@ function ClusterDetail({
                     </Badge>
                   </Group>
                   {occurrence.source_context && (
-                    <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
+                    <Text size="sm" className="preserve-lines">
                       {occurrence.source_context}
                     </Text>
                   )}
@@ -1430,10 +1431,10 @@ function ClusterDetail({
 
             <SimpleGrid
               cols={{ base: 1, lg: canEditProposal ? 2 : 1 }}
-              style={{ alignItems: "start" }}
+              className="align-start"
             >
               {canEditProposal && (
-                <Card withBorder style={{ minWidth: 0 }}>
+                <Card withBorder className="min-width-zero">
                   <Stack>
                     <div>
                       <Title order={3}>Предложение AI</Title>
@@ -1728,9 +1729,7 @@ export function CardAutomationClusterDetailPage({
       gap="lg"
       ref={pageTop}
       tabIndex={-1}
-      style={{
-        scrollMarginTop: "calc(var(--app-shell-header-offset, 0px) + 8px)",
-      }}
+      className="layout-admin-card-automation-cluster-detail-page-6"
     >
       <ReviewQueueProgress queue={queue} />
       {showCompletion ? (
@@ -1751,7 +1750,7 @@ export function CardAutomationClusterDetailPage({
           </Stack>
         </Card>
       ) : query.isPending ? (
-        <LoadingState label="Загружаем карточку…" />
+        <TableSkeleton label="Загружаем карточку…" />
       ) : query.isError ? (
         <ErrorState error={query.error} retry={() => void query.refetch()} />
       ) : (

@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import {
   Badge,
   Button,
@@ -11,18 +12,12 @@ import {
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
+import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import { PageHeader } from "../components/PageHeader";
 import { useAdminKnowledgeTopics } from "../features/admin/knowledgeQueries";
 
 export function AdminKnowledgeTopicsPage() {
   const query = useAdminKnowledgeTopics();
-  if (query.isPending) return <LoadingState label="Загружаем базу знаний…" />;
-  if (query.isError)
-    return (
-      <ErrorState error={query.error} retry={() => void query.refetch()} />
-    );
-
   return (
     <Stack gap="xl">
       <Group justify="space-between" align="flex-end">
@@ -35,8 +30,15 @@ export function AdminKnowledgeTopicsPage() {
           + Создать тему
         </Button>
       </Group>
-      {query.data.length === 0 ? (
-        <Text c="dimmed">Тем пока нет.</Text>
+      {query.isPending ? (
+        <CardGridSkeleton />
+      ) : query.isError ? (
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
+      ) : query.data.length === 0 ? (
+        <EmptyState
+          title="Тем пока нет."
+          description="Добавьте запись с помощью действий на этой странице."
+        />
       ) : (
         <SimpleGrid cols={{ base: 1, md: 2 }}>
           {query.data.map((topic) => {
@@ -50,7 +52,6 @@ export function AdminKnowledgeTopicsPage() {
                   <Group justify="space-between">
                     <Badge
                       color={topic.is_published ? "brandYellow" : "brandSand"}
-                      c="brandNavy.9"
                     >
                       {topic.is_published ? "Опубликована" : "Черновик"}
                     </Badge>

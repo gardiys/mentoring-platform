@@ -231,6 +231,28 @@ export function useMentorInterview(studentId: string, processId: string) {
   });
 }
 
+export function useMarkMentorInterviewOffer(
+  studentId: string,
+  processId: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.markMentorInterviewOffer(studentId, processId),
+    onSuccess: async (detail) => {
+      queryClient.setQueryData(
+        mentorKeys.interview(studentId, processId),
+        detail,
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: mentorKeys.all }),
+        queryClient.invalidateQueries({ queryKey: ["interviews"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "interviews"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "students"] }),
+      ]);
+    },
+  });
+}
+
 export function useCreateMentorInterviewFeedback(
   studentId: string,
   processId: string,

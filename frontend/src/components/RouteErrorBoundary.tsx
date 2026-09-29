@@ -14,9 +14,14 @@ export function RouteErrorBoundary() {
 
   return (
     <Center mih="100vh" p="md">
-      <Alert color="brandYellow" maw={560} className="brand-alert">
+      <Alert
+        color="red"
+        icon={<span aria-hidden="true">!</span>}
+        maw={560}
+        className="brand-alert"
+      >
         <Stack align="flex-start">
-          <Title order={2}>Раздел не загрузился</Title>
+          <Title order={1}>Раздел не загрузился</Title>
           <Text>{message}</Text>
           <Button onClick={() => window.location.reload()}>
             Перезагрузить страницу

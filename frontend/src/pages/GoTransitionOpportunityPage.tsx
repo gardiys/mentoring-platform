@@ -33,7 +33,7 @@ import { openExternalResource } from "../utils/openExternalResource";
 
 const statusLabels: Record<GoTransitionStatus, string> = {
   submitted: "На рассмотрении",
-  approved: "Одобрена — примите условия",
+  approved: "Одобрена — прими условия",
   payment_pending: "Ожидает оплаты",
   paid: "Оплачена, Go доступен",
   rejected: "Отклонена",
@@ -130,19 +130,19 @@ export function GoTransitionOpportunityPage() {
       <OpportunityFlow
         steps={[
           {
-            title: "Изучите программу",
+            title: "Изучи программу",
             description: "Содержание, стоимость и условия после оффера",
           },
           {
-            title: "Подайте заявку",
+            title: "Подай заявку",
             description: "Команда оценит цель и текущую ситуацию",
           },
           {
-            title: "Примите условия",
+            title: "Прими условия",
             description: "Зафиксированные условия будут показаны отдельно",
           },
           {
-            title: "Оплатите и начните",
+            title: "Оплати и начни",
             description: "После оплаты откроется Go-направление",
           },
         ]}
@@ -174,8 +174,8 @@ export function GoTransitionOpportunityPage() {
         </Card>
       ) : (
         <Alert color="gray" title="Программа временно недоступна">
-          Команда ещё не опубликовала условия перехода. Вернитесь к этому
-          разделу позже.
+          Команда ещё не опубликовала условия перехода. Вернись к этому разделу
+          позже.
         </Alert>
       )}
 
@@ -189,8 +189,8 @@ export function GoTransitionOpportunityPage() {
               условий.
             </Text>
             <Textarea
-              label="Зачем вам Go-направление"
-              description="Расскажите о цели перехода и ожидаемом результате"
+              label="Зачем тебе Go-направление"
+              description="Расскажи о цели перехода и ожидаемом результате"
               minRows={5}
               minLength={10}
               maxLength={5000}
@@ -199,7 +199,7 @@ export function GoTransitionOpportunityPage() {
               onChange={(event) => setMotivation(event.currentTarget.value)}
               error={
                 motivation.length > 0 && motivationLength < 10
-                  ? "Расскажите чуть подробнее — минимум 10 символов"
+                  ? "Расскажи чуть подробнее — минимум 10 символов"
                   : undefined
               }
             />
@@ -224,7 +224,7 @@ export function GoTransitionOpportunityPage() {
       )}
 
       {query.data.go_transition_applications.length > 0 && (
-        <Stack id="go-applications" style={{ scrollMarginTop: 24 }}>
+        <Stack id="go-applications" className="anchor-target">
           <Title order={2}>Мои заявки</Title>
           {query.data.go_transition_applications.map((item) => {
             const snapshotPrice = Number(
@@ -249,13 +249,7 @@ export function GoTransitionOpportunityPage() {
                 <Group justify="space-between" align="flex-start" wrap="wrap">
                   <div className="opportunity-request-main">
                     <Title order={3}>Переход Python → Go</Title>
-                    <Text
-                      c="dimmed"
-                      style={{
-                        whiteSpace: "pre-wrap",
-                        overflowWrap: "anywhere",
-                      }}
-                    >
+                    <Text c="dimmed" className="wrap-copy">
                       {item.motivation}
                     </Text>
                     <Text size="sm" c="dimmed" mt="xs">
@@ -269,14 +263,7 @@ export function GoTransitionOpportunityPage() {
                         mt="sm"
                         title="Комментарий команды"
                       >
-                        <Text
-                          style={{
-                            whiteSpace: "pre-wrap",
-                            overflowWrap: "anywhere",
-                          }}
-                        >
-                          {item.admin_note}
-                        </Text>
+                        <Text className="wrap-copy">{item.admin_note}</Text>
                       </Alert>
                     )}
                   </div>
@@ -301,7 +288,7 @@ export function GoTransitionOpportunityPage() {
                             {item.terms_expires_at && (
                               <Text size="xs">
                                 {termsExpired
-                                  ? "Срок принятия условий истёк. Свяжитесь с командой."
+                                  ? "Срок принятия условий истёк. Свяжись с командой."
                                   : `Принять до ${new Date(item.terms_expires_at).toLocaleString("ru-RU")}`}
                               </Text>
                             )}
@@ -336,7 +323,7 @@ export function GoTransitionOpportunityPage() {
                           <Alert color="orange" title="Нужен email для чека">
                             <Stack gap="xs">
                               <Text size="sm">
-                                Сохраните email, после этого станет доступна
+                                Сохрани email, после этого станет доступна
                                 оплата.
                               </Text>
                               <Button

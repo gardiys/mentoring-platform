@@ -1398,6 +1398,11 @@ export const api = {
     apiRequest<MentorInterviewDetail>(
       `/api/v1/mentor/students/${studentId}/interviews/${processId}`,
     ),
+  markMentorInterviewOffer: (studentId: string, processId: string) =>
+    apiRequest<MentorInterviewDetail>(
+      `/api/v1/mentor/students/${studentId}/interviews/${processId}/offer`,
+      { method: "POST" },
+    ),
   createMentorInterviewFeedback: (
     studentId: string,
     stageId: string,

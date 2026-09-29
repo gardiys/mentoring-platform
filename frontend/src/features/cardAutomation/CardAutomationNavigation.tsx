@@ -21,11 +21,8 @@ export function CardAutomationNavigation({
   const location = useLocation();
   const base = `/${scope}/card-automation`;
   return (
-    <Tabs value={currentTab(location.pathname)} style={{ minWidth: 0 }}>
-      <Tabs.List
-        className="responsive-tabs"
-        style={{ width: "100%", minWidth: 0, overflowX: "auto" }}
-      >
+    <Tabs value={currentTab(location.pathname)} className="min-width-zero">
+      <Tabs.List className="responsive-tabs layout-card-automation-navigation-4">
         <Tabs.Tab
           value="clusters"
           renderRoot={(props) => <Link {...props} to={`${base}/clusters`} />}

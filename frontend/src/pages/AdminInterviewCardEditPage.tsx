@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Alert,
   Badge,
@@ -18,7 +19,6 @@ import { type FormEvent, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
@@ -281,7 +281,7 @@ export function AdminInterviewCardEditPage() {
   const { deckId = "", cardId } = useParams();
   const query = useAdminInterviewCard(deckId, cardId);
   if (cardId && query.isPending)
-    return <LoadingState label="Загружаем карточку…" />;
+    return <TableSkeleton label="Загружаем карточку…" />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />

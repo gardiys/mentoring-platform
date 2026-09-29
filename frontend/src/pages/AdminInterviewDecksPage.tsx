@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import {
   Badge,
   Button,
@@ -11,18 +12,12 @@ import {
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
+import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import { PageHeader } from "../components/PageHeader";
 import { useAdminInterviewDecks } from "../features/admin/interviewQueries";
 
 export function AdminInterviewDecksPage() {
   const query = useAdminInterviewDecks();
-  if (query.isPending) return <LoadingState label="Загружаем колоды…" />;
-  if (query.isError)
-    return (
-      <ErrorState error={query.error} retry={() => void query.refetch()} />
-    );
-
   return (
     <Stack gap="xl">
       <Group justify="space-between" align="flex-end">
@@ -36,8 +31,15 @@ export function AdminInterviewDecksPage() {
         </Button>
       </Group>
 
-      {query.data.length === 0 ? (
-        <Text c="dimmed">Колод пока нет.</Text>
+      {query.isPending ? (
+        <CardGridSkeleton />
+      ) : query.isError ? (
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
+      ) : query.data.length === 0 ? (
+        <EmptyState
+          title="Колод пока нет."
+          description="Добавьте запись с помощью действий на этой странице."
+        />
       ) : (
         <SimpleGrid cols={{ base: 1, md: 2 }}>
           {query.data.map((deck) => {
@@ -49,7 +51,6 @@ export function AdminInterviewDecksPage() {
                       <Badge color="brandBlue">{deck.track_title}</Badge>
                       <Badge
                         color={deck.is_published ? "brandYellow" : "brandSand"}
-                        c="brandNavy.9"
                       >
                         {deck.is_published ? "Опубликована" : "Черновик"}
                       </Badge>

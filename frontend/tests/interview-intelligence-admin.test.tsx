@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -191,4 +191,69 @@ it("не показывает ментору административный з
     screen.queryByRole("button", { name: "Запустить AI-разбор" }),
   ).not.toBeInTheDocument();
   expect(operationsRequest).not.toHaveBeenCalled();
+});
+
+it("сохраняет заголовок и фильтры при первом открытии очереди, не показывает чужие статусы и логотип", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(admin);
+  vi.spyOn(api, "adminIntelligenceOperations").mockResolvedValue(operations);
+  const response = {
+    items: [requestedInterview],
+    total: 1,
+    limit: 10,
+    offset: 0,
+  };
+  let complete!: (value: typeof response) => void;
+  vi.spyOn(api, "mentorIntelligenceInterviews").mockImplementation((status) =>
+    status === "requested"
+      ? Promise.resolve(response)
+      : new Promise((resolve) => {
+          complete = resolve;
+        }),
+  );
+  const { container } = renderPage(<MentorInterviewIntelligencePage />);
+  await screen.findByText("Яндекс");
+  const heading = screen.getByRole("heading", { name: "Разборы учеников" });
+  const filter = screen.getByRole("radio", { name: "Проверено", hidden: true });
+  await userEvent.click(filter);
+  expect(
+    await screen.findByRole("status", { name: "Загружаем очередь…" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Разборы учеников" })).toBe(
+    heading,
+  );
+  expect(screen.getByRole("radio", { name: "Проверено", hidden: true })).toBe(
+    filter,
+  );
+  expect(screen.queryByText("Яндекс")).not.toBeInTheDocument();
+  expect(container.querySelector(".brand-mark")).toBeNull();
+  await act(async () => complete({ ...response, items: [], total: 0 }));
+  expect(
+    await screen.findByText("В этой очереди пока нет интервью."),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Разборы учеников" })).toBe(
+    heading,
+  );
+});
+
+it("оставляет переключение очередей доступным после ошибки запроса", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(mentor);
+  vi.spyOn(api, "mentorIntelligenceInterviews").mockImplementation((status) =>
+    status === "reviewed"
+      ? Promise.reject(new Error("offline"))
+      : Promise.resolve({ items: [], total: 0, limit: 10, offset: 0 }),
+  );
+  renderPage(<MentorInterviewIntelligencePage />);
+  await screen.findByText("В этой очереди пока нет интервью.");
+  await userEvent.click(
+    screen.getByRole("radio", { name: "Проверено", hidden: true }),
+  );
+  expect(
+    await screen.findByText("Не удалось загрузить данные"),
+  ).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("radio", { name: "Нужна проверка", hidden: true }),
+  );
+  expect(
+    await screen.findByText("В этой очереди пока нет интервью."),
+  ).toBeInTheDocument();
 });

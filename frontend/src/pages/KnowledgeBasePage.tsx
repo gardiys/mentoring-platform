@@ -1,3 +1,5 @@
+import { CardGridSkeleton } from "../components/CardGridSkeleton";
+import { EmptyState } from "../components/EmptyState";
 import {
   Badge,
   Button,
@@ -65,7 +67,7 @@ export function KnowledgeBasePage() {
               placeholder="Например: GIN-индекс или event loop"
               value={input}
               onChange={(event) => setInput(event.currentTarget.value)}
-              style={{ flex: 1 }}
+              className="flex-fill"
             />
             <Button type="submit" disabled={input.trim().length < 2}>
               Найти
@@ -92,7 +94,7 @@ export function KnowledgeBasePage() {
             <Title order={2}>Результаты поиска</Title>
             <Text className="technical-label">Запрос / {queryText}</Text>
           </Group>
-          {search.isPending && <LoadingState label="Ищем по материалам…" />}
+          {search.isPending && <CardGridSkeleton label="Ищем по материалам…" />}
           {search.isError && (
             <ErrorState
               error={search.error}
@@ -100,7 +102,10 @@ export function KnowledgeBasePage() {
             />
           )}
           {search.data?.length === 0 && (
-            <Text c="dimmed">По этому запросу ничего не найдено.</Text>
+            <EmptyState
+              title="По этому запросу ничего не найдено."
+              description="Попробуй изменить поиск или фильтры."
+            />
           )}
           {search.data?.map((result) => (
             <Card
@@ -108,8 +113,7 @@ export function KnowledgeBasePage() {
               withBorder
               component={Link}
               to={`/knowledge/entries/${result.slug}`}
-              className="knowledge-result-card"
-              style={{ textDecoration: "none", color: "inherit" }}
+              className="knowledge-result-card link-card"
             >
               <Stack gap="xs">
                 <Group justify="space-between">
@@ -135,7 +139,10 @@ export function KnowledgeBasePage() {
         <Stack>
           <Title order={2}>Темы</Title>
           {topics.data.length === 0 ? (
-            <Text c="dimmed">Опубликованных тем пока нет.</Text>
+            <EmptyState
+              title="Опубликованных тем пока нет."
+              description="Здесь появятся доступные записи. Проверь выбранный раздел или вернись позже."
+            />
           ) : (
             <SimpleGrid cols={{ base: 1, md: 2 }}>
               {topics.data.map((topic) => (
@@ -144,8 +151,7 @@ export function KnowledgeBasePage() {
                   withBorder
                   component={Link}
                   to={`/knowledge/topics/${topic.slug}`}
-                  className="roadmap-card knowledge-topic-card"
-                  style={{ textDecoration: "none", color: "inherit" }}
+                  className="roadmap-card knowledge-topic-card link-card"
                 >
                   <Stack h="100%">
                     <Text className="roadmap-slug">TOPIC / {topic.slug}</Text>
@@ -157,7 +163,7 @@ export function KnowledgeBasePage() {
                       <Badge variant="light">
                         {topic.article_count} статей
                       </Badge>
-                      <Badge color="brandYellow" c="brandNavy.9">
+                      <Badge color="brandYellow">
                         {topic.question_count} вопросов
                       </Badge>
                     </Group>

@@ -1,3 +1,4 @@
+import { EmptyState } from "../components/EmptyState";
 import {
   Badge,
   Card,
@@ -40,7 +41,7 @@ export function RoadmapsPage() {
         </div>
         <img
           src={roadmapMascotUrl}
-          alt="Геральт"
+          alt=""
           className="brand-hero-mascot"
           width={540}
           height={540}
@@ -49,12 +50,15 @@ export function RoadmapsPage() {
         />
       </Card>
       <PageHeader
-        eyebrow="Ваш прогресс"
+        order={2}
         title="Мои роадмапы"
-        description="Продолжайте с того места, где остановились. Геральт всё запомнил."
+        description="Продолжай с того места, где остановился."
       />
       {query.data.length === 0 ? (
-        <Text c="dimmed">Доступных роадмапов пока нет.</Text>
+        <EmptyState
+          title="Доступных роадмапов пока нет."
+          description="Здесь появятся доступные записи. Проверь выбранный раздел или вернись позже."
+        />
       ) : (
         <SimpleGrid cols={{ base: 1, md: 2 }}>
           {query.data.map((roadmap) => {
@@ -70,21 +74,14 @@ export function RoadmapsPage() {
                 withBorder
                 component={Link}
                 to={`/roadmaps/${roadmap.slug}`}
-                style={{ textDecoration: "none", color: "inherit" }}
-                className="roadmap-card"
+
+                className="roadmap-card link-card"
               >
                 <Stack h="100%">
                   <Group justify="space-between" align="flex-start">
                     <Badge
                       color={
-                        roadmap.progress_percent === 100
-                          ? "brandYellow"
-                          : "brandBlue"
-                      }
-                      c={
-                        roadmap.progress_percent === 100
-                          ? "brandNavy.9"
-                          : undefined
+                        roadmap.progress_percent === 100 ? "green" : "brandBlue"
                       }
                     >
                       {label}
@@ -103,7 +100,7 @@ export function RoadmapsPage() {
                         : ""}
                     </Text>
                   )}
-                  <div style={{ marginTop: "auto" }}>
+                  <div className="push-down">
                     <ProgressBar
                       completed={roadmap.completed_topics}
                       total={roadmap.total_topics}

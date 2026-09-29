@@ -93,6 +93,13 @@ const studentRoutes = [
     lazy: lazyPage(() => import("../pages/InterviewsPage"), "InterviewsPage"),
   },
   {
+    path: "/interviews/journal",
+    lazy: lazyPage(
+      () => import("../pages/InterviewsPage"),
+      "InterviewJournalPage",
+    ),
+  },
+  {
     path: "/interviews/catalog",
     lazy: lazyPage(
       () => import("../pages/InterviewCatalogPage"),
@@ -590,6 +597,27 @@ export const router = createBrowserRouter([
               {
                 element: <RoleGuard roles={["student"]} />,
                 children: [
+                  {
+                    path: "/interviews/analysis",
+                    lazy: lazyPage(
+                      () => import("../pages/InterviewsPage"),
+                      "InterviewAnalysesPage",
+                    ),
+                  },
+                  {
+                    path: "/interviews/mocks",
+                    lazy: lazyPage(
+                      () => import("../pages/InterviewsPage"),
+                      "InterviewMocksPage",
+                    ),
+                  },
+                  {
+                    path: "/interviews/materials",
+                    lazy: lazyPage(
+                      () => import("../pages/InterviewsPage"),
+                      "InterviewMaterialsPage",
+                    ),
+                  },
                   {
                     path: "/interviews/personal-review",
                     lazy: lazyPage(

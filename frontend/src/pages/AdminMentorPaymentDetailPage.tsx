@@ -181,7 +181,7 @@ export function AdminMentorPaymentDetailPage() {
       </Card>
 
       <Card withBorder p={0}>
-        <div style={{ padding: "var(--mantine-spacing-lg)" }}>
+        <div className="panel-padding">
           <Title order={3}>Из чего сложилась сумма</Title>
           <Text size="sm" c="dimmed">
             Зарплатное вознаграждение появляется только после платежа ученика.
@@ -349,7 +349,7 @@ export function AdminMentorPaymentDetailPage() {
       </Modal>
 
       <Card withBorder p={0}>
-        <div style={{ padding: "var(--mantine-spacing-lg)" }}>
+        <div className="panel-padding">
           <Title order={3}>История выплат ментору</Title>
         </div>
         <ScrollArea type="auto">

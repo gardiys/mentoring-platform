@@ -1,3 +1,5 @@
+import { TableSkeleton } from "../components/TableSkeleton";
+import { EmptyState } from "../components/EmptyState";
 import {
   Button,
   Group,
@@ -13,7 +15,6 @@ import { notifications } from "@mantine/notifications";
 import { type FormEvent, useState } from "react";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import {
   useAdminUsefulLinks,
@@ -139,13 +140,14 @@ export function AdminUsefulLinksPage() {
       </Group>
 
       {query.isPending ? (
-        <LoadingState label="Загружаем полезные ссылки…" />
+        <TableSkeleton label="Загружаем полезные ссылки…" />
       ) : query.isError ? (
         <ErrorState error={query.error} retry={() => void query.refetch()} />
       ) : query.data.length === 0 ? (
-        <Text c="dimmed">
-          Полезных ссылок пока нет. Добавьте первую — она появится у учеников.
-        </Text>
+        <EmptyState
+          title="Полезных ссылок пока нет. Добавьте первую — она появится у учеников."
+          description="Добавьте запись с помощью действий на этой странице."
+        />
       ) : (
         <Table.ScrollContainer minWidth={760}>
           <Table verticalSpacing="sm">

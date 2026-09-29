@@ -695,8 +695,11 @@ async def set_process_outcome(
     user: User,
     process_id: UUID,
     payload: InterviewProcessOutcomeMutation,
+    *,
+    actor: User | None = None,
 ) -> InterviewProcessDetail:
     process = await get_process_model(session, user, process_id, lock=True)
+    actor = actor or user
     if (
         process.status is InterviewProcessStatus.OFFER
         and payload.status is InterviewProcessStatus.ACTIVE
@@ -719,11 +722,11 @@ async def set_process_outcome(
             await notify_student(
                 session,
                 student_id=process.user_id,
-                actor=user,
+                actor=actor,
                 event_key=(f"interview-offer:{process.id}:{process.offer_received_at.isoformat()}"),
                 kind=NotificationKind.OFFER,
                 title="Трек отмечен как оффер",
-                body=f"{user.first_name} отметил оффер от {process.company_name}.",
+                body=f"{actor.first_name} отметил оффер от {process.company_name}.",
                 action_url=f"/interviews/journal/{process.id}",
             )
     await session.commit()

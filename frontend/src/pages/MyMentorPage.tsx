@@ -48,8 +48,8 @@ export function MyMentorPage() {
           <Stack gap="md">
             <Group justify="space-between" align="flex-start">
               <div>
-                <Badge color="brandYellow" c="brandNavy.9" mb="sm">
-                  Ваш ментор
+                <Badge color="brandYellow" mb="sm">
+                  Твой ментор
                 </Badge>
                 <Title order={2}>
                   {mentorName(mentor.first_name, mentor.last_name)}
@@ -106,14 +106,14 @@ export function MyMentorPage() {
             {!mentor.consultation_url && (
               <Text size="sm" c="dimmed">
                 Ментор пока не добавил ссылку для записи. Для личной встречи
-                напишите ему в Telegram.
+                напиши ему в Telegram.
               </Text>
             )}
           </Stack>
         </Card>
       ) : (
         <Alert color="blue" title="Ментор ещё не назначен">
-          Когда администратор назначит вам ментора, здесь появятся его контакты
+          Когда администратор назначит тебе ментора, здесь появятся его контакты
           и личное расписание. Общие встречи направлений уже доступны ниже.
         </Alert>
       )}
@@ -156,7 +156,7 @@ export function MyMentorPage() {
         </Title>
         <ScheduleEventList
           events={schedule}
-          emptyText="Для ваших направлений пока нет запланированных созвонов и встреч."
+          emptyText="Для твоих направлений пока нет запланированных созвонов и встреч."
         />
       </section>
     </Stack>

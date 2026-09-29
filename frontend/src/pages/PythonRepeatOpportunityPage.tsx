@@ -381,7 +381,7 @@ export function PythonRepeatOpportunityPage() {
           notifications.show({
             color: "red",
             message:
-              "Заявка сохранена, но не отправлена автоматически. Обновите страницу и повторите отправку.",
+              "Заявка сохранена, но не отправлена автоматически. Обнови страницу и повтори отправку.",
           });
           return;
         }
@@ -428,7 +428,7 @@ export function PythonRepeatOpportunityPage() {
             notifications.show({
               color: "red",
               message:
-                "Оффер сохранён, но не удалось отправить его автоматически. Обновите страницу и повторите отправку.",
+                "Оффер сохранён, но не удалось отправить его автоматически. Обнови страницу и повтори отправку.",
             });
             return;
           }
@@ -485,19 +485,19 @@ export function PythonRepeatOpportunityPage() {
       <OpportunityFlow
         steps={[
           {
-            title: "Заполните заявку",
+            title: "Заполни заявку",
             description: "Цель, текущая ситуация и пробелы в знаниях",
           },
           {
-            title: "Пройдите диагностику",
+            title: "Пройди диагностику",
             description: "Команда уточнит подходящий план возврата",
           },
           {
-            title: "Примите условия",
+            title: "Прими условия",
             description: "Сумма и процент фиксируются в заявке",
           },
           {
-            title: "Оплатите и начните",
+            title: "Оплати и начни",
             description: "Старый прогресс останется в истории",
           },
         ]}
@@ -586,7 +586,7 @@ export function PythonRepeatOpportunityPage() {
                 error={
                   application.target_position.length > 0 &&
                   !application.target_position.trim()
-                    ? "Укажите должность"
+                    ? "Укажи должность"
                     : undefined
                 }
               />
@@ -649,7 +649,7 @@ export function PythonRepeatOpportunityPage() {
               }
             />
             <Textarea
-              label="Какие пробелы хотите закрыть"
+              label="Какие пробелы хочешь закрыть"
               description="Минимум 10 символов — это поможет подготовить диагностику"
               minRows={4}
               minLength={10}
@@ -665,7 +665,7 @@ export function PythonRepeatOpportunityPage() {
               error={
                 application.technical_gaps.length > 0 &&
                 technicalGapsLength < 10
-                  ? "Опишите цель чуть подробнее"
+                  ? "Опиши цель чуть подробнее"
                   : undefined
               }
             />
@@ -705,8 +705,8 @@ export function PythonRepeatOpportunityPage() {
         <Card
           withBorder
           id="python-repeat-application"
-          style={{ scrollMarginTop: 24 }}
-          className="opportunity-request-card"
+
+          className="opportunity-request-card anchor-target"
           data-complete={["paid", "enrolled"].includes(current.status)}
         >
           <Stack>
@@ -727,7 +727,7 @@ export function PythonRepeatOpportunityPage() {
             )}
             {current.status === "needs_clarification" && (
               <Text size="sm" c="dimmed">
-                Исправьте данные в форме выше, сохраните уточнения, затем
+                Исправьте данные в форме выше, сохрани уточнения, затем
                 отправьте заявку повторно.
               </Text>
             )}
@@ -737,13 +737,13 @@ export function PythonRepeatOpportunityPage() {
                 {current.offer_expires_at && (
                   <Alert color={termsExpired ? "red" : "yellow"}>
                     {termsExpired
-                      ? "Срок принятия условий истёк. Свяжитесь с командой, чтобы получить актуальное предложение."
+                      ? "Срок принятия условий истёк. Свяжись с командой, чтобы получить актуальное предложение."
                       : `Подтвердить ознакомление до ${new Date(current.offer_expires_at).toLocaleString("ru-RU")}`}
                   </Alert>
                 )}
                 {!canAcceptPublicOffer && (
                   <Alert color="red">
-                    Для заявки не опубликована версия оферты. Обратитесь к
+                    Для заявки не опубликована версия оферты. Обратись к
                     администратору, чтобы получить актуальные условия.
                   </Alert>
                 )}
@@ -844,7 +844,7 @@ export function PythonRepeatOpportunityPage() {
                 }
                 error={
                   offer.company.length > 0 && offer.company.trim().length < 2
-                    ? "Укажите название компании"
+                    ? "Укажи название компании"
                     : undefined
                 }
               />
@@ -858,7 +858,7 @@ export function PythonRepeatOpportunityPage() {
                 }
                 error={
                   offer.position.length > 0 && offer.position.trim().length < 2
-                    ? "Укажите должность"
+                    ? "Укажи должность"
                     : undefined
                 }
               />
@@ -1033,8 +1033,7 @@ function PaymentEmailAlert() {
     <Alert color="orange" title="Нужен email для чека">
       <Stack gap="xs">
         <Text size="sm">
-          Сохраните email в платёжном профиле, после этого станет доступна
-          оплата.
+          Сохрани email в платёжном профиле, после этого станет доступна оплата.
         </Text>
         <Button component={Link} to="/payments" variant="light" size="xs">
           Указать email

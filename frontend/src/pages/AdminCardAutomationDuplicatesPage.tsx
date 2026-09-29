@@ -1,3 +1,5 @@
+import { CardGridSkeleton } from "../components/CardGridSkeleton";
+import { BackLink } from "../components/BackLink";
 import {
   Alert,
   Badge,
@@ -24,7 +26,6 @@ import { useSearchParams } from "react-router-dom";
 
 import { api } from "../api/endpoints";
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useAdminTracks } from "../features/admin/queries";
 import { CardAutomationNavigation } from "../features/cardAutomation/CardAutomationNavigation";
@@ -69,12 +70,8 @@ function CardComparison({
       radius="lg"
       padding="lg"
       onClick={onSelect}
-      style={{
-        cursor: "pointer",
-        borderColor: selected
-          ? "var(--mantine-color-blue-5)"
-          : "var(--mantine-color-default-border)",
-      }}
+      className="duplicate-choice"
+      data-selected={selected || undefined}
     >
       <Stack gap="md">
         <Radio
@@ -235,7 +232,8 @@ export function AdminCardAutomationDuplicatesPage() {
   };
 
   return (
-    <Stack gap="xl">
+    <Stack gap="xl" className="brand-ai-scope">
+      <BackLink to={"/admin/card-automation/clusters"} />
       <PageHeader
         eyebrow="Собеседования · качество базы"
         title="Дубли карточек"
@@ -314,7 +312,7 @@ export function AdminCardAutomationDuplicatesPage() {
         </SimpleGrid>
       </Card>
 
-      {duplicates.isLoading && <LoadingState />}
+      {duplicates.isLoading && <CardGridSkeleton />}
       {duplicates.isError && (
         <ErrorState
           error={duplicates.error}
@@ -363,7 +361,7 @@ export function AdminCardAutomationDuplicatesPage() {
                           openComparison(item);
                         }
                       }}
-                      style={{ cursor: "pointer" }}
+                      className="clickable"
                     >
                       <Table.Td>
                         <Badge

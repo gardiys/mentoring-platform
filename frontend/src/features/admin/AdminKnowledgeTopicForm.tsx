@@ -289,7 +289,7 @@ export function AdminKnowledgeTopicForm({ topic }: Props) {
             <Button
               type="button"
               color="brandYellow"
-              c="brandNavy.9"
+
               onClick={() => addEntry("question")}
             >
               + Вопрос

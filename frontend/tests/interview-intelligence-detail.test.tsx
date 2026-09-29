@@ -216,7 +216,7 @@ it("администратор подтверждает повторный ра�
     screen.getByRole("button", { name: "Пересчитать AI-разбор" }),
   );
   await waitFor(() =>
-    expect(restart).toHaveBeenCalledExactlyOnceWith(interviewId),
+    expect(restart).toHaveBeenCalledExactlyOnceWith(interviewId, false, false),
   );
   expect(confirm).toHaveBeenCalledWith(
     expect.stringContaining("ручными рецензиями"),

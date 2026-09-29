@@ -1,3 +1,5 @@
+import { TableSkeleton } from "../components/TableSkeleton";
+import { BackLink } from "../components/BackLink";
 import {
   Alert,
   Button,
@@ -13,7 +15,6 @@ import { type FormEvent, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { useUnsavedChanges } from "../hooks/useUnsavedChanges";
 import {
@@ -64,6 +65,7 @@ function SectionForm({
   return (
     <form onSubmit={submit}>
       <Stack gap="xl">
+        <BackLink to={`/admin/roadmaps/${roadmapId}/edit`} />
         <PageHeader
           eyebrow="Роадмап · один раздел"
           title={section ? "Настройки раздела" : "Новый раздел"}
@@ -142,7 +144,7 @@ export function AdminRoadmapSectionEditPage() {
   const { roadmapId = "", sectionId } = useParams();
   const query = useAdminRoadmapSection(roadmapId, sectionId);
   if (sectionId && query.isPending)
-    return <LoadingState label="Загружаем раздел…" />;
+    return <TableSkeleton label="Загружаем раздел…" />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />

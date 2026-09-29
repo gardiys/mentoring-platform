@@ -1,3 +1,4 @@
+import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Alert,
   Badge,
@@ -76,7 +77,7 @@ function ReleaseCard({ release }: { release: CopilotRelease }) {
         setError(
           reason instanceof Error
             ? reason.message
-            : "Не удалось скачать файл. Повторите попытку.",
+            : "Не удалось скачать файл. Повтори попытку.",
         );
     } finally {
       if (controller.current === request) {
@@ -176,7 +177,7 @@ export function CopilotPage() {
       </Alert>
     );
   return (
-    <Stack gap="xl">
+    <Stack gap="xl" className="brand-ai-scope">
       <PageHeader
         eyebrow="Copilot · Python & Go"
         title="Помощник на собеседовании"
@@ -208,7 +209,7 @@ export function CopilotPage() {
               сессии, даже если ученик не загрузил запись. Обновление — примерно
               раз в минуту.
             </Text>
-            {usage.isPending && <LoadingState label="Загружаем статистику…" />}
+            {usage.isPending && <TableSkeleton label="Загружаем статистику…" />}
             {usage.isError && (
               <ErrorState
                 error={usage.error}
@@ -286,18 +287,12 @@ export function CopilotPage() {
           </Stack>
         </Card>
       )}
-      <SimpleGrid
-        style={{
-          gridTemplateColumns:
-            "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
-        }}
-        spacing="lg"
-      >
+      <SimpleGrid className="layout-copilot-page-9" spacing="lg">
         {[
           [
             "01 / Слушает",
             "Расшифровывает разговор",
-            "Показывает вашу речь и вопросы собеседника в отдельных дорожках.",
+            "Показывает твою речь и вопросы собеседника в отдельных дорожках.",
           ],
           [
             "02 / Подсказывает",
@@ -306,8 +301,8 @@ export function CopilotPage() {
           ],
           [
             "03 / Учитывает контекст",
-            "Опирается на ваши материалы",
-            "Использует базу знаний, вопросы Python/Go и опубликованное резюме, если вы разрешили его обработку.",
+            "Опирается на твои материалы",
+            "Использует базу знаний, вопросы Python/Go и опубликованное резюме, если ты разрешил его обработку.",
           ],
         ].map(([step, title, text]) => (
           <Paper key={step} withBorder p="lg">
@@ -324,29 +319,23 @@ export function CopilotPage() {
       <Stack gap="md">
         <Title order={2}>Скачать Copilot</Title>
         <Text c="dimmed">
-          Выберите сборку для своего компьютера. На Mac тип процессора указан в
+          Выбери сборку для своего компьютера. На Mac тип процессора указан в
           меню Apple → «Об этом Mac».
         </Text>
-        {query.isPending && <LoadingState label="Загружаем список сборок…" />}
+        {query.isPending && <TableSkeleton label="Загружаем список сборок…" />}
         {query.isError && (
           <ErrorState error={query.error} retry={() => void query.refetch()} />
         )}
         {query.data &&
           (query.data.releases.length ? (
-            <SimpleGrid
-              style={{
-                gridTemplateColumns:
-                  "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
-              }}
-              spacing="lg"
-            >
+            <SimpleGrid className="layout-copilot-page-9" spacing="lg">
               {query.data.releases.map((release) => (
                 <ReleaseCard key={release.id} release={release} />
               ))}
             </SimpleGrid>
           ) : (
             <Alert title="Сборки скоро появятся" color="brandYellow">
-              Файлы приложения ещё не загружены. Зайдите в раздел позже.
+              Файлы приложения ещё не загружены. Зайди в раздел позже.
             </Alert>
           ))}
       </Stack>
@@ -354,24 +343,22 @@ export function CopilotPage() {
         <Stack gap="md">
           <Title order={2}>Как начать</Title>
           <List type="ordered" spacing="sm">
+            <List.Item>Скачай и установи приложение для своей ОС.</List.Item>
             <List.Item>
-              Скачайте и установите приложение для своей ОС.
-            </List.Item>
-            <List.Item>
-              Войдите через менторскую платформу, когда доступ к сервису будет
+              Войди через менторскую платформу, когда доступ к сервису будет
               открыт.
             </List.Item>
             <List.Item>
-              Выберите Python или Go, обновите материалы и разрешите доступ к
+              Выбери Python или Go, обнови материалы и разреши доступ к
               микрофону и системному звуку.
             </List.Item>
             <List.Item>
-              Начните тренировочное интервью. Запрашивайте подсказку, когда она
+              Начни тренировочное интервью. Запрашивай подсказку, когда она
               нужна.
             </List.Item>
           </List>
           <Text size="sm" c="dimmed">
-            Запись начинается только после вашего согласия. Для реального
+            Запись начинается только после твоего согласия. Для реального
             интервью нужно разрешение на использование AI. Copilot сохраняет
             расшифровку и ответы; фидбек остаётся в менторской платформе.
           </Text>

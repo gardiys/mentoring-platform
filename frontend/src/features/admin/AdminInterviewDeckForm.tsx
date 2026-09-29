@@ -292,7 +292,6 @@ export function AdminInterviewDeckForm({ deck }: Props) {
                         ? "brandYellow"
                         : "brandSand"
                     }
-                    c="brandNavy.9"
                   >
                     {card.frequency === "frequent" ? "Частый" : "Редкий"}
                   </Badge>

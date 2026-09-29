@@ -7,7 +7,10 @@ import { AdminInterviewDeckForm } from "../src/features/admin/AdminInterviewDeck
 import { AdminInterviewCardEditPage } from "../src/pages/AdminInterviewCardEditPage";
 import { InterviewQuestionsPage } from "../src/pages/InterviewQuestionsPage";
 import { InterviewStudyPage } from "../src/pages/InterviewStudyPage";
-import { InterviewsPage } from "../src/pages/InterviewsPage";
+import {
+  InterviewsPage,
+  InterviewJournalPage,
+} from "../src/pages/InterviewsPage";
 import type {
   AdminInterviewDeckRead,
   AdminInterviewCardRead,
@@ -283,9 +286,11 @@ it("показывает админу личный дневник без общ�
   vi.spyOn(api, "interviewProcesses").mockResolvedValue([]);
   const adminProcesses = vi.spyOn(api, "adminInterviewProcesses");
 
-  renderPage(<InterviewsPage />, "/interviews", "/interviews");
+  renderPage(<InterviewJournalPage />, "/interviews", "/interviews");
 
-  expect(await screen.findByText(deck.title)).toBeInTheDocument();
+  expect(
+    await screen.findByRole("heading", { name: "Дневник собеседований" }),
+  ).toBeInTheDocument();
   expect(
     screen.queryByRole("heading", { name: "Все треки собеседований" }),
   ).not.toBeInTheDocument();
@@ -300,10 +305,10 @@ it("показывает ментору его личный дневник и с
   vi.spyOn(api, "interviewDecks").mockResolvedValue([deck]);
   const processes = vi.spyOn(api, "interviewProcesses").mockResolvedValue([]);
 
-  renderPage(<InterviewsPage />, "/interviews", "/interviews");
+  renderPage(<InterviewJournalPage />, "/interviews", "/interviews");
 
   expect(
-    await screen.findByRole("heading", { name: "Треки по компаниям" }),
+    await screen.findByRole("heading", { name: "Дневник собеседований" }),
   ).toBeInTheDocument();
   expect(processes).toHaveBeenCalledWith("all");
   expect(
@@ -434,8 +439,8 @@ it("не выдаёт карточки до выбора пройденной т
     "/interviews/:deckSlug",
   );
 
-  expect(await screen.findByText("Сначала выберите темы")).toBeInTheDocument();
-  await userEvent.click(screen.getByText("Выберите темы"));
+  expect(await screen.findByText("Сначала выбери темы")).toBeInTheDocument();
+  await userEvent.click(screen.getByText("Выбери темы"));
   await userEvent.click(
     // jsdom cannot measure element height, so Mantine's Collapse never
     // reports the panel as visible here even though it is open — query

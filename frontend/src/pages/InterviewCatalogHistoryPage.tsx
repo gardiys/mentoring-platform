@@ -11,7 +11,7 @@ import {
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
+import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import { PageHeader } from "../components/PageHeader";
 import { useInterviewCatalogHistory } from "../features/interviews/catalogQueries";
 import type { InterviewStageType } from "../types/api";
@@ -42,31 +42,28 @@ export function InterviewCatalogHistoryPage() {
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const query = useInterviewCatalogHistory(page);
 
-  if (query.isPending)
-    return <LoadingState label="Загружаем историю просмотров…" />;
-  if (query.isError)
-    return (
-      <ErrorState error={query.error} retry={() => void query.refetch()} />
-    );
-
   return (
     <Stack gap="xl">
       <Group justify="space-between" align="flex-end">
         <PageHeader
           eyebrow="Каталог собеседований"
           title="История просмотров"
-          description="Записи и этапы собеседований, которые вы уже открывали или отметили просмотренными."
+          description="Записи и этапы собеседований, которые ты уже открывал или отметил просмотренными."
         />
         <Button component={Link} to="/interviews/catalog" variant="subtle">
           ← К каталогу
         </Button>
       </Group>
 
-      {query.data.items.length === 0 ? (
+      {query.isPending ? (
+        <CardGridSkeleton />
+      ) : query.isError ? (
+        <ErrorState error={query.error} retry={() => void query.refetch()} />
+      ) : query.data.items.length === 0 ? (
         <Card withBorder>
-          <Text fw={600}>Вы пока ничего не смотрели</Text>
+          <Text fw={600}>Ты пока ничего не смотрел</Text>
           <Text c="dimmed" size="sm" mt={4}>
-            Откройте запись собеседования или отметьте этап просмотренным — он
+            Открой запись собеседования или отметь этап просмотренным — он
             появится здесь.
           </Text>
         </Card>

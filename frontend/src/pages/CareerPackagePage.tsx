@@ -49,7 +49,7 @@ function packageContent(version: CareerVersion) {
     />
   ) : (
     <Alert color="red">
-      Содержимое этой версии повреждено. Обратитесь к администратору.
+      Содержимое этой версии повреждено. Обратись к администратору.
     </Alert>
   );
 }
@@ -81,7 +81,7 @@ export function CareerPackagePage() {
         <Card withBorder>
           <Title order={3}>Пакет ещё готовится</Title>
           <Text c="dimmed" mt="xs">
-            Когда ментор проверит и предоставит пакет, вы получите уведомление.
+            Когда ментор проверит и предоставит пакет, вы получишь уведомление.
           </Text>
         </Card>
       </Stack>
@@ -247,7 +247,7 @@ export function CareerPackagePage() {
               </Text>
               {!currentVersion.objection_deadline_at ? (
                 <Alert color="blue">
-                  Юридический срок возражений ещё не начался. Вы уже можете
+                  Юридический срок возражений ещё не начался. Ты уже можешь
                   отправить обращение — оно будет зарегистрировано как поданное
                   до начала срока.
                 </Alert>

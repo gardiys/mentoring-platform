@@ -51,12 +51,14 @@ export function AdminAnalysisRestartPanel({
 
   return (
     <Card withBorder>
-      <Stack gap="sm">
+      <Stack className="brand-ai-scope" gap="sm">
         <Group justify="space-between">
           <Text fw={700}>Повторный AI-разбор</Text>
           <Button
             variant="light"
             disabled={!canRestart}
+            color="brandAi"
+            leftSection={<span aria-hidden="true">✦</span>}
             loading={restart.isPending}
             onClick={() => {
               if (
