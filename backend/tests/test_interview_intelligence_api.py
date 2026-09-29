@@ -1026,7 +1026,24 @@ async def test_fake_processing_pipeline_reaches_ready(
         duplicate_candidate.json()["detail"]["code"] == "candidate_speaker_selection_not_available"
     )
 
+    # A successful retry must clear the stale alert before answer review finishes.
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        interview.failed_stage = IntelligenceAttemptStage.AI_EXTRACT
+        interview.processing_error_code = "OPENAI_INVALID_RESPONSE"
+        interview.processing_error_message = "Не удалось разобрать результат AI-анализа."
+        await session.commit()
+
     await intelligence_jobs.extract_interview_structure(context, str(interview_id))
+    processing = await client.get(
+        f"/api/v1/interviews/{interview_id}/processing", headers=auth(seeded.student_id)
+    )
+    assert processing.status_code == 200
+    assert processing.json()["error_code"] is None
+    assert processing.json()["error_message"] is None
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert interview.failed_stage is None
     assert (
         "refresh_interview_question_embeddings",
         (str(interview_id),),

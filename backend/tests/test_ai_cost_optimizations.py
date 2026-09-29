@@ -167,6 +167,53 @@ async def test_recovery_keeps_both_paid_attempts() -> None:
     assert [request["max_output_tokens"] for request in requests] == [1_000, 2_000]
 
 
+@pytest.mark.parametrize("recoverable", [True, False])
+@pytest.mark.parametrize("incomplete", [True, False])
+async def test_extraction_recovers_invalid_json_and_records_actual_error(
+    recoverable, incomplete
+) -> None:
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        truncated = len(requests) == 1 or not recoverable
+        body = _response(
+            '{"questions":[' if truncated else '{"questions":[],"candidate_questions":[]}',
+            number=len(requests),
+        )
+        if truncated and incomplete:
+            body["status"] = "incomplete"
+            body["incomplete_details"] = {"reason": "max_output_tokens"}
+        return httpx.Response(200, json=body)
+
+    provider = await _provider(handler)
+    provider.extraction_max_output_tokens = 8_000
+    try:
+        if recoverable:
+            result = await provider.extract("Тестовая реплика")
+            assert result.output.questions == []
+        else:
+            with pytest.raises(InterviewAIError) as caught:
+                await provider.extract("Тестовая реплика")
+            assert caught.value.code == (
+                "OPENAI_OUTPUT_TRUNCATED" if incomplete else "OPENAI_INVALID_RESPONSE"
+            )
+            assert caught.value.retryable
+    finally:
+        await provider.close()
+    assert len(requests) == 2
+    assert [r["max_output_tokens"] for r in requests] == [8_000, 16_000]
+    assert "Keep exact source quotes unchanged" in requests[1]["input"][0]["content"]
+    async with TestSession() as session:
+        rows = list(await session.scalars(select(AIRequestLog).order_by(AIRequestLog.created_at)))
+        assert len(rows) == 2
+        assert rows[0].error_code == (
+            "OPENAI_OUTPUT_TRUNCATED" if incomplete else "ValidationError"
+        )
+        assert [row.recovery for row in rows] == [False, True]
+        assert sum(row.output_tokens for row in rows) == 1_000
+
+
 async def test_flex_only_changes_background_tier_and_timeout() -> None:
     requests = []
 

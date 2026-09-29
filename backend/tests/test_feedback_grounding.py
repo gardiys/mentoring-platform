@@ -124,6 +124,33 @@ def test_rejected_skill_disappears_from_all_aggregates_and_actions():
     result = ground_communication({}, [(q, a, r)], u, rejected_skills={"structure"})
     assert result["communication_score"] is None
     assert result["priority_actions"] == []
+    assert (
+        result["communication_summary"]
+        == "Недостаточно подтверждённых реплик для оценки коммуникации."
+    )
+
+
+def test_communication_overview_distinguishes_strengths_gaps_and_missing_scores():
+    q, a, r, u = evidence()
+    r.delivery_assessment = [
+        {**r.delivery_assessment[0], "skill": skill, "score": score}
+        for skill, score in [
+            ("structure", 0.4),
+            ("specificity", 0.9),
+            ("ownership", 0.7),
+            ("clarification", None),
+        ]
+    ]
+    output = ground_communication({}, [(q, a, r)], u)
+    summary = output["communication_summary"]
+    assert "по 4 из 8 категорий" in summary
+    assert "Сильные стороны: конкретность." in summary
+    assert "В первую очередь стоит проработать: структура ответа." in summary
+    assert "Можно усилить: личный вклад." in summary
+    assert "уточнение условий" not in summary
+    assert len(summary) <= 800
+    rejected = ground_communication({}, [(q, a, r)], u, rejected_skills={"structure"})
+    assert "структура ответа" not in rejected["communication_summary"]
 
 
 def test_missing_exercise_is_replaced_with_source_specific_practice():

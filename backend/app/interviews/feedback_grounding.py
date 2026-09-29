@@ -30,6 +30,27 @@ def weighted_score(values: list[tuple[float, int]]) -> float | None:
     return sum(score * weight for score, weight in values) / sum(w for _, w in values)
 
 
+def _communication_summary(items: list[dict[str, Any]]) -> str:
+    if not items:
+        return "Недостаточно подтверждённых реплик для оценки коммуникации."
+    scored = sorted(
+        (item for item in items if item["score"] is not None), key=lambda item: item["score"]
+    )
+    parts = [f"Подтверждённые примеры есть по {len(items)} из {len(SKILL_LABELS)} категорий."]
+    for label, selected in (
+        ("Сильные стороны", [item for item in reversed(scored) if item["score"] >= 0.8]),
+        ("В первую очередь стоит проработать", [item for item in scored if item["score"] < 0.6]),
+        ("Можно усилить", [item for item in scored if 0.6 <= item["score"] < 0.8]),
+    ):
+        if selected:
+            parts.append(
+                label + ": " + ", ".join(item["name"].lower() for item in selected[:3]) + "."
+            )
+    if not scored:
+        parts.append("Для числовой оценки пока недостаточно данных.")
+    return " ".join(parts)
+
+
 def ground_delivery(
     dimensions: list[Any], question: Any, answer: Any, utterances: list[Any]
 ) -> list[dict[str, Any]]:
@@ -143,13 +164,7 @@ def ground_communication(
         communication_dimensions=items,
         communication_score=sum(scores) / len(scores) if scores else None,
         communication_grounded=bool(items),
-        communication_summary=(
-            "Подтверждённые наблюдения: "
-            + ", ".join(item["name"].lower() for item in items)
-            + ". Примеры и упражнения — ниже."
-            if items
-            else "Недостаточно подтверждённых реплик для оценки коммуникации."
-        ),
+        communication_summary=_communication_summary(items),
         communication_strengths=[
             item["summary"][:300]
             for item in items

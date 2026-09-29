@@ -89,6 +89,15 @@ Russian. English is allowed only for established technical terms, identifiers, A
 names, and code examples. Do not add commentary outside the structured response.
 """
 
+_EXTRACTION_RECOVERY_INSTRUCTION = """
+
+RETRY REQUIREMENTS
+The previous response was incomplete or invalid. Return complete JSON matching the requested
+schema and its limits. Preserve all questions and source references; do not shorten the result
+by dropping questions or answers. Keep exact source quotes unchanged, including their language.
+Do not add prose outside JSON.
+"""
+
 
 def _assert_no_english_prose(values: Sequence[str | None]) -> None:
     """Reject substantially untranslated feedback while tolerating a small language leak.
@@ -1604,40 +1613,45 @@ class OpenAIInterviewAIProvider:
                 else client.responses.with_raw_response.parse
             )
             raw = await raw_method(**kwargs)
+            body = raw.http_response.json()
             await recorder.received(
                 call_id,
-                raw.http_response.json(),
+                body,
                 raw.request_id,
                 kwargs["model"],
                 tier,
             )
+            # The SDK can raise json_invalid while parsing a truncated JSON body,
+            # before returning the response's incomplete_details to the caller.
+            if (
+                isinstance(body, dict)
+                and isinstance(body.get("incomplete_details"), dict)
+                and body["incomplete_details"].get("reason") == "max_output_tokens"
+            ):
+                raise InterviewAIError(
+                    "OPENAI_OUTPUT_TRUNCATED",
+                    "OpenAI response reached its output length limit",
+                    retryable=True,
+                )
             return raw.parse()
         except Exception as error:
-            await recorder.failed(call_id, type(error).__name__)
+            await recorder.failed(
+                call_id, error.code if isinstance(error, InterviewAIError) else type(error).__name__
+            )
             raise
 
     async def extract(self, transcript: str, *, direction: str | None = None) -> AIExtractionResult:
         try:
-            response = await self._request(
+            response, parsed = await self._parse_user_facing_response(
                 operation="extract",
                 model=self.extraction_model,
-                input=[
-                    {
-                        "role": "developer",
-                        "content": EXTRACTION_PROMPT + transcript_context(direction),
-                    },
-                    {"role": "user", "content": transcript},
-                ],
+                prompt=EXTRACTION_PROMPT + transcript_context(direction),
+                user_content=transcript,
                 text_format=ExtractionOutput,
                 max_output_tokens=self.extraction_max_output_tokens,
+                validate=lambda _: None,
+                recovery_instruction=_EXTRACTION_RECOVERY_INSTRUCTION,
             )
-            parsed = response.output_parsed
-            if parsed is None:
-                raise InterviewAIError(
-                    "OPENAI_INVALID_RESPONSE",
-                    "OpenAI returned no structured extraction",
-                    retryable=True,
-                )
             return AIExtractionResult(parsed, self._usage(response, self.extraction_model))
         except InterviewAIError:
             raise
@@ -1759,6 +1773,7 @@ class OpenAIInterviewAIProvider:
         validate: Callable[[_UserFacingOutput], None],
         operation: str,
         reasoning_effort: str | None = None,
+        recovery_instruction: str = _STRUCTURED_OUTPUT_RECOVERY_INSTRUCTION,
     ) -> tuple[object, _UserFacingOutput]:
         reasoning_options: dict[str, Any] = (
             {"reasoning": {"effort": reasoning_effort}} if reasoning_effort else {}
@@ -1789,6 +1804,10 @@ class OpenAIInterviewAIProvider:
                 recovery_reason = _incomplete_response_reason(response)
         except LengthFinishReasonError:
             recovery_reason = "max_output_tokens"
+        except InterviewAIError as error:
+            if error.code != "OPENAI_OUTPUT_TRUNCATED":
+                raise
+            recovery_reason = "max_output_tokens"
         except ValidationError as error:
             recovery_reason = "schema_validation"
             _log_structured_validation_failure(error, operation=operation, recovery=True)
@@ -1810,7 +1829,7 @@ class OpenAIInterviewAIProvider:
                 input=[
                     {
                         "role": "developer",
-                        "content": prompt + _STRUCTURED_OUTPUT_RECOVERY_INSTRUCTION,
+                        "content": prompt + recovery_instruction,
                     },
                     {"role": "user", "content": user_content},
                 ],

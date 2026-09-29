@@ -1,5 +1,9 @@
 import { Badge, Button, Card, Group, Stack, Text, Title } from "@mantine/core";
-import type { IntelligenceInterviewDetail } from "../types/api";
+import type {
+  CommunicationSkill,
+  IntelligenceInterviewDetail,
+} from "../types/api";
+import { CommunicationOverview } from "./CommunicationOverview";
 import {
   communicationLabels,
   useCoachingAction,
@@ -21,19 +25,45 @@ export function CommunicationFeedback({
   const dimensions = overview.communication_grounded
     ? overview.communication_dimensions
     : [];
+  const showExample = (skill: CommunicationSkill) => {
+    const element = document.getElementById(`communication-example-${skill}`);
+    element?.scrollIntoView?.({ block: "start" });
+    element?.focus({ preventScroll: true });
+  };
   const moments = (ids: string[]) =>
     ids
       .map((id) => interview.transcript.find((u) => u.id === id))
       .filter((u) => !!u);
   return (
-    <Card withBorder>
+    <Card withBorder className="brand-ai-scope">
       <Stack gap="md">
-        <Title order={2}>Коммуникация и подача</Title>
+        <Group justify="space-between" align="flex-start">
+          <div>
+            <Text className="technical-label">Soft Skills · общий фидбек</Text>
+            <Title order={2}>Коммуникация и подача</Title>
+          </div>
+          <Badge variant="light" size="lg">
+            {overview.communication_grounded &&
+            overview.communication_score != null
+              ? `Общая оценка · ${Math.round(overview.communication_score * 100)}%`
+              : "Без общей оценки"}
+          </Badge>
+        </Group>
         <Text>
           {overview.communication_grounded
             ? overview.communication_summary
             : "Недостаточно подтверждённых реплик для оценки коммуникации."}
         </Text>
+        <Text size="sm" c="dimmed">
+          Оценки относятся к подтверждённым примерам речи. Для каждой категории
+          показан пример, которому стоит уделить внимание; это не оценка
+          личности.
+        </Text>
+        <CommunicationOverview
+          dimensions={dimensions}
+          onExample={showExample}
+        />
+        {dimensions.length > 0 && <Title order={3}>Конкретные примеры</Title>}
         {dimensions.map((dimension) => {
           if (!dimension.skill) return null;
           const skill = dimension.skill;
@@ -50,6 +80,11 @@ export function CommunicationFeedback({
           return (
             <Stack
               key={skill}
+              id={`communication-example-${skill}`}
+              tabIndex={-1}
+              role="region"
+              aria-label={`Пример: ${communicationLabels[skill]}`}
+              style={{ scrollMarginTop: "6rem" }}
               gap="xs"
               className="analysis-communication-dimension"
             >

@@ -741,6 +741,9 @@ async def extract_interview_structure(
                 )
             )
         interview.processing_status = IntelligenceProcessingStatus.ANALYZING
+        interview.failed_stage = None
+        interview.processing_error_code = None
+        interview.processing_error_message = None
         _complete_attempt(attempt)
         await session.commit()
     await _enqueue(

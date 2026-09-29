@@ -1,13 +1,17 @@
 import { CommunicationFeedback } from "../src/components/CommunicationFeedback";
 import * as clientApi from "../src/api/client";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
 import { AdminAnalysisRestartPanel } from "../src/components/AdminAnalysisRestartPanel";
 import { InterviewIntelligencePage } from "../src/pages/InterviewIntelligencePage";
-import type { IntelligenceInterviewDetail, User } from "../src/types/api";
+import type {
+  CommunicationSkill,
+  IntelligenceInterviewDetail,
+  User,
+} from "../src/types/api";
 import { renderPage } from "./render";
 
 beforeEach(() => {
@@ -310,6 +314,77 @@ function expectBefore(first: HTMLElement, second: HTMLElement) {
     first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 }
+
+it("строит отдельные soft-skills приоритеты, категории и переход к примеру", async () => {
+  const scores: [CommunicationSkill, number | null][] = [
+    ["specificity", 0.9],
+    ["structure", 0.4],
+    ["ownership", 0.2],
+    ["conciseness", 0.5],
+    ["clarification", null],
+    ["handling_unknown", 0.1],
+  ];
+  renderPage(
+    <CommunicationFeedback
+      interview={{
+        ...detail,
+        overview: {
+          ...detail.overview!,
+          communication_grounded: true,
+          priority_actions: [],
+          communication_dimensions: scores.map(([skill, score]) => ({
+            skill,
+            score,
+            name: skill,
+            confidence: 0.9,
+            summary: `Наблюдение ${skill}`,
+            evidence_quote: `Цитата ${skill}`,
+            evidence_utterance_ids: [detail.transcript[0]!.id],
+            exercise: {
+              task: `Задание ${skill}`,
+              success_criterion: `Критерий ${skill}`,
+            },
+          })),
+        },
+      }}
+      onSeek={vi.fn()}
+      canReview={false}
+      isOwner={false}
+    />,
+  );
+  const priorities = within(
+    screen.getByRole("region", { name: "Приоритетные улучшения Soft Skills" }),
+  );
+  expect(
+    priorities
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label")),
+  ).toEqual([
+    "Разобрать пример: Работа с незнанием",
+    "Разобрать пример: Личный вклад",
+    "Разобрать пример: Структура ответа",
+  ]);
+  expect(
+    priorities.getByText("Задание handling_unknown", { exact: false }),
+  ).toBeVisible();
+  const categories = within(
+    screen.getByRole("region", { name: "Оценка по категориям Soft Skills" }),
+  );
+  expect(categories.getAllByRole("heading", { level: 4 })).toHaveLength(8);
+  expect(categories.getAllByText("Недостаточно данных")).toHaveLength(3);
+  expect(categories.getByText("90%")).toBeVisible();
+  expect(categories.queryByText("0%")).not.toBeInTheDocument();
+  await userEvent.click(
+    priorities.getByRole("button", {
+      name: "Разобрать пример: Структура ответа",
+    }),
+  );
+  const example = screen.getByRole("region", {
+    name: "Пример: Структура ответа",
+  });
+  expect(example).toHaveFocus();
+  expect(within(example).getByText("«Цитата structure»")).toBeVisible();
+});
 
 it("объясняет конфликт спикеров и отсутствие надёжной оценки", async () => {
   vi.spyOn(api, "me").mockResolvedValue(student);
