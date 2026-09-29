@@ -1904,7 +1904,21 @@ export interface IntelligenceProcessing {
   }>;
 }
 
+export type CommunicationSkill =
+  | "structure"
+  | "specificity"
+  | "conciseness"
+  | "clarification"
+  | "handling_unknown"
+  | "handling_pushback"
+  | "reasoning_aloud"
+  | "ownership";
+
 export interface IntelligenceCommunicationDimension {
+  skill?: CommunicationSkill | null;
+  evidence_quote?: string;
+  rewrite?: { original: string; improved: string } | null;
+  exercise?: { task: string; success_criterion: string } | null;
   name: string;
   score: number | null;
   summary: string;
@@ -1925,6 +1939,7 @@ export interface IntelligenceTechnicalTopic {
 }
 
 export interface IntelligencePriorityAction {
+  communication_skill?: CommunicationSkill | null;
   title: string;
   reason: string;
   steps: string[];
@@ -1933,6 +1948,17 @@ export interface IntelligencePriorityAction {
 }
 
 export interface IntelligenceInterviewOverview {
+  communication_grounded?: boolean;
+  coaching_state?: Record<
+    string,
+    { completed_at?: string | null; decision?: string }
+  >;
+  candidate_questions?: Array<{
+    question: string;
+    evidence_quote: string;
+    question_utterance_ids: string[];
+    response_utterance_ids: string[];
+  }>;
   overall_summary: string;
   technical_score: number | null;
   technical_summary: string;

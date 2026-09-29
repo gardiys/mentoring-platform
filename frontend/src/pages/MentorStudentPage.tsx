@@ -1,3 +1,4 @@
+import { CommunicationProgress } from "../components/CommunicationProgress";
 import {
   Accordion,
   Badge,
@@ -411,6 +412,7 @@ export function MentorStudentPage() {
         </Button>
       </Group>
 
+      <CommunicationProgress studentId={studentId} />
       <Card
         withBorder
         style={

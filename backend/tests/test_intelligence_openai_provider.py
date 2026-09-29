@@ -198,7 +198,7 @@ def test_automation_prompts_separate_trusted_and_untrusted_content() -> None:
         assert "outside" in prompt
 
     assert "untrusted evidence" in SUMMARY_PROMPT
-    assert "Technical assessment is primary" in SUMMARY_PROMPT
+    assert "Technical correctness and delivery are independent" in SUMMARY_PROMPT
     assert "at most six priority_actions" in SUMMARY_PROMPT
     assert "OUTPUT LANGUAGE IS RUSSIAN" in SUMMARY_PROMPT
     assert "Russian only" in TECHNICAL_REVIEW_PROMPT
@@ -521,11 +521,16 @@ def test_summary_technical_scores_and_evidence_are_grounded_in_review_rows() -> 
                 sequence_number=1,
                 confidence=0.9,
                 transcription_annotations=None,
+                difficulty="junior",
             ),
             SimpleNamespace(),
             SimpleNamespace(
                 score=0.8,
                 assessment=IntelligenceAssessment.MOSTLY_CORRECT,
+                strengths=[],
+                problems=[],
+                missing_points=[],
+                incorrect_statements=[],
             ),
         ),
         (
@@ -534,6 +539,7 @@ def test_summary_technical_scores_and_evidence_are_grounded_in_review_rows() -> 
                 sequence_number=2,
                 confidence=1.0,
                 transcription_annotations=None,
+                difficulty="junior",
             ),
             SimpleNamespace(),
             SimpleNamespace(score=0.0, assessment=IntelligenceAssessment.INCORRECT),
@@ -542,8 +548,8 @@ def test_summary_technical_scores_and_evidence_are_grounded_in_review_rows() -> 
 
     grounded = _ground_technical_assessment(overview, rows)
 
-    assert grounded.technical_score == 0.8
-    assert grounded.technical_topics[0].score == 0.8
+    assert grounded.technical_score is None
+    assert grounded.technical_topics[0].score is None
     assert grounded.technical_topics[0].questions_count == 1
     assert grounded.technical_topics[0].evidence_question_numbers == [1]
     assert grounded.technical_topics[0].confidence == 0.9
@@ -579,6 +585,8 @@ def test_derived_report_ignores_rejected_ai_and_prefers_mentor_edit() -> None:
         score: float,
     ) -> SimpleNamespace:
         return SimpleNamespace(
+            assessment=IntelligenceAssessment.MOSTLY_CORRECT,
+            incorrect_statements=[],
             source=source,
             status=status,
             score=score,
@@ -590,6 +598,8 @@ def test_derived_report_ignores_rejected_ai_and_prefers_mentor_edit() -> None:
         )
 
     rejected = SimpleNamespace(
+        transcription_annotations=None,
+        difficulty="junior",
         question_kind=IntelligenceQuestionKind.TECHNICAL,
         sequence_number=1,
         category="Python",
@@ -605,6 +615,8 @@ def test_derived_report_ignores_rejected_ai_and_prefers_mentor_edit() -> None:
         ),
     )
     edited = SimpleNamespace(
+        transcription_annotations=None,
+        difficulty="junior",
         question_kind=IntelligenceQuestionKind.TECHNICAL,
         sequence_number=2,
         category="Базы данных",
@@ -627,12 +639,13 @@ def test_derived_report_ignores_rejected_ai_and_prefers_mentor_edit() -> None:
 
     report = _derived_technical_report([rejected, edited])
 
-    assert report["technical_score"] == 0.9
+    assert report["technical_score"] is None
     topics = report["technical_topics"]
-    assert topics[0]["topic"] == "Базы данных"
-    assert topics[0]["score"] == 0.9
-    assert topics[1]["topic"] == "Python"
-    assert topics[1]["score"] is None
+    by_topic = {topic["topic"]: topic for topic in topics}
+    assert by_topic["Базы данных"]["score"] is None
+    assert by_topic["Базы данных"]["summary"] == "Проверенный итог."
+    assert by_topic["Python"]["score"] is None
+    assert by_topic["Python"]["gaps"] == []
 
 
 def test_transcript_chunks_enforce_a_character_budget_and_keep_progressing() -> None:
@@ -1069,3 +1082,9 @@ async def test_openai_embedding_response_rejects_duplicate_indexes() -> None:
 
     with pytest.raises(InterviewAIError, match="invalid embedding indexes"):
         await provider.embed(["первый", "второй"])
+
+
+@pytest.fixture(autouse=True)
+def reset_database():
+    """Provider and aggregation tests use fakes and do not require PostgreSQL."""
+    yield

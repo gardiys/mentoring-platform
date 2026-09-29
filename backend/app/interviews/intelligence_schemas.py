@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.interviews.feedback_types import CandidateQuestion, CoachingState, CommunicationDimension
 from app.interviews.intelligence_models import (
     IntelligenceAssessment,
     IntelligenceAttemptStage,
@@ -178,12 +179,8 @@ class IntelligenceProcessingRead(BaseModel):
     attempts: list[IntelligenceProcessingAttemptRead]
 
 
-class IntelligenceCommunicationDimensionRead(BaseModel):
-    name: str
-    score: float | None
-    summary: str
-    evidence_utterance_ids: list[str]
-    confidence: float
+class IntelligenceCommunicationDimensionRead(CommunicationDimension):
+    pass
 
 
 class IntelligenceTechnicalTopicRead(BaseModel):
@@ -199,6 +196,7 @@ class IntelligenceTechnicalTopicRead(BaseModel):
 
 
 class IntelligencePriorityActionRead(BaseModel):
+    communication_skill: str | None = None
     title: str
     reason: str
     steps: list[str]
@@ -207,6 +205,9 @@ class IntelligencePriorityActionRead(BaseModel):
 
 
 class IntelligenceInterviewOverviewRead(BaseModel):
+    communication_grounded: bool = False
+    candidate_questions: list[CandidateQuestion] = Field(default_factory=list)
+    coaching_state: dict[str, CoachingState] = Field(default_factory=dict)
     overall_summary: str
     technical_score: float | None = None
     technical_summary: str = ""

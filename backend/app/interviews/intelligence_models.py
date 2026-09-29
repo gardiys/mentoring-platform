@@ -196,6 +196,10 @@ class IntelligenceInterview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     processing_error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
     processing_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    candidate_questions: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, default=list, nullable=False
+    )
+    coaching_state: Mapped[dict[str, object]] = mapped_column(JSONB, default=dict, nullable=False)
     ai_summary_payload: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     ai_summary_model: Mapped[str | None] = mapped_column(String(160), nullable=True)
     ai_summary_prompt_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -540,6 +544,9 @@ class IntelligenceAnswerReview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     problems: Mapped[list[dict[str, object]]] = mapped_column(JSONB, default=list, nullable=False)
     missing_points: Mapped[list[object]] = mapped_column(JSONB, default=list, nullable=False)
     incorrect_statements: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, default=list, nullable=False
+    )
+    delivery_assessment: Mapped[list[dict[str, object]]] = mapped_column(
         JSONB, default=list, nullable=False
     )
     suggested_better_answer: Mapped[str | None] = mapped_column(Text, nullable=True)

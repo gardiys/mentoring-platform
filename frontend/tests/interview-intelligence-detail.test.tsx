@@ -1,12 +1,18 @@
+import { CommunicationFeedback } from "../src/components/CommunicationFeedback";
+import * as clientApi from "../src/api/client";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
 import { AdminAnalysisRestartPanel } from "../src/components/AdminAnalysisRestartPanel";
 import { InterviewIntelligencePage } from "../src/pages/InterviewIntelligencePage";
 import type { IntelligenceInterviewDetail, User } from "../src/types/api";
 import { renderPage } from "./render";
+
+beforeEach(() => {
+  vi.spyOn(api, "interviewDecks").mockResolvedValue([]);
+});
 
 const interviewId = "70000000-0000-4000-8000-000000000001";
 
@@ -388,13 +394,75 @@ it("показывает компактный AI-отчёт до soft skills и 
     expect(screen.getByText("Как работает GIL?")).toBeVisible(),
   );
 
-  const communicationSummary = screen.getByText(
-    "Уникальное резюме коммуникации.",
-  );
-  expect(communicationSummary).not.toBeVisible();
+  expect(
+    screen.queryByText("Уникальное резюме коммуникации."),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText("70%")).not.toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Недостаточно подтверждённых реплик для оценки коммуникации.",
+    ),
+  ).toBeVisible();
+});
 
-  await userEvent.click(
-    screen.getByRole("button", { name: /Коммуникация и подача/i }),
+it("показывает цитату, перематывает к реплике и сохраняет выполнение упражнения", async () => {
+  const seek = vi.fn();
+  const request = vi
+    .spyOn(clientApi, "apiRequest")
+    .mockResolvedValue({ completed_at: "2026-09-29T12:00:00Z" });
+  const grounded: IntelligenceInterviewDetail = {
+    ...detail,
+    analysis_revision: 2,
+    overview: {
+      ...detail.overview!,
+      communication_grounded: true,
+      communication_dimensions: [
+        {
+          skill: "structure",
+          name: "Структура ответа",
+          score: 0.4,
+          confidence: 0.9,
+          summary: "Результат не указан.",
+          evidence_quote: detail.transcript[0]!.text,
+          evidence_utterance_ids: [detail.transcript[0]!.id],
+          rewrite: {
+            original: detail.transcript[0]!.text,
+            improved: "Сначала назови задачу, затем действия.",
+          },
+          exercise: {
+            task: "Перескажи пример по структуре.",
+            success_criterion: "Названы задача и результат.",
+          },
+        },
+      ],
+    },
+  };
+  renderPage(
+    <CommunicationFeedback
+      interview={grounded}
+      onSeek={seek}
+      canReview={false}
+      isOwner
+    />,
   );
-  await waitFor(() => expect(communicationSummary).toBeVisible());
+  expect(screen.getByText(`«${detail.transcript[0]!.text}»`)).toBeVisible();
+  await userEvent.click(
+    screen.getByRole("button", { name: "К записи · 0:01" }),
+  );
+  expect(seek).toHaveBeenCalledWith(1000);
+  await userEvent.click(
+    screen.getByRole("button", { name: "Отметить выполненным" }),
+  );
+  await waitFor(() =>
+    expect(request).toHaveBeenCalledWith(
+      `/api/v1/interviews/${interviewId}/communication/structure`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ revision: 2, action: "complete" }),
+      },
+    ),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Отклонить вывод" }),
+  ).not.toBeInTheDocument();
 });

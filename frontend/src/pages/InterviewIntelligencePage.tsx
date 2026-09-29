@@ -1,3 +1,6 @@
+import { useInterviewDecks } from "../features/interviews/queries";
+import { useAddInterviewPractice } from "../features/interviews/coaching";
+import { CommunicationFeedback } from "../components/CommunicationFeedback";
 import { AiBadge } from "../components/AiBadge";
 import {
   Accordion,
@@ -84,13 +87,25 @@ function scorePresentation(score: number | null) {
 
 function OverviewSummary({
   overview,
+  questions,
+  trackId,
+  onQuestionNavigate,
 }: {
   overview: IntelligenceInterviewOverview;
+  questions: IntelligenceQuestion[];
+  trackId: string;
+  onQuestionNavigate: (id: string) => void;
 }) {
+  const decks = useInterviewDecks();
+  const relevantDecks = (decks.data ?? []).filter(
+    (deck) => deck.track_id === trackId,
+  );
   const technicalScore = overview.technical_score ?? null;
   const technical = scorePresentation(technicalScore);
   const technicalPercent = scorePercent(technicalScore);
-  const communicationPercent = scorePercent(overview.communication_score);
+  const communicationPercent = scorePercent(
+    overview.communication_grounded ? overview.communication_score : null,
+  );
   const priorityActions = (overview.priority_actions ?? []).slice(0, 6);
 
   return (
@@ -122,11 +137,21 @@ function OverviewSummary({
             <Text fw={800} size="xl">
               {technicalPercent === null ? "—" : `${technicalPercent}%`}
             </Text>
+            {technicalPercent === null && (
+              <Text size="xs" c="dimmed">
+                Мало данных: нужны минимум 3 оценённых ответа
+              </Text>
+            )}
           </div>
           <div className="analysis-score-item">
             <Text className="technical-label">Коммуникация</Text>
             <Text fw={800} size="xl">
               {communicationPercent === null ? "—" : `${communicationPercent}%`}
+            </Text>
+            <Text size="xs" c="dimmed">
+              {communicationPercent === null
+                ? "Недостаточно доказательств"
+                : "По подтверждённым цитатам; только текст разговора"}
             </Text>
           </div>
         </div>
@@ -164,6 +189,57 @@ function OverviewSummary({
                         <li key={step}>{step}</li>
                       ))}
                     </ol>
+                  )}
+                  <Group gap="xs">
+                    {questions
+                      .filter((q) =>
+                        overview.technical_topics.some(
+                          (t) =>
+                            action.related_topics.includes(t.topic) &&
+                            t.evidence_question_numbers.includes(
+                              q.sequence_number,
+                            ),
+                        ),
+                      )
+                      .slice(0, 3)
+                      .map((q) => (
+                        <Button
+                          key={q.id}
+                          size="xs"
+                          variant="light"
+                          onClick={() => onQuestionNavigate(q.id)}
+                        >
+                          Вопрос №{q.sequence_number} · ответ и повторение
+                        </Button>
+                      ))}
+                  </Group>
+                  {!!action.related_topics?.length && (
+                    <Group gap="xs">
+                      {action.related_topics.flatMap((topic) =>
+                        relevantDecks.map((deck) => (
+                          <Button
+                            key={`${topic}:${deck.id}`}
+                            component={Link}
+                            to={`/interviews/${deck.slug}/questions?q=${encodeURIComponent(topic)}`}
+                            size="xs"
+                            variant="subtle"
+                          >
+                            Карточки: {topic}
+                          </Button>
+                        )),
+                      )}
+                      {action.related_topics.map((topic) => (
+                        <Button
+                          key={topic}
+                          component={Link}
+                          to={`/knowledge?q=${encodeURIComponent(topic)}`}
+                          size="xs"
+                          variant="subtle"
+                        >
+                          Материалы: {topic}
+                        </Button>
+                      ))}
+                    </Group>
                   )}
                   {action.success_criterion && (
                     <Text size="xs" className="analysis-success-criterion">
@@ -436,6 +512,7 @@ function QuestionCard({
   reviewerRole: "student" | "mentor" | "admin";
   interviewId: string;
 }) {
+  const practice = useAddInterviewPractice();
   const reviewMutation = useIntelligenceReviewAction();
   const moderationMutation = useIntelligenceQuestionModeration();
   const review = question.answer?.reviews.at(-1);
@@ -475,6 +552,20 @@ function QuestionCard({
               {timestamp(question.question_start_ms)} · {question.category}
             </Text>
             <Title order={3}>{question.question_text}</Title>
+            {reviewerRole === "student" &&
+              question.question_kind === "technical" && (
+                <Button
+                  mt="sm"
+                  size="xs"
+                  variant="light"
+                  loading={practice.isPending}
+                  onClick={() =>
+                    practice.mutate({ interviewId, questionId: question.id })
+                  }
+                >
+                  Добавить в повторение
+                </Button>
+              )}
           </div>
           <Group gap="xs">
             <Badge
@@ -973,98 +1064,28 @@ export function InterviewIntelligencePage() {
 
       {interview.overview && (
         <>
-          <OverviewSummary overview={interview.overview} />
+          <OverviewSummary
+            overview={interview.overview}
+            questions={interview.questions}
+            trackId={interview.track_id}
+            onQuestionNavigate={revealQuestion}
+          />
           <TechnicalTopics
             overview={interview.overview}
             questions={interview.questions}
             onQuestionNavigate={revealQuestion}
           />
-          <AnalysisSection
-            ai
-            eyebrow="Soft skills"
-            title="Коммуникация и подача"
-            summary={
-              interview.overview.communication_score === null
-                ? "Без оценки"
-                : `${Math.round(interview.overview.communication_score * 100)}%`
-            }
-          >
-            <Stack gap="md">
-              <Text c="dimmed">
-                Оценка основана только на наблюдаемом тексте разговора.
-              </Text>
-              <Text>{interview.overview.communication_summary}</Text>
-
-              {interview.overview.communication_dimensions.length > 0 && (
-                <SimpleGrid
-                  cols={{ base: 1, md: 2 }}
-                  className="analysis-communication-grid"
-                >
-                  {interview.overview.communication_dimensions.map(
-                    (dimension) => (
-                      <div
-                        key={dimension.name}
-                        className="analysis-communication-dimension"
-                      >
-                        <Group justify="space-between" wrap="nowrap">
-                          <Text fw={700}>{dimension.name}</Text>
-                          {dimension.score !== null && (
-                            <Badge variant="outline">
-                              {Math.round(dimension.score * 100)}%
-                            </Badge>
-                          )}
-                        </Group>
-                        <Text size="sm" mt="xs">
-                          {dimension.summary}
-                        </Text>
-                      </div>
-                    ),
-                  )}
-                </SimpleGrid>
-              )}
-
-              <SimpleGrid cols={{ base: 1, md: 2 }}>
-                <div className="analysis-topic-points is-strength">
-                  <Text fw={700}>Сильные стороны</Text>
-                  {interview.overview.communication_strengths.length > 0 ? (
-                    <ul>
-                      {interview.overview.communication_strengths.map(
-                        (item) => (
-                          <li key={item}>{item}</li>
-                        ),
-                      )}
-                    </ul>
-                  ) : (
-                    <Text size="sm" c="dimmed">
-                      Недостаточно данных
-                    </Text>
-                  )}
-                </div>
-                <div className="analysis-topic-points is-gap">
-                  <Text fw={700}>Что можно улучшить</Text>
-                  {interview.overview.communication_growth_areas.length > 0 ? (
-                    <ul>
-                      {interview.overview.communication_growth_areas.map(
-                        (item) => (
-                          <li key={item}>{item}</li>
-                        ),
-                      )}
-                    </ul>
-                  ) : (
-                    <Text size="sm" c="dimmed">
-                      Недостаточно данных
-                    </Text>
-                  )}
-                </div>
-              </SimpleGrid>
-
-              {interview.overview.caveats.length > 0 && (
-                <Alert color="yellow" title="Ограничения оценки">
-                  {interview.overview.caveats.join(" ")}
-                </Alert>
-              )}
-            </Stack>
-          </AnalysisSection>
+          <CommunicationFeedback
+            interview={interview}
+            onSeek={(ms) => void playFromTranscript(ms)}
+            canReview={canReview}
+            isOwner={me.data.id === interview.student_id}
+          />
+          {interview.overview.caveats.length > 0 && (
+            <Alert color="yellow" title="Ограничения оценки">
+              {interview.overview.caveats.join(" ")}
+            </Alert>
+          )}
         </>
       )}
 

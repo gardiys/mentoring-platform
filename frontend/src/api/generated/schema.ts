@@ -2045,6 +2045,57 @@ export interface paths {
         patch: operations["admin_moderate_company_alias_proposal_api_v1_admin_interviews_company_alias_proposals__proposal_id__patch"];
         trace?: never;
     };
+    "/api/v1/interviews/{interview_id}/questions/{question_id}/practice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Practice Question */
+        post: operations["practice_question_api_v1_interviews__interview_id__questions__question_id__practice_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/communication-history/{student_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Coaching History */
+        get: operations["coaching_history_api_v1_interviews_communication_history__student_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/{interview_id}/communication/{skill}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Coaching Update */
+        put: operations["coaching_update_api_v1_interviews__interview_id__communication__skill__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/interviews": {
         parameters: {
             query?: never;
@@ -8280,6 +8331,17 @@ export interface components {
          * @enum {string}
          */
         AutomationReviewResult: "correct" | "merge_error" | "classification_error" | "wrong_object_type" | "wrong_topic" | "other";
+        /** CandidateQuestion */
+        CandidateQuestion: {
+            /** Question */
+            question: string;
+            /** Evidence Quote */
+            evidence_quote: string;
+            /** Question Utterance Ids */
+            question_utterance_ids: string[];
+            /** Response Utterance Ids */
+            response_utterance_ids?: string[];
+        };
         /** CardAutomationMetricsRead */
         CardAutomationMetricsRead: {
             /**
@@ -8973,6 +9035,98 @@ export interface components {
              */
             staff_only: boolean;
         };
+        /** CoachingMutation */
+        CoachingMutation: {
+            /** Revision */
+            revision: number;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "complete" | "uncomplete" | "approve" | "reject";
+        };
+        /** CoachingObservation */
+        CoachingObservation: {
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            skill?: components["schemas"]["CommunicationSkill"] | null;
+            /** Score */
+            score?: number | null;
+            /** Summary */
+            summary: string;
+            /** Evidence Utterance Ids */
+            evidence_utterance_ids?: string[];
+            /**
+             * Evidence Quote
+             * @default
+             */
+            evidence_quote: string;
+            /** Confidence */
+            confidence: number;
+            rewrite?: components["schemas"]["CommunicationRewrite"] | null;
+            exercise?: components["schemas"]["CommunicationExercise"] | null;
+            /**
+             * Interview Id
+             * Format: uuid
+             */
+            interview_id: string;
+            /** Analysis Revision */
+            analysis_revision: number;
+            /**
+             * Date
+             * Format: date-time
+             */
+            date: string;
+            /** Interview Type */
+            interview_type: string;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Decision */
+            decision?: ("approved" | "rejected") | null;
+        };
+        /** CoachingState */
+        CoachingState: {
+            /** Completed At */
+            completed_at?: string | null;
+            /** Decision */
+            decision?: ("approved" | "rejected") | null;
+            /** Reviewer Id */
+            reviewer_id?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+        };
+        /** CommunicationExercise */
+        CommunicationExercise: {
+            /** Task */
+            task: string;
+            /** Success Criterion */
+            success_criterion: string;
+        };
+        /** CommunicationHistory */
+        CommunicationHistory: {
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            /** Observations */
+            observations: components["schemas"]["CoachingObservation"][];
+        };
+        /** CommunicationRewrite */
+        CommunicationRewrite: {
+            /** Original */
+            original: string;
+            /** Improved */
+            improved: string;
+        };
+        /**
+         * CommunicationSkill
+         * @enum {string}
+         */
+        CommunicationSkill: "structure" | "specificity" | "conciseness" | "clarification" | "handling_unknown" | "handling_pushback" | "reasoning_aloud" | "ownership";
         /**
          * CompanyAliasProposalStatus
          * @enum {string}
@@ -10121,16 +10275,27 @@ export interface components {
         };
         /** IntelligenceCommunicationDimensionRead */
         IntelligenceCommunicationDimensionRead: {
-            /** Name */
+            /**
+             * Name
+             * @default
+             */
             name: string;
+            skill?: components["schemas"]["CommunicationSkill"] | null;
             /** Score */
-            score: number | null;
+            score?: number | null;
             /** Summary */
             summary: string;
             /** Evidence Utterance Ids */
-            evidence_utterance_ids: string[];
+            evidence_utterance_ids?: string[];
+            /**
+             * Evidence Quote
+             * @default
+             */
+            evidence_quote: string;
             /** Confidence */
             confidence: number;
+            rewrite?: components["schemas"]["CommunicationRewrite"] | null;
+            exercise?: components["schemas"]["CommunicationExercise"] | null;
         };
         /**
          * IntelligenceDifficulty
@@ -10244,6 +10409,17 @@ export interface components {
         };
         /** IntelligenceInterviewOverviewRead */
         IntelligenceInterviewOverviewRead: {
+            /**
+             * Communication Grounded
+             * @default false
+             */
+            communication_grounded: boolean;
+            /** Candidate Questions */
+            candidate_questions?: components["schemas"]["CandidateQuestion"][];
+            /** Coaching State */
+            coaching_state?: {
+                [key: string]: components["schemas"]["CoachingState"];
+            };
             /** Overall Summary */
             overall_summary: string;
             /** Technical Score */
@@ -10442,6 +10618,8 @@ export interface components {
         };
         /** IntelligencePriorityActionRead */
         IntelligencePriorityActionRead: {
+            /** Communication Skill */
+            communication_skill?: string | null;
             /** Title */
             title: string;
             /** Reason */
@@ -15708,6 +15886,7 @@ export interface operations {
             query: {
                 track: "python" | "go";
                 resume?: boolean;
+                keys?: string[] | null;
             };
             header?: {
                 authorization?: string | null;
@@ -20253,6 +20432,122 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminCompanyAliasProposalRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    practice_question_api_v1_interviews__interview_id__questions__question_id__practice_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                interview_id: string;
+                question_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coaching_history_api_v1_interviews_communication_history__student_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                student_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunicationHistory"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coaching_update_api_v1_interviews__interview_id__communication__skill__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                interview_id: string;
+                skill: components["schemas"]["CommunicationSkill"];
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoachingMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoachingState"];
                 };
             };
             /** @description Validation Error */

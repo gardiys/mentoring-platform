@@ -1,3 +1,4 @@
+import { CommunicationProgress } from "../components/CommunicationProgress";
 import {
   Alert,
   Anchor,
@@ -142,6 +143,7 @@ export function PersonalReviewPage() {
         </Badge>
       </Group>
 
+      <CommunicationProgress practice />
       <Card withBorder>
         <Group justify="space-between">
           <Switch

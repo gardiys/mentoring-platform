@@ -19,12 +19,26 @@ async def summarize_review_evidence(
     findings: list[dict[str, Any]] = []
     fallback_reviews: list[dict[str, Any]] = []
     coverage: list[dict[str, Any]] = []
+    delivery: dict[str, dict[str, Any]] = {}
+    interview_context: dict[str, Any] = {}
     for chunk in transcript_chunks(blocks, size=20, overlap=0, max_chars=SUMMARY_INPUT_CHARS):
         rows = [json.loads(line) for line in chunk.splitlines() if line.strip()]
         requested = {row["question_number"] for row in rows}
         for row in rows:
+            interview_context = row.get("interview_context", interview_context)
+            for observation in row.get("delivery_assessment", []):
+                skill = observation.get("skill")
+                old = delivery.get(skill)
+                score = observation.get("score")
+                if old is None or (
+                    score is not None and (old.get("score") is None or score < old["score"])
+                ):
+                    delivery[skill] = observation
             coverage.append(
                 {
+                    "difficulty": row.get("difficulty", "unknown"),
+                    "answer_excerpt": row.get("answer_excerpt", "")[:300],
+                    "answer_utterance_ids": row.get("answer_utterance_ids", []),
                     "question_number": row["question_number"],
                     "question_kind": row["question_kind"],
                     "topic": row["topic"],
@@ -50,7 +64,9 @@ async def summarize_review_evidence(
             if not numbers.issubset(requested):
                 continue
             covered.update(numbers)
-            findings.append(finding.model_dump(mode="json"))
+            # The compressor cannot introduce new delivery claims. Original, grounded
+            # observations are carried separately even when a finding omits them.
+            findings.append(finding.model_dump(mode="json", exclude={"communication_observations"}))
         # Preserve omitted questions verbatim as review data, not invented observations.
         fallback_reviews.extend(row for row in rows if row["question_number"] not in covered)
 
@@ -58,6 +74,8 @@ async def summarize_review_evidence(
         json.dumps(
             {
                 "input_kind": "reviewed_interview_evidence",
+                "interview_context": interview_context,
+                "delivery_assessment": list(delivery.values()),
                 "question_coverage": coverage,
                 "findings": findings,
                 "uncompressed_reviews": fallback_reviews,

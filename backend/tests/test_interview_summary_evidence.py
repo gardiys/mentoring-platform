@@ -7,6 +7,7 @@ import pytest
 from app.interviews.intelligence_ai import (
     AISummaryEvidenceResult,
     AIUsageResult,
+    CommunicationDimension,
     InterviewAIError,
     InterviewSummaryEvidence,
     OpenAIInterviewAIProvider,
@@ -91,6 +92,39 @@ async def test_missing_or_invented_compression_references_keep_original_reviews(
     assert payload["uncompressed_reviews"] == [json.loads(b) for b in blocks]
 
 
+async def test_compression_keeps_original_delivery_and_drops_invented_observations():
+    original = {
+        "skill": "structure",
+        "score": 0.4,
+        "summary": "Результат не уточнён.",
+        "evidence_quote": "Я проверил логи.",
+        "evidence_utterance_ids": ["source-id"],
+        "confidence": 0.9,
+    }
+
+    async def invent(content):
+        result = await compress(content)
+        for finding in result.output.findings:
+            finding.communication_observations = [
+                CommunicationDimension.model_validate(
+                    {**original, "evidence_quote": "Выдуманная цитата"}
+                )
+            ]
+        return result
+
+    checkpoints = SimpleNamespace(
+        summarize=AsyncMock(), summarize_evidence=AsyncMock(side_effect=invent)
+    )
+    rows = [json.loads(evidence(i, long=True)) for i in range(1, 22)]
+    rows[0]["delivery_assessment"] = [original]
+    rows[0]["interview_context"] = {"interview_type": "hr"}
+    await summarize_review_evidence(checkpoints, [json.dumps(row) for row in rows])
+    payload = json.loads(checkpoints.summarize.await_args.args[0])
+    assert payload["delivery_assessment"] == [original]
+    assert all("communication_observations" not in finding for finding in payload["findings"])
+    assert "Выдуманная цитата" not in checkpoints.summarize.await_args.args[0]
+
+
 async def test_invalid_compression_falls_back_without_generating_partial_reports():
     checkpoints = SimpleNamespace(
         summarize=AsyncMock(),
@@ -136,3 +170,9 @@ async def test_compact_evidence_uses_its_own_schema_and_budget():
     assert parse.await_args.kwargs["text_format"] is InterviewSummaryEvidence
     assert parse.await_args.kwargs["max_output_tokens"] == 3_000
     assert parse.await_args.kwargs["model"] == "cheap-review"
+
+
+@pytest.fixture(autouse=True)
+def reset_database():
+    """Provider and aggregation tests use fakes and do not require PostgreSQL."""
+    yield

@@ -39,11 +39,18 @@ from app.interviews.card_automation_jobs import (
     route_question_occurrence,
     validate_cluster_answer,
 )
+from app.interviews.feedback_grounding import (
+    _effective_summary_rows,
+    difficulty_weight,
+    ground_communication,
+    ground_delivery,
+    weighted_score,
+)
+from app.interviews.feedback_types import CommunicationDimension
 from app.interviews.intelligence_ai import (
     LIGHT_REVIEW_PROMPT_VERSION,
     SUMMARY_PROMPT_VERSION,
     TECHNICAL_REVIEW_PROMPT_VERSION,
-    CommunicationDimension,
     ExtractedQuestion,
     InterviewAIError,
     InterviewAIProvider,
@@ -579,6 +586,7 @@ async def extract_interview_structure(
             for item in utterances
         ]
         extracted = []
+        candidate_questions = []
         checkpoints = InterviewAICheckpoints(
             async_session_factory,
             interview.id,
@@ -593,6 +601,7 @@ async def extract_interview_structure(
             for chunk in transcript_chunks(blocks, size=40, overlap=8, max_chars=35_000):
                 result = await checkpoints.extract(chunk, direction=direction)
                 extracted.extend(result.output.questions)
+                candidate_questions.extend(result.output.candidate_questions)
         except InterviewAIError as error:
             if error.code == INTERVIEW_STAGE_CONTINUE:
                 # This is progress, not a failed attempt. Persist finished reviews and
@@ -649,6 +658,30 @@ async def extract_interview_structure(
             if will_retry:
                 raise Retry(defer=retry_delay(error, _retry_delay(ctx, 60))) from error
             return
+        saved_candidate_questions = []
+        seen_candidate_questions = set()
+        for candidate_question in candidate_questions:
+            ids = candidate_question.question_utterance_ids
+            if not ids or any(id_ not in by_label for id_ in ids):
+                continue
+            if not any(candidate_question.evidence_quote in by_label[id_].text for id_ in ids):
+                continue
+            key = tuple(ids), candidate_question.evidence_quote
+            if key in seen_candidate_questions:
+                continue
+            seen_candidate_questions.add(key)
+            saved_candidate_questions.append(
+                {
+                    **candidate_question.model_dump(mode="json"),
+                    "question_utterance_ids": [str(by_label[id_].id) for id_ in ids],
+                    "response_utterance_ids": [
+                        str(by_label[id_].id)
+                        for id_ in candidate_question.response_utterance_ids
+                        if id_ in by_label
+                    ],
+                }
+            )
+        interview.candidate_questions = saved_candidate_questions
         sequence = 0
         for item in questions_to_save:
             grounded = ground_question(item, by_label, interview.candidate_speaker_id)
@@ -847,6 +880,17 @@ async def generate_answer_reviews(
                 select(LearningTrack).where(LearningTrack.id.in_(direction_ids))
             )
         }
+        track = await session.scalar(
+            select(LearningTrack)
+            .join(InterviewProcess, InterviewProcess.track_id == LearningTrack.id)
+            .join(InterviewProcessStage, InterviewProcessStage.process_id == InterviewProcess.id)
+            .where(InterviewProcessStage.id == interview.stage_id)
+        )
+        interview_context = {
+            "interview_type": interview.interview_type.value,
+            "position_name": interview.position_name,
+            "track_title": track.title if track else None,
+        }
         try:
             for question, answer in rows:
                 exists = await session.scalar(
@@ -857,15 +901,18 @@ async def generate_answer_reviews(
                 )
                 if exists is not None:
                     continue
-                context = (
-                    _neighbor_context(
-                        question,
-                        utterances,
-                        speakers,
-                        interview.candidate_speaker_id,
-                    )
-                    if question.question_kind is IntelligenceQuestionKind.TECHNICAL
-                    else ""
+                context = _neighbor_context(
+                    question,
+                    utterances,
+                    speakers,
+                    interview.candidate_speaker_id,
+                )
+                context += "\n" + json.dumps(
+                    {
+                        "interview_context": interview_context,
+                        "answer_utterance_ids": [str(id_) for id_ in question.answer_utterance_ids],
+                    },
+                    ensure_ascii=False,
                 )
                 if question.transcription_annotations and (
                     question.transcription_annotations.get("corrections")
@@ -921,6 +968,9 @@ async def generate_answer_reviews(
                         incorrect_statements=[
                             item.model_dump(mode="json") for item in review.incorrect_statements
                         ],
+                        delivery_assessment=[
+                            item.model_dump(mode="json") for item in review.delivery_assessment
+                        ],
                         suggested_better_answer=review.suggested_better_answer,
                         model_name=review_model,
                         prompt_version=(
@@ -932,9 +982,8 @@ async def generate_answer_reviews(
                 )
             if interview.ai_summary_payload is None:
                 # The student-facing report is synthesized from the already reviewed
-                # questions. This keeps technical conclusions aligned with the
-                # question-level evaluation and avoids making soft-skill observations
-                # the centre of the report.
+                # questions. Technical and communication conclusions both need
+                # attributable source evidence; neither category has unconditional priority.
                 await session.flush()
                 summary_rows = (
                     await session.execute(
@@ -961,11 +1010,15 @@ async def generate_answer_reviews(
                     )
                 ).all()
                 summary_rows = _effective_summary_rows(list(summary_rows))
-                blocks = _summary_evidence_blocks(summary_rows)
+                blocks = _summary_evidence_blocks(summary_rows, utterances, interview_context)
                 if blocks:
                     summary_result = await summarize_review_evidence(checkpoints, blocks)
                     overview = _ground_technical_assessment(summary_result.output, summary_rows)
-                    interview.ai_summary_payload = overview.model_dump(mode="json")
+                    interview.ai_summary_payload = ground_communication(
+                        overview.model_dump(mode="json"),
+                        summary_rows,
+                        utterances,
+                    )
                     interview.ai_summary_model = summary_result.usage.model
                     interview.ai_summary_prompt_version = SUMMARY_PROMPT_VERSION
                 else:
@@ -1282,53 +1335,41 @@ def _retry_delay(ctx: dict[str, Any], base_seconds: int) -> int:
     return max(1, int(capped_delay * (0.5 + jitter_fraction / 2)))
 
 
-def _effective_summary_rows(rows: list[Any]) -> list[Any]:
-    grouped: dict[UUID, list[Any]] = {}
-    order: list[UUID] = []
-    for row in rows:
-        question = row[0]
-        if question.id not in grouped:
-            order.append(question.id)
-        grouped.setdefault(question.id, []).append(row)
-
-    result: list[Any] = []
-    for question_id in order:
-        candidates = grouped[question_id]
-        mentor = next(
-            (
-                row
-                for row in candidates
-                if row[2].source is IntelligenceReviewSource.MENTOR
-                and row[2].status is IntelligenceReviewStatus.APPROVED
-            ),
-            None,
-        )
-        ai = next(
-            (
-                row
-                for row in candidates
-                if row[2].source is IntelligenceReviewSource.AI
-                and row[2].status
-                in {
-                    IntelligenceReviewStatus.SUGGESTED,
-                    IntelligenceReviewStatus.APPROVED,
-                }
-            ),
-            None,
-        )
-        if selected := mentor or ai:
-            result.append(selected)
-    return result
-
-
-def _summary_evidence_blocks(rows: list[Any]) -> list[str]:
+def _summary_evidence_blocks(
+    rows: list[Any],
+    utterances: list[Any] | None = None,
+    interview_context: dict[str, Any] | None = None,
+) -> list[str]:
     blocks: list[str] = []
     seen_questions: set[UUID] = set()
-    for question, _answer, review in rows:
+    for row_index, (question, answer, review) in enumerate(rows):
         if question.id in seen_questions:
             continue
         seen_questions.add(question.id)
         payload = {
+            "interview_context": interview_context or {},
+            "answer_excerpt": answer.answer_text[:1200],
+            "answer_utterance_ids": [str(id_) for id_ in question.answer_utterance_ids],
+            "answer_duration_ms": (
+                answer.end_ms - answer.start_ms
+                if answer.end_ms is not None and answer.start_ms is not None
+                else None
+            ),
+            "answer_word_count": len(answer.answer_text.split()),
+            "interviewer_followups_count": sum(
+                1
+                for next_question, _, _ in rows[row_index + 1 :]
+                if answer.end_ms is not None
+                and answer.start_ms is not None
+                and answer.start_ms <= next_question.question_start_ms <= answer.end_ms
+            ),
+            "difficulty": question.difficulty.value,
+            "delivery_assessment": ground_delivery(
+                review.delivery_assessment or [],
+                question,
+                answer,
+                utterances or [],
+            ),
             "question_number": question.sequence_number,
             "question_kind": question.question_kind.value,
             "topic": question.category,
@@ -1343,10 +1384,19 @@ def _summary_evidence_blocks(rows: list[Any]) -> list[str]:
                 "assessment": review.assessment.value,
                 "score": review.score,
                 "summary": (review.summary or "")[:1_500] or None,
-                "strengths": review.strengths[:3],
-                "problems": review.problems[:3],
-                "missing_points": review.missing_points[:5],
-                "incorrect_statements": review.incorrect_statements[:3],
+                "incorrect_statements": sorted(
+                    review.incorrect_statements, key=lambda item: not bool(item.get("evidence"))
+                ),
+                "missing_points": review.missing_points[:8],
+                "problems": sorted(
+                    review.problems, key=lambda item: not bool(item.get("evidence"))
+                )[:3],
+                "strengths": sorted(
+                    review.strengths, key=lambda item: not bool(item.get("evidence"))
+                )[:3],
+                "suggested_better_answer": (review.suggested_better_answer or "")[:1200]
+                if review.score is not None and review.score < 0.8
+                else None,
             },
         }
         blocks.append(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
@@ -1419,6 +1469,10 @@ def _ground_technical_assessment(
     for question, _answer, review in rows:
         if question.question_kind is not IntelligenceQuestionKind.TECHNICAL:
             continue
+        if (question.transcription_annotations or {}).get(
+            "answer_unreliable"
+        ) and review.source is IntelligenceReviewSource.AI:
+            continue
         evidence.setdefault(
             question.sequence_number,
             (
@@ -1429,6 +1483,7 @@ def _ground_technical_assessment(
             ),
         )
 
+    by_number = {question.sequence_number: (question, review) for question, _, review in rows}
     grounded_topics: list[TechnicalTopicAssessment] = []
     for topic in overview.technical_topics:
         question_numbers = sorted(
@@ -1437,12 +1492,37 @@ def _ground_technical_assessment(
         if not question_numbers:
             continue
         scores = [
-            score for number in question_numbers if (score := evidence[number][0]) is not None
+            (score, difficulty_weight(by_number[number][0].difficulty))
+            for number in question_numbers
+            if (score := evidence[number][0]) is not None
+        ]
+        strengths = [
+            str(item["point"])
+            for number in question_numbers
+            for item in by_number[number][1].strengths
+            if item.get("point")
+        ]
+        gaps = [
+            str(item["correction"])
+            for number in question_numbers
+            for item in by_number[number][1].incorrect_statements
+            if item.get("correction")
+        ]
+        gaps += [
+            str(item) for number in question_numbers for item in by_number[number][1].missing_points
+        ]
+        gaps += [
+            str(item["problem"])
+            for number in question_numbers
+            for item in by_number[number][1].problems
+            if item.get("problem")
         ]
         grounded_topics.append(
             topic.model_copy(
                 update={
-                    "score": sum(scores) / len(scores) if scores else None,
+                    "score": weighted_score(scores),
+                    "strengths": list(dict.fromkeys(strengths))[:3],
+                    "gaps": list(dict.fromkeys(gaps))[:3],
                     "evidence_question_numbers": question_numbers,
                     "questions_count": len(question_numbers),
                     "confidence": sum(evidence[number][1] for number in question_numbers)
@@ -1451,10 +1531,14 @@ def _ground_technical_assessment(
             )
         )
 
-    all_scores = [score for score, _confidence in evidence.values() if score is not None]
+    all_scores = [
+        (score, difficulty_weight(by_number[number][0].difficulty))
+        for number, (score, _) in evidence.items()
+        if score is not None
+    ]
     return overview.model_copy(
         update={
-            "technical_score": sum(all_scores) / len(all_scores) if all_scores else None,
+            "technical_score": weighted_score(all_scores),
             "technical_topics": grounded_topics,
         }
     )

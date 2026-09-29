@@ -1,3 +1,4 @@
+import { CommunicationProgress } from "../components/CommunicationProgress";
 import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import { EmptyState } from "../components/EmptyState";
 import {
@@ -165,6 +166,7 @@ export function InterviewAnalysesPage() {
           + Добавить собеседование
         </Button>
       </Group>
+      <CommunicationProgress />
       {intelligence.isPending || intelligence.isPlaceholderData ? (
         <CardGridSkeleton label="Загружаем AI-разборы…" />
       ) : intelligence.isError ? (

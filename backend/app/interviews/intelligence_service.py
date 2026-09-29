@@ -4,6 +4,7 @@ import re
 import unicodedata
 from collections import defaultdict
 from datetime import UTC, datetime, time, timedelta
+from typing import Any, TypedDict
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -24,6 +25,11 @@ from app.interviews.card_automation_types import (
 )
 from app.interviews.card_frequency import effective_card_frequency, refresh_card_frequency
 from app.interviews.companies import resolve_company
+from app.interviews.feedback_grounding import (
+    difficulty_weight,
+    ground_communication,
+    weighted_score,
+)
 from app.interviews.intelligence_models import (
     IntelligenceAIAdmission,
     IntelligenceAICheckpoint,
@@ -31,6 +37,7 @@ from app.interviews.intelligence_models import (
     IntelligenceAnalysisArchive,
     IntelligenceAnswer,
     IntelligenceAnswerReview,
+    IntelligenceAssessment,
     IntelligenceAttemptStage,
     IntelligenceInterview,
     IntelligenceInterviewType,
@@ -163,13 +170,24 @@ def _review_text_items(items: list[dict[str, object]], key: str) -> list[str]:
     return [text for item in items if (text := _usable_russian_feedback(item.get(key))) is not None]
 
 
+class _TechnicalEvidenceBucket(TypedDict):
+    topic: str
+    scores: list[tuple[float, int]]
+    summaries: list[str]
+    strengths: list[str]
+    gaps: list[str]
+    better_answers: list[str]
+    question_numbers: list[int]
+    confidences: list[float]
+
+
 def _derived_technical_report(
     questions: list[IntelligenceQuestionRead],
 ) -> dict[str, object]:
-    grouped: dict[str, dict[str, object]] = {}
+    grouped: dict[str, _TechnicalEvidenceBucket] = {}
     total_technical = 0
     assessed_answers = 0
-    all_scores: list[float] = []
+    all_scores: list[tuple[float, int]] = []
 
     for question in questions:
         if question.question_kind is not IntelligenceQuestionKind.TECHNICAL:
@@ -190,8 +208,8 @@ def _derived_technical_report(
                 "confidences": [],
             },
         )
-        row["question_numbers"].append(question.sequence_number)  # type: ignore[union-attr]
-        row["confidences"].append(question.confidence)  # type: ignore[union-attr]
+        row["question_numbers"].append(question.sequence_number)
+        row["confidences"].append(question.confidence)
         if question.answer is None or not question.answer.reviews:
             continue
         mentor_reviews = [
@@ -213,27 +231,33 @@ def _derived_technical_report(
         if not mentor_reviews and not ai_reviews:
             continue
         review = (mentor_reviews or ai_reviews)[-1]
+        if (
+            question.transcription_annotations
+            and question.transcription_annotations.answer_unreliable
+            and review.source is IntelligenceReviewSource.AI
+        ):
+            continue
+        if review.assessment is IntelligenceAssessment.UNABLE_TO_ASSESS:
+            continue
         if review.score is not None:
-            row["scores"].append(review.score)  # type: ignore[union-attr]
-            all_scores.append(review.score)
+            weighted = (review.score, difficulty_weight(question.difficulty))
+            row["scores"].append(weighted)
+            all_scores.append(weighted)
             assessed_answers += 1
         if summary := _usable_russian_feedback(review.summary):
-            row["summaries"].append(summary)  # type: ignore[union-attr]
-        row["strengths"].extend(  # type: ignore[union-attr]
-            _review_text_items(review.strengths, "point")
-        )
-        row["gaps"].extend(  # type: ignore[union-attr]
+            row["summaries"].append(summary)
+        row["strengths"].extend(_review_text_items(review.strengths, "point"))
+        row["gaps"].extend(_review_text_items(review.incorrect_statements, "correction"))
+        row["gaps"].extend(
             text
             for item in review.missing_points
             if (text := _usable_russian_feedback(item)) is not None
         )
-        row["gaps"].extend(  # type: ignore[union-attr]
-            _review_text_items(review.problems, "problem")
-        )
+        row["gaps"].extend(_review_text_items(review.problems, "problem"))
         if better_answer := _usable_russian_feedback(review.suggested_better_answer):
-            row["better_answers"].append(better_answer)  # type: ignore[union-attr]
+            row["better_answers"].append(better_answer)
 
-    def unique(values: list[object], limit: int) -> list[str]:
+    def unique(values: list[str], limit: int) -> list[str]:
         result: list[str] = []
         seen: set[str] = set()
         for value in values:
@@ -246,12 +270,12 @@ def _derived_technical_report(
                 break
         return result
 
-    topics: list[dict[str, object]] = []
+    topics: list[dict[str, Any]] = []
     for row in grouped.values():
         scores = row["scores"]
-        score = sum(scores) / len(scores) if scores else None  # type: ignore[arg-type]
-        gaps = unique(row["gaps"], 3)  # type: ignore[arg-type]
-        summaries = unique(row["summaries"], 2)  # type: ignore[arg-type]
+        score = weighted_score(scores)
+        gaps = unique(row["gaps"], 3)
+        summaries = unique(row["summaries"], 2)
         if summaries:
             topic_summary = " ".join(summaries)
         elif score is None:
@@ -273,30 +297,29 @@ def _derived_technical_report(
         else:
             next_step = "Закрепите тему на 2–3 новых вопросах и одном практическом примере."
         confidences = row["confidences"]
-        question_numbers = sorted(set(row["question_numbers"]))  # type: ignore[arg-type]
+        question_numbers = sorted(set(row["question_numbers"]))
         topics.append(
             {
                 "topic": row["topic"],
                 "score": score,
                 "summary": topic_summary[:600],
-                "strengths": unique(row["strengths"], 3),  # type: ignore[arg-type]
+                "strengths": unique(row["strengths"], 3),
                 "gaps": gaps,
                 "next_step": next_step[:600],
                 "evidence_question_numbers": question_numbers[:20],
                 "questions_count": len(question_numbers),
-                "confidence": (
-                    sum(confidences) / len(confidences) if confidences else 0.0  # type: ignore[arg-type]
-                ),
+                "confidence": (sum(confidences) / len(confidences) if confidences else 0.0),
             }
         )
 
     topics.sort(key=lambda item: item["score"] if item["score"] is not None else 2.0)
-    technical_score = sum(all_scores) / len(all_scores) if all_scores else None
+    technical_score = weighted_score(all_scores)
     if total_technical == 0:
         technical_summary = "В записи не найдено технических вопросов для оценки."
     elif technical_score is None:
         technical_summary = (
-            f"Найдено {total_technical} технических вопросов, но ответы нельзя надежно оценить."
+            f"Найдено {total_technical} технических вопросов. "
+            f"Для процента нужны минимум три оценённых ответа; сейчас {assessed_answers}."
         )
     else:
         assessed_topics = [item for item in topics if item["score"] is not None]
@@ -317,13 +340,15 @@ def _derived_technical_report(
         )
 
     priority_actions: list[dict[str, object]] = []
-    for topic in topics:
-        gaps = topic["gaps"]
-        score = topic["score"]
+    for action_topic in topics:
+        gaps = action_topic["gaps"]
+        score = action_topic["score"]
         if not gaps and (score is None or score >= 0.8):
             continue
-        first_gap = str(gaps[0]) if gaps else str(topic["summary"])
-        question_numbers = ", ".join(f"№{number}" for number in topic["evidence_question_numbers"])
+        first_gap = str(gaps[0]) if gaps else str(action_topic["summary"])
+        question_numbers_text = ", ".join(
+            f"№{number}" for number in action_topic["evidence_question_numbers"]
+        )
         steps = []
         if gaps:
             steps.append(f"Повторить: {'; '.join(str(item) for item in gaps[:2])}.")
@@ -331,21 +356,21 @@ def _derived_technical_report(
             [
                 "Собрать ответ по схеме: определение, механизм, ограничения и практический пример.",
                 (
-                    f"Повторно ответить вслух на вопросы {question_numbers} за 1–2 минуты."
-                    if question_numbers
+                    f"Повторно ответить вслух на вопросы {question_numbers_text} за 1–2 минуты."
+                    if question_numbers_text
                     else "Повторно ответить вслух на 2–3 вопроса по теме за 1–2 минуты."
                 ),
             ]
         )
         priority_actions.append(
             {
-                "title": f"Подтянуть тему «{topic['topic']}»",
+                "title": f"Подтянуть тему «{action_topic['topic']}»",
                 "reason": first_gap[:500],
                 "steps": steps[:3],
                 "success_criterion": (
                     "Дать точный структурированный ответ за 1–2 минуты и подтвердить его примером."
                 ),
-                "related_topics": [str(topic["topic"])],
+                "related_topics": [str(action_topic["topic"])],
             }
         )
         if len(priority_actions) == 6:
@@ -404,11 +429,12 @@ def _merge_priority_actions(
         for item in source:
             if not isinstance(item, dict):
                 continue
+            raw_steps = item.get("steps")
             text_values = [
                 item.get("title"),
                 item.get("reason"),
                 item.get("success_criterion"),
-                *(item.get("steps") if isinstance(item.get("steps"), list) else []),
+                *(raw_steps if isinstance(raw_steps, list) else []),
             ]
             if any(_usable_russian_feedback(value) is None for value in text_values):
                 continue
@@ -432,11 +458,12 @@ def _merge_topic_narratives(
     candidates = [item for item in stored_topics if isinstance(item, dict)]
     merged: list[dict[str, object]] = []
     for topic in derived_topics:
-        numbers = {
-            int(number)
-            for number in topic.get("evidence_question_numbers", [])
-            if isinstance(number, int)
-        }
+        raw_numbers = topic.get("evidence_question_numbers", [])
+        numbers = (
+            {number for number in raw_numbers if isinstance(number, int)}
+            if isinstance(raw_numbers, list)
+            else set()
+        )
         if numbers & changed_question_numbers:
             merged.append(topic)
             continue
@@ -469,7 +496,11 @@ def _merge_topic_narratives(
                 if (text := _usable_russian_feedback(value)) is not None
             ]
             if values:
-                enriched[field] = values[:3]
+                raw_supported = topic.get(field, [])
+                supported = set(raw_supported) if isinstance(raw_supported, list) else set()
+                enriched[field] = [value for value in values if value in supported][
+                    :3
+                ] or topic.get(field, [])
         merged.append(enriched)
     return merged
 
@@ -1126,7 +1157,11 @@ async def intelligence_detail(
         if _usable_russian_feedback(overview_payload.get("overall_summary")) is None:
             overview_payload["overall_summary"] = _derived_overall_summary(derived_report)
         overview_payload["priority_actions"] = _merge_priority_actions(
-            overview_payload.get("priority_actions"),
+            overview_payload.get("priority_actions")
+            if interview.ai_summary_prompt_version
+            == "interview-coaching-report-v7-grounded-delivery"
+            and not changed_question_numbers
+            else [],
             derived_report["priority_actions"],
         )
         communication_summary = _usable_russian_feedback(
@@ -1160,6 +1195,33 @@ async def intelligence_detail(
                 if isinstance(item, dict)
                 and _usable_russian_feedback(item.get("summary")) is not None
             ]
+
+    if overview_payload is not None:
+        from app.interviews.feedback_grounding import _effective_summary_rows
+
+        effective_rows = _effective_summary_rows(
+            [
+                (question, answers_by_question[question.id], review)
+                for question in questions
+                if question.id in answers_by_question
+                for review in reversed(reviews_by_answer[answers_by_question[question.id].id])
+            ]
+        )
+        state = interview.coaching_state or {}
+        raw_state = state.get(str(interview.analysis_revision), {})
+        revision_state = raw_state if isinstance(raw_state, dict) else {}
+        rejected = {
+            skill
+            for skill, value in revision_state.items()
+            if isinstance(value, dict) and value.get("decision") == "rejected"
+        }
+        overview_payload = ground_communication(
+            overview_payload, effective_rows, utterances, rejected_skills=rejected
+        )
+        overview_payload["coaching_state"] = revision_state
+        overview_payload["candidate_questions"] = interview.candidate_questions or []
+        if interview.ai_summary_prompt_version != "interview-coaching-report-v7-grounded-delivery":
+            overview_payload["overall_summary"] = _derived_overall_summary(derived_report)
 
     return IntelligenceInterviewDetail(
         **summary.model_dump(),

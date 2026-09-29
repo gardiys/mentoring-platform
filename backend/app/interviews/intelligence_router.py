@@ -5,12 +5,15 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import AdminUser, CurrentUser, JournalUser, MentorUser
 from app.core.config import get_settings
 from app.core.errors import api_error
 from app.db.session import get_db_session
+from app.interviews.feedback_service import communication_history, update_coaching
+from app.interviews.feedback_types import CoachingState, CommunicationHistory, CommunicationSkill
 from app.interviews.intelligence_queue import enqueue_intelligence_job
 from app.interviews.intelligence_schemas import (
     AdminQuestionModerationDetail,
@@ -104,6 +107,63 @@ async def _enqueue(function: str, interview_id: UUID, *, analysis_revision: int 
         api_error(503, "interview_processing_unavailable", "Processing queue is unavailable")
     if job_id is None:
         api_error(503, "interview_processing_unavailable", "Processing queue is unavailable")
+
+
+class CoachingMutation(BaseModel):
+    revision: int = Field(ge=1)
+    action: Literal["complete", "uncomplete", "approve", "reject"]
+
+
+@router.post("/{interview_id}/questions/{question_id}/practice")
+async def practice_question(
+    interview_id: UUID, question_id: UUID, session: Session, user: JournalUser
+) -> dict[str, str]:
+    from sqlalchemy import select
+
+    from app.interviews.card_automation_pipeline import ensure_personal_review_for_occurrence
+    from app.interviews.card_automation_service import _settings_model
+    from app.interviews.intelligence_models import IntelligenceQuestion, IntelligenceQuestionKind
+    from app.interviews.intelligence_service import get_intelligence_interview
+
+    interview = await get_intelligence_interview(session, user, interview_id, lock=True)
+    if user.id != interview.student_id:
+        api_error(403, "practice_owner_only", "Добавить в повторение может сам ученик.")
+    question = await session.scalar(
+        select(IntelligenceQuestion).where(
+            IntelligenceQuestion.id == question_id,
+            IntelligenceQuestion.interview_id == interview.id,
+        )
+    )
+    if question is None or question.question_kind is not IntelligenceQuestionKind.TECHNICAL:
+        api_error(404, "question_not_found", "Технический вопрос не найден.")
+    if question.direction_id is None:
+        api_error(409, "practice_unavailable", "У вопроса нет направления обучения.")
+    config = await _settings_model(session, question.direction_id)
+    await ensure_personal_review_for_occurrence(
+        session, question, config, question.published_card_id, force=True
+    )
+    await session.commit()
+    return {"status": "added"}
+
+
+@router.get("/communication-history/{student_id}", response_model=CommunicationHistory)
+async def coaching_history(
+    student_id: UUID, session: Session, user: JournalUser
+) -> dict[str, object]:
+    return await communication_history(session, user, student_id)
+
+
+@router.put("/{interview_id}/communication/{skill}", response_model=CoachingState)
+async def coaching_update(
+    interview_id: UUID,
+    skill: CommunicationSkill,
+    payload: CoachingMutation,
+    session: Session,
+    user: JournalUser,
+) -> dict[str, object]:
+    return await update_coaching(
+        session, user, interview_id, skill, revision=payload.revision, action=payload.action
+    )
 
 
 @router.get("", response_model=IntelligenceReviewQueuePage)

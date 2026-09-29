@@ -1073,19 +1073,20 @@ async def test_fake_processing_pipeline_reaches_ready(
     ]
     assert detail["questions"][0]["answer"]["reviews"][0]["source"] == "ai"
     assert detail["overview"]["overall_summary"]
-    assert detail["overview"]["technical_score"] == 0.82
+    assert detail["overview"]["technical_score"] is None
     assert detail["overview"]["technical_topics"][0]["topic"] == "Python"
     assert detail["overview"]["technical_topics"][0]["evidence_question_numbers"] == [1]
     assert detail["overview"]["priority_actions"]
-    assert detail["overview"]["communication_score"] == 0.78
-    assert detail["overview"]["communication_dimensions"][0]["name"] == "clarity"
+    assert detail["overview"]["communication_score"] is None
+    assert detail["overview"]["communication_dimensions"] == []
     assert [call["question_kind"] for call in fake_ai.review_calls] == [
         IntelligenceQuestionKind.TECHNICAL,
         IntelligenceQuestionKind.HR,
     ]
     assert "U003" in str(fake_ai.review_calls[0]["context"])
     assert "Подсказка интервьюера" in str(fake_ai.review_calls[0]["context"])
-    assert fake_ai.review_calls[1]["context"] == ""
+    assert '"interview_context"' in fake_ai.review_calls[1]["context"]
+    assert '"answer_utterance_ids"' in fake_ai.review_calls[1]["context"]
     async with TestSession() as session:
         operations = list(
             await session.scalars(

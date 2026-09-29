@@ -1508,8 +1508,10 @@ async def ensure_personal_review_for_occurrence(
     question: IntelligenceQuestion,
     settings: CardAutomationSettings,
     card_id: UUID | None,
+    *,
+    force: bool = False,
 ) -> None:
-    if not settings.personal_review_enabled:
+    if not settings.personal_review_enabled and not force:
         return
     answer = await session.scalar(
         select(IntelligenceAnswer).where(IntelligenceAnswer.question_id == question.id)
@@ -1526,7 +1528,7 @@ async def ensure_personal_review_for_occurrence(
             IntelligenceAnswerReview.created_at.desc(),
         )
     )
-    if not is_failed_answer(
+    if not force and not is_failed_answer(
         review.assessment if review else None,
         answer.answer_text if answer else None,
     ):
@@ -1601,7 +1603,7 @@ async def ensure_personal_review_for_occurrence(
                 selected_card_id=card.id,
             )
         return
-    if question.learning_object_type not in CARD_ELIGIBLE_TYPES:
+    if not force and question.learning_object_type not in CARD_ELIGIBLE_TYPES:
         return
     existing = await session.scalar(
         select(PersonalReviewItem).where(
