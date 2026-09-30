@@ -261,7 +261,7 @@ async def test_scoped_manifest_works_above_catalogue_limit_and_checks_access(cli
                     slug=f"large-{i}",
                     category="Python",
                     question_markdown=f"Question {i}",
-                    answer_markdown="Answer",
+                    answer_markdown="Answer" * 1000,
                     frequency=list(InterviewCardFrequency)[0],
                     position=i,
                     is_published=True,
@@ -272,6 +272,28 @@ async def test_scoped_manifest_works_above_catalogue_limit_and_checks_access(cli
         await db.commit()
     headers = auth(seeded.student_id)
     assert (await client.get(BASE + "/manifest?track=python", headers=headers)).status_code == 413
+    collected = {}
+    cursor = None
+    for _ in range(20):
+        page_params = {"track": "python", "page_size": 100}
+        if cursor:
+            page_params["after"] = cursor
+        page = await client.get(BASE + "/manifest", params=page_params, headers=headers)
+        assert page.status_code == 200, page.text
+        payload = page.json()
+        assert len(payload["items"]) <= 100 and "content" not in payload
+        for item in payload["items"]:
+            assert item["key"] not in collected
+            collected[item["key"]] = item["version"]
+        if payload["complete"]:
+            assert payload["next_cursor"] is None
+            break
+        assert payload["next_cursor"] != cursor
+        cursor = payload["next_cursor"]
+    assert set(collected) == {f"card:{cid}" for cid in ids}
+    assert (await client.get(BASE + "/manifest?track=go&page_size=100", headers=headers)).json()[
+        "items"
+    ] == []
     keys = [f"card:{cid}" for cid in ids[:100]]
     params = [("track", "python")] + [("keys", k) for k in keys]
     response = await client.get(BASE + "/manifest", params=params, headers=headers)

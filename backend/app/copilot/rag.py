@@ -56,9 +56,17 @@ async def materials(
     resume: bool,
     key: tuple[str, UUID] | None = None,
     keys: set[str] | None = None,
+    after: str | None = None,
+    page_size: int | None = None,
 ) -> list[dict[str, Any]]:
     def selected(kind: str) -> list[UUID]:
         return [UUID(k.split(":", 1)[1]) for k in (keys or ()) if k.startswith(kind + ":")]
+
+    def after_id(kind: str, column: Any) -> Any:
+        if after is None:
+            return true()
+        prefix, value = after.split(":", 1)
+        return column > UUID(value) if kind == prefix else true() if kind > prefix else false()
 
     allowed = await accessible_track_ids(session, student)
     track_ids = list(
@@ -79,12 +87,14 @@ async def materials(
                     KnowledgeTopicTrack.track_id.in_(track_ids),
                     KnowledgeEntry.is_published.is_(True),
                     true() if keys is None else KnowledgeEntry.id.in_(selected("kb")),
+                    after_id("kb", KnowledgeEntry.id),
                     KnowledgeTopic.is_published.is_(True),
                     true()
                     if key is None
                     else (KnowledgeEntry.id == key[1] if key[0] == "kb" else false()),
                 )
-                .limit(1001)
+                .order_by(KnowledgeEntry.id)
+                .limit(1001 if page_size is None else page_size + 1)
             )
         ).all()
     )
@@ -98,11 +108,13 @@ async def materials(
                     InterviewDeck.is_published.is_(True),
                     InterviewCard.is_published.is_(True),
                     true() if keys is None else InterviewCard.id.in_(selected("card")),
+                    after_id("card", InterviewCard.id),
                     true()
                     if key is None
                     else (InterviewCard.id == key[1] if key[0] == "card" else false()),
                 )
-                .limit(1001)
+                .order_by(InterviewCard.id)
+                .limit(1001 if page_size is None else page_size + 1)
             )
         ).all()
     )
@@ -176,10 +188,16 @@ async def materials(
                     CareerPackage.student_id == student.id,
                     CareerPackage.track_id.in_(track_ids),
                     CareerPackageVersion.provided_at.is_not(None),
+                    CareerPackageVersion.snapshot["resume"]["text_content"]
+                    .as_string()
+                    .is_not(None),
+                    CareerPackageVersion.snapshot["resume"]["text_content"].as_string() != "",
                     true() if keys is None else CareerPackageVersion.id.in_(selected("resume")),
+                    after_id("resume", CareerPackageVersion.id),
                     true() if key is None else CareerPackageVersion.id == key[1],
                 )
-                .limit(1001)
+                .order_by(CareerPackageVersion.id)
+                .limit(1001 if page_size is None else page_size + 1)
             )
         )
         for version in versions:
@@ -199,6 +217,8 @@ async def materials(
                         review_status="unconfirmed",
                     )
                 )
+    if page_size is not None:
+        return sorted(result, key=lambda item: item["key"])[: page_size + 1]
     if len(result) > 1000 or sum(len(item["content"]) for item in result) > 5_000_000:
         api_error(413, "copilot_context_too_large", "Too many materials for one snapshot")
     return result
@@ -212,15 +232,31 @@ async def manifest(
     track: Track,
     resume: bool = False,
     keys: Annotated[list[SourceKey] | None, Query(max_length=100)] = None,
+    page_size: Annotated[int | None, Query(ge=1, le=100)] = None,
+    after: SourceKey | None = None,
 ) -> dict[str, Any]:
     response.headers["Cache-Control"] = "private, no-store"
+    if keys is not None and (page_size is not None or after is not None):
+        api_error(422, "invalid_pagination", "Selected keys cannot be paginated")
+    if after is not None and page_size is None:
+        api_error(422, "invalid_pagination", "Cursor requires page_size")
     items = await materials(
-        session, student, track, resume, keys=set(keys) if keys is not None else None
+        session,
+        student,
+        track,
+        resume,
+        keys=set(keys) if keys is not None else None,
+        after=after,
+        page_size=page_size,
     )
+    more = page_size is not None and len(items) > page_size
+    if page_size is not None:
+        items = items[:page_size]
     return {
         "policy_version": "rag-3",
         "scope": "selected" if keys is not None else "all",
-        "complete": True,
+        "complete": not more,
+        "next_cursor": items[-1]["key"] if more else None,
         "items": [{"key": item["key"], "version": item["version"]} for item in items],
     }
 
