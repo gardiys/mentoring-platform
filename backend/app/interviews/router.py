@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import CurrentUser
 from app.db.session import get_db_session
+from app.interviews.duplicate_reports import DuplicateReportRead, report_duplicate
 from app.interviews.schemas import (
     InterviewCardStudy,
     InterviewDeckListItem,
@@ -157,3 +158,12 @@ async def interview_card_learned(
         card_id,
         learned=payload.learned,
     )
+
+
+@router.post("/cards/{card_id}/duplicate-report")
+async def interview_card_duplicate_report(
+    card_id: UUID,
+    session: Session,
+    current_user: CurrentUser,
+) -> DuplicateReportRead:
+    return await report_duplicate(session, current_user, card_id)

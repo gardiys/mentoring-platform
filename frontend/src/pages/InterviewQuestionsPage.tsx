@@ -1,3 +1,4 @@
+import { ReportDuplicateButton } from "../features/interviews/ReportDuplicateButton";
 import { TableSkeleton } from "../components/TableSkeleton";
 import {
   Anchor,
@@ -431,6 +432,7 @@ export function InterviewQuestionsPage() {
                               </Group>
                             </Stack>
                           </UnstyledButton>
+                          <ReportDuplicateButton key={item.id} cardId={item.id} />
                         </Table.Td>
                         <Table.Td>
                           <Text fw={600}>{item.category}</Text>

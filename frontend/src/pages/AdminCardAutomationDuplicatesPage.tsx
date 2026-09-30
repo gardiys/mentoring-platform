@@ -1,3 +1,4 @@
+import { DuplicateReports } from "../features/cardAutomation/DuplicateReports";
 import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import { BackLink } from "../components/BackLink";
 import {
@@ -149,7 +150,7 @@ export function AdminCardAutomationDuplicatesPage() {
         offset: (page - 1) * PAGE_SIZE,
       }),
     refetchInterval: (query) =>
-      query.state.data?.cache_status === "building" ? 3_000 : false,
+      query.state.data?.cache_refreshing ? 3_000 : false,
   });
 
   const refreshMutation = useMutation({
@@ -181,7 +182,11 @@ export function AdminCardAutomationDuplicatesPage() {
         ? item.left.id
         : item.right.id,
     );
-    setReason("");
+    setReason(
+      item.matched_source === "user_report"
+        ? "Сообщение пользователя о дубле"
+        : "",
+    );
     setConfirmed(false);
   };
 
@@ -215,6 +220,7 @@ export function AdminCardAutomationDuplicatesPage() {
             ? `Карточки объединены. Перенесено появлений: ${result.moved_occurrences}, прогрессов: ${result.merged_progress_records}.`
             : "Пара помечена как разные карточки и больше не появится в очереди.",
       });
+      await queryClient.invalidateQueries({ queryKey: ["duplicate-reports"] });
       closeComparison();
     },
     onError: (error: Error) =>
@@ -241,6 +247,10 @@ export function AdminCardAutomationDuplicatesPage() {
       />
       <CardAutomationNavigation />
 
+      <DuplicateReports onCompare={openComparison} />
+      {duplicates.data?.cache_error && (
+        <Alert color="red">{duplicates.data.cache_error}</Alert>
+      )}
       <Card withBorder radius="lg" padding="lg">
         <Group justify="space-between" align="center" wrap="wrap">
           <Stack gap={4}>
@@ -248,19 +258,23 @@ export function AdminCardAutomationDuplicatesPage() {
               <Text fw={700}>Подготовленный список дублей</Text>
               <Badge
                 color={
-                  duplicates.data?.cache_status === "building"
-                    ? "yellow"
-                    : duplicates.data?.cache_refreshing
-                      ? "blue"
-                      : "green"
+                  duplicates.data?.cache_status === "failed"
+                    ? "red"
+                    : duplicates.data?.cache_status === "building"
+                      ? "yellow"
+                      : duplicates.data?.cache_refreshing
+                        ? "blue"
+                        : "green"
                 }
                 variant="light"
               >
-                {duplicates.data?.cache_status === "building"
-                  ? "формируется"
-                  : duplicates.data?.cache_refreshing
-                    ? "обновляется"
-                    : "готов"}
+                {duplicates.data?.cache_status === "failed"
+                  ? "ошибка расчёта"
+                  : duplicates.data?.cache_status === "building"
+                    ? "формируется"
+                    : duplicates.data?.cache_refreshing
+                      ? "обновляется"
+                      : "готов"}
               </Badge>
             </Group>
             <Text size="sm" c="dimmed">
@@ -322,7 +336,7 @@ export function AdminCardAutomationDuplicatesPage() {
       {duplicates.data?.cache_status === "building" && (
         <Alert color="brandBlue" title="Формируем список дублей">
           Первый расчёт выполняется в фоне. Страницу можно закрыть: результат
-          сохранится в Redis и появится здесь автоматически.
+          сохранится и появится здесь автоматически.
         </Alert>
       )}
       {duplicates.data?.cache_status === "ready" &&
@@ -369,6 +383,11 @@ export function AdminCardAutomationDuplicatesPage() {
                         >
                           {percentage(item.similarity)}
                         </Badge>
+                        {item.matched_source === "semantic" && (
+                          <Text size="xs" c="dimmed">
+                            По смыслу
+                          </Text>
+                        )}
                       </Table.Td>
                       <Table.Td maw={340}>
                         <Text fw={700} lineClamp={3}>

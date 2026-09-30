@@ -1436,9 +1436,10 @@ export interface InterviewCardDuplicatePage {
   total: number;
   limit: number;
   offset: number;
-  cache_status: "ready" | "building";
+  cache_status: "ready" | "building" | "failed";
   cache_generated_at: string | null;
   cache_refreshing: boolean;
+  cache_error?: string | null;
 }
 
 export interface InterviewCardDuplicateRefreshRead {

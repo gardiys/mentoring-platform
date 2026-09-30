@@ -171,7 +171,7 @@ async def enqueue_duplicate_cache_refresh(*, redis: ArqRedis | None = None) -> s
     owned_pool = redis is None
     if redis is None:
         redis = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
-    job_id = "card-automation:duplicate-cache:refresh:v2"
+    job_id = "card-automation:duplicate-cache:refresh:v3"
     try:
         job = await redis.enqueue_job(
             function,

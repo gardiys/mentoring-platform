@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
 import { AdminCardAutomationDuplicatesPage } from "../src/pages/AdminCardAutomationDuplicatesPage";
@@ -49,6 +49,12 @@ const candidate: InterviewCardDuplicateCandidate = {
   },
 };
 
+beforeEach(() => {
+  vi.spyOn(api, "adminDuplicateReports").mockResolvedValue({
+    items: [],
+    total: 0,
+  });
+});
 afterEach(() => vi.restoreAllMocks());
 
 it("сравнивает ответы и объединяет карточки только после явного подтверждения", async () => {
@@ -160,4 +166,45 @@ it("запускает пересчёт в фоне и продолжает по
   expect(
     screen.getByText(candidate.left.question_markdown),
   ).toBeInTheDocument();
+});
+
+it("показывает сообщения независимо от расчёта и позволяет выбрать вторую карточку", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(api, "adminTracks").mockResolvedValue([]);
+  vi.spyOn(api, "adminInterviewCardDuplicates").mockResolvedValue({
+    items: [],
+    total: 0,
+    limit: 20,
+    offset: 0,
+    cache_status: "failed",
+    cache_generated_at: null,
+    cache_refreshing: false,
+    cache_error: "Не удалось рассчитать список.",
+  });
+  vi.mocked(api.adminDuplicateReports).mockResolvedValue({
+    items: [
+      {
+        card: candidate.left,
+        reports_count: 2,
+        first_reported_at: candidate.left.updated_at,
+      },
+    ],
+    total: 1,
+  });
+  vi.spyOn(api, "duplicateReportTargets").mockResolvedValue([candidate.right]);
+  renderPage(<AdminCardAutomationDuplicatesPage />);
+  await user.click(
+    await screen.findByRole("button", { name: "Найти вторую карточку" }),
+  );
+  await user.type(
+    await screen.findByLabelText("Поиск по тексту вопроса или ID карточки"),
+    "индексы",
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Сравнить ответы и объединить" }),
+  );
+  expect(
+    await screen.findByText(candidate.right.answer_markdown),
+  ).toBeInTheDocument();
+  expect(screen.getByText(candidate.left.answer_markdown)).toBeInTheDocument();
 });

@@ -48,6 +48,9 @@ def stage_payload(stage_type: str = "technical_interview") -> dict[str, str]:
 
 
 class FakeInterviewUploadStore:
+    async def ensure_browser_playable(self, upload: StoredUpload) -> StoredUpload:
+        return upload
+
     def __init__(self) -> None:
         self.deleted: list[str] = []
 

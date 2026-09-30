@@ -221,6 +221,7 @@ it("показывает треки, запись, файлы и отправл�
     );
     expect(player).toHaveAttribute("preload", "metadata");
     expect(player).toHaveAttribute("disablepictureinpicture");
+    expect(player).toHaveAttribute("playsinline");
   });
   expect(
     screen.getByText("Персональный просмотр · Копирование запрещено"),

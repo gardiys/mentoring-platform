@@ -20,6 +20,9 @@ from tests.conftest import SeededData, TestSession, auth
 
 
 class FakeCatalogStore:
+    async def ensure_browser_playable(self, upload: StoredUpload) -> StoredUpload:
+        return upload
+
     def __init__(self) -> None:
         self.playback_urls: list[tuple[StoredUpload, bool, int | None]] = []
 

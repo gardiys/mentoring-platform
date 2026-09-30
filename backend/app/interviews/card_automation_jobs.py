@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -52,6 +53,8 @@ from app.interviews.card_duplicate_cache import (
     clear_duplicate_refresh_status,
     mark_duplicate_refresh_running,
     release_duplicate_refresh_lock,
+    renew_duplicate_refresh_lock,
+    set_duplicate_refresh_error,
     write_duplicate_snapshot,
 )
 from app.interviews.intelligence_ai import (
@@ -100,7 +103,15 @@ async def refresh_interview_card_duplicate_cache(ctx: dict[str, Any]) -> None:
     owner = f"{ctx.get('job_id', 'cron')}:{uuid4()}"
     if not await acquire_duplicate_refresh_lock(owner):
         return
+
+    async def heartbeat() -> None:
+        while True:
+            await asyncio.sleep(30)
+            await renew_duplicate_refresh_lock(owner)
+
+    heartbeat_task = asyncio.create_task(heartbeat())
     try:
+        await set_duplicate_refresh_error(False)
         await mark_duplicate_refresh_running()
         # Local import avoids loading the large moderation service in workers
         # that never execute this optional maintenance job.
@@ -120,7 +131,12 @@ async def refresh_interview_card_duplicate_cache(ctx: dict[str, Any]) -> None:
             len(items),
             snapshot.generated_at.isoformat(),
         )
+    except Exception:
+        await set_duplicate_refresh_error(True)
+        raise
     finally:
+        heartbeat_task.cancel()
+        await asyncio.gather(heartbeat_task, return_exceptions=True)
         await clear_duplicate_refresh_status()
         await release_duplicate_refresh_lock(owner)
 

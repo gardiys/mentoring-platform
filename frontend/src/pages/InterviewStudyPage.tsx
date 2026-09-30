@@ -1,3 +1,4 @@
+import { ReportDuplicateButton } from "../features/interviews/ReportDuplicateButton";
 import { CardGridSkeleton } from "../components/CardGridSkeleton";
 import {
   Accordion,
@@ -278,6 +279,7 @@ export function InterviewStudyPage() {
                           <ReactMarkdown>{item.answer_markdown}</ReactMarkdown>
                         </div>
                       </Stack>
+                      <ReportDuplicateButton cardId={item.id} />
                       {item.companies && (
                         <Text size="sm" c="dimmed">
                           Встречался в компаниях: {item.companies}
@@ -344,6 +346,7 @@ export function InterviewStudyPage() {
               <div className="markdown-content interview-question">
                 <ReactMarkdown>{card.question_markdown}</ReactMarkdown>
               </div>
+              <ReportDuplicateButton key={card.id} cardId={card.id} />
               {!revealed ? (
                 <Button
                   size="xl"

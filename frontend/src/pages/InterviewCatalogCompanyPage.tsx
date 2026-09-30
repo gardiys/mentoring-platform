@@ -414,6 +414,7 @@ function CatalogStage({
                   controls
                   controlsList="nodownload noremoteplayback"
                   disablePictureInPicture
+                  playsInline
                   draggable={false}
                   preload="metadata"
                   src={playerUrl}

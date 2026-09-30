@@ -69,6 +69,7 @@ import type {
   InterviewQuestionTablePage,
   InterviewCardDuplicateMergeMutation,
   InterviewCardDuplicateMutation,
+  InterviewCardDuplicateCandidate,
   InterviewCardDuplicatePage,
   InterviewCardDuplicateRefreshRead,
   InterviewCardDuplicateReviewResult,
@@ -621,6 +622,31 @@ export const api = {
   adminQuestionModerationDetail: (questionId: string) =>
     apiRequest<AdminQuestionModerationDetail>(
       `/api/v1/admin/interviews/question-moderation/${questionId}`,
+    ),
+  reportInterviewCardDuplicate: (cardId: string) =>
+    apiRequest<{ id: string; status: string }>(
+      `/api/v1/interviews/cards/${cardId}/duplicate-report`,
+      { method: "POST" },
+    ),
+  adminDuplicateReports: (offset = 0) =>
+    apiRequest<{
+      items: {
+        card: InterviewCardDuplicateCandidate["left"];
+        reports_count: number;
+        first_reported_at: string;
+      }[];
+      total: number;
+    }>(
+      `/api/v1/admin/card-automation/duplicate-reports?limit=20&offset=${offset}`,
+    ),
+  dismissDuplicateReports: (cardId: string) =>
+    apiRequest<void>(
+      `/api/v1/admin/card-automation/duplicate-reports/${cardId}/dismiss`,
+      { method: "POST" },
+    ),
+  duplicateReportTargets: (cardId: string, query: string) =>
+    apiRequest<InterviewCardDuplicateCandidate["left"][]>(
+      `/api/v1/admin/card-automation/duplicate-reports/${cardId}/targets?${new URLSearchParams({ query })}`,
     ),
   adminInterviewCardDuplicates: (
     options: {

@@ -26,9 +26,10 @@ async def ensure_stage_media_browser_playable(
         content_type=stage.media_content_type,
         size=stage.media_size,
     )
-    if not upload.storage_key.startswith(
-        EXTERNAL_STORAGE_KEY_PREFIX
-    ) or not upload.filename.casefold().endswith(".mp3"):
+    if upload.content_type.split(";", 1)[0].strip().lower() != "video/mp4" and not (
+        upload.storage_key.startswith(EXTERNAL_STORAGE_KEY_PREFIX)
+        and upload.filename.casefold().endswith(".mp3")
+    ):
         return upload
     playable = await store.ensure_browser_playable(upload)
     if playable != upload:

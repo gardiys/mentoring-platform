@@ -20,6 +20,7 @@ from app.interviews.card_automation_schemas import (
     CardAutomationSettingsList,
     CardAutomationSettingsRead,
     CardAutomationSettingsUpdate,
+    InterviewCardDuplicateCardRead,
     InterviewCardDuplicateMergeMutation,
     InterviewCardDuplicateMutation,
     InterviewCardDuplicatePage,
@@ -87,6 +88,12 @@ from app.interviews.card_automation_types import (
     LearningObjectType,
     PersonalReviewStatus,
     QuestionClusterStatus,
+)
+from app.interviews.duplicate_reports import (
+    DuplicateReportPage,
+    dismiss_reports,
+    list_reports,
+    search_merge_targets,
 )
 
 Session = Annotated[AsyncSession, Depends(get_db_session)]
@@ -1033,3 +1040,30 @@ async def review_personal_item(
     _idempotency_key: IdempotencyKey,
 ) -> PersonalReviewItemReviewResult:
     return await review_personal_review_item(session, student, item_id, payload)
+
+
+@admin_router.get("/duplicate-reports", response_model=DuplicateReportPage)
+async def admin_duplicate_reports(
+    session: Session,
+    _admin: AdminUser,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> DuplicateReportPage:
+    return await list_reports(session, limit, offset)
+
+
+@admin_router.post("/duplicate-reports/{card_id}/dismiss", status_code=204)
+async def admin_dismiss_duplicate_reports(
+    card_id: UUID, session: Session, admin: AdminUser
+) -> None:
+    await dismiss_reports(session, admin, card_id)
+
+
+@admin_router.get("/duplicate-reports/{card_id}/targets")
+async def admin_duplicate_report_targets(
+    card_id: UUID,
+    session: Session,
+    _admin: AdminUser,
+    query: str = Query(min_length=2, max_length=200),
+) -> list[InterviewCardDuplicateCardRead]:
+    return await search_merge_targets(session, card_id, query)

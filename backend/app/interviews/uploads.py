@@ -349,6 +349,9 @@ class InterviewUploadStore:
         )
         self._legacy_transcode_timeout_seconds = settings.interview_legacy_transcode_timeout_seconds
         self._legacy_transcode_max_file_bytes = settings.interview_audio_max_bytes
+        self._video_max_file_bytes = settings.interview_video_max_bytes
+        self._video_max_duration_seconds = settings.content_media_normalization_max_duration_seconds
+        self._media_probe_timeout_seconds = settings.interview_media_probe_timeout_seconds
         self._legacy_transcode_guard = _LegacyTranscodeGuard(
             max_concurrency=settings.interview_legacy_transcode_max_concurrency,
             min_free_bytes=settings.interview_legacy_transcode_min_free_bytes,
@@ -960,6 +963,11 @@ class InterviewUploadStore:
         )
 
     async def ensure_browser_playable(self, upload: StoredUpload) -> StoredUpload:
+        if upload.content_type.split(";", 1)[0].strip().lower() == "video/mp4":
+            try:
+                return await anyio.to_thread.run_sync(self._repair_mislabeled_mp4, upload)
+            except (BotoCoreError, ClientError) as error:
+                self._storage_unavailable(error)
         external_location = self._external_media_location(upload.storage_key)
         if external_location is None or not upload.filename.casefold().endswith(".mp3"):
             return upload
@@ -969,6 +977,104 @@ class InterviewUploadStore:
             )
         except (BotoCoreError, ClientError) as error:
             self._storage_unavailable(error)
+
+    def _repair_mislabeled_mp4(self, upload: StoredUpload) -> StoredUpload:
+        """Some screen recorders save Matroska under .mp4; iOS cannot play it.
+
+        Inspect only the header on ordinary playback. Cache a validated, lossless
+        MP4 copy when needed; never overwrite the uploaded source.
+        """
+        from app.media.normalization import (
+            DEFAULT_MP4_OUTPUT_OVERHEAD_BYTES,
+            ContentMediaNormalizationError,
+            normalize_content_mp4,
+        )
+
+        location = self._external_media_location(upload.storage_key)
+        client = self.legacy_client if location is not None else self.client
+        bucket, key = location or (self.bucket, upload.storage_key)
+        response = client.get_object(Bucket=bucket, Key=key, Range="bytes=0-15")
+        try:
+            header = response["Body"].read(16)
+        finally:
+            response["Body"].close()
+        if not header.startswith(b"\x1a\x45\xdf\xa3"):
+            return upload
+        source_size = self._object_total_size(response, upload.size)
+        if source_size <= 0 or source_size > self._video_max_file_bytes:
+            api_error(413, "interview_video_too_large", "Запись слишком большая для подготовки.")
+        identity = f"{upload.storage_key}:{response.get('ETag', '')}:{source_size}"
+        digest = hashlib.sha256(identity.encode()).hexdigest()
+        converted_key = f"media/converted/browser-mp4-v1/{digest}.mp4"
+        try:
+            head = self.client.head_object(Bucket=self.bucket, Key=converted_key)
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") not in {"404", "NoSuchKey", "NotFound"}:
+                raise
+        else:
+            if int(head.get("ContentLength", 0)) > 0 and head.get("ContentType") == "video/mp4":
+                return replace(upload, storage_key=converted_key, size=int(head["ContentLength"]))
+
+        try:
+            with self._legacy_transcode_guard.reserve(
+                self._legacy_transcode_root,
+                expected_bytes=source_size * 2 + DEFAULT_MP4_OUTPUT_OVERHEAD_BYTES,
+            ):
+                self._cleanup_stale_legacy_transcodes()
+                with tempfile.TemporaryDirectory(
+                    prefix="legacy-video-", dir=self._legacy_transcode_root
+                ) as directory:
+                    source = Path(directory) / "source.mkv"
+                    target = Path(directory) / "recording.mp4"
+                    with source.open("wb") as destination:
+                        client.download_fileobj(
+                            Bucket=bucket,
+                            Key=key,
+                            Fileobj=_BoundedFileWriter(destination, maximum_bytes=source_size),
+                        )
+                    if source.stat().st_size != source_size:
+                        raise OSError("Source video size changed")
+                    normalized = anyio.run(
+                        partial(
+                            normalize_content_mp4,
+                            source,
+                            target,
+                            source_size=source_size,
+                            declared_content_type="video/x-matroska",
+                            max_file_bytes=self._video_max_file_bytes,
+                            max_duration_seconds=self._video_max_duration_seconds,
+                            probe_timeout_seconds=self._media_probe_timeout_seconds,
+                            remux_timeout_seconds=self._legacy_transcode_timeout_seconds,
+                        )
+                    )
+                    anyio.run(
+                        partial(
+                            self.upload_path,
+                            target,
+                            storage_key=converted_key,
+                            content_type="video/mp4",
+                            expected_size=normalized.size,
+                        )
+                    )
+                    return replace(upload, storage_key=converted_key, size=normalized.size)
+        except LegacyTranscodeCapacityError:
+            api_error(
+                503,
+                "interview_video_preparation_busy",
+                "Подготовка видео занята. Попробуйте открыть запись немного позже.",
+            )
+        except ContentMediaNormalizationError as error:
+            api_error(
+                503 if error.retryable else 422,
+                "interview_video_preparation_failed",
+                "Не удалось подготовить видео для воспроизведения. Сообщите администратору.",
+            )
+        except (OSError, InterviewStorageWriteError):
+            api_error(
+                503,
+                "interview_video_preparation_unavailable",
+                "Подготовка видео временно недоступна. Попробуйте позже.",
+            )
 
     def _normalize_legacy_audio(
         self,
@@ -1204,7 +1310,7 @@ class InterviewUploadStore:
         except OSError as error:
             raise LegacyTranscodeCapacityError("legacy_transcode_directory_unavailable") from error
         for entry in entries:
-            if not entry.name.startswith("legacy-alac-"):
+            if not entry.name.startswith(("legacy-alac-", "legacy-video-")):
                 continue
             try:
                 entry_stat = entry.stat(follow_symlinks=False)

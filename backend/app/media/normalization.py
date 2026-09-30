@@ -185,7 +185,7 @@ async def normalize_content_mp4(
     output_overhead_bytes: int = DEFAULT_MP4_OUTPUT_OVERHEAD_BYTES,
     ffmpeg_binary: str = "ffmpeg",
 ) -> NormalizedContentMedia:
-    """Validate and losslessly remux one H.264/AAC MP4 when its layout needs it."""
+    """Validate and losslessly remux compatible video into a seekable MP4."""
     if source_size <= 0 or max_file_bytes <= 0 or output_overhead_bytes <= 0:
         raise ValueError("source size and normalization byte limits must be positive")
     try:
@@ -206,9 +206,17 @@ async def normalize_content_mp4(
     # A single `moof` already proves that a lossless remux is needed. Avoid
     # walking millions of fragments in long recordings; ffprobe above has
     # already validated the complete media container.
-    source_layout = inspect_mp4_layout(source, stop_at_first_fragment=True)
+    source_layout = (
+        inspect_mp4_layout(source, stop_at_first_fragment=True)
+        if {"mov", "mp4"}.intersection(probe.format_names)
+        else None
+    )
     normalized_declared_type = declared_content_type.split(";", 1)[0].strip().lower()
-    if normalized_declared_type == "video/mp4" and source_layout.browser_seekable:
+    if (
+        normalized_declared_type == "video/mp4"
+        and source_layout is not None
+        and source_layout.browser_seekable
+    ):
         return NormalizedContentMedia(
             path=None,
             size=source_size,

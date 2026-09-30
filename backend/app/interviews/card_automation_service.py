@@ -14,9 +14,10 @@ from uuid import UUID
 
 from fastapi import HTTPException
 from pydantic import ValidationError
-from sqlalchemy import and_, delete, exists, func, or_, select, true
+from sqlalchemy import and_, delete, exists, func, or_, select, true, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.core.errors import api_error
 from app.interviews.card_automation_cleanup import (
@@ -114,9 +115,11 @@ from app.interviews.card_duplicate_cache import (
     CACHE_STALE_SECONDS,
     DuplicateCacheUnavailable,
     clear_duplicate_refresh_status,
+    duplicate_refresh_error,
     duplicate_refresh_in_progress,
     mark_duplicate_refresh_queued,
     read_duplicate_snapshot,
+    set_duplicate_refresh_error,
 )
 from app.interviews.card_frequency import refresh_card_frequency
 from app.interviews.intelligence_models import (
@@ -134,6 +137,7 @@ from app.interviews.intelligence_queue import (
 )
 from app.interviews.models import (
     InterviewCard,
+    InterviewCardDuplicateReport,
     InterviewCardFrequencyMode,
     InterviewCardOccurrence,
     InterviewCardProgress,
@@ -2100,7 +2104,7 @@ def _compatible_embedding(
 
 
 def _candidate_for_duplicate(
-    query: InterviewCard, target: _DuplicateCardContext
+    query: InterviewCard, target: _DuplicateCardContext, *, use_embeddings: bool = True
 ) -> QuestionCandidate:
     variants = [
         QuestionVariant(
@@ -2110,7 +2114,9 @@ def _candidate_for_duplicate(
                 target.card.question_embedding,
                 target.card.question_embedding_model,
                 target.card.question_embedding_dimensions,
-            ),
+            )
+            if use_embeddings
+            else None,
             source="card",
         )
     ]
@@ -2122,7 +2128,9 @@ def _candidate_for_duplicate(
                 alias.question_embedding,
                 alias.question_embedding_model,
                 alias.question_embedding_dimensions,
-            ),
+            )
+            if use_embeddings
+            else None,
             source="approved_alias",
         )
         for alias in target.aliases
@@ -2135,18 +2143,22 @@ def _candidate_for_duplicate(
 
 
 def _duplicate_pair_match(
-    left: _DuplicateCardContext, right: _DuplicateCardContext
+    left: _DuplicateCardContext, right: _DuplicateCardContext, *, use_embeddings: bool = True
 ) -> RankedQuestionCandidate | None:
     matches = rank_question_candidates(
         left.card.question_markdown,
-        tuple(left.card.question_embedding) if left.card.question_embedding else None,
-        [_candidate_for_duplicate(left.card, right)],
+        tuple(left.card.question_embedding)
+        if use_embeddings and left.card.question_embedding
+        else None,
+        [_candidate_for_duplicate(left.card, right, use_embeddings=use_embeddings)],
         limit=1,
     )
     reverse_matches = rank_question_candidates(
         right.card.question_markdown,
-        tuple(right.card.question_embedding) if right.card.question_embedding else None,
-        [_candidate_for_duplicate(right.card, left)],
+        tuple(right.card.question_embedding)
+        if use_embeddings and right.card.question_embedding
+        else None,
+        [_candidate_for_duplicate(right.card, left, use_embeddings=use_embeddings)],
         limit=1,
     )
     candidates = [*matches, *reverse_matches]
@@ -2274,13 +2286,22 @@ def _rank_duplicate_pairs(
     minimum_similarity: float,
 ) -> list[InterviewCardDuplicateCandidateRead]:
     contexts_by_id = {context.card.id: context for context in contexts}
+    from app.interviews.duplicate_semantics import semantic_duplicate_pairs
+
+    semantic = semantic_duplicate_pairs(contexts)
+    cards = {context.card.id: _duplicate_card_read(context) for context in contexts}
     candidates: list[InterviewCardDuplicateCandidateRead] = []
-    for pair_ids in _duplicate_candidate_pairs(contexts):
+    for pair_ids in _duplicate_candidate_pairs(contexts) | semantic.keys():
         if pair_ids in reviewed_pairs:
             continue
         left = contexts_by_id[pair_ids[0]]
         right = contexts_by_id[pair_ids[1]]
-        match = _duplicate_pair_match(left, right)
+        match = _duplicate_pair_match(left, right, use_embeddings=False)
+        vector_match = semantic.get(pair_ids)
+        if vector_match is not None and (
+            match is None or vector_match.similarity > match.similarity
+        ):
+            match = vector_match
         if match is None or match.similarity < minimum_similarity:
             continue
         candidates.append(
@@ -2289,8 +2310,8 @@ def _rank_duplicate_pairs(
                 similarity=match.similarity,
                 matched_source=match.matched_source,
                 matched_text=match.matched_text,
-                left=_duplicate_card_read(left),
-                right=_duplicate_card_read(right),
+                left=cards[left.card.id],
+                right=cards[right.card.id],
             )
         )
     candidates.sort(
@@ -2329,7 +2350,19 @@ async def _load_duplicate_card_contexts(
     if loaded_ids:
         aliases = list(
             await session.scalars(
-                select(IntelligenceQuestion).where(
+                select(IntelligenceQuestion)
+                .options(
+                    load_only(
+                        IntelligenceQuestion.id,
+                        IntelligenceQuestion.published_card_id,
+                        IntelligenceQuestion.question_text,
+                        IntelligenceQuestion.question_embedding,
+                        IntelligenceQuestion.question_embedding_model,
+                        IntelligenceQuestion.question_embedding_dimensions,
+                        IntelligenceQuestion.question_embedding_source_hash,
+                    )
+                )
+                .where(
                     IntelligenceQuestion.published_card_id.in_(loaded_ids),
                     IntelligenceQuestion.alias_human_confirmed.is_(True),
                 )
@@ -2430,6 +2463,7 @@ async def request_interview_card_duplicate_refresh(*, required: bool = True) -> 
         if not queued:
             return False
         try:
+            await set_duplicate_refresh_error(False)
             await enqueue_duplicate_cache_refresh()
         except Exception:
             await clear_duplicate_refresh_status()
@@ -2456,7 +2490,17 @@ async def list_cached_interview_card_duplicates(
 ) -> InterviewCardDuplicatePage:
     try:
         snapshot = await read_duplicate_snapshot()
+        error = await duplicate_refresh_error()
         if snapshot is None:
+            if error:
+                return InterviewCardDuplicatePage(
+                    items=[],
+                    total=0,
+                    limit=limit,
+                    offset=offset,
+                    cache_status="failed",
+                    cache_error=error,
+                )
             await request_interview_card_duplicate_refresh()
             return InterviewCardDuplicatePage(
                 items=[],
@@ -2468,7 +2512,7 @@ async def list_cached_interview_card_duplicates(
             )
 
         age_seconds = (datetime.now(UTC) - snapshot.generated_at).total_seconds()
-        if age_seconds >= CACHE_STALE_SECONDS:
+        if age_seconds >= CACHE_STALE_SECONDS and not error:
             await request_interview_card_duplicate_refresh()
         refreshing = await duplicate_refresh_in_progress()
     except DuplicateCacheUnavailable:
@@ -2505,6 +2549,7 @@ async def list_cached_interview_card_duplicates(
         cache_status="ready",
         cache_generated_at=snapshot.generated_at,
         cache_refreshing=refreshing,
+        cache_error=error,
     )
 
 
@@ -2820,6 +2865,19 @@ async def merge_interview_card_duplicate(
     merged_progress_records = await _merge_card_progress(session, source.card, primary.card)
     preserved_topic_selections = await _preserve_topic_access(session, source.card, primary.card)
     source.card.is_published = False
+    await session.execute(
+        update(InterviewCardDuplicateReport)
+        .where(
+            InterviewCardDuplicateReport.card_id.in_([source.card.id, primary.card.id]),
+            InterviewCardDuplicateReport.status == "pending",
+        )
+        .values(
+            status="merged",
+            primary_card_id=primary.card.id,
+            reviewed_by_user_id=admin.id,
+            reviewed_at=datetime.now(UTC),
+        )
+    )
     await session.flush()
     await _refresh_card_stats(session, [source.card.id, primary.card.id])
 

@@ -6,6 +6,7 @@ import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from functools import lru_cache
 from typing import Literal
 from uuid import UUID
 
@@ -232,6 +233,7 @@ _RUSSIAN_SUFFIXES = (
 )
 
 
+@lru_cache(maxsize=8192)
 def normalize_question(value: str) -> str:
     """Normalize harmless formatting differences for exact comparison."""
 
@@ -250,6 +252,7 @@ def _stem_token(token: str) -> str:
     return token
 
 
+@lru_cache(maxsize=8192)
 def _fingerprint(value: str) -> _QuestionFingerprint:
     normalized = normalize_question(value)
     canonical = normalized

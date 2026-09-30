@@ -678,3 +678,27 @@ class RecruiterFeedback(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class InterviewCardDuplicateReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "interview_card_duplicate_reports"
+    __table_args__ = (
+        UniqueConstraint("card_id", "reported_by_user_id", name="uq_card_duplicate_report_user"),
+        CheckConstraint("status IN ('pending', 'dismissed', 'merged')", name="valid_status"),
+        Index("ix_card_duplicate_reports_status_created", "status", "created_at"),
+    )
+
+    card_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("interview_cards.id", ondelete="CASCADE"), nullable=False
+    )
+    reported_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")
+    reviewed_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    primary_card_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("interview_cards.id", ondelete="SET NULL")
+    )
