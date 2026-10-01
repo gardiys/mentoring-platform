@@ -263,12 +263,20 @@ export function InterviewStudyPage() {
                   </Accordion.Control>
                   <Accordion.Panel>
                     <Stack gap="md">
-                      <Group gap="xs">
-                        <Badge variant="light">{item.category}</Badge>
-                        {item.subcategory && (
-                          <Badge variant="outline">{item.subcategory}</Badge>
-                        )}
-                        {item.is_new && <Badge variant="outline">Новая</Badge>}
+                      <Group justify="space-between" wrap="nowrap">
+                        <Group gap="xs">
+                          <Badge variant="light">{item.category}</Badge>
+                          {item.subcategory && (
+                            <Badge variant="outline">{item.subcategory}</Badge>
+                          )}
+                          {item.is_new && (
+                            <Badge variant="outline">Новая</Badge>
+                          )}
+                        </Group>
+                        <ReportDuplicateButton
+                          cardId={item.id}
+                          question={questionPreview(item.question_markdown)}
+                        />
                       </Group>
                       <div className="markdown-content">
                         <ReactMarkdown>{item.question_markdown}</ReactMarkdown>
@@ -279,7 +287,6 @@ export function InterviewStudyPage() {
                           <ReactMarkdown>{item.answer_markdown}</ReactMarkdown>
                         </div>
                       </Stack>
-                      <ReportDuplicateButton cardId={item.id} />
                       {item.companies && (
                         <Text size="sm" c="dimmed">
                           Встречался в компаниях: {item.companies}
@@ -338,7 +345,14 @@ export function InterviewStudyPage() {
               )}
               {card.is_new && <Badge variant="outline">Новая</Badge>}
             </Group>
-            <Text className="technical-label">В сессии: {cards.length}</Text>
+            <Group gap="xs">
+              <Text className="technical-label">В сессии: {cards.length}</Text>
+              <ReportDuplicateButton
+                key={card.id}
+                cardId={card.id}
+                question={questionPreview(card.question_markdown)}
+              />
+            </Group>
           </Group>
 
           <Card ref={studyCard} withBorder className="interview-study-card">
@@ -346,7 +360,6 @@ export function InterviewStudyPage() {
               <div className="markdown-content interview-question">
                 <ReactMarkdown>{card.question_markdown}</ReactMarkdown>
               </div>
-              <ReportDuplicateButton key={card.id} cardId={card.id} />
               {!revealed ? (
                 <Button
                   size="xl"

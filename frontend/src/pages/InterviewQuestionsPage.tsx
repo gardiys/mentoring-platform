@@ -380,6 +380,11 @@ export function InterviewQuestionsPage() {
                       onSort={changeSort}
                     />
                   </Table.Th>
+                  <Table.Th w={76}>
+                    <Text size="xs" c="dimmed">
+                      Действия
+                    </Text>
+                  </Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -432,7 +437,6 @@ export function InterviewQuestionsPage() {
                               </Group>
                             </Stack>
                           </UnstyledButton>
-                          <ReportDuplicateButton key={item.id} cardId={item.id} />
                         </Table.Td>
                         <Table.Td>
                           <Text fw={600}>{item.category}</Text>
@@ -476,10 +480,16 @@ export function InterviewQuestionsPage() {
                             </Text>
                           )}
                         </Table.Td>
+                        <Table.Td>
+                          <ReportDuplicateButton
+                            cardId={item.id}
+                            question={plainText(item.question_markdown)}
+                          />
+                        </Table.Td>
                       </Table.Tr>
                       {answerExpanded && (
                         <Table.Tr className="interview-question-answer-row">
-                          <Table.Td colSpan={5} id={answerId}>
+                          <Table.Td colSpan={6} id={answerId}>
                             <div className="interview-question-table-answer">
                               <Text className="technical-label" mb="xs">
                                 Ответ

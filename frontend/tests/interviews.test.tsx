@@ -232,7 +232,7 @@ it("показывает таблицу вопросов, фильтрует е�
   expect(learnedRow).toHaveTextContent("Спрашивали: 12");
   expect(screen.queryByText(/блокирует параллельное/)).not.toBeInTheDocument();
 
-  await userEvent.click(screen.getByRole("button", { name: /Что такое GIL/ }));
+  await userEvent.click(screen.getByRole("button", { name: /^Что такое GIL/ }));
   expect(screen.getByText(/блокирует параллельное/)).toBeInTheDocument();
 
   await userEvent.click(
@@ -407,7 +407,7 @@ it("фильтрует частые карточки и ищет по всей �
   expect(
     await screen.findByRole("heading", { name: "Результаты поиска" }),
   ).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: /Что такое GIL/ }));
+  await userEvent.click(screen.getByRole("button", { name: /^Что такое GIL/ }));
   expect(screen.getByText(/блокирует параллельное/)).toBeInTheDocument();
 });
 
