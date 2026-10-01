@@ -1922,6 +1922,9 @@ export type CommunicationSkill =
   | "ownership";
 
 export interface IntelligenceCommunicationDimension {
+  observation_count?: number;
+  scored_observation_count?: number;
+  example_score?: number | null;
   skill?: CommunicationSkill | null;
   evidence_quote?: string;
   rewrite?: { original: string; improved: string } | null;
@@ -1975,8 +1978,7 @@ export interface IntelligenceInterviewOverview {
   communication_summary: string;
   communication_score: number | null;
   communication_dimensions: IntelligenceCommunicationDimension[];
-  communication_strengths: string[];
-  communication_growth_areas: string[];
+  communication_labels?: Partial<Record<CommunicationSkill, string>>;
   caveats: string[];
   model_name: string | null;
   prompt_version: string | null;

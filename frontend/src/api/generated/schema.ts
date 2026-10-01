@@ -9069,6 +9069,18 @@ export interface components {
             rewrite?: components["schemas"]["CommunicationRewrite"] | null;
             exercise?: components["schemas"]["CommunicationExercise"] | null;
             /**
+             * Observation Count
+             * @default 1
+             */
+            observation_count: number;
+            /**
+             * Scored Observation Count
+             * @default 0
+             */
+            scored_observation_count: number;
+            /** Example Score */
+            example_score?: number | null;
+            /**
              * Interview Id
              * Format: uuid
              */
@@ -9114,6 +9126,21 @@ export interface components {
             student_id: string;
             /** Observations */
             observations: components["schemas"]["CoachingObservation"][];
+            /**
+             * Interview Count
+             * @default 0
+             */
+            interview_count: number;
+            /**
+             * Limit
+             * @default 30
+             */
+            limit: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
         };
         /** CommunicationRewrite */
         CommunicationRewrite: {
@@ -10301,6 +10328,18 @@ export interface components {
             confidence: number;
             rewrite?: components["schemas"]["CommunicationRewrite"] | null;
             exercise?: components["schemas"]["CommunicationExercise"] | null;
+            /**
+             * Observation Count
+             * @default 1
+             */
+            observation_count: number;
+            /**
+             * Scored Observation Count
+             * @default 0
+             */
+            scored_observation_count: number;
+            /** Example Score */
+            example_score?: number | null;
         };
         /**
          * IntelligenceDifficulty
@@ -10446,10 +10485,10 @@ export interface components {
             communication_score: number | null;
             /** Communication Dimensions */
             communication_dimensions: components["schemas"]["IntelligenceCommunicationDimensionRead"][];
-            /** Communication Strengths */
-            communication_strengths: string[];
-            /** Communication Growth Areas */
-            communication_growth_areas: string[];
+            /** Communication Labels */
+            communication_labels?: {
+                [key: string]: string;
+            };
             /** Caveats */
             caveats: string[];
             /** Model Name */

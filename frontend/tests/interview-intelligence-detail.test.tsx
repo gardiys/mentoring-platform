@@ -186,8 +186,16 @@ const detail: IntelligenceInterviewDetail = {
     communication_summary: "Уникальное резюме коммуникации.",
     communication_score: 0.7,
     communication_dimensions: [],
-    communication_strengths: ["Отвечает последовательно"],
-    communication_growth_areas: ["Сократить вводную часть"],
+    communication_labels: {
+      structure: "Структура ответа",
+      specificity: "Конкретность",
+      conciseness: "Соразмерность ответа",
+      clarification: "Уточнение условий",
+      handling_unknown: "Работа с незнанием",
+      handling_pushback: "Реакция на уточнения и поправки",
+      reasoning_aloud: "Рассуждение вслух",
+      ownership: "Личный вклад",
+    },
     caveats: [],
     model_name: "test-model",
     prompt_version: "test-prompt",
@@ -335,7 +343,7 @@ it("строит отдельные soft-skills приоритеты, катег
           communication_dimensions: scores.map(([skill, score]) => ({
             skill,
             score,
-            name: skill,
+            name: detail.overview!.communication_labels![skill]!,
             confidence: 0.9,
             summary: `Наблюдение ${skill}`,
             evidence_quote: `Цитата ${skill}`,
@@ -594,4 +602,49 @@ it("требует проверки плохой диаризации перед
   await waitFor(() =>
     expect(select).toHaveBeenCalledWith(interviewId, "speaker-1", true),
   );
+});
+
+it("показывает покрытие, уверенность и отклонение ученику без общего процента", () => {
+  renderPage(
+    <CommunicationFeedback
+      interview={{
+        ...detail,
+        overview: {
+          ...detail.overview!,
+          communication_grounded: true,
+          communication_score: 0.99,
+          candidate_questions: undefined,
+          coaching_state: { structure: { decision: "rejected" } },
+          communication_dimensions: [
+            {
+              skill: "specificity",
+              name: "Конкретность",
+              score: 0.85,
+              example_score: 0.4,
+              observation_count: 10,
+              scored_observation_count: 10,
+              confidence: 0.7,
+              summary: "Отдельный слабый пример.",
+              evidence_utterance_ids: [],
+            },
+          ],
+        },
+      }}
+      onSeek={vi.fn()}
+      canReview={false}
+      isOwner
+    />,
+  );
+  expect(screen.getByText("Примеры по 1 из 8 категорий")).toBeVisible();
+  expect(screen.queryByText(/Общая оценка/)).not.toBeInTheDocument();
+  expect(screen.getByText("85%")).toBeVisible();
+  expect(screen.getByText("Пример · 40%")).toBeVisible();
+  expect(screen.getByText("Уверенность AI в примере: 70%")).toBeVisible();
+  expect(screen.getByText(/Вывод отклонён: Структура ответа/)).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Восстановить" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByText(/твои вопросы работодателю не выделены/),
+  ).toBeVisible();
 });

@@ -65,7 +65,7 @@ def evidence(kind=K.HR, unreliable=False):
 def test_hr_correctness_unassessable_does_not_remove_grounded_delivery():
     q, a, r, u = evidence()
     output = ground_communication({}, [(q, a, r)], u)
-    assert output["communication_score"] == 0.4
+    assert output["communication_score"] is None
     assert output["communication_grounded"]
     assert output["communication_dimensions"][0]["confidence"] == 0.9
     assert output["priority_actions"][0]["communication_skill"] == "structure"
@@ -106,7 +106,7 @@ def test_invalid_sources_cannot_produce_communication_score(failure):
     )
     assert result["communication_score"] is None
     assert result["communication_dimensions"] == []
-    assert result["communication_strengths"] == []
+    assert "communication_strengths" not in result
     assert result["caveats"]
 
 
@@ -243,3 +243,68 @@ def test_mentor_technical_review_overrides_unreliable_ai_attribution():
         overall_summary="Итог", technical_summary="Итог", communication_summary="Итог"
     )
     assert _ground_technical_assessment(overview, rows).technical_score == 1.0
+
+
+def test_category_mean_counts_answers_not_duplicate_findings_and_keeps_gap_example():
+    rows, utterances = [], []
+    for score in [0.4] + [0.9] * 9:
+        q, a, r, u = evidence()
+        r.delivery_assessment[0]["score"] = score
+        r.delivery_assessment *= 2
+        rows.append((q, a, r))
+        utterances.extend(u)
+    result = ground_communication({}, rows, utterances)
+    dimension = result["communication_dimensions"][0]
+    assert result["communication_score"] is None
+    assert dimension["score"] == pytest.approx(0.85)
+    assert dimension["example_score"] == 0.4
+    assert dimension["observation_count"] == dimension["scored_observation_count"] == 10
+    assert result["priority_actions"][0]["communication_skill"] == "structure"
+
+
+def test_short_acknowledgement_does_not_support_skill_judgment():
+    q, a, r, u = evidence()
+    a.answer_text = u[0].text = "Да, я исправил ошибку и проверил логи."
+    r.delivery_assessment[0]["evidence_quote"] = "Да"
+    assert ground_delivery(r.delivery_assessment, q, a, u) == []
+
+
+@pytest.mark.parametrize(
+    "source,improved,allowed",
+    [
+        ("В команде было 20 человек, я проверял логи.", "Я улучшил скорость на 20%.", False),
+        (
+            "В команде было 20 человек, я проверял логи.",
+            "Я улучшил скорость на двадцать процентов.",
+            False,
+        ),
+        ("Я сократил время на 1,5 часа и проверил логи.", "Время сократилось на 1.5 часа.", True),
+        ("Я сократил время на 20 процентов и проверил логи.", "Время сократилось на 20%.", True),
+    ],
+)
+def test_rewrite_preserves_quantities_and_units(source, improved, allowed):
+    q, a, r, u = evidence()
+    a.answer_text = u[0].text = source
+    r.delivery_assessment[0].update(
+        evidence_quote=source, rewrite={"original": source, "improved": improved}
+    )
+    output = ground_delivery(r.delivery_assessment, q, a, u)[0]
+    assert (output["rewrite"] is not None) == allowed
+
+
+def test_fallback_exercise_excerpt_has_word_boundary_and_ellipsis():
+    q, a, r, u = evidence()
+    source = "Я проверил диагностические сообщения и обнаружил причину сбоя. " * 4
+    a.answer_text = u[0].text = source
+    r.delivery_assessment[0].update(evidence_quote=source, exercise=None)
+    task = ground_delivery(r.delivery_assessment, q, a, u)[0]["exercise"]["task"]
+    quote = task.split("«")[1].split("»")[0]
+    assert quote.endswith("…")
+    assert len(quote) <= 120
+    assert source.startswith(quote[:-1])
+    assert not source[len(quote) - 1].isalpha()
+
+
+def test_missing_delivery_does_not_repeat_technical_summary():
+    result = ground_communication({"technical_summary": "Технические пробелы."}, [], [])
+    assert result["overall_summary"] != result["technical_summary"]

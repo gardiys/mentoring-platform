@@ -7,31 +7,26 @@ import type {
   IntelligenceCommunicationDimension,
 } from "../../types/api";
 
-export const communicationLabels: Record<CommunicationSkill, string> = {
-  structure: "Структура ответа",
-  specificity: "Конкретность",
-  conciseness: "Соразмерность ответа",
-  clarification: "Уточнение условий",
-  handling_unknown: "Работа с незнанием",
-  handling_pushback: "Реакция на поправки",
-  reasoning_aloud: "Рассуждение вслух",
-  ownership: "Личный вклад",
-};
 export interface CoachingObservation extends IntelligenceCommunicationDimension {
   interview_id: string;
   analysis_revision: number;
   date: string;
   interview_type: string;
   completed_at: string | null;
+  decision?: "approved" | "rejected" | null;
 }
 export function useCoachingHistory(studentId?: string) {
   return useQuery({
     queryKey: ["communication-history", studentId],
     queryFn: () =>
-      apiRequest<{ observations: CoachingObservation[] }>(
-        `/api/v1/interviews/communication-history/${studentId}`,
-      ),
+      apiRequest<{
+        observations: CoachingObservation[];
+        interview_count: number;
+        limit: number;
+        truncated: boolean;
+      }>(`/api/v1/interviews/communication-history/${studentId}`),
     enabled: !!studentId,
+    staleTime: 60_000,
   });
 }
 export function useCoachingAction() {

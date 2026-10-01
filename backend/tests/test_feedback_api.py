@@ -129,7 +129,7 @@ async def test_coaching_owner_progress_mentor_decisions_and_revision_guards(
         == "Как устроено ревью кода в команде?"
     )
     assert detail["overview"]["communication_grounded"]
-    assert detail["overview"]["communication_score"] == 0.4
+    assert detail["overview"]["communication_score"] is None
     assert detail["overview"]["technical_score"] is None
     endpoint = url + "/communication/structure"
     payload = {"revision": 1, "action": "complete"}
@@ -164,7 +164,11 @@ async def test_coaching_owner_progress_mentor_decisions_and_revision_guards(
     assert rejected.status_code == 200, rejected.text
     after = (await client.get(url, headers=auth(seeded.student_id))).json()
     assert after["overview"]["communication_score"] is None
-    assert (await client.get(history, headers=auth(seeded.student_id))).json()["observations"] == []
+    rejected_history = (await client.get(history, headers=auth(seeded.student_id))).json()
+    assert rejected_history["observations"][0]["decision"] == "rejected"
+    assert (
+        await client.put(endpoint, headers=auth(seeded.student_id), json=payload)
+    ).status_code == 404
     assert (await client.get(history, headers=auth(seeded.other_mentor_id))).status_code == 404
     restored = await client.put(
         endpoint, headers=auth(seeded.mentor_id), json={**payload, "action": "approve"}
@@ -201,3 +205,95 @@ async def test_add_technical_question_to_practice_is_owned_and_idempotent(
         )
         == 1
     )
+
+
+async def test_coaching_mutation_uses_only_referenced_utterances_without_full_detail(
+    client, seeded, grounded_interview, monkeypatch
+):
+    from sqlalchemy import event
+
+    from app.interviews import intelligence_service
+    from tests.conftest import test_engine
+
+    async def forbidden_detail(*args, **kwargs):
+        raise AssertionError("A coaching mutation must not build the full detail")
+
+    monkeypatch.setattr(intelligence_service, "intelligence_detail", forbidden_detail)
+    statements = []
+
+    def record(_conn, _cursor, statement, _parameters, _context, _many):
+        statements.append(statement.lower())
+
+    event.listen(test_engine.sync_engine, "before_cursor_execute", record)
+    try:
+        response = await client.put(
+            f"/api/v1/interviews/{grounded_interview}/communication/structure",
+            headers=auth(seeded.student_id),
+            json={"revision": 1, "action": "complete"},
+        )
+    finally:
+        event.remove(test_engine.sync_engine, "before_cursor_execute", record)
+    assert response.status_code == 200, response.text
+    utterance_reads = [
+        s for s in statements if s.startswith("select") and "intelligence_utterances" in s
+    ]
+    assert utterance_reads
+    assert all(".id in (" in s for s in utterance_reads)
+    assert all("speaker_id" not in s and "confidence" not in s for s in utterance_reads)
+
+
+async def test_history_limit_is_applied_before_source_loading(
+    client, seeded, grounded_interview, monkeypatch
+):
+    from datetime import UTC, datetime
+
+    from app.interviews import feedback_service, intelligence_service
+    from app.interviews.intelligence_models import IntelligenceInterview
+    from app.interviews.models import InterviewProcessStage
+
+    monkeypatch.setattr(
+        intelligence_service,
+        "settings",
+        intelligence_service.settings.model_copy(
+            update={"interview_ai_daily_limit": 10, "interview_ai_max_active_per_user": 10}
+        ),
+    )
+    created, _, stage_id = await create_analysis_from_journal(
+        client, seeded, monkeypatch, company_name="Another company"
+    )
+    assert created.status_code == 201, created.text
+    second_id = UUID(created.json()["id"])
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, second_id)
+        interview.ai_summary_payload = None
+        await session.commit()
+    pending = await client.get(
+        f"/api/v1/interviews/communication-history/{seeded.student_id}",
+        headers=auth(seeded.student_id),
+    )
+    assert pending.json()["interview_count"] == 1
+    assert pending.json()["observations"][0]["interview_id"] == grounded_interview
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, second_id)
+        interview.ai_summary_payload = {"overall_summary": "Разбор без наблюдений"}
+        stage = await session.get(InterviewProcessStage, stage_id)
+        stage.scheduled_at = datetime(2026, 9, 1, tzinfo=UTC)
+        await session.commit()
+    monkeypatch.setattr(feedback_service, "HISTORY_LIMIT", 1)
+    original = feedback_service._coaching_sources
+    loaded = []
+
+    async def sources(session, ids, skill=None):
+        loaded.extend(ids)
+        return await original(session, ids, skill)
+
+    monkeypatch.setattr(feedback_service, "_coaching_sources", sources)
+    response = await client.get(
+        f"/api/v1/interviews/communication-history/{seeded.student_id}",
+        headers=auth(seeded.student_id),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["truncated"]
+    assert response.json()["interview_count"] == response.json()["limit"] == 1
+    assert response.json()["observations"] == []
+    assert loaded == [second_id]

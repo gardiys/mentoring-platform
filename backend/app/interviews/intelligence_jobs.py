@@ -1679,11 +1679,6 @@ def _merge_interview_summaries(
         if len(priority_actions) == 6:
             break
 
-    communication_scores = [
-        summary.communication_score
-        for summary in summaries
-        if summary.communication_score is not None
-    ]
     return InterviewSummaryOutput(
         overall_summary=_join_unique(
             (item.overall_summary for item in summaries), max_length=1_200
@@ -1698,16 +1693,8 @@ def _merge_interview_summaries(
         communication_summary=_join_unique(
             (item.communication_summary for item in summaries), max_length=800
         ),
-        communication_score=(
-            sum(communication_scores) / len(communication_scores) if communication_scores else None
-        ),
+        communication_score=None,
         communication_dimensions=merged_dimensions,
-        communication_strengths=_unique(
-            value for item in summaries for value in item.communication_strengths
-        ),
-        communication_growth_areas=_unique(
-            value for item in summaries for value in item.communication_growth_areas
-        ),
         caveats=_unique(value for item in summaries for value in item.caveats),
     )
 

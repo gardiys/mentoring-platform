@@ -926,7 +926,7 @@ async def test_mixed_speech_pipeline_keeps_multiple_questions_and_blocks_uncerta
         assert not fake_ai.review_calls
         assert detail["overview"]["technical_score"] is None
         assert detail["overview"]["communication_score"] is None
-        assert detail["overview"]["communication_growth_areas"] == []
+        assert "communication_growth_areas" not in detail["overview"]
     else:
         assert len(fake_ai.review_calls) == 1
         assert fake_ai.review_calls[0]["answer"] == answer

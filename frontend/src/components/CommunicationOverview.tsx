@@ -7,7 +7,6 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { communicationLabels } from "../features/interviews/coaching";
 import type {
   CommunicationSkill,
   IntelligenceCommunicationDimension,
@@ -22,9 +21,11 @@ function assessment(score: number | null | undefined) {
 
 export function CommunicationOverview({
   dimensions,
+  labels,
   onExample,
 }: {
   dimensions: IntelligenceCommunicationDimension[];
+  labels: Partial<Record<CommunicationSkill, string>>;
   onExample: (skill: CommunicationSkill) => void;
 }) {
   // Independent of the mixed top-six list: technical gaps must not crowd out
@@ -32,9 +33,14 @@ export function CommunicationOverview({
   const priorities = dimensions
     .filter(
       (item) =>
-        item.skill && item.score != null && item.score < 0.6 && item.exercise,
+        item.skill &&
+        (item.example_score ?? item.score) != null &&
+        (item.example_score ?? item.score)! < 0.6 &&
+        item.exercise,
     )
-    .sort((a, b) => a.score! - b.score!)
+    .sort(
+      (a, b) => (a.example_score ?? a.score)! - (b.example_score ?? b.score)!,
+    )
     .slice(0, 3);
   const hasScores = dimensions.some((item) => item.score != null);
   return (
@@ -53,7 +59,7 @@ export function CommunicationOverview({
               >
                 <Group align="flex-start" wrap="nowrap">
                   <span className="analysis-priority-number">{index + 1}</span>
-                  <Text fw={800}>{communicationLabels[item.skill!]}</Text>
+                  <Text fw={800}>{item.name}</Text>
                 </Group>
                 <Text size="sm">{item.summary}</Text>
                 <Text size="sm">
@@ -65,7 +71,7 @@ export function CommunicationOverview({
                 <Button
                   variant="light"
                   size="xs"
-                  aria-label={`Разобрать пример: ${communicationLabels[item.skill!]}`}
+                  aria-label={`Разобрать пример: ${item.name}`}
                   onClick={() => onExample(item.skill!)}
                 >
                   Разобрать пример
@@ -87,53 +93,60 @@ export function CommunicationOverview({
           Оценка по категориям Soft Skills
         </Title>
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
-          {(
-            Object.entries(communicationLabels) as [
-              CommunicationSkill,
-              string,
-            ][]
-          ).map(([skill, label]) => {
-            const item = dimensions.find(
-              (dimension) => dimension.skill === skill,
-            );
-            const presentation = assessment(item?.score);
-            return (
-              <Stack
-                key={skill}
-                className="analysis-communication-dimension"
-                gap="xs"
-              >
-                <Group justify="space-between" align="flex-start">
-                  <Title order={4}>{label}</Title>
-                  {item?.score != null && (
-                    <Badge color={presentation.color} variant="light">
-                      {Math.round(item.score * 100)}%
-                    </Badge>
-                  )}
-                </Group>
-                <Text
-                  size="sm"
-                  c={item?.score != null ? presentation.color : "dimmed"}
+          {(Object.entries(labels) as [CommunicationSkill, string][]).map(
+            ([skill, label]) => {
+              const item = dimensions.find(
+                (dimension) => dimension.skill === skill,
+              );
+              const presentation = assessment(item?.score);
+              return (
+                <Stack
+                  key={skill}
+                  className="analysis-communication-dimension"
+                  gap="xs"
                 >
-                  {presentation.label}
-                </Text>
-                <Text size="sm">
-                  {item?.summary ??
-                    "В записи нет подтверждённого примера для оценки этой категории."}
-                </Text>
-                {item && (
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    aria-label={`К примеру: ${label}`}
-                    onClick={() => onExample(skill)}
+                  <Group justify="space-between" align="flex-start">
+                    <Title order={4}>{label}</Title>
+                    {item?.score != null && (
+                      <Badge color={presentation.color} variant="light">
+                        {Math.round(item.score * 100)}%
+                      </Badge>
+                    )}
+                  </Group>
+                  <Text
+                    size="sm"
+                    c={item?.score != null ? presentation.color : "dimmed"}
                   >
-                    К примеру
-                  </Button>
-                )}
-              </Stack>
-            );
-          })}
+                    {presentation.label}
+                  </Text>
+                  {item && (
+                    <Text size="xs" c="dimmed">
+                      Подтверждённых ответов: {item.observation_count ?? 1}.
+                      Оценено:{" "}
+                      {item.scored_observation_count ??
+                        (item.score != null ? 1 : 0)}
+                      .
+                    </Text>
+                  )}
+                  <Text size="sm">
+                    {item && <b>Отдельный пример: </b>}
+                    {item?.summary ??
+                      "В записи нет подтверждённого примера для оценки этой категории."}
+                  </Text>
+                  {item && (
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      aria-label={`К примеру: ${label}`}
+                      onClick={() => onExample(skill)}
+                    >
+                      К примеру
+                    </Button>
+                  )}
+                </Stack>
+              );
+            },
+          )}
         </SimpleGrid>
       </section>
     </>

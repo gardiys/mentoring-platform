@@ -4,10 +4,7 @@ import type {
   IntelligenceInterviewDetail,
 } from "../types/api";
 import { CommunicationOverview } from "./CommunicationOverview";
-import {
-  communicationLabels,
-  useCoachingAction,
-} from "../features/interviews/coaching";
+import { useCoachingAction } from "../features/interviews/coaching";
 
 export function CommunicationFeedback({
   interview,
@@ -25,6 +22,9 @@ export function CommunicationFeedback({
   const dimensions = overview.communication_grounded
     ? overview.communication_dimensions
     : [];
+  const labels =
+    overview.communication_labels ??
+    Object.fromEntries(dimensions.map((d) => [d.skill, d.name]));
   const showExample = (skill: CommunicationSkill) => {
     const element = document.getElementById(`communication-example-${skill}`);
     element?.scrollIntoView?.({ block: "start" });
@@ -43,10 +43,8 @@ export function CommunicationFeedback({
             <Title order={2}>Коммуникация и подача</Title>
           </div>
           <Badge variant="light" size="lg">
-            {overview.communication_grounded &&
-            overview.communication_score != null
-              ? `Общая оценка · ${Math.round(overview.communication_score * 100)}%`
-              : "Без общей оценки"}
+            Примеры по {dimensions.length} из {Object.keys(labels).length || 8}{" "}
+            категорий
           </Badge>
         </Group>
         <Text>
@@ -55,14 +53,20 @@ export function CommunicationFeedback({
             : "Недостаточно подтверждённых реплик для оценки коммуникации."}
         </Text>
         <Text size="sm" c="dimmed">
-          Оценки относятся к подтверждённым примерам речи. Для каждой категории
-          показан пример, которому стоит уделить внимание; это не оценка
-          личности.
+          Оценка категории — среднее по подтверждённым ответам, а не оценка
+          личности. Ниже показан пример, которому стоит уделить внимание; его
+          оценка может быть ниже средней. Уверенность AI относится к этому
+          примеру и не гарантирует правильность вывода.
         </Text>
         <CommunicationOverview
           dimensions={dimensions}
+          labels={labels}
           onExample={showExample}
         />
+        <Text size="xs" c="dimmed">
+          Упражнения относятся к текущей версии разбора. После пересчёта новый
+          набор упражнений отмечается заново.
+        </Text>
         {dimensions.length > 0 && <Title order={3}>Конкретные примеры</Title>}
         {dimensions.map((dimension) => {
           if (!dimension.skill) return null;
@@ -83,19 +87,27 @@ export function CommunicationFeedback({
               id={`communication-example-${skill}`}
               tabIndex={-1}
               role="region"
-              aria-label={`Пример: ${communicationLabels[skill]}`}
+              aria-label={`Пример: ${dimension.name}`}
               style={{ scrollMarginTop: "6rem" }}
               gap="xs"
               className="analysis-communication-dimension"
             >
               <Group justify="space-between">
-                <Text fw={700}>{communicationLabels[skill]}</Text>
-                {dimension.score !== null && (
+                <Text fw={700}>{dimension.name}</Text>
+                {(dimension.example_score ?? dimension.score) != null && (
                   <Badge variant="outline">
-                    {Math.round(dimension.score * 100)}%
+                    Пример ·{" "}
+                    {Math.round(
+                      (dimension.example_score ?? dimension.score)! * 100,
+                    )}
+                    %
                   </Badge>
                 )}
               </Group>
+              <Text size="xs" c="dimmed">
+                Уверенность AI в примере:{" "}
+                {Math.round(dimension.confidence * 100)}%
+              </Text>
               <Text size="sm">{dimension.summary}</Text>
               <Text component="blockquote" m={0} size="sm">
                 «{dimension.evidence_quote}»
@@ -176,17 +188,14 @@ export function CommunicationFeedback({
             </Stack>
           );
         })}
-        {canReview &&
-          Object.entries(overview.coaching_state ?? {})
-            .filter(([, s]) => s.decision === "rejected")
-            .map(([skill]) => (
-              <Group key={skill}>
-                <Text size="sm">
-                  Вывод отклонён:{" "}
-                  {communicationLabels[
-                    skill as keyof typeof communicationLabels
-                  ] ?? skill}
-                </Text>
+        {Object.entries(overview.coaching_state ?? {})
+          .filter(([, s]) => s.decision === "rejected")
+          .map(([skill]) => (
+            <Group key={skill}>
+              <Text size="sm">
+                Вывод отклонён: {labels[skill as CommunicationSkill] ?? skill}
+              </Text>
+              {canReview && (
                 <Button
                   size="xs"
                   variant="subtle"
@@ -195,16 +204,17 @@ export function CommunicationFeedback({
                     action.mutate({
                       interviewId: interview.id,
                       revision: interview.analysis_revision ?? 1,
-                      skill: skill as keyof typeof communicationLabels,
+                      skill: skill as CommunicationSkill,
                       action: "approve",
                     })
                   }
                 >
                   Восстановить
                 </Button>
-              </Group>
-            ))}
-        {overview.candidate_questions?.length === 0 && (
+              )}
+            </Group>
+          ))}
+        {!overview.candidate_questions?.length && (
           <Text size="sm" c="dimmed">
             В доступной записи твои вопросы работодателю не выделены.
           </Text>

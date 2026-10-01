@@ -104,9 +104,11 @@ function OverviewSummary({
   const technicalScore = overview.technical_score ?? null;
   const technical = scorePresentation(technicalScore);
   const technicalPercent = scorePercent(technicalScore);
-  const communicationPercent = scorePercent(
-    overview.communication_grounded ? overview.communication_score : null,
-  );
+  const communicationCount = overview.communication_grounded
+    ? overview.communication_dimensions.length
+    : 0;
+  const categoryCount =
+    Object.keys(overview.communication_labels ?? {}).length || 8;
   const priorityActions = (overview.priority_actions ?? []).slice(0, 6);
 
   return (
@@ -147,12 +149,12 @@ function OverviewSummary({
           <div className="analysis-score-item">
             <Text className="technical-label">Коммуникация</Text>
             <Text fw={800} size="xl">
-              {communicationPercent === null ? "—" : `${communicationPercent}%`}
+              {`${communicationCount} из ${categoryCount}`}
             </Text>
             <Text size="xs" c="dimmed">
-              {communicationPercent === null
+              {communicationCount === 0
                 ? "Недостаточно доказательств"
-                : "По подтверждённым цитатам; только текст разговора"}
+                : "Категорий с подтверждёнными примерами"}
             </Text>
           </div>
         </div>

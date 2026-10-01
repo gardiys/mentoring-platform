@@ -51,6 +51,81 @@ def _communication_summary(items: list[dict[str, Any]]) -> str:
     return " ".join(parts)
 
 
+def excerpt(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[: limit - 1].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
+
+
+def _quantities(text: str) -> set[str]:
+    # Conservative guard, not a semantic proof: normalise decimal punctuation and
+    # preserve adjacent units, including spelled-out quantities.
+    words = {
+        "один": "1",
+        "одна": "1",
+        "одно": "1",
+        "два": "2",
+        "две": "2",
+        "три": "3",
+        "четыре": "4",
+        "пять": "5",
+        "шесть": "6",
+        "семь": "7",
+        "восемь": "8",
+        "девять": "9",
+        "десять": "10",
+        "одиннадцать": "11",
+        "двенадцать": "12",
+        "тринадцать": "13",
+        "четырнадцать": "14",
+        "пятнадцать": "15",
+        "шестнадцать": "16",
+        "семнадцать": "17",
+        "восемнадцать": "18",
+        "девятнадцать": "19",
+        "сорок": "40",
+        "пятьдесят": "50",
+        "шестьдесят": "60",
+        "семьдесят": "70",
+        "восемьдесят": "80",
+        "девяносто": "90",
+        "двести": "200",
+        "триста": "300",
+        "четыреста": "400",
+        "пятьсот": "500",
+        "шестьсот": "600",
+        "семьсот": "700",
+        "восемьсот": "800",
+        "девятьсот": "900",
+        "тысячи": "1000",
+        "тысяч": "1000",
+        "миллиона": "1000000",
+        "миллионов": "1000000",
+        "ноль": "0",
+        "нуль": "0",
+        "двадцать": "20",
+        "тридцать": "30",
+        "сто": "100",
+        "тысяча": "1000",
+        "миллион": "1000000",
+    }
+    value = normalized(text)
+    for word, number in words.items():
+        value = re.sub(r"\b" + word + r"\b", number, value)
+    units = (
+        r"%|процент\w*|человек\w*|сотрудник\w*|секунд\w*|минут\w*|час\w*|дн[яей]+|"
+        r"месяц\w*|год\w*|лет|руб\w*|доллар\w*|раз\w*|задач\w*|проект\w*"
+    )
+    result = set()
+    for match in re.finditer(r"\b(\d+(?:[.,]\d+)?)(?:\s*(" + units + r"))?", value):
+        number, unit = match.groups()
+        unit = unit or ""
+        if unit.startswith("процент"):
+            unit = "%"
+        result.add(number.replace(",", ".") + ":" + unit)
+    return result
+
+
 def ground_delivery(
     dimensions: list[Any], question: Any, answer: Any, utterances: list[Any]
 ) -> list[dict[str, Any]]:
@@ -69,7 +144,7 @@ def ground_delivery(
         ids = item.evidence_utterance_ids
         if (
             not item.skill
-            or not quote
+            or len(quote) < 20
             or not ids
             or not set(ids) <= allowed
             or not set(ids) <= source.keys()
@@ -81,8 +156,8 @@ def ground_delivery(
         item.confidence = min(item.confidence, question.confidence)
         if item.rewrite:
             original = normalized(item.rewrite.original)
-            new_numbers = set(re.findall(r"\d+(?:[.,]\d+)?", item.rewrite.improved))
-            known_numbers = set(re.findall(r"\d+(?:[.,]\d+)?", answer.answer_text))
+            new_numbers = _quantities(item.rewrite.improved)
+            known_numbers = _quantities(answer.answer_text)
             if (
                 not original
                 or original not in speech
@@ -127,11 +202,49 @@ def ground_delivery(
             }
             task, criterion = tasks[item.skill]
             item.exercise = CommunicationExercise(
-                task=f"На примере «{item.evidence_quote[:120]}»: {task}",
+                task=f"На примере «{excerpt(item.evidence_quote, 120)}»: {task}",
                 success_criterion=criterion,
             )
         result.append(item.model_dump(mode="json"))
     return result
+
+
+def ground_dimensions(
+    rows: list[Any], utterances: list[Any], *, rejected_skills: set[str] | None = None
+) -> tuple[list[dict[str, Any]], int]:
+    grouped: dict[str, dict[UUID, dict[str, Any]]] = {}
+    filtered_count = 0
+    for question, answer, review in rows:
+        raw = getattr(review, "delivery_assessment", None) or []
+        grounded = ground_delivery(raw, question, answer, utterances)
+        filtered_count += len(raw) - len(grounded)
+        for item in grounded:
+            skill = item["skill"]
+            if skill in (rejected_skills or set()):
+                continue
+            per_question = grouped.setdefault(skill, {})
+            old = per_question.get(question.id)
+            if old is None or _example_severity(item) < _example_severity(old):
+                per_question[question.id] = item
+    items = []
+    for observations in grouped.values():
+        values = list(observations.values())
+        selected = min(values, key=_example_severity)
+        example = selected.copy()
+        scores = [item["score"] for item in values if item["score"] is not None]
+        example.update(
+            example_score=example["score"],
+            score=sum(scores) / len(scores) if scores else None,
+            observation_count=len(values),
+            scored_observation_count=len(scores),
+        )
+        items.append(example)
+    return items, filtered_count
+
+
+def _example_severity(item: dict[str, Any]) -> float:
+    score = item.get("example_score", item.get("score"))
+    return score if score is not None else 1
 
 
 def ground_communication(
@@ -142,46 +255,25 @@ def ground_communication(
     rejected_skills: set[str] | None = None,
 ) -> dict[str, Any]:
     result = dict(payload)
-    dimensions: dict[str, dict[str, Any]] = {}
-    filtered_count = 0
-    for question, answer, review in rows:
-        raw = getattr(review, "delivery_assessment", None) or []
-        grounded = ground_delivery(raw, question, answer, utterances)
-        filtered_count += len(raw) - len(grounded)
-        for item in grounded:
-            skill = item["skill"]
-            if skill in (rejected_skills or set()):
-                continue
-            # Keep one concrete example for each skill, prioritising an observed gap.
-            old = dimensions.get(skill)
-            if old is None or (
-                item["score"] is not None and (old["score"] is None or item["score"] < old["score"])
-            ):
-                dimensions[skill] = item
-    items = list(dimensions.values())
-    scores = [item["score"] for item in items if item["score"] is not None]
+    items, filtered_count = ground_dimensions(rows, utterances, rejected_skills=rejected_skills)
+    dimensions = {item["skill"]: item for item in items}
+    # No global percentage: coverage varies and the rubric is not a psychometric scale.
+    result.pop("communication_strengths", None)
+    result.pop("communication_growth_areas", None)
     result.update(
         communication_dimensions=items,
-        communication_score=sum(scores) / len(scores) if scores else None,
+        communication_labels=SKILL_LABELS,
+        communication_score=None,
         communication_grounded=bool(items),
         communication_summary=_communication_summary(items),
-        communication_strengths=[
-            item["summary"][:300]
-            for item in items
-            if item["score"] is not None and item["score"] >= 0.8
-        ][:3],
-        communication_growth_areas=[
-            item["summary"][:300]
-            for item in items
-            if item["score"] is not None and item["score"] < 0.6
-        ][:3],
     )
     if filtered_count:
         result["caveats"] = list(
             dict.fromkeys(
                 [
                     *(result.get("caveats") or []),
-                    "Часть выводов о коммуникации исключена: цитаты или авторство не подтверждены.",
+                    "Часть выводов о коммуникации исключена: цитаты слишком короткие "
+                    "либо источник или авторство не подтверждены.",
                 ]
             )
         )[:6]
@@ -205,19 +297,19 @@ def ground_communication(
     coaching = [
         {
             "title": item["name"],
-            "reason": item["summary"][:500],
-            "steps": [item["exercise"]["task"][:300]],
+            "reason": excerpt(item["summary"], 500),
+            "steps": [excerpt(item["exercise"]["task"], 300)],
             "success_criterion": item["exercise"]["success_criterion"],
             "related_topics": [],
             "communication_skill": item["skill"],
         }
-        for item in sorted(items, key=lambda x: x["score"] if x["score"] is not None else 1)
-        if item["score"] is not None and item["score"] < 0.6 and item["exercise"]
+        for item in sorted(items, key=_example_severity)
+        if _example_severity(item) < 0.6 and item["exercise"]
     ][:3]
 
     def severity(action: dict[str, Any]) -> float:
         if skill := action.get("communication_skill"):
-            return float(dimensions[skill]["score"])
+            return _example_severity(dimensions[skill])
         topics = [
             topic
             for topic in payload.get("technical_topics", [])
@@ -237,7 +329,10 @@ def ground_communication(
 
     result["priority_actions"] = sorted(coaching + actions, key=severity)[:6]
     if not items and payload.get("technical_summary"):
-        result["overall_summary"] = payload["technical_summary"]
+        result["overall_summary"] = (
+            "Для выводов о коммуникации недостаточно подтверждённых примеров. "
+            "Оценки и рекомендации по отдельным ответам приведены ниже."
+        )
     return result
 
 

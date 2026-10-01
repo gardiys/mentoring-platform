@@ -13,11 +13,13 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMe } from "../features/auth/queries";
 import {
-  communicationLabels,
   useCoachingAction,
   useCoachingHistory,
-  type CoachingObservation,
 } from "../features/interviews/coaching";
+import {
+  comparableGroups,
+  sortObservations,
+} from "../features/interviews/coachingHistory";
 import { ErrorState } from "./ErrorState";
 
 export function CommunicationProgress({
@@ -43,21 +45,27 @@ export function CommunicationProgress({
     return (
       <ErrorState error={history.error} retry={() => void history.refetch()} />
     );
-  const observations = history.data.observations;
+  const observations = sortObservations(history.data.observations);
   if (!observations.length)
     return (
       <Text size="sm" c="dimmed">
-        Динамика коммуникации появится после разборов с подтверждёнными
-        цитатами.
+        В последних {history.data.interview_count ?? 0} разборах нет
+        подтверждённых наблюдений для сравнения.
+        {history.data.truncated &&
+          " Более ранние примеры доступны на страницах соответствующих разборов."}
       </Text>
     );
   const exercises = observations.filter(
-    (o) => o.skill && o.exercise && o.score !== null && o.score < 0.6,
+    (o) =>
+      o.decision !== "rejected" &&
+      o.skill &&
+      o.exercise &&
+      (o.example_score ?? o.score) != null &&
+      (o.example_score ?? o.score)! < 0.6,
   );
-  const visibleExercises = exercises
-    .filter((o) => showCompleted || !o.completed_at)
-    .slice()
-    .reverse();
+  const visibleExercises = exercises.filter(
+    (o) => showCompleted || !o.completed_at,
+  );
   const typeLabels: Record<string, string> = {
     hr: "HR-интервью",
     screening: "Скрининг",
@@ -67,12 +75,7 @@ export function CommunicationProgress({
     live_coding: "Написание кода",
     other: "Другое",
   };
-  const groups = new Map<string, CoachingObservation[]>();
-  for (const item of observations) {
-    if (!item.skill) continue;
-    const key = `${item.skill}:${item.interview_type}`;
-    groups.set(key, [...(groups.get(key) ?? []), item]);
-  }
+  const groups = comparableGroups(observations);
   return (
     <Card withBorder>
       <Stack>
@@ -84,16 +87,39 @@ export function CommunicationProgress({
           Выполнение упражнения — твоя отметка практики, а не повышение
           AI-оценки.
         </Text>
-        {[...groups.entries()].map(([key, items]) => {
-          const latest = items.at(-1)!;
-          const first = items.find((i) => i.score !== null);
-          const delta =
-            first?.score != null && latest.score !== null && items.length > 1
-              ? Math.round((latest.score - first.score) * 100)
-              : null;
-          const repeated =
-            items.length >= 3 &&
-            items.slice(-3).every((i) => i.score !== null && i.score < 0.6);
+        <Text size="sm" c="dimmed">
+          Новые наблюдения и упражнения показаны первыми. История ограничена
+          последними {history.data.limit ?? 30} разборами.
+          {history.data.truncated &&
+            " Более ранние примеры доступны на страницах соответствующих разборов."}
+          Отметки практики относятся к текущей версии: после пересчёта разбора
+          новый набор упражнений отмечается заново.
+        </Text>
+        {!groups.length && (
+          <Text size="sm" c="dimmed">
+            Для сравнения нужны хотя бы два оценённых наблюдения одного навыка в
+            одинаковом формате интервью.
+          </Text>
+        )}
+        {observations
+          .filter((item) => item.decision === "rejected")
+          .map((item) => (
+            <Text
+              key={`rejected:${item.interview_id}:${item.skill}`}
+              size="sm"
+              c="dimmed"
+            >
+              <Anchor
+                component={Link}
+                to={`/interviews/analysis/${item.interview_id}`}
+              >
+                {item.name} · {new Date(item.date).toLocaleDateString("ru")}
+              </Anchor>
+              {" — вывод отклонён ментором; исключён из сравнения и практики."}
+            </Text>
+          ))}
+        {groups.map(([key, items]) => {
+          const latest = items[0]!;
           return (
             <Stack
               key={key}
@@ -102,20 +128,12 @@ export function CommunicationProgress({
             >
               <Group justify="space-between">
                 <Text fw={700}>
-                  {communicationLabels[latest.skill!]} ·{" "}
+                  {latest.name} ·{" "}
                   {typeLabels[latest.interview_type] ?? latest.interview_type}
                 </Text>
-                {delta !== null && (
-                  <Badge
-                    color={delta > 0 ? "green" : delta < 0 ? "orange" : "gray"}
-                  >
-                    {delta > 0 ? "+" : ""}
-                    {delta} п.п.
-                  </Badge>
-                )}
               </Group>
               <Group gap="xs">
-                {items.slice(-6).map((item) => (
+                {items.slice(0, 6).map((item) => (
                   <Anchor
                     key={item.interview_id}
                     component={Link}
@@ -123,18 +141,13 @@ export function CommunicationProgress({
                     size="sm"
                   >
                     {new Date(item.date).toLocaleDateString("ru")} ·{" "}
-                    {item.score === null
+                    {item.score == null
                       ? "—"
                       : `${Math.round(item.score * 100)}%`}
+                    {` · ответов: ${item.observation_count ?? 1}`}
                   </Anchor>
                 ))}
               </Group>
-              {repeated && (
-                <Text c="orange" size="sm">
-                  Три разбора подряд есть пробел — стоит потренировать с
-                  ментором.
-                </Text>
-              )}
               {latest.completed_at && (
                 <Badge color="green">Практика выполнена</Badge>
               )}
@@ -164,8 +177,7 @@ export function CommunicationProgress({
                   component={Link}
                   to={`/interviews/analysis/${item.interview_id}`}
                 >
-                  {communicationLabels[item.skill!]} ·{" "}
-                  {new Date(item.date).toLocaleDateString("ru")}
+                  {item.name} · {new Date(item.date).toLocaleDateString("ru")}
                 </Anchor>
                 <Text size="sm">{item.exercise!.task}</Text>
                 <Text c="dimmed" size="sm">

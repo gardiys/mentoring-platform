@@ -1200,7 +1200,10 @@ async def intelligence_detail(
         overview_payload["priority_actions"] = _merge_priority_actions(
             overview_payload.get("priority_actions")
             if interview.ai_summary_prompt_version
-            == "interview-coaching-report-v7-grounded-delivery"
+            in {
+                "interview-coaching-report-v7-grounded-delivery",
+                "interview-coaching-report-v8-coverage",
+            }
             and not changed_question_numbers
             else [],
             derived_report["priority_actions"],
@@ -1213,11 +1216,7 @@ async def intelligence_detail(
                 "Для этого разбора корректный русскоязычный комментарий по коммуникации "
                 "недоступен. Ориентируйтесь на технический разбор и проверенные ответы."
             )
-        for field in (
-            "communication_strengths",
-            "communication_growth_areas",
-            "caveats",
-        ):
+        for field in ("caveats",):
             raw_values = overview_payload.get(field)
             overview_payload[field] = (
                 [
@@ -1261,7 +1260,10 @@ async def intelligence_detail(
         )
         overview_payload["coaching_state"] = revision_state
         overview_payload["candidate_questions"] = interview.candidate_questions or []
-        if interview.ai_summary_prompt_version != "interview-coaching-report-v7-grounded-delivery":
+        if interview.ai_summary_prompt_version not in {
+            "interview-coaching-report-v7-grounded-delivery",
+            "interview-coaching-report-v8-coverage",
+        }:
             overview_payload["overall_summary"] = _derived_overall_summary(derived_report)
 
     return IntelligenceInterviewDetail(

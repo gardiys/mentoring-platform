@@ -50,9 +50,9 @@ from app.interviews.intelligence_transcript_context import (
 
 EXTRACTION_PROMPT_VERSION = "interview-extraction-candidate-questions-v6"
 ANSWER_RECOVERY_PROMPT_VERSION = "interview-answer-recovery-v1"
-TECHNICAL_REVIEW_PROMPT_VERSION = "technical-answer-review-v10-delivery"
-LIGHT_REVIEW_PROMPT_VERSION = "nontechnical-answer-review-v6-delivery"
-SUMMARY_PROMPT_VERSION = "interview-coaching-report-v7-grounded-delivery"
+TECHNICAL_REVIEW_PROMPT_VERSION = "technical-answer-review-v11-evidence"
+LIGHT_REVIEW_PROMPT_VERSION = "nontechnical-answer-review-v7-evidence"
+SUMMARY_PROMPT_VERSION = "interview-coaching-report-v8-coverage"
 SUMMARY_EVIDENCE_PROMPT_VERSION = "interview-summary-evidence-v2-delivery"
 SUMMARY_EVIDENCE_MAX_OUTPUT_TOKENS = 3_000
 # The complete report schema routinely exceeded the former 4k limit.
@@ -332,6 +332,8 @@ rules, use utterance IDs as evidence where possible, and avoid technical scores 
 does not support."""
 
 DELIVERY_PROMPT = """
+Use a complete, meaningful evidence quote of at least 20 characters; a short acknowledgement
+such as "да" cannot support a skill assessment.
 Assess delivery independently from factual correctness in delivery_assessment. Assess only reliable
 candidate speech, never reference answers or interviewer hints. Use supplied answer_utterance_ids
 (UUIDs), exact evidence_quote from Candidate answer, and one of: structure, specificity,
@@ -360,8 +362,9 @@ SUMMARY_PROMPT += """
 Calibrate advice to interview_context: hr/screening value concise relevant structure;
 system_design/live_coding require reasoning and tested assumptions, not brevity at all costs;
 final permits consistency checks only against statements actually supplied.
-Use existing delivery assessments; do not regrade or paraphrase observations. If none are supplied,
-communication_score is null and communication_dimensions is empty. A rewrite may change expression,
+Use existing delivery assessments; do not regrade or paraphrase observations.
+Always set communication_score to null: there is no overall communication percentage.
+If no observations are supplied, communication_dimensions is empty. A rewrite may change expression,
 never biography, achievements or numbers. Technical scores require at least three assessable
 answers;
 junior questions have weight 2, middle/senior/unknown have weight 1.
@@ -783,12 +786,6 @@ class InterviewSummaryOutput(BaseModel):
     communication_dimensions: list[CommunicationDimension] = Field(
         default_factory=list, max_length=8
     )
-    communication_strengths: list[Annotated[str, Field(max_length=300)]] = Field(
-        default_factory=list, max_length=3
-    )
-    communication_growth_areas: list[Annotated[str, Field(max_length=300)]] = Field(
-        default_factory=list, max_length=3
-    )
     caveats: list[Annotated[str, Field(max_length=300)]] = Field(default_factory=list, max_length=6)
 
     def validate_user_facing_language(self) -> None:
@@ -806,8 +803,6 @@ class InterviewSummaryOutput(BaseModel):
                 *(action.success_criterion for action in self.priority_actions),
                 self.communication_summary,
                 *(dimension.summary for dimension in self.communication_dimensions),
-                *self.communication_strengths,
-                *self.communication_growth_areas,
                 *self.caveats,
             ]
         )
@@ -1157,7 +1152,7 @@ class FakeInterviewAIProvider:
                 communication_summary=(
                     "Ответы сформулированы понятно, но некоторым тезисам не хватило примеров."
                 ),
-                communication_score=0.78,
+                communication_score=None,
                 communication_dimensions=[
                     CommunicationDimension(
                         name="clarity",
@@ -1167,8 +1162,6 @@ class FakeInterviewAIProvider:
                         confidence=0.9,
                     )
                 ],
-                communication_strengths=["Понятно формулирует основную мысль"],
-                communication_growth_areas=["Добавлять практические примеры"],
                 caveats=[],
             ),
             usage=AIUsageResult(None, "fake-light-v1", 160, 90),

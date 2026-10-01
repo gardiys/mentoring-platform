@@ -68,7 +68,13 @@ class CoachingState(BaseModel):
     reviewed_at: datetime | None = None
 
 
-class CoachingObservation(CommunicationDimension):
+class GroundedCommunicationDimension(CommunicationDimension):
+    observation_count: int = Field(default=1, ge=1)
+    scored_observation_count: int = Field(default=0, ge=0)
+    example_score: float | None = Field(default=None, ge=0, le=1)
+
+
+class CoachingObservation(GroundedCommunicationDimension):
     interview_id: UUID
     analysis_revision: int
     date: datetime
@@ -80,3 +86,6 @@ class CoachingObservation(CommunicationDimension):
 class CommunicationHistory(BaseModel):
     student_id: UUID
     observations: list[CoachingObservation]
+    interview_count: int = 0
+    limit: int = 30
+    truncated: bool = False
