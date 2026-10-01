@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -151,9 +151,13 @@ async def _latest_interview_activity(
 ) -> dict[UUID, datetime]:
     if not student_ids:
         return {}
+    # Adding an upcoming interview is activity now. Its scheduled time becomes
+    # activity only when reached; a distant appointment must not keep the
+    # student active indefinitely. Do not use updated_at: background media/AI
+    # processing and edits are not new interviews.
     activity_at = func.greatest(
         InterviewProcessStage.created_at,
-        InterviewProcessStage.scheduled_at,
+        case((InterviewProcessStage.scheduled_at <= now, InterviewProcessStage.scheduled_at)),
     )
     rows = (
         await session.execute(
@@ -164,7 +168,7 @@ async def _latest_interview_activity(
             )
             .where(
                 InterviewProcess.user_id.in_(student_ids),
-                InterviewProcessStage.scheduled_at <= now,
+                InterviewProcessStage.created_at <= now,
             )
             .group_by(InterviewProcess.user_id)
         )

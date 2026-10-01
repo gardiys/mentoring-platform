@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, update
 
@@ -313,3 +314,100 @@ async def test_admin_progress_contains_all_student_workspace_and_offer(
     assert interview.status_code == 200
     assert interview.json()["process"]["offer"]["filename"] == "offer.pdf"
     assert interview.json()["process"]["stages"][0]["description"].startswith("Python")
+
+
+@pytest.mark.parametrize(
+    "created_offset,scheduled_offset,expected_attention",
+    [
+        pytest.param(timedelta(days=-1), timedelta(hours=2), None, id="added-yesterday-for-today"),
+        pytest.param(
+            timedelta(days=-1), timedelta(days=1), None, id="added-yesterday-for-tomorrow"
+        ),
+        pytest.param(timedelta(days=-10), timedelta(hours=-1), None, id="recent-interview"),
+        pytest.param(timedelta(days=-10), timedelta(0), None, id="scheduled-time-reached"),
+        pytest.param(
+            timedelta(days=-1), timedelta(days=-30), None, id="recently-added-past-interview"
+        ),
+        pytest.param(
+            timedelta(days=-7), timedelta(days=20), None, id="creation-at-window-boundary"
+        ),
+        pytest.param(
+            timedelta(days=-10), timedelta(days=-8), "interviews_not_published", id="old-interview"
+        ),
+        pytest.param(
+            timedelta(days=-10),
+            timedelta(days=20),
+            "interviews_not_published",
+            id="old-entry-future-date",
+        ),
+        pytest.param(
+            timedelta(days=-7, seconds=-1),
+            timedelta(days=20),
+            "interviews_not_published",
+            id="creation-outside-window",
+        ),
+    ],
+)
+async def test_interview_attention_counts_entry_creation_without_counting_future_time(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    created_offset: timedelta,
+    scheduled_offset: timedelta,
+    expected_attention: str | None,
+) -> None:
+    from app.mentors import service as mentor_service
+
+    now = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now.astimezone(tz) if tz else now.replace(tzinfo=None)
+
+    monkeypatch.setattr(mentor_service, "datetime", FixedDateTime)
+    switched = await client.patch(
+        f"/api/v1/mentor/students/{seeded.student_id}/state",
+        headers=auth(seeded.mentor_id),
+        json={"learning_status": "interviewing"},
+    )
+    assert switched.status_code == 200, switched.text
+    process = await client.post(
+        "/api/v1/interviews/journal/tracks",
+        headers=auth(seeded.student_id),
+        json={"company_name": "Career Pilot", "track_id": str(seeded.python_track_id)},
+    )
+    assert process.status_code == 201, process.text
+    staged = await client.post(
+        f"/api/v1/interviews/journal/tracks/{process.json()['id']}/stages",
+        headers=auth(seeded.student_id),
+        json={"stage_type": "screening", "scheduled_at": (now + scheduled_offset).isoformat()},
+    )
+    assert staged.status_code == 200, staged.text
+    async with TestSession() as session:
+        await session.execute(
+            update(StudentMentorshipState)
+            .where(StudentMentorshipState.student_id == seeded.student_id)
+            .values(status_updated_at=now - timedelta(days=20))
+        )
+        await session.execute(
+            update(MentorStudent)
+            .where(MentorStudent.student_id == seeded.student_id)
+            .values(status_updated_at=now - timedelta(days=20))
+        )
+        await session.execute(
+            update(InterviewProcessStage)
+            .where(InterviewProcessStage.process_id == UUID(process.json()["id"]))
+            .values(created_at=now + created_offset, updated_at=now)
+        )
+        await session.commit()
+
+    listing = await client.get("/api/v1/mentor/students", headers=auth(seeded.mentor_id))
+    assert listing.status_code == 200, listing.text
+    student = next(item for item in listing.json()["items"] if item["id"] == str(seeded.student_id))
+    assert student["attention_reason"] == expected_attention
+    detail = await client.get(
+        f"/api/v1/mentor/students/{seeded.student_id}", headers=auth(seeded.mentor_id)
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["attention_reason"] == expected_attention
