@@ -51,6 +51,7 @@ from app.interviews.intelligence_models import (
     IntelligenceReviewStatus,
     IntelligenceSpeaker,
     IntelligenceSpeakerRole,
+    IntelligenceTranscriptionCleanup,
     IntelligenceUtterance,
 )
 from app.interviews.intelligence_recovery import intelligence_recovery_job_name
@@ -106,7 +107,12 @@ from app.users.models import User, UserRole
 settings = get_settings()
 AI_ADMISSION_LOCK_KEY = 4_128_771_003
 TRANSCRIPTION_RESUBMIT_ERROR_CODES = frozenset(
-    {"TRANSCRIPTION_RESULT_EXPIRED", "TRANSCRIPTION_TIMEOUT"}
+    {
+        "TRANSCRIPTION_RESULT_EXPIRED",
+        "TRANSCRIPTION_TIMEOUT",
+        "TRANSCRIPTION_JOB_FAILED",
+        "TRANSCRIPTION_JOB_BALANCE_ERROR",
+    }
 )
 
 GLOBAL_AI_WORKLOAD_STATUSES = (
@@ -817,6 +823,33 @@ async def prepare_processing_retry(
     await _ensure_ai_analysis_capacity(session, user, now=now)
     failed_stage = interview.failed_stage
     error_code = interview.processing_error_code
+    # Earlier Soniox adapters stored terminal job errors under the same code as
+    # transport errors. Recover only that exact old diagnostic: a lost connection
+    # must resume the existing paid job, not submit the recording again.
+    legacy_failed_soniox_job = False
+    if (
+        interview.transcription_provider == "soniox"
+        and error_code == "TRANSCRIPTION_PROVIDER_ERROR"
+    ):
+        diagnostic = await session.scalar(
+            select(IntelligenceProcessingAttempt.error_message)
+            .where(
+                IntelligenceProcessingAttempt.interview_id == interview.id,
+                IntelligenceProcessingAttempt.stage == failed_stage,
+                IntelligenceProcessingAttempt.error_code == error_code,
+            )
+            .order_by(IntelligenceProcessingAttempt.started_at.desc())
+            .limit(1)
+        )
+        legacy_failed_soniox_job = diagnostic == "Soniox could not transcribe the recording"
+    cleaned_remote_job = None
+    if interview.transcription_provider == "soniox" and interview.transcription_provider_job_id:
+        cleaned_remote_job = await session.scalar(
+            select(IntelligenceTranscriptionCleanup.completed_at).where(
+                IntelligenceTranscriptionCleanup.provider_job_id
+                == interview.transcription_provider_job_id
+            )
+        )
     if failed_stage in {
         IntelligenceAttemptStage.NORMALIZE,
         IntelligenceAttemptStage.TRANSCRIPTION_SUBMIT,
@@ -828,6 +861,8 @@ async def prepare_processing_retry(
     elif failed_stage is IntelligenceAttemptStage.TRANSCRIPTION_POLL:
         if (
             interview.transcription_provider_job_id
+            and cleaned_remote_job is None
+            and not legacy_failed_soniox_job
             and error_code not in TRANSCRIPTION_RESUBMIT_ERROR_CODES
         ):
             interview.processing_status = IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED
@@ -840,6 +875,8 @@ async def prepare_processing_retry(
     elif failed_stage is IntelligenceAttemptStage.TRANSCRIPTION_PARSE:
         if (
             interview.transcription_provider_job_id
+            and cleaned_remote_job is None
+            and not legacy_failed_soniox_job
             and error_code not in TRANSCRIPTION_RESUBMIT_ERROR_CODES
         ):
             interview.processing_status = IntelligenceProcessingStatus.TRANSCRIPT_READY
@@ -1022,8 +1059,12 @@ async def intelligence_detail(
         IntelligenceUtteranceRead(
             id=item.id,
             speaker_id=item.speaker_id,
-            speaker_key=speaker_by_id[item.speaker_id].provider_speaker_key,
-            speaker_role=speaker_by_id[item.speaker_id].role,
+            speaker_key=speaker_by_id[item.speaker_id].provider_speaker_key
+            if item.speaker_id in speaker_by_id
+            else "Не определён",
+            speaker_role=speaker_by_id[item.speaker_id].role
+            if item.speaker_id in speaker_by_id
+            else IntelligenceSpeakerRole.UNKNOWN,
             sequence_number=item.sequence_number,
             start_ms=item.start_ms,
             end_ms=item.end_ms,
@@ -1033,7 +1074,7 @@ async def intelligence_detail(
     ]
     examples_by_speaker: dict[UUID, list[IntelligenceUtteranceRead]] = defaultdict(list)
     for item in utterance_reads:
-        if len(examples_by_speaker[item.speaker_id]) < 4:
+        if item.speaker_id is not None and len(examples_by_speaker[item.speaker_id]) < 4:
             examples_by_speaker[item.speaker_id].append(item)
 
     questions = list(
@@ -1290,6 +1331,9 @@ async def intelligence_detail(
             failed_stage=interview.failed_stage,
             error_code=interview.processing_error_code,
             error_message=interview.processing_error_message,
+            transcription_quality=(interview.transcription_provider_payload or {}).get(
+                "quality", {}
+            ),
             transcribed=bool(utterances),
             candidate_selected=interview.candidate_speaker_id is not None,
             questions_found=len(questions),
@@ -1359,6 +1403,7 @@ async def intelligence_processing(
         failed_stage=interview.failed_stage,
         error_code=interview.processing_error_code,
         error_message=interview.processing_error_message,
+        transcription_quality=(interview.transcription_provider_payload or {}).get("quality", {}),
         transcribed=bool(first.transcribed),
         candidate_selected=interview.candidate_speaker_id is not None,
         questions_found=int(first.questions_found or 0),
@@ -1381,7 +1426,12 @@ async def intelligence_processing(
 
 
 async def select_candidate_speaker(
-    session: AsyncSession, user: User, interview_id: UUID, speaker_id: UUID
+    session: AsyncSession,
+    user: User,
+    interview_id: UUID,
+    speaker_id: UUID,
+    *,
+    accept_transcription_quality: bool = False,
 ) -> IntelligenceInterview:
     interview = await get_intelligence_interview(
         session, user, interview_id, owner_only=True, lock=True
@@ -1392,6 +1442,26 @@ async def select_candidate_speaker(
             "candidate_speaker_selection_not_available",
             "Candidate speaker can only be selected once after transcription",
         )
+    quality = (interview.transcription_provider_payload or {}).get("quality", {})
+    if (
+        isinstance(quality, dict)
+        and quality.get("requires_review")
+        and not accept_transcription_quality
+    ):
+        api_error(
+            409,
+            "transcription_quality_review_required",
+            "Проверьте разделение спикеров перед продолжением анализа.",
+        )
+    if accept_transcription_quality and isinstance(quality, dict):
+        interview.transcription_provider_payload = {
+            **(interview.transcription_provider_payload or {}),
+            "quality": {
+                **quality,
+                "reviewed_by": str(user.id),
+                "reviewed_at": datetime.now(UTC).isoformat(),
+            },
+        }
     speaker = await session.scalar(
         select(IntelligenceSpeaker).where(
             IntelligenceSpeaker.id == speaker_id,
@@ -2493,6 +2563,18 @@ def safe_processing_message(code: str) -> str:
     messages = {
         "TRANSCRIPTION_TIMEOUT": "Сервис транскрибации не ответил вовремя.",
         "TRANSCRIPTION_PROVIDER_ERROR": "Не удалось обработать запись в сервисе транскрибации.",
+        "TRANSCRIPTION_JOB_BALANCE_ERROR": (
+            "Soniox остановил транскрибацию: исчерпан баланс организации. "
+            "После пополнения нажмите «Повторить этап» для новой отправки записи."
+        ),
+        "TRANSCRIPTION_JOB_FAILED": (
+            "Сервис транскрибации завершил задание с ошибкой. "
+            "Кнопка «Повторить этап» отправит запись заново."
+        ),
+        "TRANSCRIPTION_BALANCE_ERROR": (
+            "Недостаточно средств или превышен бюджет сервиса транскрибации. "
+            "Проверьте баланс и лимиты проекта."
+        ),
         "TRANSCRIPTION_INVALID_RESPONSE": "Сервис транскрибации вернул некорректный результат.",
         "STAGING_CAPACITY_EXCEEDED": "Недостаточно временного места для обработки записи.",
         "MEDIA_PROBE_UNAVAILABLE": "Проверка формата записи временно недоступна.",

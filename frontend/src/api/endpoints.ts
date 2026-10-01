@@ -1108,10 +1108,20 @@ export const api = {
       `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/ai-analysis`,
       { method: "POST" },
     ),
-  selectIntelligenceCandidate: (id: string, speakerId: string) =>
+  selectIntelligenceCandidate: (
+    id: string,
+    speakerId: string,
+    acceptQuality = false,
+  ) =>
     apiRequest<IntelligenceInterviewDetail>(
       `/api/v1/interviews/${id}/candidate-speaker`,
-      { method: "PUT", body: JSON.stringify({ speaker_id: speakerId }) },
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          speaker_id: speakerId,
+          accept_transcription_quality: acceptQuality,
+        }),
+      },
     ),
   retryIntelligenceInterview: (id: string) =>
     apiRequest<IntelligenceInterviewDetail>(`/api/v1/interviews/${id}/retry`, {

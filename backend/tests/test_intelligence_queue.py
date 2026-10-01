@@ -163,7 +163,10 @@ def test_worker_keeps_deterministic_ids_reusable_and_runs_reconciliation() -> No
 
     assert poll_function.max_tries == POLL_MAX_TRIES
     assert WorkerSettings.keep_result == 0
-    assert len(WorkerSettings.cron_jobs) == 1
+    assert {job.name for job in WorkerSettings.cron_jobs} == {
+        "cron:reconcile_intelligence_jobs",
+        "cron:sweep_soniox_resources",
+    }
     assert WorkerSettings.cron_jobs[0].run_at_startup is True
 
     assert TranscriptionWorkerSettings.queue_name == intelligence_queue.TRANSCRIPTION_QUEUE_NAME
@@ -175,7 +178,7 @@ def test_worker_keeps_deterministic_ids_reusable_and_runs_reconciliation() -> No
         TranscriptionWorkerSettings.job_timeout
         == intelligence_jobs.settings.transcription_job_timeout_seconds
     )
-    assert len(TranscriptionWorkerSettings.cron_jobs) == 1
+    assert TranscriptionWorkerSettings.cron_jobs == WorkerSettings.cron_jobs
     assert (
         TranscriptionWorkerSettings.health_check_interval
         == intelligence_jobs.WORKER_HEALTH_CHECK_INTERVAL_SECONDS

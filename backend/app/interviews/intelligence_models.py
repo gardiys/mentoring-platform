@@ -284,11 +284,12 @@ class IntelligenceUtterance(UUIDPrimaryKeyMixin, Base):
         ForeignKey("intelligence_interviews.id", ondelete="CASCADE"),
         nullable=False,
     )
-    speaker_id: Mapped[UUID] = mapped_column(
+    speaker_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("intelligence_speakers.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
+    recognition_quality: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
     start_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
     end_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -717,3 +718,16 @@ class IntelligenceTranscriptionUsage(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class IntelligenceTranscriptionCleanup(Base):
+    """Durable remote job references, retained across restarts and interview deletion."""
+
+    __tablename__ = "intelligence_transcription_cleanup"
+
+    provider_job_id: Mapped[str] = mapped_column(String(500), primary_key=True)
+    interview_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

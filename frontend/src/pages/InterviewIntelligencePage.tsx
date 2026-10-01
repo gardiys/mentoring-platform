@@ -8,6 +8,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Group,
   Progress,
   Radio,
@@ -780,6 +781,9 @@ export function InterviewIntelligencePage() {
   const completeReview = useCompleteIntelligenceReview();
   const generateOverview = useGenerateIntelligenceOverview();
   const [candidateId, setCandidateId] = useState("");
+  const [qualityAcceptedFor, setQualityAcceptedFor] = useState<string | null>(
+    null,
+  );
   const [comment, setComment] = useState("");
   const [media, setMedia] = useState<{
     url: string;
@@ -1016,6 +1020,41 @@ export function InterviewIntelligencePage() {
                 ответов.
               </Text>
             </div>
+            {interview.processing.transcription_quality?.requires_review && (
+              <Alert color="yellow" title="Проверь разделение спикеров">
+                <Stack gap="sm">
+                  <Text size="sm">
+                    Определено спикеров:{" "}
+                    {interview.processing.transcription_quality.speaker_count ??
+                      0}
+                    . Без метки спикера:{" "}
+                    {Math.round(
+                      (interview.processing.transcription_quality
+                        .unattributed_fraction ?? 0) * 100,
+                    )}
+                    % текста. Прослушай запись и сравни реплики: ошибки
+                    разделения могут повлиять на оценку ответов. Если голоса
+                    смешаны, попроси ментора проверить запись перед анализом.
+                  </Text>
+                  {interview.speakers.length > 0 && (
+                    <Checkbox
+                      label="Я проверил реплики и могу определить кандидата"
+                      checked={
+                        qualityAcceptedFor ===
+                        `${interview.id}:${interview.updated_at}`
+                      }
+                      onChange={(event) =>
+                        setQualityAcceptedFor(
+                          event.currentTarget.checked
+                            ? `${interview.id}:${interview.updated_at}`
+                            : null,
+                        )
+                      }
+                    />
+                  )}
+                </Stack>
+              </Alert>
+            )}
             <Radio.Group value={candidateId} onChange={setCandidateId}>
               <Stack>
                 {interview.speakers.map((speaker) => (
@@ -1044,13 +1083,24 @@ export function InterviewIntelligencePage() {
               </Stack>
             </Radio.Group>
             <Button
-              disabled={!candidateId}
+              disabled={
+                !interview.speakers.some(
+                  (speaker) => speaker.id === candidateId,
+                ) ||
+                (interview.processing.transcription_quality?.requires_review ===
+                  true &&
+                  qualityAcceptedFor !==
+                    `${interview.id}:${interview.updated_at}`)
+              }
               loading={selectCandidate.isPending}
               onClick={() =>
                 selectCandidate.mutate(
                   {
                     interviewId: interview.id,
                     speakerId: candidateId,
+                    acceptQuality:
+                      qualityAcceptedFor ===
+                      `${interview.id}:${interview.updated_at}`,
                   },
                   { onError: notifyMutationError },
                 )

@@ -160,6 +160,7 @@ def test_fake_transcription_provider_is_forbidden_in_production() -> None:
         build_transcription_provider(
             Settings(
                 _env_file=None,
+                _env_prefix="NEXARA_PROVIDER_TEST_",
                 app_env="production",
                 app_debug=False,
                 database_url="postgresql+asyncpg://app:password@postgres:5432/mentoring",

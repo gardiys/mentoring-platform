@@ -541,3 +541,57 @@ it("показывает цитату, перематывает к реплик�
     screen.queryByRole("button", { name: "Отклонить вывод" }),
   ).not.toBeInTheDocument();
 });
+
+it("требует проверки плохой диаризации перед запуском анализа", async () => {
+  const user = userEvent.setup();
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  const waiting: IntelligenceInterviewDetail = {
+    ...detail,
+    processing_status: "awaiting_candidate_speaker",
+    overview: null,
+    questions: [],
+    speakers: [
+      {
+        id: "speaker-1",
+        provider_speaker_key: "1",
+        role: "unknown",
+        display_name: null,
+        examples: detail.transcript,
+      },
+    ],
+    processing: {
+      ...detail.processing,
+      status: "awaiting_candidate_speaker",
+      candidate_selected: false,
+      transcription_quality: {
+        requires_review: true,
+        speaker_count: 1,
+        unattributed_fraction: 0.25,
+      },
+    },
+  };
+  vi.spyOn(api, "intelligenceInterview").mockResolvedValue(waiting);
+  const select = vi
+    .spyOn(api, "selectIntelligenceCandidate")
+    .mockResolvedValue(waiting);
+  renderPage(
+    <InterviewIntelligencePage />,
+    `/interviews/analysis/${interviewId}`,
+    "/interviews/analysis/:interviewId",
+  );
+  await screen.findByText("Проверь разделение спикеров");
+  const button = screen.getByRole("button", { name: "Продолжить анализ" });
+  await user.click(screen.getByText("Спикер 1"));
+  expect(button).toBeDisabled();
+  expect(select).not.toHaveBeenCalled();
+  await user.click(
+    screen.getByRole("checkbox", {
+      name: "Я проверил реплики и могу определить кандидата",
+    }),
+  );
+  expect(button).toBeEnabled();
+  await user.click(button);
+  await waitFor(() =>
+    expect(select).toHaveBeenCalledWith(interviewId, "speaker-1", true),
+  );
+});

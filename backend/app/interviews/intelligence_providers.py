@@ -53,10 +53,11 @@ class TranscriptionJob(BaseModel):
 
 
 class TranscriptionUtterance(BaseModel):
-    speaker: str
+    speaker: str | None
     start_ms: int = Field(ge=0)
     end_ms: int = Field(ge=0)
     text: str = Field(min_length=1)
+    quality: dict[str, object] = Field(default_factory=dict)
 
 
 class TranscriptionResult(BaseModel):
@@ -387,11 +388,24 @@ class NexaraTranscriptionProvider:
         )
 
 
-def build_transcription_provider(settings: Settings) -> TranscriptionProvider:
-    if settings.transcription_provider == "fake":
+def build_transcription_provider(
+    settings: Settings,
+    *,
+    provider_name: str | None = None,
+) -> TranscriptionProvider:
+    name = provider_name or settings.transcription_provider
+    if name == "fake":
         if settings.app_env == "production":
             raise RuntimeError("Fake transcription provider is forbidden in production")
         return FakeTranscriptionProvider()
-    if settings.transcription_provider == "nexara":
+    if name == "nexara":
         return NexaraTranscriptionProvider(settings)
-    raise RuntimeError(f"Unsupported transcription provider: {settings.transcription_provider}")
+    if name == "soniox":
+        from app.interviews.soniox_provider import SonioxTranscriptionProvider
+
+        return SonioxTranscriptionProvider(settings)
+    raise TranscriptionProviderError(
+        "TRANSCRIPTION_CONFIG_ERROR",
+        "Unsupported transcription provider",
+        retryable=False,
+    )

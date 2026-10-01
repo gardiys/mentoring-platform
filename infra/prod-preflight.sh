@@ -99,7 +99,7 @@ for key in \
     TELEGRAM_BOT_TOKEN TELEGRAM_BOT_URL BOT_INTEGRATION_TOKEN \
     TELEGRAM_WEB_CLIENT_ID TELEGRAM_WEB_CLIENT_SECRET WEB_SESSION_SECRET \
     S3_BUCKET S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY \
-    TRANSCRIPTION_PROVIDER NEXARA_API_KEY \
+    TRANSCRIPTION_PROVIDER \
     INTERVIEW_AI_PROVIDER OPENAI_API_KEY OPENAI_ANALYSIS_MODEL OPENAI_EXTRACTION_MODEL
 do
     require_value "$key"
@@ -159,15 +159,17 @@ case "$telegram_bot_url" in
 esac
 
 for key in \
-    S3_ENDPOINT_URL S3_PUBLIC_ENDPOINT_URL NEXARA_BASE_URL TOCHKA_API_BASE_URL
+    S3_ENDPOINT_URL S3_PUBLIC_ENDPOINT_URL NEXARA_BASE_URL SONIOX_BASE_URL TOCHKA_API_BASE_URL
 do
     require_https_if_set "$key"
 done
 
 transcription_provider=$(value_of TRANSCRIPTION_PROVIDER)
-if [ "$transcription_provider" != "nexara" ]; then
-    fail "TRANSCRIPTION_PROVIDER must be nexara in production"
-fi
+case "$transcription_provider" in
+    nexara) require_value NEXARA_API_KEY ;;
+    soniox) require_value SONIOX_API_KEY ;;
+    *) fail "TRANSCRIPTION_PROVIDER must be nexara or soniox in production" ;;
+esac
 
 ai_provider=$(value_of INTERVIEW_AI_PROVIDER)
 if [ "$ai_provider" != "openai" ]; then

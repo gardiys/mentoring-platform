@@ -80,6 +80,7 @@ from app.interviews.intelligence_models import (
     IntelligenceReviewStatus,
     IntelligenceSpeaker,
     IntelligenceSpeakerRole,
+    IntelligenceTranscriptionCleanup,
     IntelligenceTranscriptionUsage,
     IntelligenceUtterance,
 )
@@ -120,6 +121,8 @@ from app.interviews.models import (
 )
 from app.interviews.question_embeddings import refresh_track_question_embeddings
 from app.interviews.question_matching import normalize_question
+from app.interviews.transcription_cleanup import sweep_soniox_resources
+from app.interviews.transcription_quality import low_recognition_confidence
 from app.interviews.uploads import (
     InterviewStorageReadError,
     InterviewUploadStore,
@@ -145,7 +148,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
-    await _transcription(ctx).close()
+    await _close_transcription_providers(ctx)
     await _ai(ctx).close()
 
 
@@ -156,7 +159,7 @@ async def transcription_startup(ctx: dict[str, Any]) -> None:
 
 
 async def transcription_shutdown(ctx: dict[str, Any]) -> None:
-    await _transcription(ctx).close()
+    await _close_transcription_providers(ctx)
 
 
 async def ai_startup(ctx: dict[str, Any]) -> None:
@@ -380,6 +383,12 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
         interview.transcription_provider = _transcription(ctx).name
         interview.transcription_provider_job_id = job.provider_job_id
         interview.transcription_provider_payload = job.raw_payload
+        if provider.name == "soniox":
+            session.add(
+                IntelligenceTranscriptionCleanup(
+                    provider_job_id=job.provider_job_id, interview_id=interview.id
+                )
+            )
         interview.processing_status = IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED
         attempt.external_request_id = job.provider_job_id
         _complete_attempt(attempt)
@@ -415,10 +424,12 @@ async def poll_transcription(ctx: dict[str, Any], interview_id: str) -> None:
             session,
             interview.id,
             IntelligenceAttemptStage.TRANSCRIPTION_POLL,
-            _transcription(ctx).name,
+            interview.transcription_provider or _transcription(ctx).name,
         )
         try:
-            job = await _transcription(ctx).get_status(provider_job_id)
+            job = await _transcription(ctx, interview.transcription_provider).get_status(
+                provider_job_id
+            )
         except TranscriptionProviderError as error:
             if _deadline_reached(deadline_at):
                 await _record_failure(
@@ -490,10 +501,11 @@ async def process_transcription_result(ctx: dict[str, Any], interview_id: str) -
             session,
             interview.id,
             IntelligenceAttemptStage.TRANSCRIPTION_PARSE,
-            _transcription(ctx).name,
+            interview.transcription_provider or _transcription(ctx).name,
         )
         try:
-            result = await _transcription(ctx).get_result(interview.transcription_provider_job_id)
+            provider = _transcription(ctx, interview.transcription_provider)
+            result = await provider.get_result(interview.transcription_provider_job_id)
             await _save_transcript(session, interview, result)
         except TranscriptionProviderError as error:
             will_retry = _will_retry(ctx, error.retryable)
@@ -510,13 +522,27 @@ async def process_transcription_result(ctx: dict[str, Any], interview_id: str) -
         session.add(
             IntelligenceTranscriptionUsage(
                 interview_id=interview.id,
-                provider=_transcription(ctx).name,
+                provider=provider.name,
                 duration_ms=result.duration_ms,
                 provider_job_id=interview.transcription_provider_job_id,
             )
         )
         _complete_attempt(attempt)
         await session.commit()
+        cleanup = getattr(provider, "cleanup", None)
+        if cleanup is not None:
+            try:
+                if await cleanup(interview.transcription_provider_job_id):
+                    cleanup_record = await session.get(
+                        IntelligenceTranscriptionCleanup, interview.transcription_provider_job_id
+                    )
+                    if cleanup_record:
+                        cleanup_record.completed_at = datetime.now(UTC)
+                        await session.commit()
+            except TranscriptionProviderError as error:
+                logger.warning(
+                    "Transcription cleanup failed provider=%s code=%s", provider.name, error.code
+                )
 
 
 async def extract_interview_structure(
@@ -581,7 +607,9 @@ async def extract_interview_structure(
                 item,
                 "Candidate"
                 if item.speaker_id == interview.candidate_speaker_id
-                else f"Speaker {speakers[item.speaker_id].provider_speaker_key}",
+                else f"Speaker {speakers[item.speaker_id].provider_speaker_key}"
+                if item.speaker_id in speakers
+                else "Unattributed speech (speaker uncertain)",
             )
             for item in utterances
         ]
@@ -696,10 +724,20 @@ async def extract_interview_structure(
                     for row in [*question_utterances, *answer_utterances]
                 },
                 item.transcription_corrections,
-                grounded.uncertain_ids,
+                list(
+                    set(grounded.uncertain_ids)
+                    | {
+                        f"U{row.sequence_number:03d}"
+                        for row in [*question_utterances, *answer_utterances]
+                        if row.speaker_id is None
+                        or low_recognition_confidence(row.recognition_quality)
+                    }
+                ),
             )
             annotations.speaker_attribution_conflict = grounded.speaker_conflict
-            annotations.answer_unreliable = grounded.answer_unreliable
+            annotations.answer_unreliable = grounded.answer_unreliable or any(
+                low_recognition_confidence(row.recognition_quality) for row in answer_utterances
+            )
             annotations.answer_spans = grounded.answer_spans
             sequence += 1
             question = IntelligenceQuestion(
@@ -1123,7 +1161,7 @@ def _neighbor_context(
         )
     for index in sorted(selected):
         utterance = utterances[index]
-        speaker = speakers.get(utterance.speaker_id)
+        speaker = speakers.get(utterance.speaker_id) if utterance.speaker_id is not None else None
         label = (
             "Candidate"
             if utterance.speaker_id == candidate_speaker_id
@@ -1194,7 +1232,7 @@ async def _save_transcript(
     )
     speaker_by_key: dict[str, IntelligenceSpeaker] = {}
     for row in result.utterances:
-        if row.speaker not in speaker_by_key:
+        if row.speaker is not None and row.speaker not in speaker_by_key:
             speaker = IntelligenceSpeaker(
                 interview_id=interview.id,
                 provider_speaker_key=row.speaker,
@@ -1207,7 +1245,8 @@ async def _save_transcript(
         session.add(
             IntelligenceUtterance(
                 interview_id=interview.id,
-                speaker_id=speaker_by_key[row.speaker].id,
+                speaker_id=speaker_by_key[row.speaker].id if row.speaker is not None else None,
+                recognition_quality=row.quality or None,
                 sequence_number=sequence,
                 start_ms=row.start_ms,
                 end_ms=row.end_ms,
@@ -1739,6 +1778,11 @@ def _utterance_block(item: IntelligenceUtterance, speaker: str) -> str:
     return (
         f"[U{item.sequence_number:03d}] "
         f"[{_timestamp(item.start_ms)} - {_timestamp(item.end_ms)}] {speaker}:\n{item.text}"
+        + (
+            "\n[Low ASR confidence: do not treat recognition errors as candidate knowledge errors.]"
+            if low_recognition_confidence(item.recognition_quality)
+            else ""
+        )
     )
 
 
@@ -1749,8 +1793,30 @@ def _timestamp(milliseconds: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{millis:03d}"
 
 
-def _transcription(ctx: dict[str, Any]) -> TranscriptionProvider:
-    return cast(TranscriptionProvider, ctx["transcription_provider"])
+def _transcription(
+    ctx: dict[str, Any],
+    provider_name: str | None = None,
+) -> TranscriptionProvider:
+    default = cast(TranscriptionProvider, ctx["transcription_provider"])
+    if provider_name is None or provider_name == default.name:
+        return default
+    providers = cast(
+        dict[str, TranscriptionProvider], ctx.setdefault("transcription_providers", {})
+    )
+    if provider_name not in providers:
+        providers[provider_name] = build_transcription_provider(
+            settings, provider_name=provider_name
+        )
+    return providers[provider_name]
+
+
+async def _close_transcription_providers(ctx: dict[str, Any]) -> None:
+    providers = [_transcription(ctx), *ctx.get("transcription_providers", {}).values()]
+    try:
+        for provider in {id(item): item for item in providers}.values():
+            await provider.close()
+    finally:
+        ctx.pop("transcription_providers", None)
 
 
 def _ai(ctx: dict[str, Any]) -> InterviewAIProvider:
@@ -1833,12 +1899,19 @@ class WorkerSettings:
     ]
     cron_jobs = [
         cron(
+            sweep_soniox_resources,
+            minute={7, 22, 37, 52},
+            run_at_startup=True,
+            max_tries=1,
+            keep_result=0,
+        ),
+        cron(
             reconcile_intelligence_jobs,
             minute=RECONCILIATION_MINUTES,
             run_at_startup=True,
             max_tries=1,
             keep_result=0,
-        )
+        ),
     ]
     on_startup = startup
     on_shutdown = shutdown

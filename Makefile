@@ -36,6 +36,12 @@ worker-maintenance:
 worker-media:
 	cd backend && poetry run arq app.media.normalization_jobs.ContentMediaWorkerSettings
 
+check-soniox:
+	cd backend && poetry run python -m app.check_soniox
+
+prod-check-soniox:
+	$(PROD_COMPOSE) run --rm --no-deps intelligence-worker python -m app.check_soniox
+
 check-nexara:
 	cd backend && poetry run python -m app.check_nexara
 

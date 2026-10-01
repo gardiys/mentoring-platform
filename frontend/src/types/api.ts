@@ -1791,7 +1791,7 @@ export interface ManagedPersonalReviewResult {
 
 export interface IntelligenceUtterance {
   id: string;
-  speaker_id: string;
+  speaker_id: string | null;
   speaker_key: string;
   speaker_role: IntelligenceSpeakerRole;
   sequence_number: number;
@@ -1888,6 +1888,12 @@ export interface IntelligenceProcessing {
   failed_stage: string | null;
   error_code: string | null;
   error_message: string | null;
+  transcription_quality?: {
+    speaker_count?: number;
+    unattributed_fraction?: number;
+    unattributed_utterances?: number;
+    requires_review?: boolean;
+  };
   transcribed: boolean;
   candidate_selected: boolean;
   questions_found: number;

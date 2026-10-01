@@ -10272,6 +10272,11 @@ export interface components {
              * Format: uuid
              */
             speaker_id: string;
+            /**
+             * Accept Transcription Quality
+             * @default false
+             */
+            accept_transcription_quality: boolean;
         };
         /** IntelligenceCommunicationDimensionRead */
         IntelligenceCommunicationDimensionRead: {
@@ -10664,6 +10669,10 @@ export interface components {
             error_code: string | null;
             /** Error Message */
             error_message: string | null;
+            /** Transcription Quality */
+            transcription_quality?: {
+                [key: string]: unknown;
+            };
             /** Transcribed */
             transcribed: boolean;
             /** Candidate Selected */
@@ -10901,11 +10910,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /**
-             * Speaker Id
-             * Format: uuid
-             */
-            speaker_id: string;
+            /** Speaker Id */
+            speaker_id: string | null;
             /** Speaker Key */
             speaker_key: string;
             speaker_role: components["schemas"]["IntelligenceSpeakerRole"];

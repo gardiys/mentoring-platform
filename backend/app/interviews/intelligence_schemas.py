@@ -86,7 +86,7 @@ class IntelligenceSpeakerRead(BaseModel):
 
 class IntelligenceUtteranceRead(BaseModel):
     id: UUID
-    speaker_id: UUID
+    speaker_id: UUID | None
     speaker_key: str
     speaker_role: IntelligenceSpeakerRole
     sequence_number: int
@@ -172,6 +172,7 @@ class IntelligenceProcessingRead(BaseModel):
     failed_stage: IntelligenceAttemptStage | None
     error_code: str | None
     error_message: str | None
+    transcription_quality: dict[str, object] = Field(default_factory=dict)
     transcribed: bool
     candidate_selected: bool
     questions_found: int
@@ -247,6 +248,7 @@ class IntelligenceInterviewDetail(IntelligenceInterviewSummary):
 
 class IntelligenceCandidateSpeakerMutation(BaseModel):
     speaker_id: UUID
+    accept_transcription_quality: bool = False
 
 
 class IntelligenceMentorCommentMutation(BaseModel):

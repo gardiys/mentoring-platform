@@ -188,8 +188,16 @@ function useIntelligenceMutation<TVariables, TData>(
 
 export function useSelectIntelligenceCandidate() {
   return useIntelligenceMutation(
-    ({ interviewId, speakerId }: { interviewId: string; speakerId: string }) =>
-      api.selectIntelligenceCandidate(interviewId, speakerId),
+    ({
+      interviewId,
+      speakerId,
+      acceptQuality,
+    }: {
+      interviewId: string;
+      speakerId: string;
+      acceptQuality?: boolean;
+    }) =>
+      api.selectIntelligenceCandidate(interviewId, speakerId, acceptQuality),
   );
 }
 

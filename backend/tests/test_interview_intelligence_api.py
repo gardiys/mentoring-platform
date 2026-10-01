@@ -380,6 +380,7 @@ async def test_processing_poll_is_authorized_lightweight_and_returns_progress(
         "failed_stage": None,
         "error_code": None,
         "error_message": None,
+        "transcription_quality": {},
         "transcribed": True,
         "candidate_selected": True,
         "questions_found": 1,

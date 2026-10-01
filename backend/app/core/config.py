@@ -187,7 +187,7 @@ class Settings(BaseSettings):
     interview_max_upload_mb: int = Field(default=2_048, ge=1, le=5_120)
     redis_url: str = "redis://localhost:6379/0"
     intelligence_job_expires_seconds: int = Field(default=604_800, ge=3_600, le=2_592_000)
-    transcription_provider: str = "fake"
+    transcription_provider: Literal["fake", "nexara", "soniox"] = "fake"
     transcription_max_concurrency: int = Field(default=4, ge=1, le=32)
     transcription_job_timeout_seconds: int = Field(default=3_600, ge=60, le=7_200)
     transcription_poll_deadline_seconds: int = Field(default=21_600, ge=300, le=604_800)
@@ -197,6 +197,17 @@ class Settings(BaseSettings):
     nexara_timeout_seconds: float = Field(default=600, ge=10, le=1_800)
     # ARQ persists and jitters retries; keep provider SDK retries disabled.
     nexara_max_retries: int = Field(default=0, ge=0, le=5)
+    soniox_api_key: SecretStr | None = None
+    soniox_base_url: str = "https://api.soniox.com/v1"
+    soniox_model: str = Field(default="stt-async-v5", min_length=1, max_length=32)
+    soniox_proxy_url: SecretStr | None = None
+    soniox_timeout_seconds: float = Field(default=600, ge=10, le=1_800)
+    soniox_upload_max_bytes: int = Field(default=2 * 1024**3, ge=1, le=2 * 1024**3)
+    soniox_utterance_pause_ms: int = Field(default=1500, ge=100, le=10_000)
+    soniox_utterance_max_ms: int = Field(default=30_000, ge=1000, le=120_000)
+    soniox_low_confidence_threshold: float = Field(default=0.6, ge=0, le=1)
+    soniox_unattributed_fraction_limit: float = Field(default=0.1, ge=0, le=1)
+    soniox_language_hints: list[str] = Field(default_factory=lambda: ["ru", "en"])
     interview_ai_provider: str = "fake"
     openai_api_key: SecretStr | None = None
     openai_analysis_model: str | None = None
@@ -324,6 +335,7 @@ class Settings(BaseSettings):
         "s3_endpoint_url",
         "s3_public_endpoint_url",
         "nexara_base_url",
+        "soniox_base_url",
         "tochka_api_base_url",
         "tochka_redirect_url",
         "tochka_fail_redirect_url",
@@ -356,6 +368,7 @@ class Settings(BaseSettings):
                 "s3_endpoint_url",
                 "s3_public_endpoint_url",
                 "nexara_base_url",
+                "soniox_base_url",
                 "tochka_api_base_url",
             }
             and parsed.query
@@ -371,6 +384,28 @@ class Settings(BaseSettings):
             return parsed._replace(netloc="firsts3.ru").geturl()
         return value
 
+    @field_validator("soniox_proxy_url")
+    @classmethod
+    def validate_soniox_proxy(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is None:
+            return None
+        raw = value.get_secret_value()
+        try:
+            parsed = urlsplit(raw)
+            _ = parsed.port
+        except ValueError:
+            raise ValueError("SONIOX_PROXY_URL is not a valid proxy URL") from None
+        if (
+            cls._contains_unsafe_whitespace(raw)
+            or parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.query
+            or parsed.fragment
+            or parsed.path not in {"", "/"}
+        ):
+            raise ValueError("SONIOX_PROXY_URL must be an http(s) proxy URL")
+        return value
+
     @field_validator(
         "telegram_bot_token",
         "telegram_bot_proxy_url",
@@ -380,6 +415,8 @@ class Settings(BaseSettings):
         "telegram_oidc_proxy_url",
         "web_session_secret",
         "nexara_api_key",
+        "soniox_api_key",
+        "soniox_proxy_url",
         "openai_api_key",
         "openai_proxy_url",
         "tochka_jwt_token",
@@ -546,6 +583,7 @@ class Settings(BaseSettings):
             ("TELEGRAM_WEB_REDIRECT_URI", self.telegram_web_redirect_uri),
             ("ONBOARDING_BOT_API_BASE_URL", self.onboarding_bot_api_base_url),
             ("NEXARA_BASE_URL", self.nexara_base_url),
+            ("SONIOX_BASE_URL", self.soniox_base_url),
             ("TOCHKA_API_BASE_URL", self.tochka_api_base_url),
             ("TOCHKA_REDIRECT_URL", self.tochka_redirect_url),
             ("TOCHKA_FAIL_REDIRECT_URL", self.tochka_fail_redirect_url),
@@ -589,6 +627,8 @@ class Settings(BaseSettings):
             "TELEGRAM_OIDC_PROXY_URL": self.telegram_oidc_proxy_url,
             "WEB_SESSION_SECRET": self.web_session_secret,
             "NEXARA_API_KEY": self.nexara_api_key,
+            "SONIOX_API_KEY": self.soniox_api_key,
+            "SONIOX_PROXY_URL": self.soniox_proxy_url,
             "OPENAI_API_KEY": self.openai_api_key,
             "OPENAI_PROXY_URL": self.openai_proxy_url,
             "TOCHKA_JWT_TOKEN": self.tochka_jwt_token,

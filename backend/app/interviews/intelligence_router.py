@@ -200,7 +200,13 @@ async def interview_candidate_speaker(
     session: Session,
     student: JournalUser,
 ) -> IntelligenceInterviewDetail:
-    await select_candidate_speaker(session, student, interview_id, payload.speaker_id)
+    await select_candidate_speaker(
+        session,
+        student,
+        interview_id,
+        payload.speaker_id,
+        accept_transcription_quality=payload.accept_transcription_quality,
+    )
     await _enqueue("extract_interview_structure", interview_id)
     return await intelligence_detail(session, student, interview_id)
 
