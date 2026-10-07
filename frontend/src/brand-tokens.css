@@ -1,7 +1,9 @@
 /* Потрачено · brandbook v4. Fonts are bundled locally in main.tsx. */
 :root {
+  color-scheme: dark;
   --control-tint: 9%;
   --control-hover-tint: 14%;
+  --status-ink-strength: 55%;
   --c-bg: #101d2d;
   --c-surface: #152539;
   --c-raised: #19355f;
@@ -57,4 +59,39 @@
   --r-card: 20px;
   --r-modal: 24px;
   --r-hero: 32px;
+}
+
+/* Brandbook v4 light palette; dark remains the fallback without a preference. */
+:root[data-mantine-color-scheme="light"] {
+  color-scheme: light;
+  --c-bg: #faf7f1;
+  --c-surface: #fff;
+  --c-raised: #f1ece3;
+  --c-line: #e4ded2;
+  --c-line-strong: #cfc7b8;
+  --c-text: #16283f;
+  --c-muted: #67655f;
+  --c-action: #1a62cc;
+  --c-action-hover: #1553ae;
+  --c-action-pressed: #11458f;
+  --c-on-action: #fff;
+  --c-secondary: #f1ece3;
+  --c-link: #1a62cc;
+  --c-accent-text: #754600;
+  --c-ai: color-mix(in srgb, var(--c-ai-fill) 65%, var(--c-text));
+  --c-ai-tint: color-mix(in srgb, var(--c-ai-fill) 8%, var(--c-surface));
+  --c-success: #146b43;
+  --c-warning: #754600;
+  --c-warning-fill: #ffb47a;
+  --c-teal: #0b4e5e;
+  --c-teal-fill: #69dfce;
+  --c-neutral-border: #67655f;
+  --c-danger: #a52a22;
+  --c-focus: #2e90ff;
+  --c-go-text: #0b4e5e;
+  --c-service-text: #1a62cc;
+  --c-field: #fff;
+  --c-selected: color-mix(in srgb, var(--c-action) 8%, var(--c-surface));
+  --c-disabled: #f1ece3;
+  --c-on-disabled: #67655f;
 }

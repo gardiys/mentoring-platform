@@ -11,6 +11,7 @@ import {
 import { Navigate, useSearchParams } from "react-router-dom";
 
 import { BrandLogo } from "../components/BrandLogo";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { API_URL } from "../api/client";
 import { useMe } from "../features/auth/queries";
 import { telegramMiniAppLink } from "../platform/telegramLinks";
@@ -57,6 +58,9 @@ export function TelegramRequiredPage() {
             </Stack>
           </div>
           <div className="login-form-panel">
+            <div className="login-theme-control">
+              <ThemeToggle />
+            </div>
             <Stack gap="lg">
               <div>
                 <Text className="brand-eyebrow" mb="xs">

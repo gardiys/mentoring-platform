@@ -6,16 +6,20 @@ import { type PropsWithChildren, useState } from "react";
 import { PlatformProvider } from "../platform/PlatformProvider";
 import { createQueryClient } from "./queryClient";
 import { brandCssVariables, brandTheme } from "./theme";
+import { createPlatformColorSchemeManager } from "./colorScheme";
+import { ThemeMetadata } from "./ThemeMetadata";
 
 export function AppProviders({ children }: PropsWithChildren) {
   const [queryClient] = useState(createQueryClient);
+  const [colorSchemeManager] = useState(createPlatformColorSchemeManager);
   return (
     <MantineProvider
-      forceColorScheme="dark"
+      colorSchemeManager={colorSchemeManager}
       defaultColorScheme="dark"
       theme={brandTheme}
       cssVariablesResolver={brandCssVariables}
     >
+      <ThemeMetadata />
       <Notifications />
       <QueryClientProvider client={queryClient}>
         <PlatformProvider>{children}</PlatformProvider>

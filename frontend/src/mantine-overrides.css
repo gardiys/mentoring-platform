@@ -34,6 +34,12 @@
   box-shadow: none;
 }
 
+/* The generic Card surface must not erase the branded hero background. */
+.mantine-Card-root.brand-hero {
+  background: var(--c-hero-start)
+    linear-gradient(135deg, var(--c-hero-start), var(--c-hero-end));
+}
+
 @media (max-width: 48em) {
   .opportunity-request-actions .mantine-Button-root {
     width: 100%;

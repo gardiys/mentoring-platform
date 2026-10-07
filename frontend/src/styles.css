@@ -816,7 +816,7 @@ a {
   flex: 0 0 1.8rem;
   width: 1.8rem;
   height: 1.8rem;
-  color: var(--brand-navy);
+  color: var(--c-on-accent);
   font-family: "JetBrains Mono", monospace;
   font-size: var(--mantine-font-size-sm);
   font-weight: 800;
@@ -1294,6 +1294,18 @@ a {
 .login-form-panel {
   min-width: 0;
   padding: clamp(1.5rem, 5vw, 3.5rem);
+}
+
+.login-theme-control {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.theme-toggle {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .not-found-page {

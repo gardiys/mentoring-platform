@@ -29,6 +29,7 @@ import { HeaderIcon } from "./HeaderIcon";
 import { NavigationIcon } from "./NavigationIcon";
 import { BrandLogo } from "./BrandLogo";
 import { NotificationBell } from "./NotificationBell";
+import { ThemeToggle } from "./ThemeToggle";
 
 const roleLabels = {
   student: "Ученик",
@@ -160,6 +161,7 @@ export function AppLayout() {
               </Stack>
             )}
             {me.data && <NotificationBell />}
+            <ThemeToggle />
             {!platform.isTelegram && (
               <ActionIcon
                 variant="light"

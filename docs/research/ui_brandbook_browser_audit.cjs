@@ -102,6 +102,13 @@ const report = { pages: [], errors: [], unhandled: [], controls: [] };
     else if (p.startsWith("/api/v1/knowledge/entries/")) body = knowledge.entry;
     else if (p === "/api/v1/interviews")
       body = { items: [], total: 0, limit: 6, offset: 0 };
+    else if (p.startsWith("/api/v1/interviews/communication-history/"))
+      body = {
+        observations: [],
+        interview_count: 0,
+        limit: 30,
+        truncated: false,
+      };
     else if (p === "/api/v1/interviews/decks") body = [study.deck];
     else if (p.endsWith("/session")) body = study.session;
     else if (p.endsWith("/topics")) body = study.topics;
@@ -160,7 +167,10 @@ const report = { pages: [], errors: [], unhandled: [], controls: [] };
       function background(e) {
         if (!e) return [255, 255, 255, 1];
         // The brighter endpoint is the worst case for white text on this gradient.
-        if (e.classList.contains("brand-hero"))
+        if (
+          e.classList.contains("brand-hero") &&
+          getComputedStyle(e).backgroundImage.includes("linear-gradient")
+        )
           return rgba(getComputedStyle(e).getPropertyValue("--c-hero-start"));
         let c = rgba(getComputedStyle(e).backgroundColor);
         return c[3] === 1 ? c : composite(c, background(e.parentElement));
@@ -186,9 +196,10 @@ const report = { pages: [], errors: [], unhandled: [], controls: [] };
           a = lum(rgba(s.color)),
           b = lum(background(e));
         const contrast = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-        const min =
-          parseFloat(s.fontSize) >= 24 ||
-          (parseFloat(s.fontSize) >= 18.66 && Number(s.fontWeight) >= 700)
+        const min = e.closest('.mantine-Badge-root[data-variant="light"]')
+          ? 7
+          : parseFloat(s.fontSize) >= 24 ||
+              (parseFloat(s.fontSize) >= 18.66 && Number(s.fontWeight) >= 700)
             ? 3
             : 4.5;
         if (contrast < min - 0.05)
@@ -209,6 +220,11 @@ const report = { pages: [], errors: [], unhandled: [], controls: [] };
           });
       }
       return {
+        scheme: document.documentElement.dataset.mantineColorScheme,
+        heroBranded: [...document.querySelectorAll(".brand-hero")].every(
+          (hero) =>
+            getComputedStyle(hero).backgroundImage.includes("linear-gradient"),
+        ),
         statusBackgrounds: [
           ...document.querySelectorAll(
             ".queue-status-summary .mantine-Badge-root",
@@ -255,8 +271,19 @@ const report = { pages: [], errors: [], unhandled: [], controls: [] };
     ["login", "/login", "Продолжить через Telegram"],
     ["dev-login", "/dev-login", "Development-вход"],
   ];
-  for (const theme of ["dark"]) {
-    await page.addInitScript(
+  login = true;
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto(baseUrl + "/dev-login");
+  await page.evaluate(() =>
+    localStorage.removeItem("mentoring-platform-color-scheme-v2"),
+  );
+  await page.reload();
+  await page.getByRole("button", { name: "Включить светлую тему" }).waitFor();
+  report.darkDefault = await page.evaluate(
+    () => document.documentElement.dataset.mantineColorScheme === "dark",
+  );
+  for (const theme of ["dark", "light"]) {
+    await page.evaluate(
       (t) => localStorage.setItem("mentoring-platform-color-scheme-v2", t),
       theme,
     );
@@ -270,15 +297,28 @@ const report = { pages: [], errors: [], unhandled: [], controls: [] };
       role = name === "clusters" ? "admin" : "student";
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(baseUrl + url);
-      await page.getByText(marker, { exact: true }).first().waitFor();
-      if (
-        ["interviews", "journal", "analyses", "mocks", "materials"].includes(
-          name,
+      try {
+        await page.getByText(marker, { exact: true }).first().waitFor();
+        if (
+          ["interviews", "journal", "analyses", "mocks", "materials"].includes(
+            name,
+          )
         )
-      )
-        await page
-          .getByRole("heading", { name: marker, exact: true })
-          .waitFor();
+          await page
+            .getByRole("heading", { name: marker, exact: true })
+            .waitFor();
+      } catch (error) {
+        await page.screenshot({
+          path: `${outputDir}/failure-${name}-${theme}.png`,
+          fullPage: true,
+        });
+        fs.writeFileSync(
+          outputDir + "/pages.json",
+          JSON.stringify(report, null, 2),
+        );
+        await browser.close();
+        throw error;
+      }
       await page.evaluate(() => document.fonts.ready);
       if (name === "study")
         await page
@@ -307,6 +347,45 @@ const report = { pages: [], errors: [], unhandled: [], controls: [] };
         }
       }
     }
+  }
+  report.themeSwitching = [];
+  for (const scheme of ["dark", "light"]) {
+    await page
+      .getByRole("button", {
+        name:
+          scheme === "dark" ? "Включить тёмную тему" : "Включить светлую тему",
+      })
+      .click();
+    await page.reload();
+    await page
+      .getByRole("button", {
+        name:
+          scheme === "dark" ? "Включить светлую тему" : "Включить тёмную тему",
+      })
+      .waitFor();
+    report.themeSwitching.push(
+      await page.evaluate(
+        (expected) => ({
+          scheme: expected,
+          restored:
+            document.documentElement.dataset.mantineColorScheme === expected,
+          saved:
+            localStorage.getItem("mentoring-platform-color-scheme-v2") ===
+            expected,
+          nativeControls:
+            getComputedStyle(document.documentElement).colorScheme === expected,
+          browserChrome:
+            document.querySelector('meta[name="color-scheme"]').content ===
+            expected,
+          themeColor:
+            document.querySelector('meta[name="theme-color"]').content ===
+            getComputedStyle(document.documentElement)
+              .getPropertyValue("--c-bg")
+              .trim(),
+        }),
+        scheme,
+      ),
+    );
   }
   // Render favicon as an image, where embedded fonts are unavailable.
   await page.goto(baseUrl + "/dev-login");
@@ -439,12 +518,23 @@ const report = { pages: [], errors: [], unhandled: [], controls: [] };
   );
   await browser.close();
   if (
+    !report.darkDefault ||
+    report.themeSwitching.some(
+      (s) =>
+        !s.restored ||
+        !s.saved ||
+        !s.nativeControls ||
+        !s.browserChrome ||
+        !s.themeColor,
+    ) ||
     !report.mobileStudyFits ||
     report.queueTransitions.some((x) => !x.stable || !x.noLogo) ||
     report.errors.length ||
     report.unhandled.length ||
     report.pages.some(
       (p) =>
+        !p.heroBranded ||
+        !p.label.endsWith("-" + p.scheme) ||
         p.statusBackgrounds.length !== new Set(p.statusBackgrounds).size ||
         p.h1Count !== 1 ||
         p.ratingHeight > 140 ||

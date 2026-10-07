@@ -5,6 +5,7 @@ import type { ReactElement } from "react";
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
 
 import { brandCssVariables, brandTheme } from "../src/app/theme";
+import { createPlatformColorSchemeManager } from "../src/app/colorScheme";
 import { PlatformProvider } from "../src/platform/PlatformProvider";
 
 export function renderPage(
@@ -37,7 +38,8 @@ export function renderPage(
   );
   const result = render(
     <MantineProvider
-      forceColorScheme="dark"
+      defaultColorScheme="dark"
+      colorSchemeManager={createPlatformColorSchemeManager()}
       theme={brandTheme}
       cssVariablesResolver={brandCssVariables}
     >

@@ -5,6 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#101D2D" />
     <meta name="color-scheme" content="dark" />
+    <script>
+      // Apply the saved preference before React or styles load to avoid a flash.
+      (() => {
+        let scheme = "dark";
+        try {
+          if (
+            localStorage.getItem("mentoring-platform-color-scheme-v2") ===
+            "light"
+          ) {
+            scheme = "light";
+          }
+        } catch {}
+        document.documentElement.dataset.mantineColorScheme = scheme;
+        document.querySelector('meta[name="color-scheme"]').content = scheme;
+        document.querySelector('meta[name="theme-color"]').content =
+          scheme === "light" ? "#FAF7F1" : "#101D2D";
+      })();
+    </script>
+    <style>
+      /* Background is available before the application stylesheet arrives. */
+      html {
+        background: #101d2d;
+        color-scheme: dark;
+      }
+      html[data-mantine-color-scheme="light"] {
+        background: #faf7f1;
+        color-scheme: light;
+      }
+    </style>
     <meta
       name="description"
       content="Потрачено — менторство и роадмапы для Python и Go разработчиков"

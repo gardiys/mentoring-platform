@@ -19,6 +19,7 @@ import {
 } from "../features/auth/devAuth";
 
 import { BrandLogo } from "../components/BrandLogo";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -58,6 +59,9 @@ export function DevLoginPage() {
               if (valid) login(value.trim());
             }}
           >
+            <div className="login-theme-control">
+              <ThemeToggle />
+            </div>
             <Stack gap="lg">
               <div>
                 <Text className="brand-eyebrow" mb="xs">

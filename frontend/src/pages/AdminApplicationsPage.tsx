@@ -587,7 +587,7 @@ function ApplicationDetails({
       )}
 
       {application.admin_comment && (
-        <Card withBorder padding="md" bg="yellow.0">
+        <Card withBorder padding="md" bg="var(--c-secondary)">
           <Text size="xs" c="dimmed">
             Комментарий администратора
           </Text>

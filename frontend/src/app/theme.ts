@@ -96,7 +96,7 @@ const variantColorResolver: VariantColorsResolver = (input) => {
 };
 
 export const brandCssVariables: CSSVariablesResolver = () => {
-  const common = {
+  const common: Record<string, string> = {
     "--mantine-color-body": "var(--c-bg)",
     "--mantine-color-text": "var(--c-text)",
     "--mantine-color-dimmed": "var(--c-muted)",
@@ -111,8 +111,23 @@ export const brandCssVariables: CSSVariablesResolver = () => {
     "--mantine-color-disabled-color": "var(--c-on-disabled)",
     "--mantine-primary-color-filled": "var(--c-action)",
     "--mantine-primary-color-filled-hover": "var(--c-action-hover)",
+    "--mantine-primary-color-contrast": "var(--c-on-action)",
   };
-  return { variables: {}, dark: common, light: {} };
+  for (const [name, [fill, , text]] of Object.entries(semanticColors)) {
+    const foreground = `var(--c-${text})`;
+    common[`--mantine-color-${name}-text`] = foreground;
+    common[`--mantine-color-${name}-filled`] = `var(--c-${fill})`;
+    common[`--mantine-color-${name}-filled-hover`] =
+      name === "brandBlue" || name === "blue"
+        ? "var(--c-action-hover)"
+        : `var(--c-${fill})`;
+    common[`--mantine-color-${name}-light`] =
+      `color-mix(in srgb, ${foreground} var(--control-tint), var(--c-surface))`;
+    common[`--mantine-color-${name}-light-color`] = foreground;
+    common[`--mantine-color-${name}-light-hover`] =
+      `color-mix(in srgb, ${foreground} var(--control-hover-tint), var(--c-surface))`;
+  }
+  return { variables: {}, dark: common, light: common };
 };
 
 export const brandTheme = createTheme({
@@ -240,7 +255,21 @@ export const brandTheme = createTheme({
         },
       }),
     }),
-    Badge: Badge.extend({ defaultProps: { radius: "xl", variant: "light" } }),
+    Badge: Badge.extend({
+      defaultProps: { radius: "xl", variant: "light" },
+      styles: (theme, props) => {
+        const name = (props.color ?? theme.primaryColor).split(".")[0] ?? "";
+        const semantic = semanticColors[name];
+        return {
+          root:
+            (props.variant ?? "light") === "light" && semantic
+              ? {
+                  color: `color-mix(in srgb, var(--c-${semantic[2]}) var(--status-ink-strength), var(--c-text))`,
+                }
+              : {},
+        };
+      },
+    }),
     Card: Card.extend({ defaultProps: { radius: "lg", padding: "lg" } }),
     Paper: Paper.extend({ defaultProps: { radius: "lg" } }),
     Accordion: Accordion.extend({ defaultProps: { radius: "lg" } }),

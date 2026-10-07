@@ -76,6 +76,37 @@ const fs = require("fs");
           ),
         ),
       ),
+      h(
+        m.Group,
+        {},
+        ...colors.map((color) =>
+          h(
+            m.Badge,
+            {
+              key: color,
+              color,
+              variant: "light",
+              "data-audit": "status-" + color,
+            },
+            "Статус " + color,
+          ),
+        ),
+      ),
+    );
+    const textColors = h(
+      m.Group,
+      {},
+      ...colors.map((color) =>
+        h(
+          m.Text,
+          {
+            key: color,
+            c: color,
+            "data-audit": "text-" + color,
+          },
+          "Текст " + color,
+        ),
+      ),
     );
     window.preview = (scheme) =>
       root.render(
@@ -86,18 +117,26 @@ const fs = require("fs");
             cssVariablesResolver: brandCssVariables,
             forceColorScheme: scheme,
           },
-          content,
+          h(m.Stack, {}, content, textColors),
         ),
       );
     window.preview("dark");
   });
   const failures = [];
   let checked = 0;
-  for (const theme of ["dark"]) {
+  for (const theme of ["dark", "light"]) {
     await page.evaluate((s) => window.preview(s), theme);
     await page.waitForTimeout(200);
     for (const button of await page.locator("[data-audit]").all()) {
-      for (const state of ["normal", "hover", "pressed", "disabled"]) {
+      const isStatus = (await button.getAttribute("data-audit")).startsWith(
+        "status-",
+      );
+      const isText = (await button.getAttribute("data-audit")).startsWith(
+        "text-",
+      );
+      for (const state of isStatus || isText
+        ? ["normal"]
+        : ["normal", "hover", "pressed", "disabled"]) {
         await button.evaluate((e, disabled) => {
           e.disabled = disabled;
         }, state === "disabled");
@@ -147,7 +186,7 @@ const fs = require("fs");
         });
         checked++;
         if (
-          result.ratio < 4.5 ||
+          result.ratio < (isStatus ? 7 : 4.5) ||
           (result.label.startsWith("outline") &&
             (result.border !== "solid" || result.width !== "1px"))
         )

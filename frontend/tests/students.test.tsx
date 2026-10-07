@@ -279,6 +279,7 @@ it("не создаёт ученика без трека и подставляе
     screen.getByRole("button", { name: "Добавить ученика" }),
   ).toBeDisabled();
   expect(screen.getByText("Направление не выбрано")).toBeInTheDocument();
+  expect(create).not.toHaveBeenCalled();
 
   await userEvent.click(screen.getByRole("checkbox", { name: /Go/ }));
 
@@ -290,7 +291,6 @@ it("не создаёт ученика без трека и подставляе
     screen.getByRole("button", { name: "Добавить ученика" }),
   ).toBeEnabled();
 });
-
 
 it("показывает 45% при назначении ментора существующему Go-ученику", () => {
   renderPage(
