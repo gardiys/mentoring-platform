@@ -8,7 +8,7 @@ import {
   Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import ReactMarkdown from "react-markdown";
+import { ContentMarkdown } from "../components/ContentMarkdown";
 import { Link, useParams } from "react-router-dom";
 
 import { api } from "../api/endpoints";
@@ -97,22 +97,16 @@ export function TopicPage() {
         p={{ base: "md", sm: "xl" }}
         className="markdown-content"
       >
-        <ReactMarkdown
-          components={{
-            a: ({ children, href, title }) => (
-              <a
-                href={href}
-                title={title}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {children}
-              </a>
-            ),
-          }}
+        <ContentMarkdown
+          media={query.data.media ?? []}
+          resourceKey={`roadmap:${query.data.id}`}
+          loadPlayback={(mediaId) =>
+            api.roadmapTopicMediaPlayback(query.data.id, mediaId)
+          }
+          openLinksInNewTab
         >
           {query.data.content_markdown}
-        </ReactMarkdown>
+        </ContentMarkdown>
       </Paper>
       <Group>
         {query.data.status === "not_started" && (

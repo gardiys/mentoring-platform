@@ -9246,7 +9246,7 @@ export interface components {
          * ContentMediaKind
          * @enum {string}
          */
-        ContentMediaKind: "audio" | "video";
+        ContentMediaKind: "audio" | "video" | "image";
         /** ContentMediaMultipartUploadIntent */
         ContentMediaMultipartUploadIntent: {
             /**

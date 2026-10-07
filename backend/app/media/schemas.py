@@ -11,6 +11,7 @@ from app.media.models import ContentMediaProcessingStatus
 class ContentMediaKind(StrEnum):
     AUDIO = "audio"
     VIDEO = "video"
+    IMAGE = "image"
 
 
 class ContentMediaUploadProtocol(StrEnum):

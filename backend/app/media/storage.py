@@ -21,6 +21,13 @@ SAFE_CONTENT_VIDEO_TYPES = (
     "video/mp4",
     "video/quicktime",
 )
+SAFE_CONTENT_IMAGE_TYPES = (
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+    "image/avif",
+)
 
 
 class PrivateMediaStore(InterviewUploadStore):
@@ -35,10 +42,12 @@ def content_media_upload_rules(
         return SAFE_CONTENT_VIDEO_TYPES, settings.content_video_max_bytes
     if normalized in SAFE_CONTENT_AUDIO_TYPES:
         return SAFE_CONTENT_AUDIO_TYPES, settings.interview_audio_max_bytes
+    if normalized in SAFE_CONTENT_IMAGE_TYPES:
+        return SAFE_CONTENT_IMAGE_TYPES, settings.content_image_max_bytes
     api_error(
         415,
         "unsupported_content_media_type",
-        "Only supported audio and video files can be attached",
+        "Only supported images, audio and video files can be attached",
     )
 
 

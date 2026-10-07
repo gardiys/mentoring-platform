@@ -8,6 +8,8 @@ def content_media_read(media: ProtectedContentMedia) -> ProtectedContentMediaRea
     kind = (
         ContentMediaKind.VIDEO
         if media.content_type.startswith("video/")
+        else ContentMediaKind.IMAGE
+        if media.content_type.startswith("image/")
         else ContentMediaKind.AUDIO
     )
     return ProtectedContentMediaRead(

@@ -246,11 +246,11 @@ export function AdminContentMediaManager({
       <Stack>
         <div>
           <Title order={2} size="h3">
-            Аудио и видео
+            Аудио, видео и изображения
           </Title>
           <Text c="dimmed" size="sm">
-            Файлы хранятся приватно и открываются ученикам только во встроенном
-            защищённом плеере.
+            Изображения вставляются в текст материала, аудио и видео открываются
+            во встроенном защищённом плеере. Файлы хранятся приватно.
           </Text>
         </div>
 
@@ -280,7 +280,11 @@ export function AdminContentMediaManager({
                       <div>
                         <Group gap="xs">
                           <Badge variant="light">
-                            {item.kind === "video" ? "Видео" : "Аудио"}
+                            {item.kind === "image"
+                              ? "Изображение"
+                              : item.kind === "video"
+                                ? "Видео"
+                                : "Аудио"}
                           </Badge>
                           <Badge color={processing.color} variant="light">
                             {processing.label}

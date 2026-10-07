@@ -3,7 +3,7 @@ import type { StorageUploadIntent } from "../api/client";
 
 type Schemas = components["schemas"];
 
-export type ContentMediaKind = "audio" | "video";
+export type ContentMediaKind = "audio" | "video" | "image";
 export type ContentMediaProcessingStatus =
   "queued" | "processing" | "ready" | "failed";
 

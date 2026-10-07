@@ -107,6 +107,7 @@ class Settings(BaseSettings):
         ge=1_048_576,
         le=10_737_418_240,
     )
+    content_image_max_bytes: int = Field(default=10_485_760, ge=1_048_576, le=20_971_520)
     content_media_normalization_directory: str = "/var/lib/mentoring/content-media-normalization"
     content_media_normalization_max_concurrency: int = Field(default=1, ge=1, le=2)
     content_media_normalization_min_free_bytes: int = Field(

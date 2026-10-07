@@ -372,8 +372,9 @@ it("администратор видит, загружает и удаляет 
   );
 
   expect(await screen.findByText("Разбор asyncio")).toBeInTheDocument();
-  const fileInput =
-    document.querySelector<HTMLInputElement>('input[type="file"]');
+  const fileInput = document.querySelector<HTMLInputElement>(
+    'input[type="file"][accept*="video/mp4"]',
+  );
   expect(fileInput).not.toBeNull();
   const file = new File(["audio"], "lecture.mp3", { type: "audio/mpeg" });
   await userEvent.upload(fileInput!, file);
@@ -466,8 +467,9 @@ it("разрешает учебное видео больше 2 ГБ в пред
   expect(
     await screen.findByText(/Видео — до 5 ГБ, аудио — до 500 МБ/),
   ).toBeInTheDocument();
-  const fileInput =
-    document.querySelector<HTMLInputElement>('input[type="file"]');
+  const fileInput = document.querySelector<HTMLInputElement>(
+    'input[type="file"][accept*="video/mp4"]',
+  );
   expect(fileInput).not.toBeNull();
   const file = new File(["video"], "long-lesson.mp4", { type: "video/mp4" });
   Object.defineProperty(file, "size", { value: VIDEO_MAX_BYTES + 1 });
@@ -506,8 +508,9 @@ it("разрешает MOV и передаёт его на автоматиче�
   );
 
   await screen.findByText("Вложений пока нет.");
-  const fileInput =
-    document.querySelector<HTMLInputElement>('input[type="file"]');
+  const fileInput = document.querySelector<HTMLInputElement>(
+    'input[type="file"][accept*="video/mp4"]',
+  );
   expect(fileInput).not.toBeNull();
   const file = new File(["video"], "lesson.mov", {
     type: "video/quicktime",
@@ -540,8 +543,9 @@ it("не отправляет неподдерживаемый или пусто
     "/admin/knowledge/:topicId/entries/:entryId/edit",
   );
   await screen.findByText("Вложений пока нет.");
-  const fileInput =
-    document.querySelector<HTMLInputElement>('input[type="file"]');
+  const fileInput = document.querySelector<HTMLInputElement>(
+    'input[type="file"][accept*="video/mp4"]',
+  );
   expect(fileInput).not.toBeNull();
   expect(fileInput!.accept).toContain("video/mp4");
   expect(fileInput!.accept).toContain("video/quicktime");

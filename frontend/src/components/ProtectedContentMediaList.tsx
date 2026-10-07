@@ -329,6 +329,7 @@ export function ProtectedContentMediaList({
   resourceKey,
   loadPlayback,
 }: Props) {
+  media = media.filter((item) => item.kind !== "image");
   if (media.length === 0) return null;
   return (
     <Stack gap="md">

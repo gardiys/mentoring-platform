@@ -1,0 +1,691 @@
+{
+  "checked_at_utc": "2026-10-07 13:54:17.524450+00:00",
+  "checked_at_moscow": "2026-10-07 16:54:17",
+  "period_since_utc": "2026-09-23 00:00:00+00",
+  "basis": "Read-only production aggregates; public-price estimate, not a provider invoice. Card costs attributed to newly created clusters represented by this interview; no global backlog assigned to it.",
+  "rub_per_usd": "85.7116",
+  "completed_interviews": 21,
+  "all_completed_interviews_use_standard": true,
+  "production_settings": {
+    "openai_analysis_model": "gpt-5.6-terra",
+    "openai_extraction_model": "gpt-5.6-luna",
+    "openai_light_review_model": "gpt-5.6-luna",
+    "openai_background_service_tier": "flex",
+    "openai_review_reasoning_effort": null,
+    "openai_simple_review_enabled": false,
+    "openai_simple_review_model": null,
+    "openai_flex_timeout_seconds": 900.0,
+    "openai_job_timeout_seconds": 3600,
+    "openai_extraction_max_output_tokens": 8000,
+    "openai_review_max_output_tokens": 4000,
+    "openai_summary_max_output_tokens": 4000,
+    "openai_analysis_input_price_per_million_usd": "0",
+    "openai_analysis_output_price_per_million_usd": "0",
+    "openai_light_input_price_per_million_usd": "0",
+    "openai_light_output_price_per_million_usd": "0"
+  },
+  "verified_source_sha256": {
+    "intelligence_ai.py": "47ad5cc7b3a7bf73b2d9d4eac72abdbb0050cf838a147c08c04f5ee98bc59240",
+    "intelligence_jobs.py": "a4123b32c7171b68c35c51736419701994378e36a01230072f69ac63ead38a72",
+    "intelligence_request_policy.py": "bf64add53c18e92a109adc860d5f5c08aa45d9a67ed503e344b323bb655eeabe",
+    "intelligence_checkpoints.py": "34b38c306affa3e6ec054b9c722b6946be80514d4beaf42d0e8c0833e04f9f70",
+    "intelligence_service.py": "2b9d9d425b264771ab9aea025e6bfb18039413e642ed0abfe46eb74fd61783f2",
+    "card_automation_jobs.py": "894e40c990c693951d9a4be619a22f61656f007f6fb2172c992b70ad21b2d64a",
+    "card_automation_pipeline.py": "951aca724fb1ed6ba98e40a8d2ca5524a45a215e5635a103d177fb4e4f337968",
+    "ai_accounting.py": "d103c820a728cbf5c395a58eab94cdbc428e60b057158511b2ac26cf4ccd26a8"
+  },
+  "sample": {
+    "duration_minutes": "89.47",
+    "question_count": 149,
+    "analysis_revision": 1,
+    "analysis_complete": true,
+    "analysis_cost_usd": "1.7927075800",
+    "card_cost_usd": "2.57383639",
+    "transcription_estimated_usd": "0.15",
+    "operations": [
+      {
+        "operation": "answer_recovery",
+        "model": "gpt-5.6-luna",
+        "service_tier": "default",
+        "calls": 2,
+        "cost_known": 2,
+        "input_tokens": 12541,
+        "cached_tokens": 1136,
+        "write_tokens": 11399,
+        "output_tokens": 2168,
+        "reasoning_tokens": 923,
+        "usd": "0.0054752700"
+      },
+      {
+        "operation": "embedding",
+        "model": "text-embedding-3-small",
+        "service_tier": null,
+        "calls": 7,
+        "cost_known": 0,
+        "input_tokens": 9324,
+        "cached_tokens": null,
+        "write_tokens": null,
+        "output_tokens": 0,
+        "reasoning_tokens": null,
+        "usd": null
+      },
+      {
+        "operation": "extraction",
+        "model": "gpt-5.6-luna",
+        "service_tier": "default",
+        "calls": 21,
+        "cost_known": 21,
+        "input_tokens": 83464,
+        "cached_tokens": 41740,
+        "write_tokens": 41661,
+        "output_tokens": 46927,
+        "reasoning_tokens": 21820,
+        "usd": "0.0675750500"
+      },
+      {
+        "operation": "light_evaluation",
+        "model": "gpt-5.6-luna",
+        "service_tier": "default",
+        "calls": 14,
+        "cost_known": 14,
+        "input_tokens": 33202,
+        "cached_tokens": 24284,
+        "write_tokens": 8876,
+        "output_tokens": 20011,
+        "reasoning_tokens": 6426,
+        "usd": "0.0267262800"
+      },
+      {
+        "operation": "summary",
+        "model": "gpt-5.6-luna",
+        "service_tier": "default",
+        "calls": 1,
+        "cost_known": 1,
+        "input_tokens": 97722,
+        "cached_tokens": 0,
+        "write_tokens": 97719,
+        "output_tokens": 4873,
+        "reasoning_tokens": 506,
+        "usd": "0.0302779500"
+      },
+      {
+        "operation": "summary_evidence",
+        "model": "gpt-5.6-luna",
+        "service_tier": "default",
+        "calls": 10,
+        "cost_known": 10,
+        "input_tokens": 119267,
+        "cached_tokens": 0,
+        "write_tokens": 119237,
+        "output_tokens": 11773,
+        "reasoning_tokens": 6444,
+        "usd": "0.0439428500"
+      },
+      {
+        "operation": "technical_evaluation",
+        "model": "gpt-5.6-terra",
+        "service_tier": "default",
+        "calls": 132,
+        "cost_known": 132,
+        "input_tokens": 375766,
+        "cached_tokens": 314531,
+        "write_tokens": 60839,
+        "output_tokens": 116894,
+        "reasoning_tokens": 19305,
+        "usd": "1.6185237000"
+      }
+    ],
+    "card_decisions": [
+      {
+        "entity_type": "cluster",
+        "decision_type": "semantic_card_match",
+        "decision_source": "semantic_judge",
+        "model_name": "gpt-5.6-luna",
+        "prompt_version": "pairwise-card-match-v1",
+        "decisions": 9,
+        "entities": 8,
+        "cost_known": 9,
+        "input_tokens": 7969,
+        "output_tokens": 2784,
+        "usd": "0.00249733",
+        "first_at": "2026-10-07 13:36:36.324417+00:00",
+        "last_at": "2026-10-07 13:45:21.443795+00:00"
+      },
+      {
+        "entity_type": "cluster",
+        "decision_type": "cluster_promoted",
+        "decision_source": "rule",
+        "model_name": null,
+        "prompt_version": null,
+        "decisions": 77,
+        "entities": 77,
+        "cost_known": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "usd": null,
+        "first_at": "2026-10-07 13:15:10.673055+00:00",
+        "last_at": "2026-10-07 13:28:26.996679+00:00"
+      },
+      {
+        "entity_type": "cluster",
+        "decision_type": "answer_contract_generated",
+        "decision_source": "rule",
+        "model_name": null,
+        "prompt_version": "answer-contract-v5-reuse",
+        "decisions": 1,
+        "entities": 1,
+        "cost_known": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "usd": null,
+        "first_at": "2026-10-07 13:45:16.785602+00:00",
+        "last_at": "2026-10-07 13:45:16.785602+00:00"
+      },
+      {
+        "entity_type": "cluster",
+        "decision_type": "answer_contract_generated",
+        "decision_source": "semantic_judge",
+        "model_name": "gpt-5.6-terra",
+        "prompt_version": "answer-contract-v5-reuse",
+        "decisions": 128,
+        "entities": 70,
+        "cost_known": 128,
+        "input_tokens": 585204,
+        "output_tokens": 90236,
+        "usd": "1.27282500",
+        "first_at": "2026-10-07 13:20:22.564117+00:00",
+        "last_at": "2026-10-07 13:50:25.818671+00:00"
+      },
+      {
+        "entity_type": "cluster",
+        "decision_type": "answer_contract_validated",
+        "decision_source": "semantic_judge",
+        "model_name": "gpt-5.6-terra",
+        "prompt_version": "answer-contract-validation-v5-attribution",
+        "decisions": 128,
+        "entities": 70,
+        "cost_known": 128,
+        "input_tokens": 626336,
+        "output_tokens": 77002,
+        "usd": "1.24483600",
+        "first_at": "2026-10-07 13:29:23.103243+00:00",
+        "last_at": "2026-10-07 13:50:33.510937+00:00"
+      },
+      {
+        "entity_type": "cluster",
+        "decision_type": "answer_validation_failed",
+        "decision_source": "rule",
+        "model_name": null,
+        "prompt_version": null,
+        "decisions": 20,
+        "entities": 13,
+        "cost_known": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "usd": null,
+        "first_at": "2026-10-07 13:20:05.155885+00:00",
+        "last_at": "2026-10-07 13:47:50.969485+00:00"
+      },
+      {
+        "entity_type": "cluster",
+        "decision_type": "cluster_linked",
+        "decision_source": "rule",
+        "model_name": null,
+        "prompt_version": null,
+        "decisions": 2,
+        "entities": 2,
+        "cost_known": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "usd": null,
+        "first_at": "2026-10-07 13:30:51.070426+00:00",
+        "last_at": "2026-10-07 13:39:25.750437+00:00"
+      },
+      {
+        "entity_type": "cluster",
+        "decision_type": "card_created",
+        "decision_source": "rule",
+        "model_name": null,
+        "prompt_version": null,
+        "decisions": 39,
+        "entities": 39,
+        "cost_known": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "usd": null,
+        "first_at": "2026-10-07 13:29:23.115004+00:00",
+        "last_at": "2026-10-07 13:50:33.520866+00:00"
+      },
+      {
+        "entity_type": "occurrence",
+        "decision_type": "question_routed",
+        "decision_source": "ai_routing",
+        "model_name": "gpt-5.6-luna",
+        "prompt_version": "question-routing-v2",
+        "decisions": 86,
+        "entities": 86,
+        "cost_known": 86,
+        "input_tokens": 112363,
+        "output_tokens": 33394,
+        "usd": "0.03402529",
+        "first_at": "2026-10-07 13:15:09.120572+00:00",
+        "last_at": "2026-10-07 13:28:33.471534+00:00"
+      },
+      {
+        "entity_type": "occurrence",
+        "decision_type": "routed_as_non_flashcard",
+        "decision_source": "rule",
+        "model_name": null,
+        "prompt_version": null,
+        "decisions": 14,
+        "entities": 14,
+        "cost_known": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "usd": null,
+        "first_at": "2026-10-07 13:17:21.533417+00:00",
+        "last_at": "2026-10-07 13:28:44.347627+00:00"
+      },
+      {
+        "entity_type": "occurrence",
+        "decision_type": "routed_as_non_flashcard",
+        "decision_source": "ai_routing",
+        "model_name": "gpt-5.6-luna",
+        "prompt_version": "question-routing-v2",
+        "decisions": 49,
+        "entities": 49,
+        "cost_known": 49,
+        "input_tokens": 63946,
+        "output_tokens": 18314,
+        "usd": "0.01882824",
+        "first_at": "2026-10-07 13:15:20.074457+00:00",
+        "last_at": "2026-10-07 13:29:09.952812+00:00"
+      },
+      {
+        "entity_type": "occurrence",
+        "decision_type": "exact_card_match",
+        "decision_source": "exact",
+        "model_name": null,
+        "prompt_version": null,
+        "decisions": 1,
+        "entities": 1,
+        "cost_known": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "usd": null,
+        "first_at": "2026-10-07 13:28:18.274272+00:00",
+        "last_at": "2026-10-07 13:28:18.274272+00:00"
+      },
+      {
+        "entity_type": "occurrence",
+        "decision_type": "semantic_card_match",
+        "decision_source": "semantic_judge",
+        "model_name": "gpt-5.6-luna",
+        "prompt_version": "pairwise-card-match-v1",
+        "decisions": 3,
+        "entities": 3,
+        "cost_known": 3,
+        "input_tokens": 2732,
+        "output_tokens": 867,
+        "usd": "0.00082453",
+        "first_at": "2026-10-07 13:19:12.209336+00:00",
+        "last_at": "2026-10-07 13:20:03.847044+00:00"
+      },
+      {
+        "entity_type": "occurrence",
+        "decision_type": "cluster_match",
+        "decision_source": "clustering",
+        "model_name": null,
+        "prompt_version": null,
+        "decisions": 6,
+        "entities": 6,
+        "cost_known": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "usd": null,
+        "first_at": "2026-10-07 13:16:56.158774+00:00",
+        "last_at": "2026-10-07 13:28:35.006039+00:00"
+      },
+      {
+        "entity_type": "occurrence",
+        "decision_type": "shadow_cluster_created",
+        "decision_source": "clustering",
+        "model_name": null,
+        "prompt_version": null,
+        "decisions": 77,
+        "entities": 77,
+        "cost_known": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "usd": null,
+        "first_at": "2026-10-07 13:15:10.673055+00:00",
+        "last_at": "2026-10-07 13:28:26.996679+00:00"
+      },
+      {
+        "entity_type": "occurrence",
+        "decision_type": "personal_review_created",
+        "decision_source": "rule",
+        "model_name": null,
+        "prompt_version": null,
+        "decisions": 6,
+        "entities": 6,
+        "cost_known": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "usd": null,
+        "first_at": "2026-10-07 13:43:57.877438+00:00",
+        "last_at": "2026-10-07 13:50:33.520866+00:00"
+      }
+    ],
+    "cluster_states": [
+      {
+        "status": "needs_review",
+        "answer_status": "needs_manual_review",
+        "clusters": 36,
+        "repairs": 44,
+        "first_at": "2026-10-07 13:15:10.673055+00:00",
+        "last_at": "2026-10-07 13:28:10.037174+00:00",
+        "min_interviews": 1,
+        "max_interviews": 1,
+        "linked": 0,
+        "contracts": 30
+      },
+      {
+        "status": "linked",
+        "answer_status": "approved",
+        "clusters": 2,
+        "repairs": 0,
+        "first_at": "2026-10-07 13:18:16.211001+00:00",
+        "last_at": "2026-10-07 13:27:38.802875+00:00",
+        "min_interviews": 1,
+        "max_interviews": 1,
+        "linked": 2,
+        "contracts": 2
+      },
+      {
+        "status": "card_created",
+        "answer_status": "approved",
+        "clusters": 39,
+        "repairs": 14,
+        "first_at": "2026-10-07 13:15:29.152083+00:00",
+        "last_at": "2026-10-07 13:28:26.996679+00:00",
+        "min_interviews": 1,
+        "max_interviews": 1,
+        "linked": 39,
+        "contracts": 39
+      }
+    ]
+  },
+  "period_operations": [
+    {
+      "operation": "answer review",
+      "model": "gpt-5.6-luna",
+      "service_tier": "default",
+      "attempts": 226,
+      "known_cost_attempts": 226,
+      "input_tokens": 387651,
+      "cached_tokens": 295937,
+      "write_tokens": 91036,
+      "output_tokens": 161459,
+      "reasoning_tokens": 46981,
+      "cost_usd": "0.2225641400"
+    },
+    {
+      "operation": "answer review",
+      "model": "gpt-5.6-terra",
+      "service_tier": "default",
+      "attempts": 1503,
+      "known_cost_attempts": 1502,
+      "input_tokens": 3505143,
+      "cached_tokens": 2891243,
+      "write_tokens": 609394,
+      "output_tokens": 942223,
+      "reasoning_tokens": 228423,
+      "cost_usd": "13.4174216000"
+    },
+    {
+      "operation": "embed",
+      "model": "text-embedding-3-small",
+      "service_tier": "default",
+      "attempts": 62,
+      "known_cost_attempts": 62,
+      "input_tokens": 65931,
+      "cached_tokens": 0,
+      "write_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
+      "cost_usd": "0.0013186200"
+    },
+    {
+      "operation": "extract",
+      "model": "gpt-5.6-luna",
+      "service_tier": "default",
+      "attempts": 185,
+      "known_cost_attempts": 180,
+      "input_tokens": 779138,
+      "cached_tokens": 314669,
+      "write_tokens": 463929,
+      "output_tokens": 515099,
+      "reasoning_tokens": 261079,
+      "cost_usd": "0.7405024300"
+    },
+    {
+      "operation": "generate_answer_contract",
+      "model": "gpt-5.6-terra",
+      "service_tier": "flex",
+      "attempts": 1148,
+      "known_cost_attempts": 1148,
+      "input_tokens": 6405161,
+      "cached_tokens": 39569,
+      "write_tokens": 6362148,
+      "output_tokens": 776046,
+      "reasoning_tokens": 105794,
+      "cost_usd": "12.6163619000"
+    },
+    {
+      "operation": "interview summary",
+      "model": "gpt-5.6-luna",
+      "service_tier": "default",
+      "attempts": 24,
+      "known_cost_attempts": 24,
+      "input_tokens": 595122,
+      "cached_tokens": 4819,
+      "write_tokens": 590231,
+      "output_tokens": 101829,
+      "reasoning_tokens": 25786,
+      "cost_usd": "0.2698633300"
+    },
+    {
+      "operation": "judge_card_match",
+      "model": "gpt-5.6-luna",
+      "service_tier": "flex",
+      "attempts": 92,
+      "known_cost_attempts": 92,
+      "input_tokens": 81798,
+      "cached_tokens": 0,
+      "write_tokens": 23820,
+      "output_tokens": 27011,
+      "reasoning_tokens": 5980,
+      "cost_usd": "0.0249819000"
+    },
+    {
+      "operation": "recover_answers",
+      "model": "gpt-5.6-luna",
+      "service_tier": "default",
+      "attempts": 40,
+      "known_cost_attempts": 40,
+      "input_tokens": 238009,
+      "cached_tokens": 20448,
+      "write_tokens": 217441,
+      "output_tokens": 42797,
+      "reasoning_tokens": 29092,
+      "cost_usd": "0.1061496100"
+    },
+    {
+      "operation": "route_question",
+      "model": "gpt-5.6-luna",
+      "service_tier": "flex",
+      "attempts": 1509,
+      "known_cost_attempts": 1505,
+      "input_tokens": 2002935,
+      "cached_tokens": 5237,
+      "write_tokens": 1944894,
+      "output_tokens": 588244,
+      "reasoning_tokens": 290713,
+      "cost_usd": "0.6013909200"
+    },
+    {
+      "operation": "summary evidence",
+      "model": "gpt-5.6-luna",
+      "service_tier": "default",
+      "attempts": 100,
+      "known_cost_attempts": 100,
+      "input_tokens": 830201,
+      "cached_tokens": 0,
+      "write_tokens": 829901,
+      "output_tokens": 92425,
+      "reasoning_tokens": 34387,
+      "cost_usd": "0.3184452500"
+    },
+    {
+      "operation": "validate_answer_contract",
+      "model": "gpt-5.6-terra",
+      "service_tier": "flex",
+      "attempts": 1408,
+      "known_cost_attempts": 1326,
+      "input_tokens": 7647151,
+      "cached_tokens": 11288,
+      "write_tokens": 7631885,
+      "output_tokens": 738030,
+      "reasoning_tokens": 407567,
+      "cost_usd": "13.9731430500"
+    }
+  ],
+  "card_settings": [
+    {
+      "enabled": true,
+      "shadow_mode": false,
+      "global_auto_publish_enabled": true,
+      "cluster_moderation_enabled": true,
+      "min_distinct_interviews_for_promotion": 1,
+      "min_distinct_companies_for_promotion": 1,
+      "min_failed_answers_for_promotion": 1,
+      "personal_review_enabled": true
+    },
+    {
+      "enabled": true,
+      "shadow_mode": false,
+      "global_auto_publish_enabled": true,
+      "cluster_moderation_enabled": true,
+      "min_distinct_interviews_for_promotion": 1,
+      "min_distinct_companies_for_promotion": 2,
+      "min_failed_answers_for_promotion": 2,
+      "personal_review_enabled": true
+    }
+  ],
+  "duplicate_paid_card_inputs": [],
+  "technical_review_metrics": [
+    {
+      "assessment": "incorrect",
+      "reviews": 80,
+      "average_better_answer_chars": "265.4",
+      "with_better_answer": 80,
+      "average_summary_chars": "171.9"
+    },
+    {
+      "assessment": "correct",
+      "reviews": 192,
+      "average_better_answer_chars": "232.0",
+      "with_better_answer": 1,
+      "average_summary_chars": "158.5"
+    },
+    {
+      "assessment": "unable_to_assess",
+      "reviews": 129,
+      "average_better_answer_chars": null,
+      "with_better_answer": 0,
+      "average_summary_chars": "192.5"
+    },
+    {
+      "assessment": "mostly_incorrect",
+      "reviews": 89,
+      "average_better_answer_chars": "318.0",
+      "with_better_answer": 89,
+      "average_summary_chars": "209.9"
+    },
+    {
+      "assessment": "mostly_correct",
+      "reviews": 382,
+      "average_better_answer_chars": "350.3",
+      "with_better_answer": 382,
+      "average_summary_chars": "244.1"
+    },
+    {
+      "assessment": "partial",
+      "reviews": 582,
+      "average_better_answer_chars": "365.5",
+      "with_better_answer": 582,
+      "average_summary_chars": "223.2"
+    }
+  ],
+  "auxiliary_metrics": {
+    "simple_allowlist": {
+      "technical_questions": 1454,
+      "upper_bound_candidates": 0,
+      "sample_candidates": 0
+    },
+    "summary_compression": {
+      "checkpoints": 10,
+      "findings": 62,
+      "covered_questions": 73,
+      "total_questions": 149,
+      "finding_json_chars": 21407
+    },
+    "card_repeated_calls": {
+      "extra_generation_calls": 58,
+      "extra_validation_calls": 58,
+      "extra_generation_usd": "0.60459825",
+      "extra_validation_usd": "0.57016100"
+    },
+    "source_sets": {
+      "generations": 70,
+      "distinct_source_sets": 64,
+      "average_sources_per_generation": 8
+    }
+  },
+  "scenario_estimates": {
+    "observed_standard_with_cards": {
+      "usd": "4.5165439700",
+      "rub": "387.12"
+    },
+    "standard_analysis_only": {
+      "usd": "1.9427075800",
+      "rub": "166.51"
+    },
+    "flex_analysis_only": {
+      "usd": "1.0464470300",
+      "rub": "89.69"
+    },
+    "flex_with_same_cards": {
+      "usd": "3.6202834200",
+      "rub": "310.30"
+    },
+    "flex_keep_routing_skip_new_cards": {
+      "usd": "1.1026224200",
+      "rub": "94.51"
+    },
+    "flex_generate_ten_topics_at_observed_average": {
+      "usd": "1.462288277142857142857142857",
+      "rub": "125.34"
+    }
+  },
+  "scenario_conditions": "Same tokens, attempts and FX; Flex excludes Standard-only embeddings. Ten-topic scenario assumes the observed mean cost per paid cluster, not a hard budget or proven future performance.",
+  "sources": {
+    "openai_pricing": "https://developers.openai.com/api/docs/pricing",
+    "flex": "https://developers.openai.com/api/docs/guides/flex-processing",
+    "batch": "https://developers.openai.com/api/docs/guides/batch",
+    "prompt_caching": "https://developers.openai.com/api/docs/guides/prompt-caching",
+    "soniox": "https://soniox.com/pricing",
+    "exchange_rate": "https://cbr.ru/currency_base/daily/?UniDbQuery.Posted=True&UniDbQuery.To=07.10.2026"
+  }
+}

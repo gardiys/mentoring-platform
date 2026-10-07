@@ -547,7 +547,7 @@ async def _ticket_user(
         api_error(401, "invalid_content_media_ticket", "Playback session is invalid")
 
     destination = request.headers.get("sec-fetch-dest")
-    if destination is not None and destination not in {"audio", "video"}:
+    if destination is not None and destination not in {"audio", "video", "image"}:
         api_error(403, "content_media_player_required", "Use the platform media player")
 
     user = await session.get(User, user_id)
@@ -565,6 +565,12 @@ async def _stream_media(
     media: ProtectedContentMedia,
 ) -> RedirectResponse:
     _require_media_ready(media)
+    destination = request.headers.get("sec-fetch-dest")
+    allowed_destinations = (
+        {"image"} if media.content_type.startswith("image/") else {"audio", "video"}
+    )
+    if destination is not None and destination not in allowed_destinations:
+        api_error(403, "content_media_player_required", "Use the platform content viewer")
     range_header = request.headers.get("range")
     if range_header is not None and RANGE_PATTERN.fullmatch(range_header) is None:
         api_error(416, "invalid_content_media_range", "Requested range is invalid")

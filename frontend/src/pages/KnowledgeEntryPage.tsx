@@ -7,7 +7,6 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import ReactMarkdown from "react-markdown";
 import { Link, useParams } from "react-router-dom";
 
 import { api } from "../api/endpoints";
@@ -15,6 +14,7 @@ import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
 import { ProtectedContentMediaList } from "../components/ProtectedContentMediaList";
+import { ContentMarkdown } from "../components/ContentMarkdown";
 import { useKnowledgeEntry } from "../features/knowledge/queries";
 
 export function KnowledgeEntryPage() {
@@ -70,7 +70,15 @@ export function KnowledgeEntryPage() {
         p={{ base: "md", sm: "xl" }}
         className="markdown-content"
       >
-        <ReactMarkdown>{query.data.content_markdown}</ReactMarkdown>
+        <ContentMarkdown
+          media={query.data.media ?? []}
+          resourceKey={`knowledge:${query.data.id}`}
+          loadPlayback={(mediaId) =>
+            api.knowledgeMediaPlayback(entrySlug, mediaId)
+          }
+        >
+          {query.data.content_markdown}
+        </ContentMarkdown>
       </Paper>
     </Stack>
   );

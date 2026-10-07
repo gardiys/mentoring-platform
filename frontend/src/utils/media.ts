@@ -51,6 +51,8 @@ const CONTENT_TYPES_BY_EXTENSION: Record<string, string> = {
   jpg: "image/jpeg",
   png: "image/png",
   webp: "image/webp",
+  gif: "image/gif",
+  avif: "image/avif",
   pdf: "application/pdf",
 };
 
