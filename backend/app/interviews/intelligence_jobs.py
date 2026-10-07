@@ -121,6 +121,10 @@ from app.interviews.models import (
 )
 from app.interviews.question_embeddings import refresh_track_question_embeddings
 from app.interviews.question_matching import normalize_question
+from app.interviews.transcription_audio import (
+    prepare_transcription_audio,
+    transcription_audio_max_bytes,
+)
 from app.interviews.transcription_cleanup import sweep_soniox_resources
 from app.interviews.transcription_quality import low_recognition_confidence
 from app.interviews.uploads import (
@@ -305,6 +309,9 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
                     filename=upload.filename,
                     maximum_bytes=upload.size,
                     expected_bytes=upload.size,
+                    additional_reserved_bytes=(
+                        transcription_audio_max_bytes(settings.interview_media_max_duration_seconds)
+                    ),
                     download=partial(_store(ctx).download_to_path, upload),
                     staging_root=_staging_root(),
                 ) as file_path:
@@ -316,9 +323,16 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
                         timeout_seconds=settings.interview_media_probe_timeout_seconds,
                     )
                     interview.duration_ms = round(probe.duration_seconds * 1_000)
+                    audio_path = await prepare_transcription_audio(
+                        file_path,
+                        probe,
+                        timeout_seconds=settings.interview_transcription_audio_timeout_seconds,
+                        probe_timeout_seconds=settings.interview_media_probe_timeout_seconds,
+                        max_duration_seconds=settings.interview_media_max_duration_seconds,
+                    )
                     job = await provider.submit(
                         file_url=None,
-                        file_path=file_path,
+                        file_path=audio_path,
                         language=None,
                         diarization=True,
                         timestamps=True,
@@ -348,7 +362,12 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
                 raise Retry(defer=_retry_delay(ctx, 60)) from error
             return
         except MediaGuardrailError as error:
-            retryable = error.code in {"media_probe_timeout", "media_probe_unavailable"}
+            retryable = error.code in {
+                "media_probe_timeout",
+                "media_probe_unavailable",
+                "media_audio_extraction_timeout",
+                "media_audio_extraction_unavailable",
+            }
             provider_error = TranscriptionProviderError(
                 error.code.upper(),
                 str(error),

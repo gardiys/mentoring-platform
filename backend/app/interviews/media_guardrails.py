@@ -280,16 +280,19 @@ async def stage_media_file(
     download: Callable[[Path], Awaitable[None]],
     expected_bytes: int | None = None,
     staging_root: Path | None = None,
+    additional_reserved_bytes: int = 0,
 ) -> AsyncIterator[Path]:
     """Download one object into an automatically cleaned, capacity-guarded directory."""
 
     if expected_bytes is not None and (expected_bytes <= 0 or expected_bytes > maximum_bytes):
         raise ValueError("expected_bytes must be positive and no greater than maximum_bytes")
+    if additional_reserved_bytes < 0:
+        raise ValueError("additional_reserved_bytes cannot be negative")
     root = staging_root or Path(tempfile.gettempdir())
     suffix = Path(filename).suffix.casefold()
     if not suffix[1:].isalnum() or len(suffix) > 20:
         suffix = ".bin"
-    async with guard.reserve(root, expected_bytes=maximum_bytes):
+    async with guard.reserve(root, expected_bytes=maximum_bytes + additional_reserved_bytes):
         with tempfile.TemporaryDirectory(prefix="interview-media-", dir=root) as directory:
             destination = Path(directory) / f"recording{suffix}"
             await download(destination)

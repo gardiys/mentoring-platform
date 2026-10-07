@@ -172,6 +172,7 @@ class Settings(BaseSettings):
     )
     interview_staging_cleanup_age_seconds: int = Field(default=86_400, ge=3_600, le=604_800)
     interview_media_probe_timeout_seconds: float = Field(default=20, ge=1, le=120)
+    interview_transcription_audio_timeout_seconds: int = Field(default=600, ge=30, le=1_800)
     interview_legacy_transcode_directory: str = "/tmp/interview-legacy-transcode"
     interview_legacy_transcode_max_concurrency: int = Field(default=1, ge=1, le=4)
     interview_legacy_transcode_min_free_bytes: int = Field(

@@ -45,10 +45,16 @@ from app.interviews.intelligence_providers import (
     FakeTranscriptionProvider,
     TranscriptionJob,
     TranscriptionJobState,
+    TranscriptionProviderError,
 )
 from app.interviews.intelligence_service import select_candidate_speaker
 from app.interviews.intelligence_transcript_context import TranscriptCorrection
-from app.interviews.media_guardrails import MediaProbe, MediaStreamProbe, StagingGuard
+from app.interviews.media_guardrails import (
+    MediaGuardrailError,
+    MediaProbe,
+    MediaStreamProbe,
+    StagingGuard,
+)
 from app.interviews.models import (
     InterviewCard,
     InterviewCardFrequency,
@@ -1590,6 +1596,104 @@ async def test_file_transcription_repairs_missing_or_stale_legacy_media_size(
     assert stage is not None
     assert interview.processing_status is IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED
     assert stage.media_size == 1_024
+
+
+@pytest.mark.parametrize("outcome", ["success", "missing_audio", "timeout", "provider_failure"])
+async def test_video_transcription_uploads_only_audio_and_cleans_staging(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    outcome: str,
+) -> None:
+    created, _, stage_id = await create_analysis_from_journal(client, seeded, monkeypatch)
+    interview_id = UUID(created.json()["id"])
+    async with TestSession() as session:
+        stage = await session.get(InterviewProcessStage, stage_id)
+        assert stage is not None
+        stage.media_filename = "recording.mp4"
+        stage.media_content_type = "video/mp4"
+        await session.commit()
+
+    class AudioProvider(FileUploadTranscriptionProvider):
+        async def submit(self, **kwargs: Any) -> TranscriptionJob:
+            path = kwargs["file_path"]
+            assert path.name == "transcription-audio.mp3"
+            assert path.read_bytes() == b"audio-only"
+            result = await super().submit(**kwargs)
+            if outcome == "provider_failure":
+                raise TranscriptionProviderError(
+                    "TRANSCRIPTION_PROVIDER_ERROR", "offline", retryable=True
+                )
+            return result
+
+    provider = AudioProvider()
+    guard = StagingGuard(max_concurrency=1, min_free_bytes=0)
+    extraction_calls: list[Path] = []
+
+    async def fake_probe(*_args: object, **_kwargs: object) -> MediaProbe:
+        return MediaProbe(
+            format_names=("mp4",),
+            duration_seconds=42,
+            streams=(
+                MediaStreamProbe(kind="video", codec="h264", duration_seconds=42),
+                MediaStreamProbe(kind="audio", codec="aac", duration_seconds=42),
+            ),
+        )
+
+    async def fake_extract(source: Path, _probe: MediaProbe, **_kwargs: object) -> Path:
+        extraction_calls.append(source)
+        assert guard.reserved_bytes > source.stat().st_size
+        audio = source.with_name("transcription-audio.mp3")
+        audio.write_bytes(b"audio-only")
+        if outcome in {"missing_audio", "timeout"}:
+            code = (
+                "media_audio_missing"
+                if outcome == "missing_audio"
+                else "media_audio_extraction_timeout"
+            )
+            raise MediaGuardrailError(code, "extraction failed")
+        return audio
+
+    monkeypatch.setattr(intelligence_jobs, "async_session_factory", TestSession)
+    monkeypatch.setattr(intelligence_jobs, "probe_media_async", fake_probe)
+    monkeypatch.setattr(intelligence_jobs, "prepare_transcription_audio", fake_extract)
+    monkeypatch.setattr(intelligence_jobs.settings, "interview_staging_directory", str(tmp_path))
+    queue = RecordingRedis()
+    context: dict[str, Any] = {
+        "redis": queue,
+        "transcription_provider": provider,
+        "upload_store": StagedUploadStore(),
+        "media_staging_guard": guard,
+        "job_try": 1,
+    }
+    if outcome in {"timeout", "provider_failure"}:
+        with pytest.raises(Retry):
+            await intelligence_jobs.submit_transcription(context, str(interview_id))
+    else:
+        await intelligence_jobs.submit_transcription(context, str(interview_id))
+
+    assert len(extraction_calls) == 1
+    assert list(tmp_path.iterdir()) == []
+    assert guard.reserved_bytes == 0
+    assert (provider.submitted_path is not None) == (outcome in {"success", "provider_failure"})
+    async with TestSession() as session:
+        stage = await session.get(InterviewProcessStage, stage_id)
+        interview = await session.get(IntelligenceInterview, interview_id)
+        assert stage is not None and interview is not None
+        assert stage.media_content_type == "video/mp4"
+        assert stage.media_filename == "recording.mp4"
+        assert stage.media_storage_key == "interview-media/student/recording"
+        if outcome == "success":
+            assert (
+                interview.processing_status is IntelligenceProcessingStatus.TRANSCRIPTION_SUBMITTED
+            )
+            assert interview.duration_ms == 42_000
+            assert queue.jobs == [("poll_transcription", (str(interview_id),))]
+        elif outcome == "missing_audio":
+            assert interview.processing_status is IntelligenceProcessingStatus.FAILED
+            assert interview.processing_error_code == "MEDIA_AUDIO_MISSING"
+            assert queue.jobs == []
 
 
 class LegacyM4aUploadStore(StagedUploadStore):
