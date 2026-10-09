@@ -49,6 +49,10 @@ async def test_quota_waits_outside_manual_queue_and_resumes_saved_stage(ready, s
         cluster.answer_status = cluster.answer_validation = None
         if stage == "generation":
             cluster.answer_contract = None
+            cluster.generation_backlog = False
+            # The already admitted theme meets the real selection thresholds.
+            cluster.distinct_interviews_count = 3
+            cluster.priority_score = 10
         original = cluster.answer_contract
         await session.commit()
     handler = (

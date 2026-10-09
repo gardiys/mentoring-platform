@@ -499,6 +499,15 @@ async def test_reconciler_restores_each_persisted_stage_and_retries_source_block
         assert question is not None
         question.direction_id = seeded.python_track_id
         question.automation_status = QuestionOccurrenceStatus.CREATED
+        # These persisted stages have already passed ranked selection for a
+        # different interview whose routing is complete.
+        for selected_id in (generation_cluster_id, validation_cluster_id):
+            selected_cluster = await session.get(QuestionCluster, selected_id)
+            selected_cluster.representative_occurrence_id = routed_source.question_id
+            selected_cluster.generation_source_interview_id = routed_source.interview_id
+            selected_cluster.generation_selected_revision = 1
+            selected_cluster.distinct_interviews_count = 3
+            selected_cluster.priority_score = 8
         routed_question = await session.get(
             IntelligenceQuestion,
             routed_source.question_id,

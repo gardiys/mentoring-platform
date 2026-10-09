@@ -27,6 +27,7 @@ def provider(output):
     )
     ai = object.__new__(OpenAIInterviewAIProvider)
     ai.analysis_model = "strong-analysis"
+    ai.card_validation_model = ai.analysis_model
     ai.light_review_model = "cheap-review"
     ai.review_max_output_tokens = 4_000
     ai.client = SimpleNamespace(responses=SimpleNamespace(parse=parse))

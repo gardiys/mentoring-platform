@@ -225,6 +225,11 @@ class Settings(BaseSettings):
     openai_proxy_url: SecretStr | None = None
     openai_timeout_seconds: float = Field(default=120, ge=10, le=600)
     openai_background_service_tier: Literal["default", "flex"] = "default"
+    interview_ai_default_service_tier: Literal["default", "flex"] = "flex"
+    card_ai_max_topics_per_interview: int = Field(default=10, ge=0, le=1000)
+    card_ai_budget_per_interview_usd: Decimal = Field(default=Decimal("0.40"), ge=0)
+    card_ai_daily_budget_usd: Decimal = Field(default=Decimal("5"), ge=0)
+    openai_card_validation_model: str | None = None
     openai_flex_timeout_seconds: float = Field(default=900, ge=120, le=1_800)
     # ARQ owns observable retries and persists every attempt; avoid nested SDK retries.
     openai_max_retries: int = Field(default=0, ge=0, le=5)
@@ -499,6 +504,25 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
+    def validate_card_ai_configuration(self) -> "Settings":
+        from app.interviews.ai_pricing import _TEXT_PRICES, pricing_model
+
+        for name, model in (
+            ("OPENAI_ANALYSIS_MODEL", self.openai_analysis_model),
+            ("OPENAI_CARD_VALIDATION_MODEL", self.openai_card_validation_model),
+        ):
+            if model is not None and pricing_model(model) not in _TEXT_PRICES:
+                raise ValueError(f"{name}: card AI pricing is unknown for {model}")
+        if (
+            self.interview_ai_default_service_tier == "flex"
+            or self.openai_background_service_tier == "flex"
+        ) and self.openai_job_timeout_seconds < 2 * self.openai_flex_timeout_seconds + 60:
+            raise ValueError(
+                "OPENAI_JOB_TIMEOUT_SECONDS must cover two Flex requests plus 60 seconds"
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_intelligence_job_lifetimes(self) -> "Settings":
         if (self.onboarding_bot_api_base_url is None) != (
             self.onboarding_bot_integration_token is None
@@ -682,6 +706,7 @@ class Settings(BaseSettings):
         "openai_extraction_model",
         "openai_light_review_model",
         "openai_simple_review_model",
+        "openai_card_validation_model",
         "openai_review_reasoning_effort",
         "tochka_client_id",
         "tochka_customer_code",

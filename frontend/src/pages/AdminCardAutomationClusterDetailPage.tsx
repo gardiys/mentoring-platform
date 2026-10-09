@@ -36,10 +36,12 @@ import {
   useSetQuestionClusterState,
   useSplitQuestionCluster,
   useUpdateQuestionClusterDraft,
+  useWriteOffUnknownCardCost,
   type CardAutomationScope,
 } from "../features/cardAutomation/queries";
 import {
   answerStatusLabels,
+  cardBudgetReasonLabels,
   clusterStatusColors,
   clusterStatusLabels,
   decisionSourceLabels,
@@ -204,6 +206,7 @@ function ClusterDetail({
   const link = useLinkQuestionCluster();
   const create = useCreateCardFromQuestionCluster();
   const generateAnswer = useGenerateQuestionClusterAnswer();
+  const writeOffCost = useWriteOffUnknownCardCost();
   const updateDraft = useUpdateQuestionClusterDraft(scope);
   const split = useSplitQuestionCluster();
   const merge = useMergeQuestionCluster();
@@ -271,6 +274,7 @@ function ClusterDetail({
     link.isPending ||
     create.isPending ||
     generateAnswer.isPending ||
+    writeOffCost.isPending ||
     updateDraft.isPending ||
     split.isPending ||
     merge.isPending ||
@@ -280,6 +284,7 @@ function ClusterDetail({
     link.error ??
     create.error ??
     generateAnswer.error ??
+    writeOffCost.error ??
     updateDraft.error ??
     split.error ??
     merge.error ??
@@ -1298,6 +1303,103 @@ function ClusterDetail({
 
         <Tabs.Panel value="answer" pt="lg">
           <Stack>
+            {(cluster.card_ai_unknown_costs?.length ?? 0) > 0 && (
+              <Alert color="orange" title="Стоимость AI-запросов неизвестна">
+                <Text size="sm">
+                  Резерв учитывается в расходах исходного интервью. После двух
+                  неизвестных попыток автоматические повторы остановятся.
+                </Text>
+                {cluster.card_ai_unknown_costs?.map((cost) => (
+                  <Group key={cost.request_id} justify="space-between" mt="sm">
+                    <Text size="sm">
+                      {cost.operation === "validate_answer_contract"
+                        ? "Проверка"
+                        : "Генерация"}
+                      : ${cost.amount_usd}
+                    </Text>
+                    {scope === "admin" && (
+                      <Button
+                        variant="light"
+                        color="orange"
+                        disabled={mutation || !cost.can_write_off}
+                        onClick={() => {
+                          const reason = requiredReason(
+                            "списать неизвестный расход",
+                          );
+                          if (
+                            !reason ||
+                            !window.confirm(
+                              `Записать $${cost.amount_usd} в расходы по сумме резерва? Фактическая стоимость провайдера остаётся неизвестной.`,
+                            )
+                          )
+                            return;
+                          void performDecision(
+                            async () => {
+                              await writeOffCost.mutateAsync({
+                                clusterId: cluster.id,
+                                payload: {
+                                  expected_version: cluster.version,
+                                  request_id: cost.request_id,
+                                  reason,
+                                },
+                              });
+                              await reload();
+                            },
+                            "Расход списан по резерву",
+                            false,
+                          );
+                        }}
+                      >
+                        Списать ${cost.amount_usd}
+                      </Button>
+                    )}
+                    {!cost.can_write_off && (
+                      <Text size="sm" c="dimmed">
+                        Доступно после{" "}
+                        {new Date(cost.retry_safe_after).toLocaleString(
+                          "ru-RU",
+                        )}
+                      </Text>
+                    )}
+                  </Group>
+                ))}
+              </Alert>
+            )}
+            {cluster.answer_status === "not_selected" &&
+              cluster.generation_deferred_reason && (
+                <Alert color="yellow" title="AI-обработка отложена">
+                  {cardBudgetReasonLabels[cluster.generation_deferred_reason] ??
+                    cluster.generation_deferred_reason}
+                  .
+                  <Text size="sm">
+                    Остаток на новые темы интервью: $
+                    {cluster.card_ai_budget?.interview_remaining_usd ?? "—"}; на
+                    направление сегодня: $
+                    {cluster.card_ai_budget?.daily_remaining_usd ?? "—"}.
+                  </Text>
+                  <Text size="sm">
+                    {cluster.generation_deferred_reason ===
+                    "CARD_AI_COST_UNKNOWN"
+                      ? "Сначала спишите неизвестные расходы выше; после этого повторный запрос будет доступен."
+                      : "Можно запросить AI-черновик вручную в пределах суточного бюджета или изменить лимиты в настройках автоматизации."}
+                  </Text>
+                  {cluster.generation_retry_after && (
+                    <Text size="sm">
+                      Повторный отбор после{" "}
+                      {new Date(cluster.generation_retry_after).toLocaleString(
+                        "ru-RU",
+                      )}
+                      .
+                    </Text>
+                  )}
+                </Alert>
+              )}
+            {cluster.answer_validation?.requires_additional_sources && (
+              <Alert color="orange" title="Нужны дополнительные источники">
+                Текущих материалов недостаточно. Дополните источники перед
+                следующим исправлением.
+              </Alert>
+            )}
             {cluster.answer_status === "waiting_for_ai" && (
               <Alert color="orange" title="Ожидаем восстановления AI">
                 Ответы сохранены. Обработка продолжится с остановленного этапа.

@@ -105,7 +105,9 @@ async def test_statistics_preserve_unverified_review_and_schedule_validation(rea
     async with TestSession() as session:
         cluster = await session.get_one(QuestionCluster, ready[0])
         assert cluster.answer_contract["short_answer"] == DRAFT
-    assert [name for name, _, _ in redis.calls] == ["validate_cluster_answer"]
+    assert redis.calls == []
+    await jobs.reconcile_card_automation_jobs({"redis": redis})
+    assert any(name == "validate_cluster_answer" for name, _, _ in redis.calls)
 
 
 @pytest.mark.parametrize("validation", [None, {"supported": True, "confidence": 0.98}])

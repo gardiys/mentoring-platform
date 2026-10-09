@@ -18,13 +18,16 @@ from app.interviews.card_automation_types import (
     AutomationDecisionSource,
     AutomationDecisionType,
     QuestionClusterStatus,
+    QuestionOccurrenceStatus,
 )
 from app.interviews.intelligence_ai import FakeInterviewAIProvider
+from app.interviews.intelligence_models import IntelligenceQuestion
 from app.interviews.models import InterviewCard, InterviewCardFrequency, InterviewDeck
 from app.users.models import User
 from tests.conftest import TestSession
 from tests.test_card_auto_publish import ready as ready_fixture
 from tests.test_card_automation_jobs import RecordingRedis
+from tests.test_card_automation_pipeline import _create_source
 from tests.test_card_automation_service import _cluster
 
 ready = ready_fixture
@@ -246,12 +249,19 @@ async def test_workflow_counts_are_scoped_and_separate_pending_from_human_review
 
 
 async def test_reconciler_holds_shadow_backfill_and_prioritizes_existing_answers(ready, seeded):
+    source = await _create_source(seeded, "Тема, ожидающая генерации")
     async with TestSession() as session:
         shadow = _cluster(seeded.python_track_id, 10, status=QuestionClusterStatus.SHADOW)
         shadow.membership_revision = shadow.stats_revision = 1
         pending = _cluster(seeded.python_track_id, 11, status=QuestionClusterStatus.NEEDS_REVIEW)
         pending.membership_revision = pending.stats_revision = 1
+        pending.distinct_interviews_count = 3
+        pending.priority_score = 10
         session.add_all([shadow, pending])
+        await session.flush()
+        question = await session.get_one(IntelligenceQuestion, source.question_id)
+        question.cluster_id = pending.id
+        question.automation_status = QuestionOccurrenceStatus.CLUSTERED
         await session.commit()
     redis = RecordingRedis()
     await jobs.reconcile_card_automation_jobs({"redis": redis})

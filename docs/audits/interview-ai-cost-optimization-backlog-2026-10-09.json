@@ -1,0 +1,219 @@
+{
+  "read_only": true,
+  "checked_at": "2026-10-09T17:48:51.869244+00:00",
+  "backlog": [
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "candidates_total": 0,
+      "eligible_blank": 0,
+      "eligible_draft": 0,
+      "estimated_blank_generation_and_validation_usd": 0,
+      "estimated_draft_validation_usd": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000002",
+      "candidates_total": 0,
+      "eligible_blank": 0,
+      "eligible_draft": 0,
+      "estimated_blank_generation_and_validation_usd": 0,
+      "estimated_draft_validation_usd": 0
+    }
+  ],
+  "flex_prices": [
+    {
+      "operation": "generate_answer_contract",
+      "priced_requests": 939,
+      "mean_usd": 0.011240109318423855
+    },
+    {
+      "operation": "validate_answer_contract",
+      "priced_requests": 1052,
+      "mean_usd": 0.010898823003802282
+    }
+  ],
+  "fresh_scores": [
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "fresh_topics": 292,
+      "p10": 5.102368,
+      "median": 6.993955,
+      "p90": 7.994367899999999,
+      "below_4": 0,
+      "below_6_5": 116
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000002",
+      "fresh_topics": 6,
+      "p10": 5.566820999999999,
+      "median": 6.066820999999999,
+      "p90": 7.028821,
+      "below_4": 0,
+      "below_6_5": 5
+    }
+  ],
+  "current_budget_lock_holders": 0,
+  "decision": "Legacy blank generation disabled by default; existing drafts can be serviced within daily maintenance cap.",
+  "estimates_are_not_measured_rollout_costs": true,
+  "settings": [
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "enabled": true,
+      "cluster_moderation_enabled": true,
+      "global_auto_publish_enabled": true,
+      "shadow_mode": false,
+      "min_distinct_interviews_for_promotion": 1,
+      "min_distinct_companies_for_promotion": 1,
+      "min_failed_answers_for_promotion": 1
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000002",
+      "enabled": true,
+      "cluster_moderation_enabled": true,
+      "global_auto_publish_enabled": true,
+      "shadow_mode": false,
+      "min_distinct_interviews_for_promotion": 1,
+      "min_distinct_companies_for_promotion": 2,
+      "min_failed_answers_for_promotion": 2
+    }
+  ],
+  "inventory": [
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000002",
+      "status": "linked",
+      "answer_status": "needs_manual_review",
+      "topics": 8,
+      "with_draft": 6,
+      "unlinked": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "linked",
+      "answer_status": "needs_manual_review",
+      "topics": 358,
+      "with_draft": 259,
+      "unlinked": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "linked",
+      "answer_status": "needs_expert_source",
+      "topics": 60,
+      "with_draft": 60,
+      "unlinked": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "needs_review",
+      "answer_status": "needs_expert_source",
+      "topics": 2,
+      "with_draft": 0,
+      "unlinked": 2
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000002",
+      "status": "linked",
+      "answer_status": "approved",
+      "topics": 1,
+      "with_draft": 1,
+      "unlinked": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000002",
+      "status": "needs_review",
+      "answer_status": "needs_manual_review",
+      "topics": 5,
+      "with_draft": 4,
+      "unlinked": 5
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "ignored",
+      "answer_status": null,
+      "topics": 326,
+      "with_draft": 8,
+      "unlinked": 326
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "linked",
+      "answer_status": "approved",
+      "topics": 35,
+      "with_draft": 29,
+      "unlinked": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "ignored",
+      "answer_status": "needs_expert_source",
+      "topics": 37,
+      "with_draft": 37,
+      "unlinked": 37
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "linked",
+      "answer_status": "generated_from_sources",
+      "topics": 3,
+      "with_draft": 3,
+      "unlinked": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "card_created",
+      "answer_status": "approved",
+      "topics": 1938,
+      "with_draft": 1938,
+      "unlinked": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "ignored",
+      "answer_status": "needs_manual_review",
+      "topics": 175,
+      "with_draft": 147,
+      "unlinked": 175
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000002",
+      "status": "ignored",
+      "answer_status": "needs_manual_review",
+      "topics": 5,
+      "with_draft": 5,
+      "unlinked": 5
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "linked",
+      "answer_status": null,
+      "topics": 22,
+      "with_draft": 15,
+      "unlinked": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000002",
+      "status": "card_created",
+      "answer_status": "approved",
+      "topics": 58,
+      "with_draft": 58,
+      "unlinked": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "ignored",
+      "answer_status": "approved",
+      "topics": 27,
+      "with_draft": 27,
+      "unlinked": 0
+    },
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000001",
+      "status": "ignored",
+      "answer_status": "generated_from_sources",
+      "topics": 1,
+      "with_draft": 1,
+      "unlinked": 1
+    }
+  ],
+  "potential_regardless_of_enabled": null,
+  "scope": "Unlinked SHADOW/CANDIDATE/NEEDS_REVIEW, answer_status null/not_selected, no editorial human decision. Source/manual queues, closed and linked cards excluded."
+}

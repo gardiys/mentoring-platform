@@ -599,40 +599,51 @@ it("проигрывает видеозапись собеседования н�
   });
 });
 
-it("запускает единственный AI-разбор из уже загруженного этапа", async () => {
-  const processWithRecording: InterviewProcessDetail = {
-    ...processDetail,
-    stages: [
-      {
-        ...processDetail.stages[0]!,
-        media: {
-          filename: "interview.mp3",
-          content_type: "audio/mpeg",
-          size: 1024,
+it.each(["flex", "default"] as const)(
+  "сохраняет серверный режим %s перед первым AI-разбором",
+  async (tier) => {
+    vi.spyOn(api, "interviewAIOptions").mockResolvedValue({
+      default_service_tier: tier,
+      median_ready_minutes: 14,
+      measured_interviews: 8,
+    });
+    const processWithRecording: InterviewProcessDetail = {
+      ...processDetail,
+      stages: [
+        {
+          ...processDetail.stages[0]!,
+          media: {
+            filename: "interview.mp3",
+            content_type: "audio/mpeg",
+            size: 1024,
+          },
         },
-      },
-    ],
-  };
-  vi.spyOn(api, "interviewProcess").mockResolvedValue(processWithRecording);
-  const start = vi
-    .spyOn(api, "startInterviewStageAnalysis")
-    .mockReturnValue(new Promise(() => undefined));
-  vi.spyOn(window, "confirm").mockReturnValue(true);
-  renderPage(
-    <InterviewProcessPage />,
-    `/interviews/journal/${processWithRecording.id}`,
-    "/interviews/journal/:processId",
-  );
+      ],
+    };
+    vi.spyOn(api, "interviewProcess").mockResolvedValue(processWithRecording);
+    const start = vi
+      .spyOn(api, "startInterviewStageAnalysis")
+      .mockReturnValue(new Promise(() => undefined));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage(
+      <InterviewProcessPage />,
+      `/interviews/journal/${processWithRecording.id}`,
+      "/interviews/journal/:processId",
+    );
 
-  await userEvent.click(
-    await screen.findByRole("button", { name: "Разобрать с AI" }),
-  );
+    const launch = await screen.findByRole("button", {
+      name: "Разобрать с AI",
+    });
+    expect(screen.queryByLabelText("Режим AI-разбора")).not.toBeInTheDocument();
+    await userEvent.click(launch);
 
-  expect(start).toHaveBeenCalledWith(
-    processWithRecording.id,
-    processWithRecording.stages[0]!.id,
-  );
-});
+    expect(start).toHaveBeenCalledWith(
+      processWithRecording.id,
+      processWithRecording.stages[0]!.id,
+      undefined,
+    );
+  },
+);
 
 it("добавляет несколько файлов к описанию собеседования", async () => {
   vi.spyOn(api, "interviewProcess").mockResolvedValue(processDetail);

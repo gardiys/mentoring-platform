@@ -11,6 +11,7 @@ from app.interviews.card_automation_models import (
 from app.interviews.card_automation_types import (
     AnswerContractStatus,
     AutomationDecisionSource,
+    AutomationDecisionType,
     QuestionClusterStatus,
 )
 
@@ -42,6 +43,7 @@ def ai_processing_condition() -> ColumnElement[bool]:
             AutomationDecision.entity_type == "cluster",
             AutomationDecision.entity_id == QuestionCluster.id,
             AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+            AutomationDecision.decision_type != AutomationDecisionType.CARD_AI_COST_WRITTEN_OFF,
         )
         .correlate(QuestionCluster)
     )
@@ -82,7 +84,22 @@ def waiting_for_sources_condition() -> ColumnElement[bool]:
 def manual_review_condition() -> ColumnElement[bool]:
     return and_(
         QuestionCluster.status == QuestionClusterStatus.NEEDS_REVIEW,
+        ~not_selected_condition(),
         ~ai_processing_condition(),
         ~waiting_for_ai_condition(),
         ~waiting_for_sources_condition(),
+    )
+
+
+def not_selected_condition() -> ColumnElement[bool]:
+    return and_(
+        QuestionCluster.status.in_(
+            [
+                QuestionClusterStatus.SHADOW,
+                QuestionClusterStatus.CANDIDATE,
+                QuestionClusterStatus.NEEDS_REVIEW,
+            ]
+        ),
+        QuestionCluster.answer_status.is_not(None),
+        QuestionCluster.answer_status == AnswerContractStatus.NOT_SELECTED,
     )

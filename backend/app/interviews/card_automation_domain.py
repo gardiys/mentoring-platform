@@ -267,12 +267,9 @@ def promotion_result(
     min_companies: int,
     min_failures: int,
     manual_important: bool,
-    coverage_gap: bool = False,
 ) -> PromotionResult:
     if manual_important:
         return PromotionResult(True, "manually_marked_important")
-    if coverage_gap:
-        return PromotionResult(True, "critical_topic_coverage_gap")
     if distinct_interviews >= min_interviews:
         return PromotionResult(True, "distinct_interviews_threshold")
     if distinct_companies >= min_companies:
@@ -372,4 +369,10 @@ def cluster_allowed_actions(status: QuestionClusterStatus) -> tuple[str, ...]:
         "ignore",
         "defer",
         "mark_important",
+    )
+
+
+def answer_repairable(validation: dict[str, object]) -> bool:
+    return validation.get("question_is_self_contained") is not False and not validation.get(
+        "requires_additional_sources"
     )

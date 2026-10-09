@@ -15,10 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import async_session_factory
 from app.interviews.ai_rate_limit import defer_model_cooldown, retry_delay
+from app.interviews.card_ai_budget import card_budget_scope
 from app.interviews.card_answer_sources import load_trusted_sources
 from app.interviews.card_automation_domain import ensure_occurrence_transition
 from app.interviews.card_automation_models import (
     AutomationDecision,
+    CardAICharge,
     CardAutomationSettings,
     PersonalReviewItem,
     QuestionCluster,
@@ -171,6 +173,8 @@ async def repair_missing_source_validations(*, limit: int = 50) -> int:
                             AutomationDecision.entity_type == "cluster",
                             AutomationDecision.entity_id == QuestionCluster.id,
                             AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+                            AutomationDecision.decision_type
+                            != AutomationDecisionType.CARD_AI_COST_WRITTEN_OFF,
                         )
                     ),
                     ~exists(
@@ -257,6 +261,8 @@ async def recheck_source_blocked_clusters(*, limit: int = 50) -> int:
                         AutomationDecision.entity_type == "cluster",
                         AutomationDecision.entity_id == QuestionCluster.id,
                         AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+                        AutomationDecision.decision_type
+                        != AutomationDecisionType.CARD_AI_COST_WRITTEN_OFF,
                     )
                 ),
             )
@@ -306,6 +312,8 @@ async def resume_service_blocked_clusters(*, limit: int = 50) -> int:
                         AutomationDecision.entity_type == "cluster",
                         AutomationDecision.entity_id == QuestionCluster.id,
                         AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+                        AutomationDecision.decision_type
+                        != AutomationDecisionType.CARD_AI_COST_WRITTEN_OFF,
                     )
                 ),
             )
@@ -378,6 +386,8 @@ async def schedule_answer_repairs(*, limit: int = 20) -> int:
                         AutomationDecision.entity_type == "cluster",
                         AutomationDecision.entity_id == QuestionCluster.id,
                         AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+                        AutomationDecision.decision_type
+                        != AutomationDecisionType.CARD_AI_COST_WRITTEN_OFF,
                     )
                 ),
             )
@@ -388,7 +398,7 @@ async def schedule_answer_repairs(*, limit: int = 20) -> int:
         for cluster in clusters:
             cluster.source_retry_after = now + SOURCE_RECHECK_INTERVAL
             # Explicit missing-context verdicts cannot be fixed by inventing more prose.
-            if (cluster.answer_validation or {}).get("question_is_self_contained") is False:
+            if not _answer_repairable(cluster.answer_validation or {}):
                 continue
             settings = await session.get(CardAutomationSettings, cluster.direction_id)
             assert settings is not None
@@ -439,8 +449,11 @@ async def schedule_answer_repairs(*, limit: int = 20) -> int:
 async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
     """Recover queued work after Redis or worker restarts."""
 
+    from app.interviews.card_ai_admission import select_card_candidates
     from app.interviews.card_review_recovery import queue_review_backlog
 
+    async with async_session_factory() as session:
+        await select_card_candidates(session)
     await repair_missing_source_validations()
     await recheck_source_blocked_clusters()
     await resume_service_blocked_clusters()
@@ -518,9 +531,30 @@ async def reconcile_card_automation_jobs(ctx: dict[str, Any]) -> None:
                     CardAutomationSettings,
                     CardAutomationSettings.direction_id == QuestionCluster.direction_id,
                 )
-                .where(ai_processing_condition())
+                .where(
+                    ai_processing_condition(),
+                    or_(
+                        exists(
+                            select(CardAICharge.request_id).where(
+                                CardAICharge.cluster_id == QuestionCluster.id,
+                                CardAICharge.amount_usd > 0,
+                                CardAICharge.manual.is_(False),
+                            )
+                        ),
+                        and_(
+                            QuestionCluster.generation_backlog.is_(True),
+                            QuestionCluster.answer_contract.is_not(None),
+                        ),
+                        and_(
+                            QuestionCluster.generation_source_interview_id.is_not(None),
+                            QuestionCluster.generation_selected_revision
+                            == QuestionCluster.membership_revision,
+                        ),
+                    ),
+                )
                 .order_by(
                     QuestionCluster.answer_contract.is_(None),
+                    QuestionCluster.priority_score.desc(),
                     QuestionCluster.updated_at,
                     QuestionCluster.id,
                 )
@@ -655,43 +689,14 @@ async def recalculate_cluster_stats(
         # Preserve interview-review drafts. Missing citations trigger independent
         # source attribution during validation, not deletion and paid regeneration.
         current_revision = cluster.membership_revision
-        should_generate = (
-            settings.enabled
-            and settings.cluster_moderation_enabled
-            and cluster.status is QuestionClusterStatus.NEEDS_REVIEW
-            and cluster.answer_status is None
-            and cluster.answer_contract is None
-        )
-        should_validate = (
-            settings.enabled
-            and settings.cluster_moderation_enabled
-            and cluster.status is QuestionClusterStatus.NEEDS_REVIEW
-            and cluster.answer_status is None
-            and cluster.answer_contract is not None
-            and cluster.answer_validation is None
-        )
         await session.commit()
     if current_revision != membership_revision:
         logger.info(
-            "Recalculated newer cluster revision cluster_id=%s requested=%s current=%s",
-            cluster_id,
-            membership_revision,
-            current_revision,
-        )
-    if should_generate:
-        await enqueue_card_automation_job(
-            "generate_cluster_candidate",
+            "Recalculated newer cluster revision cluster_id=%s revision=%s",
             cluster_id,
             current_revision,
-            redis=ctx["redis"],
         )
-    elif should_validate:
-        await enqueue_card_automation_job(
-            "validate_cluster_answer",
-            cluster_id,
-            current_revision,
-            redis=ctx["redis"],
-        )
+    # Admission and paid queueing are performed after all routing/stats finish.
 
 
 async def promote_question_cluster(
@@ -705,6 +710,9 @@ async def generate_cluster_candidate(
 ) -> None:
     parsed_id = UUID(cluster_id)
     async with async_session_factory() as session:
+        from app.interviews.card_ai_budget import acquire_card_budget_lock
+
+        await acquire_card_budget_lock(session, "card_job_preflight")
         cluster = await session.get(QuestionCluster, parsed_id, with_for_update=True)
         if (
             cluster is None
@@ -720,6 +728,7 @@ async def generate_cluster_candidate(
                     None,
                     AnswerContractStatus.NEEDS_EXPERT_SOURCE,
                     AnswerContractStatus.NEEDS_MANUAL_REVIEW,
+                    AnswerContractStatus.NOT_SELECTED,
                     AnswerContractStatus.REPAIR_PENDING,
                 }
                 if manual_draft
@@ -743,6 +752,24 @@ async def generate_cluster_candidate(
             return
         repair_context = None
         if cluster.answer_status == AnswerContractStatus.REPAIR_PENDING:
+            if not _answer_repairable(cluster.answer_validation or {}):
+                cluster.answer_status = AnswerContractStatus.NEEDS_MANUAL_REVIEW
+                cluster.version += 1
+                await _record_answer_terminal_decision(
+                    session,
+                    cluster=cluster,
+                    settings=settings,
+                    membership_revision=membership_revision,
+                    decision_type=AutomationDecisionType.ANSWER_CONTRACT_NEEDS_SOURCE,
+                    decision_source=AutomationDecisionSource.RULE,
+                    stage="generation",
+                    outcome="needs_source",
+                    error_code="insufficient_sources",
+                    reason="Нужны дополнительные источники или контекст; "
+                    "повторное исправление не поможет",
+                )
+                await session.commit()
+                return
             if cluster.answer_repair_attempts >= MAX_ANSWER_REPAIRS:
                 cluster.answer_status = AnswerContractStatus.NEEDS_MANUAL_REVIEW
                 cluster.version += 1
@@ -837,14 +864,15 @@ async def generate_cluster_candidate(
     else:
         started_at = time.perf_counter()
         try:
-            if repair_context is not None:
-                generated = await provider.generate_answer_contract(
-                    question=question, trusted_sources=sources, repair_context=repair_context
-                )
-            else:
-                generated = await provider.generate_answer_contract(
-                    question=question, trusted_sources=sources
-                )
+            with card_budget_scope(parsed_id, manual=manual_draft):
+                if repair_context is not None:
+                    generated = await provider.generate_answer_contract(
+                        question=question, trusted_sources=sources, repair_context=repair_context
+                    )
+                else:
+                    generated = await provider.generate_answer_contract(
+                        question=question, trusted_sources=sources
+                    )
         except InterviewAIError as error:
             await defer_model_cooldown(ctx, error)
             latency_ms = _elapsed_ms(started_at)
@@ -875,6 +903,21 @@ async def generate_cluster_candidate(
                     or not settings.enabled
                     or not settings.cluster_moderation_enabled
                 ):
+                    return
+                from app.interviews.card_ai_budget import BUDGET_CODES
+
+                if error.code in BUDGET_CODES:
+                    from app.interviews.card_ai_admission import defer_card_generation
+
+                    await defer_card_generation(
+                        session,
+                        cluster,
+                        settings,
+                        error.code,
+                        error.safe_message,
+                        retryable=error.retryable,
+                    )
+                    await session.commit()
                     return
                 cluster.ai_error_code = error.code
                 cluster.answer_status = (
@@ -956,6 +999,8 @@ async def generate_cluster_candidate(
         cluster.ai_error_code = None
         cluster.ai_retry_after = None
         cluster.source_retry_after = None
+        cluster.generation_deferred_reason = None
+        cluster.generation_retry_after = None
         cluster.answer_contract = contract_payload
         cluster.answer_validation = None
         cluster.answer_status = None
@@ -1001,6 +1046,9 @@ async def validate_cluster_answer(
     if await _publish_ready_cluster(parsed_id, membership_revision):
         return
     async with async_session_factory() as session:
+        from app.interviews.card_ai_budget import acquire_card_budget_lock
+
+        await acquire_card_budget_lock(session, "card_job_preflight")
         cluster = await session.get(QuestionCluster, parsed_id, with_for_update=True)
         if (
             cluster is None
@@ -1042,7 +1090,7 @@ async def validate_cluster_answer(
             sources,
             ANSWER_VALIDATION_PROMPT_VERSION,
             ANSWER_VALIDATION_SCHEMA_VERSION,
-            _analysis_model_name(provider),
+            _validation_model_name(provider),
             direction_id=cluster.direction_id,
             provider_name=provider.name,
             max_output_tokens=getattr(provider, "review_max_output_tokens", 4_000),
@@ -1068,6 +1116,11 @@ async def validate_cluster_answer(
                 )
     missing_references = set(_contract_source_ids(contract_payload)) - allowed_ids
     if not sources or missing_references:
+        from app.interviews.card_ai_budget import release_validation_pledges
+
+        async with async_session_factory() as budget_session:
+            await release_validation_pledges(budget_session, parsed_id)
+            await budget_session.commit()
         async with async_session_factory() as session:
             cluster = await session.scalar(
                 select(QuestionCluster).where(QuestionCluster.id == parsed_id).with_for_update()
@@ -1121,6 +1174,11 @@ async def validate_cluster_answer(
         )
         return
     if cached_validation_output is not None:
+        from app.interviews.card_ai_budget import release_validation_pledges
+
+        async with async_session_factory() as session:
+            await release_validation_pledges(session, parsed_id)
+            await session.commit()
         validation_payload = cached_validation_output.model_dump(mode="json")
         validation_supported = cached_validation_output.supported
         confidence = cached_validation_output.confidence
@@ -1133,11 +1191,12 @@ async def validate_cluster_answer(
     else:
         started_at = time.perf_counter()
         try:
-            validation = await provider.validate_answer_contract(
-                question=question,
-                contract=safe_contract_payload,
-                trusted_sources=sources,
-            )
+            with card_budget_scope(parsed_id, manual=manual_draft):
+                validation = await provider.validate_answer_contract(
+                    question=question,
+                    contract=safe_contract_payload,
+                    trusted_sources=sources,
+                )
         except InterviewAIError as error:
             await defer_model_cooldown(ctx, error)
             latency_ms = _elapsed_ms(started_at)
@@ -1169,6 +1228,21 @@ async def validate_cluster_answer(
                     or not settings.enabled
                     or not settings.cluster_moderation_enabled
                 ):
+                    return
+                from app.interviews.card_ai_budget import BUDGET_CODES
+
+                if error.code in BUDGET_CODES:
+                    from app.interviews.card_ai_admission import defer_card_generation
+
+                    await defer_card_generation(
+                        session,
+                        cluster,
+                        settings,
+                        error.code,
+                        error.safe_message,
+                        retryable=error.retryable,
+                    )
+                    await session.commit()
                     return
                 cluster.ai_error_code = error.code
                 cluster.answer_status = (
@@ -1250,6 +1324,7 @@ async def validate_cluster_answer(
         and not validation_payload.get("contradictions")
         and not validation_payload.get("missing_required_points")
         and not validation_payload.get("version_sensitive_claims")
+        and not validation_payload.get("requires_additional_sources")
     )
     async with async_session_factory() as session:
         cluster = await session.scalar(
@@ -1270,7 +1345,14 @@ async def validate_cluster_answer(
                 **contract_payload,
                 "source_references": attributed_references,
             }
+        cluster.generation_deferred_reason = None
+        cluster.generation_retry_after = None
         cluster.answer_validation = validation_payload
+        if validation_payload.get("requires_additional_sources"):
+            reason = (
+                "Нужны дополнительные источники: "
+                "повторная генерация по текущим материалам не поможет"
+            )
         cluster.answer_status = (
             AnswerContractStatus.GENERATED_FROM_SOURCES
             if supported
@@ -1278,7 +1360,7 @@ async def validate_cluster_answer(
             if not manual_draft
             and settings.global_auto_publish_enabled
             and not settings.shadow_mode
-            and validation_payload.get("question_is_self_contained") is not False
+            and _answer_repairable(validation_payload)
             and cluster.answer_repair_attempts < MAX_ANSWER_REPAIRS
             else AnswerContractStatus.NEEDS_MANUAL_REVIEW
         )
@@ -1298,7 +1380,7 @@ async def validate_cluster_answer(
             retrieval_scores={
                 "publication_sources_hash": _publication_sources_hash(sources),
                 "answer_source_ids": [source["source_id"] for source in sources],
-                "request_model": _analysis_model_name(provider),
+                "request_model": _validation_model_name(provider),
                 "answer_cache_version": ANSWER_CACHE_VERSION,
             },
             usage=usage,
@@ -1415,6 +1497,9 @@ async def _defer_unpublishable_answer(
         else "publication_preflight_failed",
         reason=reason,
     )
+    from app.interviews.card_ai_budget import release_validation_pledges
+
+    await release_validation_pledges(session, cluster.id)
     return True
 
 
@@ -1789,6 +1874,16 @@ def _ai(ctx: dict[str, Any]) -> InterviewAIProvider:
 
 def _analysis_model_name(ai: InterviewAIProvider) -> str:
     return str(getattr(ai, "analysis_model", getattr(ai, "model", type(ai).__qualname__)))
+
+
+def _validation_model_name(ai: InterviewAIProvider) -> str:
+    return str(getattr(ai, "card_validation_model", _analysis_model_name(ai)))
+
+
+def _answer_repairable(validation: dict[str, object]) -> bool:
+    from app.interviews.card_automation_domain import answer_repairable
+
+    return answer_repairable(validation)
 
 
 async def _cached_answer_decision(

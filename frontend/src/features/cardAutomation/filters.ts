@@ -106,10 +106,12 @@ export function filtersFromParams(
       params.get("processing_only") !== "true" &&
       params.get("waiting_only") !== "true" &&
       params.get("sources_only") !== "true" &&
+      params.get("not_selected_only") !== "true" &&
       params.get("needs_action_only") !== "false",
     processingOnly: params.get("processing_only") === "true",
     waitingOnly: params.get("waiting_only") === "true",
     sourcesOnly: params.get("sources_only") === "true",
+    notSelectedOnly: params.get("not_selected_only") === "true",
     sortBy:
       sortBy && sortOptions.some((option) => option.value === sortBy)
         ? sortBy

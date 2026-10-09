@@ -310,6 +310,7 @@ function questionClusterSearchParams(
     processing_only: String(filters.processingOnly ?? false),
     waiting_only: String(filters.waitingOnly ?? false),
     sources_only: String(filters.sourcesOnly ?? false),
+    not_selected_only: String(filters.notSelectedOnly ?? false),
     sort_by: filters.sortBy,
     sort_order: filters.sortOrder,
   });
@@ -741,6 +742,19 @@ export const api = {
         body: JSON.stringify(payload),
       },
     ),
+  writeOffAdminCardAICost: (
+    clusterId: string,
+    payload: { expected_version: number; request_id: string; reason: string },
+    idempotencyKey: string,
+  ) =>
+    apiRequest<QuestionClusterActionResult>(
+      `/api/v1/admin/card-automation/clusters/${clusterId}/write-off-ai-cost`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(payload),
+      },
+    ),
   linkAdminCardAutomationCluster: (
     clusterId: string,
     payload: QuestionClusterLinkCardMutation,
@@ -1093,19 +1107,23 @@ export const api = {
   adminRestartIntelligenceInterview: (
     id: string,
     force = false,
-    economy = false,
+    economy?: boolean,
   ) =>
     apiRequest<IntelligenceInterviewDetail>(
-      `/api/v1/admin/interviews/ai-operations/${id}/restart?force=${force}&economy=${economy}`,
+      `/api/v1/admin/interviews/ai-operations/${id}/restart?force=${force}${economy === undefined ? "" : `&economy=${economy}`}`,
       { method: "POST" },
     ),
   adminIntelligenceArchive: (id: string, archiveId: string) =>
     apiRequest<Record<string, unknown>>(
       `/api/v1/admin/interviews/ai-operations/${id}/archives/${archiveId}`,
     ),
-  startInterviewStageAnalysis: (processId: string, stageId: string) =>
+  startInterviewStageAnalysis: (
+    processId: string,
+    stageId: string,
+    aiServiceTier?: "default" | "flex",
+  ) =>
     apiRequest<IntelligenceInterviewDetail>(
-      `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/ai-analysis`,
+      `/api/v1/interviews/journal/tracks/${processId}/stages/${stageId}/ai-analysis${aiServiceTier ? `?ai_service_tier=${aiServiceTier}` : ""}`,
       { method: "POST" },
     ),
   selectIntelligenceCandidate: (
@@ -1976,6 +1994,12 @@ export const api = {
     apiRequest<CompanyOption[]>(
       `/api/v1/interviews/journal/companies?q=${encodeURIComponent(query)}`,
     ),
+  interviewAIOptions: () =>
+    apiRequest<{
+      default_service_tier: "default" | "flex";
+      median_ready_minutes: number | null;
+      measured_interviews: number;
+    }>("/api/v1/interviews/journal/ai-options"),
   interviewDirections: () =>
     apiRequest<InterviewDirectionOption[]>(
       "/api/v1/interviews/journal/directions",

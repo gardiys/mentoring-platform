@@ -44,6 +44,7 @@ import {
   useSetInterviewProcessOutcome,
   useSetInterviewProcessRecruiters,
   useStartInterviewStageAnalysis,
+  useInterviewAIOptions,
   useUpdateInterviewStage,
   useUploadInterviewStageMedia,
   useUploadInterviewStageAttachments,
@@ -141,6 +142,7 @@ function StageMedia({
   const mutation = useUploadInterviewStageMedia();
   const deleteMutation = useDeleteInterviewStageMedia();
   const analysisMutation = useStartInterviewStageAnalysis();
+  const aiOptions = useInterviewAIOptions();
   const storedMediaKind = stage.media
     ? mediaKind(stage.media.content_type, stage.media.filename)
     : null;
@@ -332,6 +334,12 @@ function StageMedia({
             </audio>
           )}
           <Group justify="flex-end">
+            {stage.ai_analysis_service_tier && (
+              <Text size="sm" c="dimmed">
+                Режим разбора:{" "}
+                {stage.ai_analysis_service_tier === "flex" ? "Flex" : "Обычный"}
+              </Text>
+            )}
             {stage.ai_analysis_id ? (
               <Button
                 component={Link}
@@ -351,34 +359,48 @@ function StageMedia({
                 AI-разбор уже запрашивался
               </Button>
             ) : (
-              <Button
-                loading={analysisMutation.isPending}
-                onClick={() => {
-                  if (
-                    !window.confirm(
-                      "Запустить AI-разбор? Для одного собеседования это можно сделать только один раз.",
+              <>
+                <Text size="sm" c="dimmed">
+                  Режим:{" "}
+                  {aiOptions.data
+                    ? aiOptions.data.default_service_tier === "default"
+                      ? "Обычный"
+                      : "Flex"
+                    : "из настроек платформы"}
+                  .{" "}
+                  {aiOptions.data?.median_ready_minutes != null
+                    ? `По последним ${aiOptions.data.measured_interviews} разборам: около ${Math.round(aiOptions.data.median_ready_minutes)} мин до готовности.`
+                    : "Собираем данные о времени обработки."}
+                </Text>
+                <Button
+                  loading={analysisMutation.isPending}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        "Запустить AI-разбор? Для одного собеседования это можно сделать только один раз.",
+                      )
                     )
-                  )
-                    return;
-                  analysisMutation.mutate(
-                    { processId, stageId: stage.id },
-                    {
-                      onSuccess: () =>
-                        notifications.show({
-                          color: "green",
-                          message: "AI-разбор запущен",
-                        }),
-                      onError: (error) =>
-                        notifications.show({
-                          color: "red",
-                          message: error.message,
-                        }),
-                    },
-                  );
-                }}
-              >
-                Разобрать с AI
-              </Button>
+                      return;
+                    analysisMutation.mutate(
+                      { processId, stageId: stage.id },
+                      {
+                        onSuccess: () =>
+                          notifications.show({
+                            color: "green",
+                            message: "AI-разбор запущен",
+                          }),
+                        onError: (error) =>
+                          notifications.show({
+                            color: "red",
+                            message: error.message,
+                          }),
+                      },
+                    );
+                  }}
+                >
+                  Разобрать с AI
+                </Button>
+              </>
             )}
           </Group>
         </>

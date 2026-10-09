@@ -1,87 +1,19 @@
 from __future__ import annotations
 
 import logging
-import re
 from datetime import UTC, datetime
-from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.session import async_session_factory
+from app.interviews.ai_pricing import PRICING_VERSION, _count
+from app.interviews.ai_pricing import estimated_cost as estimated_cost
 from app.interviews.intelligence_models import AIRequestLog
 
 logger = logging.getLogger(__name__)
-PRICING_VERSION = "openai-public-2026-09-22"
-# https://developers.openai.com/api/docs/pricing (verified 2026-09-22).
-# Rates are USD / million tokens: ordinary input, cached input, output.
-_TEXT_PRICES = {
-    "gpt-5-mini": ("0.25", "0.025", "2"),
-    "gpt-5.6-terra": ("2", "0.2", "12"),
-    "gpt-5.6-luna": ("0.2", "0.02", "1.2"),
-}
-
-
-def pricing_model(model: str) -> str:
-    """Recognize dated snapshots of supported families, never similarly named models."""
-    return re.sub(r"-\d{4}-\d{2}-\d{2}$", "", model)
-
-
-def _count(value: object) -> int | None:
-    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
-
-
-def estimated_cost(
-    model: str,
-    tier: str,
-    input_tokens: int,
-    cached_tokens: int,
-    output_tokens: int,
-    *,
-    cache_write_tokens: int | None = None,
-) -> Decimal | None:
-    """Estimate only known prices and complete, consistent token usage."""
-    model = pricing_model(model)
-    if min(input_tokens, cached_tokens, output_tokens) < 0 or cached_tokens > input_tokens:
-        return None
-    writes = cache_write_tokens or 0
-    if writes < 0 or writes + cached_tokens > input_tokens:
-        return None
-    if model in _TEXT_PRICES:
-        if tier not in {"default", "flex", "batch", "priority", "fast"}:
-            return None
-        input_rate, cached_rate, output_rate = map(Decimal, _TEXT_PRICES[model])
-        has_write_pricing = model.startswith("gpt-5.6-")
-        # Old logs lack write-token details. Do not silently count them as ordinary input.
-        if has_write_pricing and cache_write_tokens is None:
-            return None
-        if not has_write_pricing and writes:
-            return None
-        multiplier = Decimal("0.5") if tier in {"flex", "batch"} else Decimal("1")
-        if tier in {"priority", "fast"}:
-            multiplier = Decimal("2") if has_write_pricing else Decimal("1.8")
-        if has_write_pricing and input_tokens > 272_000:
-            input_rate *= 2
-            cached_rate *= 2
-            output_rate *= Decimal("1.5")
-        write_rate = input_rate * Decimal("1.25")
-    elif model == "text-embedding-3-small" and tier == "default" and not writes:
-        input_rate, cached_rate, output_rate, write_rate = map(Decimal, ("0.02", "0.02", "0", "0"))
-        multiplier = Decimal("1")
-    else:
-        return None
-    return (
-        (
-            (input_tokens - cached_tokens - writes) * input_rate
-            + cached_tokens * cached_rate
-            + writes * write_rate
-            + output_tokens * output_rate
-        )
-        * multiplier
-        / Decimal(1_000_000)
-    ).quantize(Decimal("0.0000000001"))
 
 
 class AIRequestRecorder:
@@ -91,7 +23,15 @@ class AIRequestRecorder:
     ) -> None:
         self.session_factory = session_factory
 
-    async def start(self, operation: str, model: str, tier: str, recovery: bool) -> UUID:
+    async def start(
+        self,
+        operation: str,
+        model: str,
+        tier: str,
+        recovery: bool,
+        *,
+        request: dict[str, Any] | None = None,
+    ) -> UUID:
         # Persist intent before spending. An interrupted/unknown call is not a zero-cost call.
         async with self.session_factory() as session:
             row = AIRequestLog(
@@ -101,7 +41,23 @@ class AIRequestRecorder:
                 status="started",
                 recovery=recovery,
             )
+            from app.interviews.intelligence_request_policy import interview_request_id
+
+            row.interview_id = interview_request_id.get()
             session.add(row)
+            await session.flush()
+            if request is not None:
+                from app.interviews.card_ai_budget import reserve_card_request
+
+                await reserve_card_request(session, row.id, operation, model, tier, request)
+                from app.interviews.card_ai_budget import card_budget_context
+                from app.interviews.card_automation_models import CardAICharge
+
+                context = card_budget_context.get()
+                if context is not None:
+                    charge = await session.get(CardAICharge, row.id)
+                    row.cluster_id = context[0]
+                    row.interview_id = charge.interview_id if charge is not None else None
             await session.commit()
             return row.id
 
@@ -173,7 +129,7 @@ class AIRequestRecorder:
         await self._update(
             call_id,
             {
-                "status": "error",
+                "status": "interrupted" if error_code == "interrupted" else "error",
                 "error_code": error_code[:100],
                 "finished_at": datetime.now(UTC),
             },
@@ -186,6 +142,15 @@ class AIRequestRecorder:
                     update(AIRequestLog).where(AIRequestLog.id == call_id).values(**values)
                 )
                 await session.commit()
+                operation = await session.scalar(
+                    select(AIRequestLog.operation).where(AIRequestLog.id == call_id)
+                )
+            if operation in {"generate_answer_contract", "validate_answer_contract"}:
+                from app.interviews.card_ai_budget import settle_card_request
+
+                async with self.session_factory() as session:
+                    await settle_card_request(session, call_id)
+                    await session.commit()
         except Exception:
             # A billing DB failure after a paid response must not trigger another paid request.
             # Only financial metadata is logged; the durable started row remains reconcilable.

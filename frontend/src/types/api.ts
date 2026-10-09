@@ -1143,6 +1143,7 @@ export type QuestionOccurrenceStatus =
   | "failed";
 
 export type AnswerContractStatus =
+  | "not_selected"
   | "review_pending"
   | "waiting_for_ai"
   | "repair_pending"
@@ -1153,6 +1154,8 @@ export type AnswerContractStatus =
   | "rejected";
 
 export type AutomationDecisionType =
+  | "card_ai_deferred"
+  | "card_ai_cost_written_off"
   | "question_routed"
   | "routed_as_noise"
   | "routed_as_non_flashcard"
@@ -1240,6 +1243,7 @@ export interface CardAutomationAnswerValidation {
   version_sensitive_claims: string[];
   version_warnings?: string[];
   question_is_self_contained?: boolean | null;
+  requires_additional_sources?: boolean;
   confidence: number;
 }
 
@@ -1266,8 +1270,11 @@ export interface QuestionClusterSummary {
     | "ai_processing"
     | "manual_review"
     | "waiting_for_ai"
+    | "not_selected"
     | "waiting_for_sources"
     | null;
+  generation_deferred_reason?: string | null;
+  generation_retry_after?: string | null;
   canonical_question: string;
   learning_object_type: LearningObjectType;
   deck_id: string | null;
@@ -1370,6 +1377,15 @@ export interface QuestionClusterDetail extends QuestionClusterSummary {
   answer_status: AnswerContractStatus | null;
   ai_retry_after?: string | null;
   ai_error_code?: string | null;
+  card_ai_budget?: Record<string, string>;
+  card_ai_unknown_costs?: Array<{
+    request_id: string;
+    operation: string;
+    amount_usd: string;
+    created_at: string;
+    retry_safe_after: string;
+    can_write_off: boolean;
+  }>;
   answer_repair_attempts?: number;
   occurrences: QuestionClusterOccurrence[];
   top_card_matches: CardAutomationCardCandidate[];
@@ -1401,6 +1417,8 @@ export interface QuestionClusterPage {
   manual_review_total?: number;
   waiting_for_ai_total?: number;
   waiting_for_sources_total?: number;
+  not_selected_total?: number;
+  unknown_cost_total?: number;
   limit: number;
   offset: number;
 }
@@ -1486,6 +1504,7 @@ export interface QuestionClusterFilters {
   processingOnly?: boolean;
   waitingOnly?: boolean;
   sourcesOnly?: boolean;
+  notSelectedOnly?: boolean;
   sortBy:
     | "priority_score"
     | "last_seen_at"
@@ -1586,6 +1605,12 @@ export interface CardAutomationSettingsRead {
   min_distinct_interviews_for_promotion: number;
   min_distinct_companies_for_promotion: number;
   min_failed_answers_for_promotion: number;
+  card_ai_max_topics_per_interview?: number;
+  card_ai_budget_per_interview_usd?: number;
+  card_ai_daily_budget_usd?: number;
+  card_ai_maintenance_budget_usd?: number;
+  card_ai_min_priority_score?: number;
+  card_ai_legacy_backlog_enabled?: boolean;
   audit_sample_percent: number;
   personal_review_enabled: boolean;
   global_auto_publish_enabled: boolean;

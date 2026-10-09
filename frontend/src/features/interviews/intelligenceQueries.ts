@@ -228,7 +228,7 @@ export function useAdminRestartIntelligenceInterview() {
     }: {
       id: string;
       force: boolean;
-      economy: boolean;
+      economy?: boolean;
     }) => api.adminRestartIntelligenceInterview(id, force, economy),
   );
 }

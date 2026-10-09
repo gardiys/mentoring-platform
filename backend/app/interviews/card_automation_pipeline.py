@@ -1392,38 +1392,38 @@ async def recalculate_cluster_stats(
         cluster_confidence=cluster.cluster_confidence,
     )
     cluster.stats_revision = cluster.membership_revision
-    promotion = promotion_result(
-        distinct_interviews=cluster.distinct_interviews_count,
-        distinct_companies=cluster.distinct_companies_count,
-        failed_answers=cluster.failed_answers_count,
-        min_interviews=settings.min_distinct_interviews_for_promotion,
-        min_companies=settings.min_distinct_companies_for_promotion,
-        min_failures=settings.min_failed_answers_for_promotion,
-        manual_important=cluster.manual_important,
-    )
-    auto_publish = (
-        settings.enabled and settings.global_auto_publish_enabled and not settings.shadow_mode
-    )
-    if (promotion.promoted or auto_publish) and cluster.status in {
-        QuestionClusterStatus.SHADOW,
-        QuestionClusterStatus.CANDIDATE,
-    }:
-        cluster.status = QuestionClusterStatus.NEEDS_REVIEW
-        cluster.promoted_at = datetime.now(UTC)
-        cluster.promotion_reason = promotion.reason or "Automatic card generation enabled"
-        cluster.version += 1
-        await record_automation_decision(
-            session,
-            entity_type="cluster",
-            entity_id=cluster.id,
-            idempotency_key=f"cluster:{cluster.id}:promotion:{cluster.membership_revision}",
-            decision_type=AutomationDecisionType.CLUSTER_PROMOTED,
-            decision_source=AutomationDecisionSource.RULE,
-            reason=promotion.reason or "Promotion threshold reached",
-            confidence=cluster.cluster_confidence,
-            settings=settings,
-            selected_cluster_id=cluster.id,
+    if not settings.cluster_moderation_enabled:
+        promotion = promotion_result(
+            distinct_interviews=cluster.distinct_interviews_count,
+            distinct_companies=cluster.distinct_companies_count,
+            failed_answers=cluster.failed_answers_count,
+            min_interviews=settings.min_distinct_interviews_for_promotion,
+            min_companies=settings.min_distinct_companies_for_promotion,
+            min_failures=settings.min_failed_answers_for_promotion,
+            manual_important=cluster.manual_important,
         )
+        if (
+            promotion.promoted
+            and cluster.priority_score >= settings.card_ai_min_priority_score
+            and cluster.status in {QuestionClusterStatus.SHADOW, QuestionClusterStatus.CANDIDATE}
+        ):
+            cluster.status = QuestionClusterStatus.NEEDS_REVIEW
+            cluster.promoted_at = datetime.now(UTC)
+            cluster.promotion_reason = promotion.reason
+            cluster.version += 1
+            await record_automation_decision(
+                session,
+                entity_type="cluster",
+                entity_id=cluster.id,
+                idempotency_key=f"cluster:{cluster.id}:promotion:{cluster.membership_revision}",
+                decision_type=AutomationDecisionType.CLUSTER_PROMOTED,
+                decision_source=AutomationDecisionSource.RULE,
+                reason=promotion.reason or "Promotion threshold reached",
+                confidence=cluster.cluster_confidence,
+                settings=settings,
+                selected_cluster_id=cluster.id,
+            )
+    # Promotion/paid admission is ranked once all occurrence routing finishes.
 
 
 async def link_occurrence_to_card(

@@ -41,6 +41,7 @@ from app.interviews.media import ensure_stage_media_browser_playable
 from app.interviews.models import InterviewProcessStage, InterviewProcessStatus
 from app.interviews.schemas import (
     CompanyOption,
+    InterviewAIOptions,
     InterviewDirectionOption,
     InterviewDownloadUrl,
     InterviewMultipartUploadIntent,
@@ -70,6 +71,35 @@ Session = Annotated[AsyncSession, Depends(get_db_session)]
 settings = get_settings()
 store = InterviewUploadStore(settings)
 logger = logging.getLogger(__name__)
+
+
+@router.get("/ai-options", response_model=InterviewAIOptions)
+async def ai_options(
+    user: JournalUser, session: Annotated[AsyncSession, Depends(get_db_session)]
+) -> InterviewAIOptions:
+    from datetime import UTC, datetime, timedelta
+    from statistics import median
+
+    from sqlalchemy import select
+
+    from app.interviews.intelligence_models import IntelligenceInterview
+
+    tier = get_settings().interview_ai_default_service_tier
+    timings = (
+        await session.execute(
+            select(IntelligenceInterview.ai_started_at, IntelligenceInterview.ai_ready_at).where(
+                IntelligenceInterview.ai_service_tier == tier,
+                IntelligenceInterview.ai_started_at >= datetime.now(UTC) - timedelta(days=30),
+                IntelligenceInterview.ai_ready_at.is_not(None),
+            )
+        )
+    ).all()
+    durations = [(ready - start).total_seconds() / 60 for start, ready in timings if ready >= start]
+    return InterviewAIOptions(
+        default_service_tier=tier,
+        median_ready_minutes=round(median(durations), 1) if durations else None,
+        measured_interviews=len(durations),
+    )
 
 
 async def _enqueue_ai_analysis(interview_id: UUID) -> None:
@@ -313,8 +343,11 @@ async def journal_start_stage_ai_analysis(
     stage_id: UUID,
     session: Session,
     student: JournalUser,
+    ai_service_tier: Literal["default", "flex"] | None = Query(default=None),
 ) -> IntelligenceInterviewDetail:
-    interview = await start_stage_ai_analysis(session, student, process_id, stage_id)
+    interview = await start_stage_ai_analysis(
+        session, student, process_id, stage_id, ai_service_tier=ai_service_tier
+    )
     try:
         await _enqueue_ai_analysis(interview.id)
     except Exception:

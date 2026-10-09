@@ -4,7 +4,7 @@ import re
 import unicodedata
 from collections import defaultdict
 from datetime import UTC, datetime, time, timedelta
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -24,7 +24,6 @@ from app.interviews.card_automation_types import (
     QuestionOccurrenceStatus,
 )
 from app.interviews.card_frequency import effective_card_frequency, refresh_card_frequency
-from app.interviews.companies import resolve_company
 from app.interviews.feedback_grounding import (
     difficulty_weight,
     ground_communication,
@@ -63,7 +62,6 @@ from app.interviews.intelligence_schemas import (
     AdminQuestionModerationSummary,
     IntelligenceAnalysisArchiveRead,
     IntelligenceAnswerRead,
-    IntelligenceInterviewCreate,
     IntelligenceInterviewDetail,
     IntelligenceInterviewOverviewRead,
     IntelligenceInterviewSummary,
@@ -87,7 +85,6 @@ from app.interviews.models import (
     InterviewDeck,
     InterviewProcess,
     InterviewProcessStage,
-    InterviewProcessStatus,
     InterviewStageComment,
     InterviewStageType,
     InterviewTopicSelection,
@@ -100,7 +97,6 @@ from app.interviews.question_matching import (
     rank_question_candidates,
 )
 from app.mentors.models import MentorStudent, MentorTrackAssignment
-from app.tracks.access import has_track_access
 from app.tracks.models import LearningTrack
 from app.users.models import User, UserRole
 
@@ -652,7 +648,15 @@ async def start_stage_ai_analysis(
     user: User,
     process_id: UUID,
     stage_id: UUID,
+    *,
+    ai_service_tier: Literal["default", "flex"] | None = None,
 ) -> IntelligenceInterview:
+    if ai_service_tier is not None and user.role is not UserRole.ADMIN:
+        api_error(
+            403,
+            "interview_ai_tariff_admin_only",
+            "Тариф AI-разбора задаёт платформа; изменить его может администратор",
+        )
     now = datetime.now(UTC)
     stage = await session.scalar(
         select(InterviewProcessStage)
@@ -691,6 +695,8 @@ async def start_stage_ai_analysis(
         student_id=user.id,
         interview_type=STAGE_TO_TYPE[stage.stage_type],
         processing_status=IntelligenceProcessingStatus.UPLOADED,
+        ai_service_tier=ai_service_tier or get_settings().interview_ai_default_service_tier,
+        ai_started_at=datetime.now(UTC),
     )
     stage.ai_analysis_requested_at = now
     session.add(interview)
@@ -699,55 +705,6 @@ async def start_stage_ai_analysis(
     await session.commit()
     await session.refresh(interview)
     return interview
-
-
-async def create_intelligence_interview(
-    session: AsyncSession,
-    student: User,
-    payload: IntelligenceInterviewCreate,
-) -> IntelligenceInterviewDetail:
-    if student.role is not UserRole.STUDENT:
-        api_error(403, "student_access_required", "Only students can create AI interview reviews")
-    if not await has_track_access(session, student, payload.track_id):
-        api_error(422, "interview_direction_not_available", "Direction is not available")
-    track = await session.get(LearningTrack, payload.track_id)
-    if track is None or not track.is_published:
-        api_error(422, "interview_direction_not_available", "Direction is not available")
-    company = await resolve_company(
-        session,
-        payload.company_name,
-        company_id=payload.company_id,
-        raw_alias=payload.company_alias,
-        alias_confirmed=payload.company_alias_confirmed,
-        suggested_by=student,
-    )
-    process = InterviewProcess(
-        user_id=student.id,
-        track_id=track.id,
-        company_id=company.id,
-        company_name=company.name,
-        recruiter_telegram_usernames=[],
-        status=InterviewProcessStatus.ACTIVE,
-    )
-    session.add(process)
-    await session.flush()
-    stage = InterviewProcessStage(
-        process_id=process.id,
-        stage_type=TYPE_TO_STAGE[payload.interview_type],
-        scheduled_at=payload.interviewed_at,
-    )
-    session.add(stage)
-    await session.flush()
-    interview = IntelligenceInterview(
-        stage_id=stage.id,
-        student_id=student.id,
-        position_name=payload.position_name,
-        interview_type=payload.interview_type,
-        processing_status=IntelligenceProcessingStatus.DRAFT,
-    )
-    session.add(interview)
-    await session.commit()
-    return await intelligence_detail(session, student, interview.id)
 
 
 async def get_intelligence_interview(
@@ -1692,7 +1649,7 @@ async def prepare_analysis_restart(
     interview_id: UUID,
     *,
     force: bool = False,
-    economy: bool = False,
+    economy: bool | None = None,
 ) -> IntelligenceInterview:
     if admin.role is not UserRole.ADMIN:
         api_error(403, "analysis_restart_forbidden", "Пересчёт доступен только администратору.")
@@ -1755,7 +1712,10 @@ async def prepare_analysis_restart(
         )
     )
     interview.analysis_revision += 1
-    interview.ai_service_tier = "flex" if economy else "default"
+    interview.ai_started_at = datetime.now(UTC)
+    interview.ai_ready_at = None
+    if economy is not None:
+        interview.ai_service_tier = "flex" if economy else "default"
     interview.ai_summary_payload = None
     interview.ai_summary_model = None
     interview.ai_summary_prompt_version = None

@@ -15,6 +15,7 @@ from app.interviews.card_automation_schemas import (
     AutomationDecisionPage,
     AutomationDecisionRead,
     AutomationDecisionReviewMutation,
+    CardAICostWriteOffMutation,
     CardAutomationMetricsFilters,
     CardAutomationMetricsRead,
     CardAutomationSettingsList,
@@ -81,6 +82,7 @@ from app.interviews.card_automation_service import (
     split_question_cluster,
     update_card_automation_settings,
     update_question_cluster_draft,
+    write_off_unknown_card_cost,
 )
 from app.interviews.card_automation_types import (
     AutomationDecisionSource,
@@ -194,6 +196,7 @@ def _cluster_filters(
     processing_only: bool,
     waiting_only: bool,
     sources_only: bool,
+    not_selected_only: bool,
     sort_by: ClusterSort,
     sort_order: SortOrder,
     limit: int,
@@ -217,6 +220,7 @@ def _cluster_filters(
         processing_only=processing_only,
         waiting_only=waiting_only,
         sources_only=sources_only,
+        not_selected_only=not_selected_only,
         sort_by=sort_by,
         sort_order=sort_order,
         limit=limit,
@@ -254,6 +258,7 @@ async def _clusters(
     processing_only: bool,
     waiting_only: bool,
     sources_only: bool,
+    not_selected_only: bool,
     sort_by: ClusterSort,
     sort_order: SortOrder,
     limit: int,
@@ -280,6 +285,7 @@ async def _clusters(
             processing_only=processing_only,
             waiting_only=waiting_only,
             sources_only=sources_only,
+            not_selected_only=not_selected_only,
             sort_by=sort_by,
             sort_order=sort_order,
             limit=limit,
@@ -309,6 +315,7 @@ async def admin_clusters(
     processing_only: Annotated[bool, Query()] = False,
     waiting_only: Annotated[bool, Query()] = False,
     sources_only: Annotated[bool, Query()] = False,
+    not_selected_only: Annotated[bool, Query()] = False,
     sort_by: Annotated[ClusterSort, Query()] = "priority_score",
     sort_order: Annotated[SortOrder, Query()] = "desc",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -334,6 +341,7 @@ async def admin_clusters(
         processing_only,
         waiting_only,
         sources_only,
+        not_selected_only,
         sort_by,
         sort_order,
         limit,
@@ -362,6 +370,7 @@ async def mentor_clusters(
     processing_only: Annotated[bool, Query()] = False,
     waiting_only: Annotated[bool, Query()] = False,
     sources_only: Annotated[bool, Query()] = False,
+    not_selected_only: Annotated[bool, Query()] = False,
     sort_by: Annotated[ClusterSort, Query()] = "priority_score",
     sort_order: Annotated[SortOrder, Query()] = "desc",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -387,6 +396,7 @@ async def mentor_clusters(
         processing_only,
         waiting_only,
         sources_only,
+        not_selected_only,
         sort_by,
         sort_order,
         limit,
@@ -480,6 +490,19 @@ async def mentor_reprocess_occurrence(
     _idempotency_key: IdempotencyKey,
 ) -> QuestionOccurrenceReprocessResult:
     return await reprocess_question_occurrence(session, mentor, question_id, payload)
+
+
+@admin_router.post(
+    "/clusters/{cluster_id}/write-off-ai-cost", response_model=QuestionClusterMutationResult
+)
+async def admin_write_off_card_cost(
+    cluster_id: UUID,
+    payload: CardAICostWriteOffMutation,
+    session: Session,
+    admin: AdminUser,
+    _idempotency_key: IdempotencyKey,
+) -> QuestionClusterMutationResult:
+    return await write_off_unknown_card_cost(session, admin, cluster_id, payload)
 
 
 @admin_router.post(

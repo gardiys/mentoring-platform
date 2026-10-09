@@ -397,6 +397,7 @@ async def test_openai_answer_review_recovers_from_non_russian_response() -> None
     )
     provider = object.__new__(OpenAIInterviewAIProvider)
     provider.analysis_model = "strong-analysis"
+    provider.card_validation_model = "strong-analysis"
     provider.light_review_model = "cheap-review"
     provider.review_max_output_tokens = 4_000
     provider.client = SimpleNamespace(responses=SimpleNamespace(parse=parse))
@@ -887,6 +888,7 @@ async def test_openai_answer_contract_uses_strong_model_and_source_allowlist() -
     )
     provider = object.__new__(OpenAIInterviewAIProvider)
     provider.analysis_model = "strong-analysis"
+    provider.card_validation_model = "strong-analysis"
     provider.review_max_output_tokens = 1_200
     provider.client = SimpleNamespace(responses=SimpleNamespace(parse=parse))
 
@@ -931,6 +933,7 @@ async def test_openai_answer_contract_rejects_reference_outside_source_allowlist
     )
     provider = object.__new__(OpenAIInterviewAIProvider)
     provider.analysis_model = "strong-analysis"
+    provider.card_validation_model = "strong-analysis"
     provider.review_max_output_tokens = 1_200
     provider.client = SimpleNamespace(
         responses=SimpleNamespace(
@@ -973,6 +976,7 @@ async def test_openai_answer_validation_uses_strong_model_and_enforces_sources()
     )
     provider = object.__new__(OpenAIInterviewAIProvider)
     provider.analysis_model = "strong-analysis"
+    provider.card_validation_model = "strong-analysis"
     provider.review_max_output_tokens = 900
     provider.client = SimpleNamespace(responses=SimpleNamespace(parse=parse))
     contract = AnswerContract(

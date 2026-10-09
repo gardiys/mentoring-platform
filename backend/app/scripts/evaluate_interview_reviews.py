@@ -133,7 +133,15 @@ class EvaluationRecorder(AIRequestRecorder):
         self.rows: dict[UUID, dict[str, Any]] = {}
         self.label: dict[str, str] = {}
 
-    async def start(self, operation: str, model: str, tier: str, recovery: bool) -> UUID:
+    async def start(
+        self,
+        operation: str,
+        model: str,
+        tier: str,
+        recovery: bool,
+        *,
+        request: dict[str, Any] | None = None,
+    ) -> UUID:
         if len(self.rows) >= self.max_requests:
             raise InterviewAIError(
                 "EVALUATION_CALL_LIMIT", "Evaluation limit reached", retryable=False

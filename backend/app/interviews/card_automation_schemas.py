@@ -97,6 +97,7 @@ class AnswerContract(StrictAPIModel):
 
 class AnswerValidationResult(StrictAPIModel):
     supported: bool
+    requires_additional_sources: bool = False
     supporting_source_references: list[str] = Field(default_factory=list)
     unsupported_claims: list[str] = Field(default_factory=list)
     contradictions: list[str] = Field(default_factory=list)
@@ -136,8 +137,17 @@ class QuestionClusterSummary(StrictAPIModel):
     direction_title: str
     status: QuestionClusterStatus
     processing_state: (
-        Literal["ai_processing", "manual_review", "waiting_for_ai", "waiting_for_sources"] | None
+        Literal[
+            "ai_processing",
+            "manual_review",
+            "waiting_for_ai",
+            "waiting_for_sources",
+            "not_selected",
+        ]
+        | None
     ) = None
+    generation_deferred_reason: str | None = None
+    generation_retry_after: datetime | None = None
     canonical_question: str
     learning_object_type: LearningObjectType
     deck_id: UUID | None = None
@@ -180,6 +190,7 @@ class QuestionClusterListFilters(StrictAPIModel):
     processing_only: bool = False
     waiting_only: bool = False
     sources_only: bool = False
+    not_selected_only: bool = False
     sort_by: Literal[
         "priority_score",
         "last_seen_at",
@@ -219,6 +230,8 @@ class QuestionClusterPage(StrictAPIModel):
     manual_review_total: int = Field(default=0, ge=0)
     waiting_for_ai_total: int = Field(default=0, ge=0)
     waiting_for_sources_total: int = Field(default=0, ge=0)
+    not_selected_total: int = Field(default=0, ge=0)
+    unknown_cost_total: int = Field(default=0, ge=0)
     limit: int = Field(ge=1)
     offset: int = Field(ge=0)
 
@@ -357,6 +370,21 @@ class QuestionClusterAnswerGenerationMutation(StrictAPIModel):
     expected_version: int = Field(ge=1)
 
 
+class CardAICostWriteOffMutation(StrictAPIModel):
+    expected_version: int = Field(ge=1)
+    request_id: UUID
+    reason: str = Field(min_length=1, max_length=2_000)
+
+
+class CardAIUnknownCostRead(StrictAPIModel):
+    request_id: UUID
+    operation: str
+    amount_usd: str
+    created_at: datetime
+    retry_safe_after: datetime
+    can_write_off: bool
+
+
 class QuestionClusterAnswerGenerationResult(StrictAPIModel):
     cluster_id: UUID
     version: int = Field(ge=1)
@@ -421,6 +449,7 @@ class QuestionClusterTopicOption(StrictAPIModel):
 
 
 class QuestionClusterDetail(QuestionClusterSummary):
+    card_ai_unknown_costs: list[CardAIUnknownCostRead] = Field(default_factory=list)
     normalized_canonical_question: str
     representative_occurrence_id: UUID | None = None
     merged_into_cluster_id: UUID | None = None
@@ -435,6 +464,7 @@ class QuestionClusterDetail(QuestionClusterSummary):
     answer_status: AnswerContractStatus | None = None
     ai_retry_after: datetime | None = None
     ai_error_code: str | None = None
+    card_ai_budget: dict[str, str] = Field(default_factory=dict)
     answer_repair_attempts: int = 0
     decisions: list[AutomationDecisionRead] = Field(default_factory=list)
     manual_history: list[QuestionClusterManualHistoryRead] = Field(default_factory=list)
@@ -666,6 +696,7 @@ class AutomationDecisionOverrideMutation(StrictAPIModel):
 
 
 class CardAutomationSettingsRead(StrictAPIModel):
+    card_ai_legacy_backlog_enabled: bool = False
     direction_id: UUID
     direction_slug: str
     direction_title: str
@@ -682,6 +713,11 @@ class CardAutomationSettingsRead(StrictAPIModel):
     min_distinct_interviews_for_promotion: int = Field(ge=1)
     min_distinct_companies_for_promotion: int = Field(ge=1)
     min_failed_answers_for_promotion: int = Field(ge=1)
+    card_ai_max_topics_per_interview: int = Field(default=10, ge=0, le=1000)
+    card_ai_budget_per_interview_usd: float = Field(default=0.40, ge=0, allow_inf_nan=False)
+    card_ai_daily_budget_usd: float = Field(default=5, ge=0, allow_inf_nan=False)
+    card_ai_maintenance_budget_usd: float = Field(default=1, ge=0, allow_inf_nan=False)
+    card_ai_min_priority_score: float = Field(default=4, ge=0, allow_inf_nan=False)
     audit_sample_percent: float = Field(ge=0, le=100)
     personal_review_enabled: bool
     global_auto_publish_enabled: bool
@@ -696,6 +732,7 @@ class CardAutomationSettingsList(StrictAPIModel):
 
 
 class CardAutomationSettingsUpdate(StrictAPIModel):
+    card_ai_legacy_backlog_enabled: bool = False
     direction_id: UUID
     expected_version: int = Field(ge=1)
     enabled: bool
@@ -711,6 +748,11 @@ class CardAutomationSettingsUpdate(StrictAPIModel):
     min_distinct_interviews_for_promotion: int = Field(ge=1)
     min_distinct_companies_for_promotion: int = Field(ge=1)
     min_failed_answers_for_promotion: int = Field(ge=1)
+    card_ai_max_topics_per_interview: int = Field(default=10, ge=0, le=1000)
+    card_ai_budget_per_interview_usd: float = Field(default=0.40, ge=0, allow_inf_nan=False)
+    card_ai_daily_budget_usd: float = Field(default=5, ge=0, allow_inf_nan=False)
+    card_ai_maintenance_budget_usd: float = Field(default=1, ge=0, allow_inf_nan=False)
+    card_ai_min_priority_score: float = Field(default=4, ge=0, allow_inf_nan=False)
     audit_sample_percent: float = Field(ge=0, le=100)
     personal_review_enabled: bool
     global_auto_publish_enabled: bool

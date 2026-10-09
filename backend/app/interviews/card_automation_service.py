@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
+from app.core.config import get_settings
 from app.core.errors import api_error
 from app.interviews.card_automation_cleanup import (
     sync_cluster_embedding_from_representative,
@@ -26,6 +27,7 @@ from app.interviews.card_automation_cleanup import (
 from app.interviews.card_automation_domain import cluster_allowed_actions, next_personal_review
 from app.interviews.card_automation_models import (
     AutomationDecision,
+    CardAICharge,
     CardAutomationSettings,
     InterviewCardDuplicateReview,
     PersonalReviewItem,
@@ -47,6 +49,8 @@ from app.interviews.card_automation_schemas import (
     AutomationDecisionPage,
     AutomationDecisionRead,
     AutomationDecisionReviewMutation,
+    CardAICostWriteOffMutation,
+    CardAIUnknownCostRead,
     CardAutomationMetricsFilters,
     CardAutomationMetricsRead,
     CardAutomationSettingsList,
@@ -108,6 +112,7 @@ from app.interviews.card_automation_types import (
 from app.interviews.card_cluster_workflow import (
     ai_processing_condition,
     manual_review_condition,
+    not_selected_condition,
     waiting_for_ai_condition,
     waiting_for_sources_condition,
 )
@@ -517,7 +522,9 @@ async def _cluster_summaries(
             direction_title=track.title,
             status=cluster.status,
             processing_state=(
-                "waiting_for_sources"
+                "not_selected"
+                if cluster.answer_status == AnswerContractStatus.NOT_SELECTED
+                else "waiting_for_sources"
                 if cluster.answer_status == AnswerContractStatus.NEEDS_EXPERT_SOURCE
                 and cluster.ai_error_code == "no_trusted_sources"
                 else "waiting_for_ai"
@@ -527,7 +534,10 @@ async def _cluster_summaries(
                 else "manual_review"
             )
             if cluster.status is QuestionClusterStatus.NEEDS_REVIEW
+            or cluster.answer_status == AnswerContractStatus.NOT_SELECTED
             else None,
+            generation_deferred_reason=cluster.generation_deferred_reason,
+            generation_retry_after=cluster.generation_retry_after,
             canonical_question=cluster.canonical_question,
             learning_object_type=cluster.learning_object_type,
             deck_id=cluster.deck_id,
@@ -707,7 +717,9 @@ async def _cluster_filter_conditions(
 
 def _selected_cluster_work(filters: QuestionClusterListFilters) -> Any:
     return (
-        waiting_for_sources_condition()
+        not_selected_condition()
+        if filters.not_selected_only
+        else waiting_for_sources_condition()
         if filters.sources_only
         else waiting_for_ai_condition()
         if filters.waiting_only
@@ -758,6 +770,16 @@ async def list_question_clusters(
     waiting = waiting_for_ai_condition()
     sources_waiting = waiting_for_sources_condition()
     selected_work = _selected_cluster_work(filters)
+    from app.interviews.card_ai_budget import unknown_charge_condition
+
+    unknown_total = (
+        select(func.count())
+        .select_from(CardAICharge)
+        .join(QuestionCluster, QuestionCluster.id == CardAICharge.cluster_id)
+        .where(*conditions, unknown_charge_condition(), CardAICharge.amount_usd > 0)
+        .correlate(None)
+        .scalar_subquery()
+    )
     totals = (
         await session.execute(
             select(
@@ -766,6 +788,7 @@ async def list_question_clusters(
                 func.count(QuestionCluster.id).filter(manual),
                 func.count(QuestionCluster.id).filter(waiting),
                 func.count(QuestionCluster.id).filter(sources_waiting),
+                func.count(QuestionCluster.id).filter(not_selected_condition()),
                 func.count(QuestionCluster.id).filter(
                     and_(processing, QuestionCluster.id.in_(running_ids or set()))
                 ),
@@ -775,6 +798,7 @@ async def list_question_clusters(
                         QuestionCluster.answer_status == AnswerContractStatus.REPAIR_PENDING,
                     )
                 ),
+                unknown_total,
             ).where(*conditions)
         )
     ).one()
@@ -819,13 +843,15 @@ async def list_question_clusters(
         ),
         total=totals[0],
         ai_processing_total=totals[1],
-        ai_running_total=totals[5] if running_ids is not None else None,
-        ai_queued_total=max(totals[1] - totals[5], 0) if running_ids is not None else None,
-        ai_repair_total=totals[6],
+        ai_running_total=totals[6] if running_ids is not None else None,
+        ai_queued_total=max(totals[1] - totals[6], 0) if running_ids is not None else None,
+        ai_repair_total=totals[7],
         completed_last_hour=completed or 0,
         manual_review_total=totals[2],
         waiting_for_ai_total=totals[3],
         waiting_for_sources_total=totals[4],
+        not_selected_total=totals[5],
+        unknown_cost_total=totals[8],
         limit=filters.limit,
         offset=filters.offset,
     )
@@ -1358,7 +1384,38 @@ async def get_question_cluster_detail(
         topics_by_deck.setdefault((option_deck_id, deck_title), {}).setdefault(
             _normalized_topic_label(category), category
         )
+    from app.interviews.card_ai_budget import (
+        budget_snapshot,
+        request_deadline,
+        unknown_charge_condition,
+    )
+
+    settings = await _settings_model(session, cluster.direction_id)
+    card_budget = await budget_snapshot(session, cluster, settings)
+    unknown_rows = list(
+        await session.scalars(
+            select(CardAICharge)
+            .where(
+                CardAICharge.cluster_id == cluster.id,
+                CardAICharge.amount_usd > 0,
+                unknown_charge_condition(),
+            )
+            .order_by(CardAICharge.created_at)
+        )
+    )
     return QuestionClusterDetail(
+        card_ai_unknown_costs=[
+            CardAIUnknownCostRead(
+                request_id=row.request_id,
+                operation=row.operation,
+                amount_usd=str(row.amount_usd - row.validation_reserve_usd),
+                created_at=row.created_at,
+                retry_safe_after=request_deadline(row),
+                can_write_off=request_deadline(row) <= datetime.now(UTC),
+            )
+            for row in unknown_rows
+        ],
+        card_ai_budget=card_budget,
         **summary.model_dump(),
         normalized_canonical_question=cluster.normalized_canonical_question,
         representative_occurrence_id=cluster.representative_occurrence_id,
@@ -1554,6 +1611,74 @@ async def reprocess_question_occurrence(
     )
 
 
+async def write_off_unknown_card_cost(
+    session: AsyncSession, viewer: User, cluster_id: UUID, payload: CardAICostWriteOffMutation
+) -> QuestionClusterMutationResult:
+    """Book a conservative charge explicitly; provider usage remains unknown."""
+    from app.interviews.card_ai_budget import (
+        ZERO,
+        acquire_card_budget_lock,
+        reconcile_card_charges,
+        request_deadline,
+    )
+
+    _require_admin(viewer)
+    await acquire_card_budget_lock(session, "write_off_unknown")
+    await reconcile_card_charges(session)
+    cluster, track = await _cluster_row(session, viewer, cluster_id, lock=True)
+    charge = await session.get(CardAICharge, payload.request_id)
+    if charge is None or charge.cluster_id != cluster.id:
+        api_error(404, "card_ai_charge_not_found", "Запрос карточки не найден")
+    key = f"cluster:{cluster.id}:cost-write-off:{payload.request_id}"
+    existing = await session.scalar(
+        select(AutomationDecision).where(AutomationDecision.idempotency_key == key)
+    )
+    if existing is not None:
+        return QuestionClusterMutationResult(
+            cluster=(await _cluster_summaries(session, viewer, [(cluster, track)]))[0],
+            decision_id=existing.id,
+        )
+    if cluster.version != payload.expected_version:
+        api_error(409, "question_cluster_version_conflict", "Кластер изменился — обновите страницу")
+    if charge.status != "unknown":
+        api_error(409, "card_ai_cost_not_unknown", "Стоимость известна или запрос ещё выполняется")
+    if request_deadline(charge) > datetime.now(UTC):
+        api_error(409, "CARD_AI_RESERVATION_BUSY", "Дождитесь окончания таймаута запроса")
+    amount = charge.amount_usd - charge.validation_reserve_usd
+    charge.amount_usd = amount
+    charge.validation_reserve_usd = ZERO
+    charge.status = "written_off"
+    charge.settled_at = datetime.now(UTC)
+    charge.reason = "admin_reservation_write_off"
+    if cluster.generation_deferred_reason == "CARD_AI_COST_UNKNOWN":
+        cluster.answer_status = None
+        cluster.generation_deferred_reason = None
+        cluster.generation_retry_after = None
+    cluster.version += 1
+    settings = await _settings_model(session, cluster.direction_id)
+    decision = await _record_cluster_decision(
+        session,
+        cluster=cluster,
+        settings=settings,
+        idempotency_key=key,
+        decision_type=AutomationDecisionType.CARD_AI_COST_WRITTEN_OFF,
+        reason=payload.reason,
+        viewer=viewer,
+        selected_cluster_id=cluster.id,
+        retrieval_scores={
+            "request_id": str(charge.request_id),
+            "booked_usd": str(amount),
+            "cost_basis": "reservation",
+            "provider_usage_known": False,
+        },
+    )
+    await session.commit()
+    return QuestionClusterMutationResult(
+        cluster=(await _cluster_summaries(session, viewer, [(cluster, track)]))[0],
+        decision_id=decision.id,
+    )
+
+
 async def request_question_cluster_answer_generation(
     session: AsyncSession,
     viewer: User,
@@ -1563,6 +1688,10 @@ async def request_question_cluster_answer_generation(
     """Queue an explicit AI answer draft request from the moderation screen."""
 
     _require_admin(viewer)
+    # Same lock order as admission: budget, then cluster. No paid HTTP in this transaction.
+    from app.interviews.card_ai_budget import acquire_card_budget_lock
+
+    await acquire_card_budget_lock(session, "manual_generation")
     cluster, _track = await _cluster_row(session, viewer, cluster_id)
     locked_cluster = await session.scalar(
         select(QuestionCluster)
@@ -1599,6 +1728,7 @@ async def request_question_cluster_answer_generation(
         None,
         AnswerContractStatus.NEEDS_EXPERT_SOURCE,
         AnswerContractStatus.NEEDS_MANUAL_REVIEW,
+        AnswerContractStatus.NOT_SELECTED,
     }:
         api_error(
             409,
@@ -1643,6 +1773,9 @@ async def request_question_cluster_answer_generation(
             "question_cluster_answer_generation_disabled",
             "Включите автоматизацию и модерацию кластеров для этого направления",
         )
+    from app.interviews.card_ai_budget import precheck_manual_budget
+
+    await precheck_manual_budget(session, cluster, settings)
     # Explicit draft requests remain available after automatic preflight defers
     # a cluster. This is a human action, not approval of the generated answer.
     await record_automation_decision(
@@ -1694,6 +1827,12 @@ def _new_settings(direction_id: UUID) -> CardAutomationSettings:
         min_distinct_interviews_for_promotion=3,
         min_distinct_companies_for_promotion=2,
         min_failed_answers_for_promotion=2,
+        card_ai_max_topics_per_interview=get_settings().card_ai_max_topics_per_interview,
+        card_ai_budget_per_interview_usd=get_settings().card_ai_budget_per_interview_usd,
+        card_ai_daily_budget_usd=get_settings().card_ai_daily_budget_usd,
+        card_ai_maintenance_budget_usd=1,
+        card_ai_min_priority_score=4,
+        card_ai_legacy_backlog_enabled=False,
         audit_sample_percent=5.0,
         personal_review_enabled=False,
         global_auto_publish_enabled=False,
@@ -1739,6 +1878,12 @@ def _settings_read(
         min_distinct_interviews_for_promotion=settings.min_distinct_interviews_for_promotion,
         min_distinct_companies_for_promotion=settings.min_distinct_companies_for_promotion,
         min_failed_answers_for_promotion=settings.min_failed_answers_for_promotion,
+        card_ai_max_topics_per_interview=settings.card_ai_max_topics_per_interview,
+        card_ai_budget_per_interview_usd=float(settings.card_ai_budget_per_interview_usd),
+        card_ai_daily_budget_usd=float(settings.card_ai_daily_budget_usd),
+        card_ai_maintenance_budget_usd=float(settings.card_ai_maintenance_budget_usd),
+        card_ai_min_priority_score=settings.card_ai_min_priority_score,
+        card_ai_legacy_backlog_enabled=settings.card_ai_legacy_backlog_enabled,
         audit_sample_percent=settings.audit_sample_percent,
         personal_review_enabled=settings.personal_review_enabled,
         global_auto_publish_enabled=settings.global_auto_publish_enabled,
@@ -1831,12 +1976,38 @@ async def update_card_automation_settings(
     settings.min_distinct_interviews_for_promotion = payload.min_distinct_interviews_for_promotion
     settings.min_distinct_companies_for_promotion = payload.min_distinct_companies_for_promotion
     settings.min_failed_answers_for_promotion = payload.min_failed_answers_for_promotion
+    if "card_ai_max_topics_per_interview" in payload.model_fields_set:
+        settings.card_ai_max_topics_per_interview = payload.card_ai_max_topics_per_interview
+    if "card_ai_budget_per_interview_usd" in payload.model_fields_set:
+        settings.card_ai_budget_per_interview_usd = Decimal(
+            str(payload.card_ai_budget_per_interview_usd)
+        )
+    if "card_ai_daily_budget_usd" in payload.model_fields_set:
+        settings.card_ai_daily_budget_usd = Decimal(str(payload.card_ai_daily_budget_usd))
+    if "card_ai_maintenance_budget_usd" in payload.model_fields_set:
+        settings.card_ai_maintenance_budget_usd = Decimal(
+            str(payload.card_ai_maintenance_budget_usd)
+        )
+    if "card_ai_min_priority_score" in payload.model_fields_set:
+        settings.card_ai_min_priority_score = payload.card_ai_min_priority_score
+    if "card_ai_legacy_backlog_enabled" in payload.model_fields_set:
+        settings.card_ai_legacy_backlog_enabled = payload.card_ai_legacy_backlog_enabled
     settings.audit_sample_percent = payload.audit_sample_percent
     settings.personal_review_enabled = payload.personal_review_enabled
     settings.global_auto_publish_enabled = payload.global_auto_publish_enabled
     settings.cluster_moderation_enabled = payload.cluster_moderation_enabled
     settings.legacy_queue_enabled = payload.legacy_queue_enabled
     settings.version += 1
+    # A raised limit or threshold change triggers ranked reconsideration, not a
+    # burst of directly queued paid calls.
+    await session.execute(
+        update(QuestionCluster)
+        .where(
+            QuestionCluster.direction_id == settings.direction_id,
+            QuestionCluster.answer_status == AnswerContractStatus.NOT_SELECTED,
+        )
+        .values(generation_retry_after=datetime.now(UTC))
+    )
     after = _settings_audit_values(settings)
     decision = await record_automation_decision(
         session,
@@ -1884,6 +2055,12 @@ def _settings_audit_values(settings: CardAutomationSettings) -> dict[str, object
         "min_distinct_interviews_for_promotion": (settings.min_distinct_interviews_for_promotion),
         "min_distinct_companies_for_promotion": settings.min_distinct_companies_for_promotion,
         "min_failed_answers_for_promotion": settings.min_failed_answers_for_promotion,
+        "card_ai_max_topics_per_interview": float(settings.card_ai_max_topics_per_interview),
+        "card_ai_budget_per_interview_usd": float(settings.card_ai_budget_per_interview_usd),
+        "card_ai_daily_budget_usd": float(settings.card_ai_daily_budget_usd),
+        "card_ai_maintenance_budget_usd": float(settings.card_ai_maintenance_budget_usd),
+        "card_ai_min_priority_score": float(settings.card_ai_min_priority_score),
+        "card_ai_legacy_backlog_enabled": settings.card_ai_legacy_backlog_enabled,
         "audit_sample_percent": settings.audit_sample_percent,
         "personal_review_enabled": settings.personal_review_enabled,
         "global_auto_publish_enabled": settings.global_auto_publish_enabled,

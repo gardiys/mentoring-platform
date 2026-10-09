@@ -68,7 +68,7 @@ async def admin_restart_ai_analysis(
     session: Session,
     admin: AdminUser,
     force: bool = False,
-    economy: bool = False,
+    economy: bool | None = None,
 ) -> IntelligenceInterviewDetail:
     interview = await prepare_analysis_restart(
         session, admin, interview_id, force=force, economy=economy

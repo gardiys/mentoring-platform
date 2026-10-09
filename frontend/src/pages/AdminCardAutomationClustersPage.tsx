@@ -306,21 +306,24 @@ export function CardAutomationClustersPage({
               <Select
                 label="Показать"
                 value={
-                  filters.sourcesOnly
-                    ? "sources"
-                    : filters.waitingOnly
-                      ? "waiting"
-                      : filters.processingOnly
-                        ? "ai"
-                        : filters.needsActionOnly
-                          ? "manual"
-                          : "all"
+                  filters.notSelectedOnly
+                    ? "not_selected"
+                    : filters.sourcesOnly
+                      ? "sources"
+                      : filters.waitingOnly
+                        ? "waiting"
+                        : filters.processingOnly
+                          ? "ai"
+                          : filters.needsActionOnly
+                            ? "manual"
+                            : "all"
                 }
                 data={[
                   { value: "manual", label: "Нужно решение человека" },
                   { value: "ai", label: "На AI-обработке" },
                   { value: "waiting", label: "Ожидает восстановления AI" },
                   { value: "sources", label: "Ожидает материалов" },
+                  { value: "not_selected", label: "Не отобрано для AI" },
                   { value: "all", label: "Все кластеры" },
                 ]}
                 allowDeselect={false}
@@ -329,6 +332,9 @@ export function CardAutomationClustersPage({
                     (current) => {
                       const next = new URLSearchParams(current);
                       next.delete("page");
+                      if (value === "not_selected")
+                        next.set("not_selected_only", "true");
+                      else next.delete("not_selected_only");
                       if (value === "sources") next.set("sources_only", "true");
                       else next.delete("sources_only");
                       if (value === "waiting") next.set("waiting_only", "true");
@@ -402,6 +408,12 @@ export function CardAutomationClustersPage({
                 </Badge>
                 <Badge variant="filled" color="yellow">
                   На этапе исправления: {query.data.ai_repair_total ?? 0}
+                </Badge>
+                <Badge variant="filled" color="gray">
+                  Не отобрано: {query.data.not_selected_total ?? 0}
+                </Badge>
+                <Badge variant="filled" color="orange">
+                  Неизвестная стоимость: {query.data.unknown_cost_total ?? 0}
                 </Badge>
                 <Badge variant="filled" color="orange">
                   Нужно решение человека: {query.data.manual_review_total ?? 0}
@@ -609,13 +621,16 @@ export function CardAutomationClustersPage({
                         </Table.Td>
                         <Table.Td>
                           <Badge color={clusterStatusColors[cluster.status]}>
-                            {cluster.processing_state === "waiting_for_sources"
-                              ? "Ожидает материалов"
-                              : cluster.processing_state === "waiting_for_ai"
-                                ? "Ожидает восстановления AI"
-                                : cluster.processing_state === "ai_processing"
-                                  ? "На AI-обработке"
-                                  : clusterStatusLabels[cluster.status]}
+                            {cluster.processing_state === "not_selected"
+                              ? "Не отобрано"
+                              : cluster.processing_state ===
+                                  "waiting_for_sources"
+                                ? "Ожидает материалов"
+                                : cluster.processing_state === "waiting_for_ai"
+                                  ? "Ожидает восстановления AI"
+                                  : cluster.processing_state === "ai_processing"
+                                    ? "На AI-обработке"
+                                    : clusterStatusLabels[cluster.status]}
                           </Badge>
                         </Table.Td>
                         <Table.Td>

@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Literal
+from uuid import UUID
 
 from app.interviews.intelligence_models import IntelligenceQuestionKind
 
@@ -16,13 +17,18 @@ interview_service_tier: ContextVar[ServiceTier] = ContextVar(
 )
 
 
+interview_request_id: ContextVar[UUID | None] = ContextVar("interview_request_id", default=None)
+
+
 @contextmanager
-def interview_request_scope(tier: ServiceTier) -> Iterator[None]:
+def interview_request_scope(tier: ServiceTier, interview_id: UUID | None = None) -> Iterator[None]:
     token = interview_service_tier.set(tier)
+    id_token = interview_request_id.set(interview_id)
     try:
         yield
     finally:
         interview_service_tier.reset(token)
+        interview_request_id.reset(id_token)
 
 
 # Deliberately narrow: novel wording and multi-part questions stay on the main model.

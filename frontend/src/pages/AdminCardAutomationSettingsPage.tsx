@@ -54,6 +54,16 @@ function initialForm(
     min_distinct_companies_for_promotion:
       settings.min_distinct_companies_for_promotion,
     min_failed_answers_for_promotion: settings.min_failed_answers_for_promotion,
+    card_ai_max_topics_per_interview:
+      settings.card_ai_max_topics_per_interview ?? 10,
+    card_ai_budget_per_interview_usd:
+      settings.card_ai_budget_per_interview_usd ?? 0.4,
+    card_ai_daily_budget_usd: settings.card_ai_daily_budget_usd ?? 5,
+    card_ai_maintenance_budget_usd:
+      settings.card_ai_maintenance_budget_usd ?? 1,
+    card_ai_min_priority_score: settings.card_ai_min_priority_score ?? 4,
+    card_ai_legacy_backlog_enabled:
+      settings.card_ai_legacy_backlog_enabled ?? false,
     audit_sample_percent: settings.audit_sample_percent,
     personal_review_enabled: settings.personal_review_enabled,
     global_auto_publish_enabled: settings.global_auto_publish_enabled,
@@ -422,7 +432,69 @@ function SettingsForm({ settings, reload }: SettingsFormProps) {
           <Title order={3}>Зрелость кластера и аудит</Title>
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
             <NumberInput
+              label="Новых тем на интервью"
+              min={0}
+              value={form.card_ai_max_topics_per_interview ?? 10}
+              onChange={(value) => {
+                if (typeof value === "number")
+                  setForm((current) => ({
+                    ...current,
+                    card_ai_max_topics_per_interview: value,
+                  }));
+              }}
+            />
+            <NumberInput
+              label="Бюджет новых тем интервью, USD"
+              min={0}
+              value={form.card_ai_budget_per_interview_usd ?? 0.4}
+              onChange={(value) => {
+                if (typeof value === "number")
+                  setForm((current) => ({
+                    ...current,
+                    card_ai_budget_per_interview_usd: value,
+                  }));
+              }}
+            />
+            <NumberInput
+              label="Суточный бюджет направления, USD"
+              min={0}
+              value={form.card_ai_daily_budget_usd ?? 5}
+              onChange={(value) => {
+                if (typeof value === "number")
+                  setForm((current) => ({
+                    ...current,
+                    card_ai_daily_budget_usd: value,
+                  }));
+              }}
+            />
+            <NumberInput
+              label="Из него на обслуживание карточек, USD"
+              min={0}
+              value={form.card_ai_maintenance_budget_usd ?? 1}
+              onChange={(value) => {
+                if (typeof value === "number")
+                  setForm((current) => ({
+                    ...current,
+                    card_ai_maintenance_budget_usd: value,
+                  }));
+              }}
+            />
+            <NumberInput
+              label="Минимальный приоритет темы"
+              description="Дополнительный ручной порог; основной отбор — наиболее приоритетные темы в пределах лимита интервью."
+              min={0}
+              value={form.card_ai_min_priority_score ?? 4}
+              onChange={(value) => {
+                if (typeof value === "number")
+                  setForm((current) => ({
+                    ...current,
+                    card_ai_min_priority_score: value,
+                  }));
+              }}
+            />
+            <NumberInput
               label="Минимум интервью"
+              description="Порог повторяемости для нового платного допуска."
               min={1}
               value={form.min_distinct_interviews_for_promotion}
               onChange={(value) =>
@@ -432,6 +504,18 @@ function SettingsForm({ settings, reload }: SettingsFormProps) {
                   min_distinct_interviews_for_promotion: value,
                 }))
               }
+            />
+            <Switch
+              label="Оплачивать генерацию старых тем без черновика"
+              description="Выключено по умолчанию. При включении старый бэклог использует бюджет обслуживания; готовые старые черновики продолжают проверку."
+              checked={form.card_ai_legacy_backlog_enabled ?? false}
+              onChange={(event) => {
+                const checked = event.currentTarget.checked;
+                setForm((current) => ({
+                  ...current,
+                  card_ai_legacy_backlog_enabled: checked,
+                }));
+              }}
             />
             <NumberInput
               label="Минимум компаний"

@@ -492,6 +492,7 @@ class InterviewProcessStageRead(BaseModel):
     comments: list[InterviewCatalogCommentRead] = Field(default_factory=list)
     ai_analysis_id: UUID | None = None
     ai_analysis_status: IntelligenceProcessingStatus | None = None
+    ai_analysis_service_tier: Literal["default", "flex"] | None = None
     ai_analysis_requested_at: datetime | None = None
     can_edit: bool
     edit_locked_reason: InterviewStageEditLockReason | None
@@ -767,3 +768,9 @@ class RecruiterContactOpenRead(BaseModel):
     last_contacted_at: datetime
     my_contact_opens: int
     my_last_contacted_at: datetime
+
+
+class InterviewAIOptions(BaseModel):
+    default_service_tier: Literal["default", "flex"]
+    median_ready_minutes: float | None = None
+    measured_interviews: int = 0

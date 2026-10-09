@@ -66,6 +66,8 @@ async def ready(seeded, monkeypatch):
             topic_name="Python",
             membership_revision=1,
             stats_revision=1,
+            generation_backlog=True,
+            generation_selected_revision=1,
             answer_contract={
                 "short_answer": "Сборщик освобождает недостижимые циклические структуры.",
                 "required_points": ["Учёт ссылок и циклы"],
@@ -253,7 +255,7 @@ async def test_validation_job_publishes_and_reconciler_recovers_ready_backlog(re
         assert cluster.status is QuestionClusterStatus.CARD_CREATED
 
 
-async def test_auto_mode_promotes_first_occurrence_and_reconciles_old_shadow(ready, seeded):
+async def test_auto_mode_preserves_thresholds_and_reconciles_old_shadow(ready, seeded):
     async with TestSession() as session:
         cluster = await session.get(QuestionCluster, ready[0])
         cluster.status = QuestionClusterStatus.SHADOW
@@ -270,19 +272,31 @@ async def test_auto_mode_promotes_first_occurrence_and_reconciles_old_shadow(rea
     async with TestSession() as session:
         cluster = await session.get(QuestionCluster, ready[0])
         await recalculate_cluster_stats(session, cluster)
-        assert cluster.status is QuestionClusterStatus.NEEDS_REVIEW
+        assert cluster.status is QuestionClusterStatus.SHADOW
         assert cluster.distinct_interviews_count == 1
+        await session.commit()
+    await jobs.reconcile_card_automation_jobs({"redis": redis})
+    assert not any(name == "generate_cluster_candidate" for name, _, _ in redis.calls)
+    async with TestSession() as session:
+        cluster = await session.get(QuestionCluster, ready[0])
+        assert cluster.answer_status is AnswerContractStatus.NOT_SELECTED
 
 
-async def test_new_cluster_runs_generation_validation_and_publication(ready):
+async def test_selected_new_cluster_runs_generation_validation_and_publication(ready):
     async with TestSession() as session:
         cluster = await session.get(QuestionCluster, ready[0])
         cluster.status = QuestionClusterStatus.SHADOW
+        cluster.generation_backlog = False
         cluster.answer_contract = cluster.answer_validation = cluster.answer_status = None
+        settings = await session.get(CardAutomationSettings, cluster.direction_id)
+        settings.min_distinct_interviews_for_promotion = 1
         await session.commit()
     ai = FakeInterviewAIProvider()
     ctx = {"redis": RecordingRedis(), "ai_provider": ai}
     await jobs.recalculate_cluster_stats(ctx, str(ready[0]), 1)
+    assert not any(name == "generate_cluster_candidate" for name, _, _ in ctx["redis"].calls)
+    await jobs.reconcile_card_automation_jobs(ctx)
+    assert any(name == "generate_cluster_candidate" for name, _, _ in ctx["redis"].calls)
     await jobs.generate_cluster_candidate(ctx, str(ready[0]), 1)
     await jobs.validate_cluster_answer(ctx, str(ready[0]), 1)
     async with TestSession() as session:

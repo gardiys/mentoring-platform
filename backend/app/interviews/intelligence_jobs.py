@@ -1105,6 +1105,7 @@ async def generate_answer_reviews(
                 raise Retry(defer=retry_delay(error, _retry_delay(ctx, 60))) from error
             return
         interview.processing_status = IntelligenceProcessingStatus.READY
+        interview.ai_ready_at = datetime.now(UTC)
         interview.failed_stage = None
         interview.processing_error_code = None
         interview.processing_error_message = None

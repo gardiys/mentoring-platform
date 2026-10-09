@@ -195,6 +195,7 @@ def _stage_read(
         ],
         ai_analysis_id=analysis.id if analysis else None,
         ai_analysis_status=analysis.processing_status if analysis else None,
+        ai_analysis_service_tier=analysis.ai_service_tier if analysis else None,
         ai_analysis_requested_at=stage.ai_analysis_requested_at,
         can_edit=lock_reason is None,
         edit_locked_reason=lock_reason,

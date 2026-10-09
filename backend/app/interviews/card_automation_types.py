@@ -46,6 +46,7 @@ class QuestionClusterStatus(StrEnum):
 
 
 class AnswerContractStatus(StrEnum):
+    NOT_SELECTED = "not_selected"
     REVIEW_PENDING = "review_pending"
     WAITING_FOR_AI = "waiting_for_ai"
     REPAIR_PENDING = "repair_pending"
@@ -64,6 +65,8 @@ class PersonalReviewStatus(StrEnum):
 
 
 class AutomationDecisionType(StrEnum):
+    CARD_AI_COST_WRITTEN_OFF = "card_ai_cost_written_off"
+    CARD_AI_DEFERRED = "card_ai_deferred"
     QUESTION_ROUTED = "question_routed"
     ROUTED_AS_NOISE = "routed_as_noise"
     ROUTED_AS_NON_FLASHCARD = "routed_as_non_flashcard"

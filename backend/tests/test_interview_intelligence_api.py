@@ -141,7 +141,16 @@ async def create_analysis_from_journal(
     track_id: UUID | None = None,
     media_size: int | None = 1_024,
     media_storage_key: str = "interview-media/student/recording",
+    ai_service_tier: str | None = None,
+    configured_service_tier: str | None = "default",
 ) -> tuple[Any, UUID, UUID]:
+    if configured_service_tier is not None:
+        from app.core.config import get_settings
+
+        monkeypatch.setattr(
+            get_settings(), "interview_ai_default_service_tier", configured_service_tier
+        )
+
     async def fake_enqueue(_: UUID) -> None:
         return None
 
@@ -176,6 +185,7 @@ async def create_analysis_from_journal(
     created = await client.post(
         f"/api/v1/interviews/journal/tracks/{process_id}/stages/{stage_id}/ai-analysis",
         headers=auth(selected_owner_id),
+        params={"ai_service_tier": ai_service_tier} if ai_service_tier is not None else {},
     )
     return created, process_id, stage_id
 

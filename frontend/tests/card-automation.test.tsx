@@ -313,6 +313,90 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it("списывает неизвестную стоимость с причиной и остаётся на текущей теме", async () => {
+  const user = userEvent.setup();
+  const requestId = "70000000-0000-4000-8000-000000000001";
+  vi.spyOn(api, "adminCardAutomationCluster").mockResolvedValue({
+    ...clusterDetail,
+    card_ai_unknown_costs: [
+      {
+        request_id: requestId,
+        operation: "generate_answer_contract",
+        amount_usd: "0.025",
+        created_at: "2026-08-16T10:00:00Z",
+        retry_safe_after: "2026-08-16T11:00:00Z",
+        can_write_off: true,
+      },
+    ],
+  });
+  vi.spyOn(api, "adminInterviewDeckSummaries").mockResolvedValue([]);
+  vi.spyOn(window, "prompt").mockReturnValue("Проверил прерванный запрос");
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  const writeOff = vi.spyOn(api, "writeOffAdminCardAICost").mockResolvedValue({
+    cluster,
+    decision_id: decision.id,
+    affected_cluster_ids: [cluster.id],
+  });
+  renderPage(
+    <AdminCardAutomationClusterDetailPage />,
+    `/admin/card-automation/clusters/${cluster.id}`,
+    "/admin/card-automation/clusters/:clusterId",
+  );
+  await user.click(
+    await screen.findByRole("tab", { name: "Проверка карточки" }),
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Списать $0.025" }),
+  );
+  await waitFor(() =>
+    expect(writeOff).toHaveBeenCalledWith(
+      cluster.id,
+      {
+        expected_version: cluster.version,
+        request_id: requestId,
+        reason: "Проверил прерванный запрос",
+      },
+      expect.any(String),
+    ),
+  );
+  expect(window.confirm).toHaveBeenCalledWith(
+    "Записать $0.025 в расходы по сумме резерва? Фактическая стоимость провайдера остаётся неизвестной.",
+  );
+  expect(
+    screen.getByRole("heading", { name: cluster.canonical_question }),
+  ).toBeInTheDocument();
+});
+
+it("не разрешает списать ещё выполняющийся неизвестный запрос", async () => {
+  vi.spyOn(api, "adminCardAutomationCluster").mockResolvedValue({
+    ...clusterDetail,
+    card_ai_unknown_costs: [
+      {
+        request_id: "70000000-0000-4000-8000-000000000001",
+        operation: "generate_answer_contract",
+        amount_usd: "0.025",
+        created_at: "2026-08-16T10:00:00Z",
+        retry_safe_after: "2026-08-16T11:00:00Z",
+        can_write_off: false,
+      },
+    ],
+  });
+  vi.spyOn(api, "adminInterviewDeckSummaries").mockResolvedValue([]);
+  const writeOff = vi.spyOn(api, "writeOffAdminCardAICost");
+  renderPage(
+    <AdminCardAutomationClusterDetailPage />,
+    `/admin/card-automation/clusters/${cluster.id}`,
+    "/admin/card-automation/clusters/:clusterId",
+  );
+  await userEvent
+    .setup()
+    .click(await screen.findByRole("tab", { name: "Проверка карточки" }));
+  expect(
+    await screen.findByRole("button", { name: "Списать $0.025" }),
+  ).toBeDisabled();
+  expect(writeOff).not.toHaveBeenCalled();
+});
+
 it("передаёт cluster-фильтры и пагинацию в точном backend-контракте", async () => {
   vi.spyOn(api, "adminTracks").mockResolvedValue([]);
   const list = vi.spyOn(api, "adminCardAutomationClusters").mockResolvedValue({

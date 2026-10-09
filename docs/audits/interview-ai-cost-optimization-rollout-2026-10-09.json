@@ -1,0 +1,21 @@
+{
+  "unpublished_validation_wave": [
+    {
+      "direction_id": "40000000-0000-4000-8000-000000000002",
+      "unpublished_validated": 4,
+      "changed_prompt_wave": 4
+    }
+  ],
+  "recent_validation_costs": [
+    {
+      "service_tier": "flex",
+      "priced_requests": 1052,
+      "mean_validation_usd": "0.01089882300380228137"
+    }
+  ],
+  "read_only": true,
+  "checked_at": "2026-10-09",
+  "estimated_wave_usd": "0.0435952920",
+  "proposed_daily_maintenance_cap_usd": "1",
+  "note": "Current unpublished clusters only; further source updates/new traffic can add checks. No AI calls or production writes were performed."
+}

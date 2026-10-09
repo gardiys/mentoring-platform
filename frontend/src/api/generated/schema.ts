@@ -1266,6 +1266,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/interviews/cards/{card_id}/duplicate-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Interview Card Duplicate Report */
+        post: operations["interview_card_duplicate_report_api_v1_interviews_cards__card_id__duplicate_report_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/interviews/catalog/directions": {
         parameters: {
             query?: never;
@@ -1466,6 +1483,23 @@ export interface paths {
         post?: never;
         /** Catalog Delete Comment */
         delete: operations["catalog_delete_comment_api_v1_interviews_catalog_comments__comment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/interviews/journal/ai-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ai Options */
+        get: operations["ai_options_api_v1_interviews_journal_ai_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2692,6 +2726,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/card-automation/clusters/{cluster_id}/write-off-ai-cost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Write Off Card Cost */
+        post: operations["admin_write_off_card_cost_api_v1_admin_card_automation_clusters__cluster_id__write_off_ai_cost_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/card-automation/clusters/{cluster_id}/generate-answer": {
         parameters: {
             query?: never;
@@ -2929,6 +2980,57 @@ export interface paths {
         head?: never;
         /** Admin Correct Personal Item */
         patch: operations["admin_correct_personal_item_api_v1_admin_card_automation_students__student_id__personal_review_items__item_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/duplicate-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Duplicate Reports */
+        get: operations["admin_duplicate_reports_api_v1_admin_card_automation_duplicate_reports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/duplicate-reports/{card_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin Dismiss Duplicate Reports */
+        post: operations["admin_dismiss_duplicate_reports_api_v1_admin_card_automation_duplicate_reports__card_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/card-automation/duplicate-reports/{card_id}/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin Duplicate Report Targets */
+        get: operations["admin_duplicate_report_targets_api_v1_admin_card_automation_duplicate_reports__card_id__targets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/mentor/card-automation/clusters": {
@@ -8167,11 +8269,16 @@ export interface components {
          * AnswerContractStatus
          * @enum {string}
          */
-        AnswerContractStatus: "review_pending" | "waiting_for_ai" | "repair_pending" | "generated_from_sources" | "needs_expert_source" | "needs_manual_review" | "approved" | "rejected";
+        AnswerContractStatus: "not_selected" | "review_pending" | "waiting_for_ai" | "repair_pending" | "generated_from_sources" | "needs_expert_source" | "needs_manual_review" | "approved" | "rejected";
         /** AnswerValidationResult */
         AnswerValidationResult: {
             /** Supported */
             supported: boolean;
+            /**
+             * Requires Additional Sources
+             * @default false
+             */
+            requires_additional_sources: boolean;
             /** Supporting Source References */
             supporting_source_references?: string[];
             /** Unsupported Claims */
@@ -8325,7 +8432,7 @@ export interface components {
          * AutomationDecisionType
          * @enum {string}
          */
-        AutomationDecisionType: "question_routed" | "routed_as_noise" | "routed_as_non_flashcard" | "exact_card_match" | "alias_card_match" | "semantic_card_match" | "cluster_match" | "shadow_cluster_created" | "cluster_promoted" | "personal_review_created" | "personal_review_reviewed" | "personal_review_archived" | "answer_contract_generated" | "answer_contract_validated" | "answer_contract_needs_source" | "answer_contract_failed" | "answer_validation_failed" | "manual_override" | "cluster_linked" | "card_created" | "cluster_split" | "cluster_merged" | "cluster_ignored" | "cluster_deferred" | "cluster_reopened" | "cluster_marked_important" | "occurrence_reprocessed" | "occurrence_failed";
+        AutomationDecisionType: "card_ai_cost_written_off" | "card_ai_deferred" | "question_routed" | "routed_as_noise" | "routed_as_non_flashcard" | "exact_card_match" | "alias_card_match" | "semantic_card_match" | "cluster_match" | "shadow_cluster_created" | "cluster_promoted" | "personal_review_created" | "personal_review_reviewed" | "personal_review_archived" | "answer_contract_generated" | "answer_contract_validated" | "answer_contract_needs_source" | "answer_contract_failed" | "answer_validation_failed" | "manual_override" | "cluster_linked" | "card_created" | "cluster_split" | "cluster_merged" | "cluster_ignored" | "cluster_deferred" | "cluster_reopened" | "cluster_marked_important" | "occurrence_reprocessed" | "occurrence_failed";
         /**
          * AutomationReviewResult
          * @enum {string}
@@ -8341,6 +8448,42 @@ export interface components {
             question_utterance_ids: string[];
             /** Response Utterance Ids */
             response_utterance_ids?: string[];
+        };
+        /** CardAICostWriteOffMutation */
+        CardAICostWriteOffMutation: {
+            /** Expected Version */
+            expected_version: number;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Reason */
+            reason: string;
+        };
+        /** CardAIUnknownCostRead */
+        CardAIUnknownCostRead: {
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** Operation */
+            operation: string;
+            /** Amount Usd */
+            amount_usd: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Retry Safe After
+             * Format: date-time
+             */
+            retry_safe_after: string;
+            /** Can Write Off */
+            can_write_off: boolean;
         };
         /** CardAutomationMetricsRead */
         CardAutomationMetricsRead: {
@@ -8410,6 +8553,11 @@ export interface components {
         /** CardAutomationSettingsRead */
         CardAutomationSettingsRead: {
             /**
+             * Card Ai Legacy Backlog Enabled
+             * @default false
+             */
+            card_ai_legacy_backlog_enabled: boolean;
+            /**
              * Direction Id
              * Format: uuid
              */
@@ -8444,6 +8592,31 @@ export interface components {
             min_distinct_companies_for_promotion: number;
             /** Min Failed Answers For Promotion */
             min_failed_answers_for_promotion: number;
+            /**
+             * Card Ai Max Topics Per Interview
+             * @default 10
+             */
+            card_ai_max_topics_per_interview: number;
+            /**
+             * Card Ai Budget Per Interview Usd
+             * @default 0.4
+             */
+            card_ai_budget_per_interview_usd: number;
+            /**
+             * Card Ai Daily Budget Usd
+             * @default 5
+             */
+            card_ai_daily_budget_usd: number;
+            /**
+             * Card Ai Maintenance Budget Usd
+             * @default 1
+             */
+            card_ai_maintenance_budget_usd: number;
+            /**
+             * Card Ai Min Priority Score
+             * @default 4
+             */
+            card_ai_min_priority_score: number;
             /** Audit Sample Percent */
             audit_sample_percent: number;
             /** Personal Review Enabled */
@@ -8464,6 +8637,11 @@ export interface components {
         };
         /** CardAutomationSettingsUpdate */
         CardAutomationSettingsUpdate: {
+            /**
+             * Card Ai Legacy Backlog Enabled
+             * @default false
+             */
+            card_ai_legacy_backlog_enabled: boolean;
             /**
              * Direction Id
              * Format: uuid
@@ -8497,6 +8675,31 @@ export interface components {
             min_distinct_companies_for_promotion: number;
             /** Min Failed Answers For Promotion */
             min_failed_answers_for_promotion: number;
+            /**
+             * Card Ai Max Topics Per Interview
+             * @default 10
+             */
+            card_ai_max_topics_per_interview: number;
+            /**
+             * Card Ai Budget Per Interview Usd
+             * @default 0.4
+             */
+            card_ai_budget_per_interview_usd: number;
+            /**
+             * Card Ai Daily Budget Usd
+             * @default 5
+             */
+            card_ai_daily_budget_usd: number;
+            /**
+             * Card Ai Maintenance Budget Usd
+             * @default 1
+             */
+            card_ai_maintenance_budget_usd: number;
+            /**
+             * Card Ai Min Priority Score
+             * @default 4
+             */
+            card_ai_min_priority_score: number;
             /** Audit Sample Percent */
             audit_sample_percent: number;
             /** Personal Review Enabled */
@@ -9361,6 +9564,34 @@ export interface components {
             size: number;
             /** @default legacy-post */
             upload_protocol: components["schemas"]["ContentMediaUploadProtocol"];
+        };
+        /** DuplicateReportItem */
+        DuplicateReportItem: {
+            card: components["schemas"]["InterviewCardDuplicateCardRead"];
+            /** Reports Count */
+            reports_count: number;
+            /**
+             * First Reported At
+             * Format: date-time
+             */
+            first_reported_at: string;
+        };
+        /** DuplicateReportPage */
+        DuplicateReportPage: {
+            /** Items */
+            items: components["schemas"]["DuplicateReportItem"][];
+            /** Total */
+            total: number;
+        };
+        /** DuplicateReportRead */
+        DuplicateReportRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Status */
+            status: string;
         };
         /** EmploymentAIContradiction */
         EmploymentAIContradiction: {
@@ -10963,6 +11194,21 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** InterviewAIOptions */
+        InterviewAIOptions: {
+            /**
+             * Default Service Tier
+             * @enum {string}
+             */
+            default_service_tier: "default" | "flex";
+            /** Median Ready Minutes */
+            median_ready_minutes?: number | null;
+            /**
+             * Measured Interviews
+             * @default 0
+             */
+            measured_interviews: number;
+        };
         /** InterviewAttachmentRead */
         InterviewAttachmentRead: {
             /** Filename */
@@ -11097,7 +11343,7 @@ export interface components {
              * @default ready
              * @enum {string}
              */
-            cache_status: "ready" | "building";
+            cache_status: "ready" | "building" | "failed";
             /** Cache Generated At */
             cache_generated_at?: string | null;
             /**
@@ -11105,6 +11351,8 @@ export interface components {
              * @default false
              */
             cache_refreshing: boolean;
+            /** Cache Error */
+            cache_error?: string | null;
         };
         /** InterviewCardDuplicateRefreshRead */
         InterviewCardDuplicateRefreshRead: {
@@ -11670,6 +11918,8 @@ export interface components {
             /** Ai Analysis Id */
             ai_analysis_id?: string | null;
             ai_analysis_status?: components["schemas"]["IntelligenceProcessingStatus"] | null;
+            /** Ai Analysis Service Tier */
+            ai_analysis_service_tier?: ("default" | "flex") | null;
             /** Ai Analysis Requested At */
             ai_analysis_requested_at?: string | null;
             /** Can Edit */
@@ -14175,7 +14425,11 @@ export interface components {
             direction_title: string;
             status: components["schemas"]["QuestionClusterStatus"];
             /** Processing State */
-            processing_state?: ("ai_processing" | "manual_review" | "waiting_for_ai" | "waiting_for_sources") | null;
+            processing_state?: ("ai_processing" | "manual_review" | "waiting_for_ai" | "waiting_for_sources" | "not_selected") | null;
+            /** Generation Deferred Reason */
+            generation_deferred_reason?: string | null;
+            /** Generation Retry After */
+            generation_retry_after?: string | null;
             /** Canonical Question */
             canonical_question: string;
             learning_object_type: components["schemas"]["LearningObjectType"];
@@ -14223,6 +14477,8 @@ export interface components {
             version: number;
             /** Allowed Actions */
             allowed_actions?: components["schemas"]["QuestionClusterAction"][];
+            /** Card Ai Unknown Costs */
+            card_ai_unknown_costs?: components["schemas"]["CardAIUnknownCostRead"][];
             /** Normalized Canonical Question */
             normalized_canonical_question: string;
             /** Representative Occurrence Id */
@@ -14248,6 +14504,10 @@ export interface components {
             ai_retry_after?: string | null;
             /** Ai Error Code */
             ai_error_code?: string | null;
+            /** Card Ai Budget */
+            card_ai_budget?: {
+                [key: string]: string;
+            };
             /**
              * Answer Repair Attempts
              * @default 0
@@ -14469,6 +14729,16 @@ export interface components {
              * @default 0
              */
             waiting_for_sources_total: number;
+            /**
+             * Not Selected Total
+             * @default 0
+             */
+            not_selected_total: number;
+            /**
+             * Unknown Cost Total
+             * @default 0
+             */
+            unknown_cost_total: number;
             /** Limit */
             limit: number;
             /** Offset */
@@ -14512,7 +14782,11 @@ export interface components {
             direction_title: string;
             status: components["schemas"]["QuestionClusterStatus"];
             /** Processing State */
-            processing_state?: ("ai_processing" | "manual_review" | "waiting_for_ai" | "waiting_for_sources") | null;
+            processing_state?: ("ai_processing" | "manual_review" | "waiting_for_ai" | "waiting_for_sources" | "not_selected") | null;
+            /** Generation Deferred Reason */
+            generation_deferred_reason?: string | null;
+            /** Generation Retry After */
+            generation_retry_after?: string | null;
             /** Canonical Question */
             canonical_question: string;
             learning_object_type: components["schemas"]["LearningObjectType"];
@@ -15932,6 +16206,8 @@ export interface operations {
                 track: "python" | "go";
                 resume?: boolean;
                 keys?: string[] | null;
+                page_size?: number | null;
+                after?: string | null;
             };
             header?: {
                 authorization?: string | null;
@@ -18270,6 +18546,42 @@ export interface operations {
             };
         };
     };
+    interview_card_duplicate_report_api_v1_interviews_cards__card_id__duplicate_report_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                card_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateReportRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     catalog_directions_api_v1_interviews_catalog_directions_get: {
         parameters: {
             query?: never;
@@ -18748,6 +19060,40 @@ export interface operations {
             };
         };
     };
+    ai_options_api_v1_interviews_journal_ai_options_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewAIOptions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     journal_company_suggestions_api_v1_interviews_journal_companies_get: {
         parameters: {
             query: {
@@ -19201,7 +19547,9 @@ export interface operations {
     };
     journal_start_stage_ai_analysis_api_v1_interviews_journal_tracks__process_id__stages__stage_id__ai_analysis_post: {
         parameters: {
-            query?: never;
+            query?: {
+                ai_service_tier?: ("default" | "flex") | null;
+            };
             header?: {
                 authorization?: string | null;
                 "x-dev-user-id"?: string | null;
@@ -21502,7 +21850,7 @@ export interface operations {
         parameters: {
             query?: {
                 force?: boolean;
-                economy?: boolean;
+                economy?: boolean | null;
             };
             header?: {
                 authorization?: string | null;
@@ -21745,6 +22093,7 @@ export interface operations {
                 processing_only?: boolean;
                 waiting_only?: boolean;
                 sources_only?: boolean;
+                not_selected_only?: boolean;
                 sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
                 sort_order?: "asc" | "desc";
                 limit?: number;
@@ -21840,6 +22189,7 @@ export interface operations {
                 processing_only?: boolean;
                 waiting_only?: boolean;
                 sources_only?: boolean;
+                not_selected_only?: boolean;
                 sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
                 sort_order?: "asc" | "desc";
                 limit?: number;
@@ -21976,6 +22326,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuestionOccurrenceReprocessResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_write_off_card_cost_api_v1_admin_card_automation_clusters__cluster_id__write_off_ai_cost_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                cluster_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardAICostWriteOffMutation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionClusterMutationResult"];
                 };
             };
             /** @description Validation Error */
@@ -22603,6 +22994,115 @@ export interface operations {
             };
         };
     };
+    admin_duplicate_reports_api_v1_admin_card_automation_duplicate_reports_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateReportPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_dismiss_duplicate_reports_api_v1_admin_card_automation_duplicate_reports__card_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                card_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_duplicate_report_targets_api_v1_admin_card_automation_duplicate_reports__card_id__targets_get: {
+        parameters: {
+            query: {
+                query: string;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                card_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewCardDuplicateCardRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     mentor_clusters_api_v1_mentor_card_automation_clusters_get: {
         parameters: {
             query?: {
@@ -22623,6 +23123,7 @@ export interface operations {
                 processing_only?: boolean;
                 waiting_only?: boolean;
                 sources_only?: boolean;
+                not_selected_only?: boolean;
                 sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
                 sort_order?: "asc" | "desc";
                 limit?: number;
@@ -22679,6 +23180,7 @@ export interface operations {
                 processing_only?: boolean;
                 waiting_only?: boolean;
                 sources_only?: boolean;
+                not_selected_only?: boolean;
                 sort_by?: "priority_score" | "last_seen_at" | "first_seen_at" | "occurrences_count" | "cluster_confidence";
                 sort_order?: "asc" | "desc";
                 limit?: number;

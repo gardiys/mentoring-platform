@@ -1,6 +1,6 @@
 import { Button, Card, Checkbox, Group, Stack, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api } from "../api/endpoints";
 import { useAdminRestartIntelligenceInterview } from "../features/interviews/intelligenceQueries";
@@ -14,7 +14,10 @@ export function AdminAnalysisRestartPanel({
   const restart = useAdminRestartIntelligenceInterview();
   const [downloading, setDownloading] = useState<string | null>(null);
   const [force, setForce] = useState(false);
-  const [economy, setEconomy] = useState(false);
+  const [economy, setEconomy] = useState(interview.ai_service_tier === "flex");
+  useEffect(() => {
+    setEconomy(interview.ai_service_tier === "flex");
+  }, [interview.id, interview.ai_service_tier]);
   const canRestart =
     ["ready", "failed"].includes(interview.processing_status) &&
     interview.transcript.some((row) => row.speaker_role === "candidate");

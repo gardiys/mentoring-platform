@@ -59,8 +59,10 @@ def _priority_options(function: str, defer_seconds: int | float | None) -> dict[
     seconds = (
         900
         if function in REVISIONED_ANALYSIS_FUNCTIONS
+        else 600
+        if function == "validate_cluster_answer"
         else 300
-        if function in {"generate_cluster_candidate", "validate_cluster_answer"}
+        if function == "generate_cluster_candidate"
         else 0
     )
     return {"_defer_until": datetime.now(UTC) - timedelta(seconds=seconds)} if seconds else {}

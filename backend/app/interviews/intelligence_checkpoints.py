@@ -137,7 +137,7 @@ class InterviewAICheckpoints:
                 retry_after_seconds=1,
             )
         self.paid_operations += 1
-        with interview_request_scope(self.service_tier):
+        with interview_request_scope(self.service_tier, self.interview_id):
             result = await call()
         async with self.session_factory() as session:
             await session.execute(

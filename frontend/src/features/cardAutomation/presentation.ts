@@ -45,6 +45,7 @@ export const clusterStatusColors: Record<QuestionClusterStatus, string> = {
 };
 
 export const answerStatusLabels: Record<AnswerContractStatus, string> = {
+  not_selected: "Не отобрано для AI",
   review_pending: "Повторная проверка AI",
   waiting_for_ai: "Ожидает восстановления AI",
   repair_pending: "AI исправляет ответ",
@@ -56,6 +57,8 @@ export const answerStatusLabels: Record<AnswerContractStatus, string> = {
 };
 
 export const decisionTypeLabels: Record<AutomationDecisionType, string> = {
+  card_ai_deferred: "Отложено по правилам бюджета",
+  card_ai_cost_written_off: "Неизвестный расход списан по резерву",
   question_routed: "Вопрос классифицирован",
   routed_as_noise: "Отнесён к шуму",
   routed_as_non_flashcard: "Не подходит для карточки",
@@ -87,6 +90,8 @@ export const decisionTypeLabels: Record<AutomationDecisionType, string> = {
 };
 
 export const decisionTypeColors: Record<AutomationDecisionType, string> = {
+  card_ai_deferred: "gray",
+  card_ai_cost_written_off: "orange",
   question_routed: "blue",
   routed_as_noise: "gray",
   routed_as_non_flashcard: "gray",
@@ -157,3 +162,18 @@ export function percent(value: number | null | undefined) {
     ? "—"
     : `${Math.round(value * 100)}%`;
 }
+
+export const cardBudgetReasonLabels: Record<string, string> = {
+  CARD_AI_NOT_SELECTED: "Тема не прошла пороги повторяемости и приоритета",
+  CARD_AI_AWAITING_ADMISSION: "Тема ожидает завершения маршрутизации и отбора",
+  CARD_AI_COST_UNKNOWN:
+    "Стоимость двух попыток неизвестна. Требуется списание резерва администратором",
+  CARD_AI_BACKLOG_DISABLED: "Платная генерация старого бэклога выключена",
+  CARD_AI_TOPIC_LIMIT: "Лимит новых тем интервью исчерпан",
+  CARD_AI_INTERVIEW_BUDGET: "Бюджет новых тем интервью исчерпан",
+  CARD_AI_DAILY_BUDGET: "Суточный бюджет направления исчерпан",
+  CARD_AI_MAINTENANCE_BUDGET: "Бюджет обслуживания карточек исчерпан",
+  CARD_AI_RESERVATION_BUSY: "Ожидается освобождение или сверка резерва",
+  CARD_AI_PRICING_UNKNOWN: "Цена модели не настроена",
+  CARD_AI_NO_SOURCE_INTERVIEW: "Нет интервью-источника",
+};

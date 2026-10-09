@@ -169,6 +169,8 @@ class IntelligenceInterview(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default=IntelligenceProcessingStatus.DRAFT,
         nullable=False,
     )
+    ai_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ai_ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     duration_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     normalized_audio_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     transcription_provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -680,6 +682,8 @@ class AIRequestLog(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "ai_request_logs"
     __table_args__ = (Index("ix_ai_request_logs_created_operation", "created_at", "operation"),)
 
+    interview_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), index=True)
+    cluster_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), index=True)
     operation: Mapped[str] = mapped_column(String(60), nullable=False)
     model: Mapped[str] = mapped_column(String(160), nullable=False)
     service_tier: Mapped[str] = mapped_column(String(30), nullable=False)

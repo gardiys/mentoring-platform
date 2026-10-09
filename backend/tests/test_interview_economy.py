@@ -39,6 +39,35 @@ from tests.test_intelligence_restart import completed_analysis as completed_anal
 completed_analysis = completed_analysis_fixture
 
 
+@pytest.mark.parametrize("configured", ["flex", "default"])
+async def test_first_analysis_uses_server_tariff_before_paid_work(
+    client, seeded, monkeypatch, configured
+):
+    from app.core.config import get_settings
+    from tests.test_interview_intelligence_api import create_analysis_from_journal
+
+    monkeypatch.setattr(get_settings(), "interview_ai_default_service_tier", configured)
+    response, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, configured_service_tier=configured
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["ai_service_tier"] == configured
+    async with TestSession() as session:
+        saved = await session.get(IntelligenceInterview, response.json()["id"])
+        assert saved.ai_service_tier == configured
+
+
+@pytest.mark.parametrize("tier", ["flex", "default"])
+async def test_student_cannot_override_platform_tariff(client, seeded, monkeypatch, tier):
+    from tests.test_interview_intelligence_api import create_analysis_from_journal
+
+    response, _, _ = await create_analysis_from_journal(
+        client, seeded, monkeypatch, ai_service_tier=tier
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "interview_ai_tariff_admin_only"
+
+
 async def test_flex_restart_makes_durable_progress_without_failed_attempts(
     client, seeded, monkeypatch, completed_analysis
 ):
@@ -327,3 +356,39 @@ async def test_confidence_score_mistake_is_recovered_before_saving():
         assert all(body["reasoning"] == {"effort": "low"} for body in requests)
     finally:
         await provider.close()
+
+
+async def test_restart_without_explicit_tariff_keeps_flex(
+    client, seeded, monkeypatch, completed_analysis
+):
+    interview_id, _, _ = completed_analysis
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        interview.ai_service_tier = "flex"
+        await session.commit()
+    monkeypatch.setattr(
+        intelligence_operations_router, "enqueue_intelligence_job", AsyncMock(return_value="queued")
+    )
+    response = await client.post(
+        f"/api/v1/admin/interviews/ai-operations/{interview_id}/restart",
+        headers=auth(seeded.admin_id),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["ai_service_tier"] == "flex"
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"openai_card_validation_model": "unpriced-model"},
+        {"openai_analysis_model": "unpriced-model"},
+        {"interview_ai_default_service_tier": "flex", "openai_job_timeout_seconds": 120},
+    ],
+)
+async def test_invalid_economy_configuration_fails_at_start(extra):
+    from pydantic import ValidationError
+
+    from app.core.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **extra)

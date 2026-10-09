@@ -101,6 +101,7 @@ async def _question_review_blocker(
             AutomationDecision.entity_type == "cluster",
             AutomationDecision.entity_id == cluster.id,
             AutomationDecision.decision_source == AutomationDecisionSource.HUMAN,
+            AutomationDecision.decision_type != AutomationDecisionType.CARD_AI_COST_WRITTEN_OFF,
         )
         .limit(1)
     )
@@ -528,6 +529,7 @@ def publication_quality_passes(
         or (contract.confidence < AUTO_PUBLISH_CONFIDENCE and not independently_verified)
         or validation.confidence < AUTO_PUBLISH_CONFIDENCE
         or (contract.unsupported_claims and not independently_verified)
+        or validation.requires_additional_sources
         or validation.unsupported_claims
         or validation.contradictions
         or validation.missing_required_points

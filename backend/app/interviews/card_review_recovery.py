@@ -15,6 +15,7 @@ from app.interviews.card_auto_publish import (
     publication_preflight_reason,
     publication_quality_passes,
 )
+from app.interviews.card_automation_domain import answer_repairable
 from app.interviews.card_automation_models import (
     AutomationDecision,
     CardAutomationSettings,
@@ -43,6 +44,7 @@ def no_human_decision() -> ColumnElement[bool]:
             AutomationDecision.entity_type == "cluster",
             AutomationDecision.entity_id == QuestionCluster.id,
             AutomationDecision.decision_source == Source.HUMAN,
+            AutomationDecision.decision_type != Decision.CARD_AI_COST_WRITTEN_OFF,
         )
     )
 
@@ -236,12 +238,12 @@ async def review_cluster(
                     except ValueError:
                         pass
                 if need_generation or (modern and not quality_passes):
-                    if modern and (validation or {}).get("question_is_self_contained") is False:
+                    if modern and not answer_repairable(validation or {}):
                         await _manual(
                             session,
                             cluster,
                             settings,
-                            "Question requires missing code, data or context",
+                            "Нужны дополнительные источники или контекст для ответа",
                         )
                     elif cluster.answer_repair_attempts >= MAX_ANSWER_REPAIRS:
                         await _manual(

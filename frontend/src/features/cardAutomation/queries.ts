@@ -196,6 +196,14 @@ export function useGenerateQuestionClusterAnswer() {
   });
 }
 
+export function useWriteOffUnknownCardCost() {
+  return useClusterMutation<{
+    expected_version: number;
+    request_id: string;
+    reason: string;
+  }>("admin", api.writeOffAdminCardAICost);
+}
+
 export function useUpdateQuestionClusterDraft(
   scope: CardAutomationScope = "admin",
 ) {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import (
@@ -36,6 +37,12 @@ from app.interviews.card_automation_types import (
     PersonalReviewStatus,
     QuestionClusterStatus,
 )
+
+
+def _budget_default(name: str) -> int | Decimal:
+    from app.core.config import get_settings
+
+    return cast(int | Decimal, getattr(get_settings(), name))
 
 
 def _enum(enum_type: type, name: str) -> Enum:
@@ -137,6 +144,12 @@ class QuestionCluster(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     answer_status: Mapped[AnswerContractStatus | None] = mapped_column(
         _enum(AnswerContractStatus, "answer_contract_status"), nullable=True
     )
+    generation_backlog: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    generation_deferred_reason: Mapped[str | None] = mapped_column(String(100))
+    generation_retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    generation_selected_revision: Mapped[int | None] = mapped_column(Integer)
+    generation_source_interview_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    generation_admitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ai_retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ai_error_code: Mapped[str | None] = mapped_column(String(100))
     answer_repair_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -354,6 +367,39 @@ class InterviewCardDuplicateReview(UUIDPrimaryKeyMixin, Base):
     )
 
 
+class CardAICharge(Base):
+    """Durable spend reservations, retained even if the source content is deleted."""
+
+    __tablename__ = "card_ai_charges"
+    request_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    cluster_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
+    interview_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    direction_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), index=True)
+    operation: Mapped[str] = mapped_column(
+        String(60), default="generate_answer_contract", server_default="generate_answer_contract"
+    )
+    manual: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    maintenance: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    status: Mapped[str] = mapped_column(String(30), default="reserved", server_default="reserved")
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reserve_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pledge_request_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    released_pledge_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 10), default=Decimal("0"), server_default="0"
+    )
+    reason: Mapped[str | None] = mapped_column(String(100))
+    request_reserve_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 10), default=Decimal("0"), server_default="0"
+    )
+    amount_usd: Mapped[Decimal] = mapped_column(Numeric(18, 10), nullable=False)
+    validation_reserve_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 10), nullable=False, default=Decimal("0"), server_default="0"
+    )
+
+
 class CardAutomationSettings(TimestampMixin, Base):
     __tablename__ = "card_automation_settings"
     __table_args__ = (
@@ -428,6 +474,30 @@ class CardAutomationSettings(TimestampMixin, Base):
     )
     min_failed_answers_for_promotion: Mapped[int] = mapped_column(
         Integer, default=2, server_default="2"
+    )
+    card_ai_max_topics_per_interview: Mapped[int] = mapped_column(
+        Integer,
+        default=lambda: _budget_default("card_ai_max_topics_per_interview"),
+        server_default="10",
+    )
+    card_ai_budget_per_interview_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 10),
+        default=lambda: _budget_default("card_ai_budget_per_interview_usd"),
+        server_default="0.40",
+    )
+    card_ai_daily_budget_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 10),
+        default=lambda: _budget_default("card_ai_daily_budget_usd"),
+        server_default="5",
+    )
+    card_ai_maintenance_budget_usd: Mapped[Decimal] = mapped_column(
+        Numeric(18, 10), default=Decimal("1"), server_default="1"
+    )
+    card_ai_min_priority_score: Mapped[float] = mapped_column(
+        Float, default=4.0, server_default="4"
+    )
+    card_ai_legacy_backlog_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
     )
     audit_sample_percent: Mapped[float] = mapped_column(Float, default=5.0, server_default="5.0")
     personal_review_enabled: Mapped[bool] = mapped_column(

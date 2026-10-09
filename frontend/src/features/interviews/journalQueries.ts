@@ -167,8 +167,15 @@ export function useDeleteInterviewStage() {
 
 export function useStartInterviewStageAnalysis() {
   return useJournalMutation(
-    ({ processId, stageId }: { processId: string; stageId: string }) =>
-      api.startInterviewStageAnalysis(processId, stageId),
+    ({
+      processId,
+      stageId,
+      aiServiceTier,
+    }: {
+      processId: string;
+      stageId: string;
+      aiServiceTier?: "default" | "flex";
+    }) => api.startInterviewStageAnalysis(processId, stageId, aiServiceTier),
   );
 }
 
@@ -322,4 +329,12 @@ export function useCancelInterviewOffer() {
   return useJournalMutation(({ processId }: { processId: string }) =>
     api.deleteInterviewOffer(processId),
   );
+}
+
+export function useInterviewAIOptions() {
+  return useQuery({
+    queryKey: ["interviews", "journal", "ai-options"],
+    queryFn: api.interviewAIOptions,
+    staleTime: 5 * 60_000,
+  });
 }
