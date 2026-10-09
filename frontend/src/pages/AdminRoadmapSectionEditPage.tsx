@@ -80,22 +80,24 @@ function SectionForm({
               label="Название"
               required
               value={form.title}
-              onChange={(event) =>
+              onChange={(event) => {
+                const title = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  title: event.currentTarget.value,
-                }))
-              }
+                  title,
+                }));
+              }}
             />
             <Textarea
               label="Описание"
               value={form.description ?? ""}
-              onChange={(event) =>
+              onChange={(event) => {
+                const description = event.currentTarget.value || null;
                 setForm((current) => ({
                   ...current,
-                  description: event.currentTarget.value || null,
-                }))
-              }
+                  description,
+                }));
+              }}
             />
             <Group grow>
               <NumberInput

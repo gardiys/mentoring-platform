@@ -1,15 +1,17 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
 import { AdminRoadmapCreatePage } from "../src/pages/AdminRoadmapCreatePage";
 import { AdminRoadmapEditPage } from "../src/pages/AdminRoadmapEditPage";
+import { AdminRoadmapSectionEditPage } from "../src/pages/AdminRoadmapSectionEditPage";
 import { AdminRoadmapsPage } from "../src/pages/AdminRoadmapsPage";
 import type {
   AdminRoadmapOutline,
   AdminRoadmapRead,
   AdminRoadmapSummary,
+  AdminSectionOutline,
 } from "../src/types/api";
 import { renderPage } from "./render";
 
@@ -74,6 +76,15 @@ const outline: AdminRoadmapOutline = {
       is_published: topic.is_published,
     })),
   })),
+};
+
+const sectionOutline: AdminSectionOutline = {
+  id: "section-id",
+  title: "Django",
+  description: null,
+  position: 0,
+  duration_days: null,
+  topics: [],
 };
 
 it("AdminRoadmapsPage показывает черновики", async () => {
@@ -173,4 +184,77 @@ it("редактор сохраняет настройки без отправк
   );
   expect(screen.getByText("Django ORM")).toBeInTheDocument();
   expect(screen.queryByLabelText(/Содержание/)).not.toBeInTheDocument();
+});
+
+it("создаёт раздел роадмапа через отдельную форму", async () => {
+  const read = vi.spyOn(api, "adminRoadmapSection");
+  const create = vi
+    .spyOn(api, "createAdminRoadmapSection")
+    .mockResolvedValue({ ...sectionOutline, id: "new-section-id" });
+  const { router } = renderPage(
+    <AdminRoadmapSectionEditPage />,
+    "/admin/roadmaps/roadmap-id/sections/new",
+    "/admin/roadmaps/:roadmapId/sections/new",
+  );
+
+  expect(
+    screen.getByRole("heading", { name: "Новый раздел" }),
+  ).toBeInTheDocument();
+  expect(read).not.toHaveBeenCalled();
+  await userEvent.type(screen.getByLabelText(/^Название/), "Новый раздел");
+  await userEvent.type(screen.getByLabelText(/^Описание/), "Описание раздела");
+  const position = screen.getByLabelText(/^Позиция/);
+  await userEvent.clear(position);
+  await userEvent.type(position, "2");
+  await userEvent.type(screen.getByLabelText(/^Длительность/), "7");
+  await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(create).toHaveBeenCalledWith("roadmap-id", {
+    title: "Новый раздел",
+    description: "Описание раздела",
+    position: 2,
+    duration_days: 7,
+  });
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe(
+      "/admin/roadmaps/roadmap-id/edit",
+    ),
+  );
+});
+
+it("редактирует раздел и позволяет очистить описание", async () => {
+  const section = { ...sectionOutline, description: "Старое описание" };
+  vi.spyOn(api, "adminRoadmapSection").mockResolvedValue(section);
+  const create = vi.spyOn(api, "createAdminRoadmapSection");
+  const update = vi
+    .spyOn(api, "updateAdminRoadmapSection")
+    .mockResolvedValue(section);
+  const { router } = renderPage(
+    <AdminRoadmapSectionEditPage />,
+    "/admin/roadmaps/roadmap-id/sections/section-id/edit",
+    "/admin/roadmaps/:roadmapId/sections/:sectionId/edit",
+  );
+
+  const title = await screen.findByLabelText(/^Название/);
+  expect(title).toHaveValue("Django");
+  await userEvent.clear(title);
+  await userEvent.type(title, "Обновлённый раздел");
+  const description = screen.getByLabelText(/^Описание/);
+  await userEvent.clear(description);
+  await userEvent.type(description, "Новое описание");
+  await userEvent.clear(description);
+  await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+  expect(create).not.toHaveBeenCalled();
+  expect(update).toHaveBeenCalledWith("roadmap-id", "section-id", {
+    title: "Обновлённый раздел",
+    description: null,
+    position: section.position,
+    duration_days: section.duration_days,
+  });
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe(
+      "/admin/roadmaps/roadmap-id/edit",
+    ),
+  );
 });
