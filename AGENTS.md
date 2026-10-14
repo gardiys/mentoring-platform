@@ -2,7 +2,8 @@
 
 Run `make lint`, `make format-python-check`, and `make test` to validate changes.
 For the Git test runner, also run `python -m unittest discover -s scripts -p 'test_*.py'`.
-Pre-commit runs bounded smoke tests for the changed component; full tests run on pre-push.
+Pre-commit runs bounded smoke tests for the changed component; full tests run manually.
+Git push does not run tests.
 Database schema is session-scoped; mark tests that change schema with `schema_change`.
 Backend tests require the local PostgreSQL database `mentoring_test`; set
 `TEST_DATABASE_URL` to use another database ending in `_test`.

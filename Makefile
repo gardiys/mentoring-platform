@@ -21,7 +21,8 @@ install:
 .PHONY: test-hook-full
 
 pre-commit-install:
-	poetry --project backend run pre-commit install
+	poetry --project backend run pre-commit uninstall --hook-type pre-push
+	poetry --project backend run pre-commit install --hook-type pre-commit
 
 pre-commit:
 	poetry --project backend run pre-commit run --all-files

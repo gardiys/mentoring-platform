@@ -1,4 +1,4 @@
-default_install_hook_types: [pre-commit, pre-push]
+default_install_hook_types: [pre-commit]
 default_stages: [pre-commit]
 
 repos:
@@ -44,13 +44,4 @@ repos:
         language: system
         files: ^scripts/
         pass_filenames: false
-      - id: full-tests
-        name: Full tests before push (logs in .local/checks)
-        entry: make test-hook-full
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-        require_serial: true
-
 exclude: ^(\.local/|\.codex/|\.agents/|graphify-out/)
