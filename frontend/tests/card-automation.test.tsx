@@ -973,7 +973,9 @@ it("требует явное подтверждение bulk action и обно
   const dialog = await screen.findByRole("dialog", {
     name: "Массовое действие · 2 кластеров",
   });
-  const actionSelect = within(dialog).getByLabelText("Действие");
+  const actionSelect = within(dialog).getByLabelText("Действие", {
+    selector: "input",
+  });
   await user.click(actionSelect);
   await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
   expect(actionSelect).toHaveValue("Исключить выбранный шум");

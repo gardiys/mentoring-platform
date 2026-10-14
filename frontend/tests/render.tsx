@@ -38,6 +38,7 @@ export function renderPage(
   );
   const result = render(
     <MantineProvider
+      env="test"
       defaultColorScheme="dark"
       colorSchemeManager={createPlatformColorSchemeManager()}
       theme={brandTheme}
