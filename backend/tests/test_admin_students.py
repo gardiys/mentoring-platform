@@ -131,9 +131,7 @@ async def test_admin_creates_go_student_with_cards_access_and_go_mentor_default(
         headers=auth(UUID(created.json()["id"])),
     )
     assert available_decks.status_code == 200, available_decks.text
-    assert [item["slug"] for item in available_decks.json()] == [
-        "go-core-for-new-students"
-    ]
+    assert [item["slug"] for item in available_decks.json()] == ["go-core-for-new-students"]
 
 
 async def test_admin_cannot_create_student_without_learning_track(

@@ -136,7 +136,7 @@ async def test_telemetry_counts_distinct_running_clusters_and_not_other_jobs(mon
         yield f"arq:in-progress:card-automation:{uuid4()}:route_question_occurrence:v1".encode()
 
     redis.scan_iter = keys
-    monkeypatch.setattr(telemetry.Redis, "from_url", lambda *a, **kw: redis)
+    monkeypatch.setattr(telemetry.Redis, "from_url", lambda *_args, **_kwargs: redis)
     assert await telemetry.running_card_cluster_ids() == {cluster_id}
     redis.exists.side_effect = ConnectionError()
     assert await telemetry.running_card_cluster_ids() is None

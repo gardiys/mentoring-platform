@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -37,7 +38,15 @@ TEST_DATABASE_URL = os.getenv(
 )
 if not TEST_DATABASE_URL.rstrip("/").split("/")[-1].split("?")[0].endswith("_test"):
     raise RuntimeError("TEST_DATABASE_URL must point to a database ending with '_test'")
-test_engine = create_async_engine(TEST_DATABASE_URL, poolclass=NullPool)
+test_engine = create_async_engine(
+    TEST_DATABASE_URL,
+    poolclass=NullPool,
+    connect_args={
+        "timeout": 10,
+        "command_timeout": 35,
+        "server_settings": {"lock_timeout": "5000", "statement_timeout": "30000"},
+    },
+)
 TestSession = async_sessionmaker(test_engine, expire_on_commit=False)
 
 
@@ -74,12 +83,43 @@ class SeededData:
     topic_ids: tuple[UUID, UUID]
 
 
-@pytest.fixture(autouse=True)
-async def reset_database() -> AsyncIterator[None]:
+async def recreate_database_schema() -> None:
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
-    yield
+
+
+@pytest.fixture(scope="session")
+async def database_schema() -> AsyncIterator[None]:
+    # Keep concurrent test runs from dropping/truncating each other's data.
+    async with test_engine.connect() as lock_connection:
+        await lock_connection.execute(text("SELECT pg_advisory_lock(714202610)"))
+        await lock_connection.commit()
+        try:
+            await recreate_database_schema()
+            yield
+        finally:
+            await lock_connection.execute(text("SELECT pg_advisory_unlock(714202610)"))
+            await lock_connection.commit()
+    await test_engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+async def reset_database(
+    database_schema: None, request: pytest.FixtureRequest
+) -> AsyncIterator[None]:
+    async with test_engine.begin() as connection:
+        tables = ", ".join(
+            connection.dialect.identifier_preparer.format_table(table)
+            for table in Base.metadata.tables.values()
+        )
+        await connection.execute(text(f"TRUNCATE TABLE {tables} RESTART IDENTITY CASCADE"))
+    try:
+        yield
+    finally:
+        # Migration tests may recreate tables without later model columns.
+        if request.node.get_closest_marker("schema_change") is not None:
+            await recreate_database_schema()
 
 
 @pytest.fixture

@@ -69,9 +69,7 @@ def _refresh_company_keys(*, phonetic: bool) -> None:
     rows = connection.execute(sa.text("SELECT id, name FROM companies")).mappings()
     for row in rows:
         connection.execute(
-            sa.text(
-                "UPDATE companies SET transliterated_name = :transliterated WHERE id = :id"
-            ),
+            sa.text("UPDATE companies SET transliterated_name = :transliterated WHERE id = :id"),
             {
                 "id": row["id"],
                 "transliterated": transliterate(row["name"], phonetic=phonetic),

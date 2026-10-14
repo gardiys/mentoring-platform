@@ -2478,15 +2478,6 @@ def build_ai_provider(settings: Settings) -> InterviewAIProvider:
     raise RuntimeError(f"Unsupported interview AI provider: {settings.interview_ai_provider}")
 
 
-def build_transcript(utterances: list[tuple[str, int, int, str]]) -> str:
-    lines: list[str] = []
-    for sequence, (speaker, start_ms, end_ms, text) in enumerate(utterances, start=1):
-        lines.append(
-            f"[U{sequence:03d}] [{_timestamp(start_ms)} - {_timestamp(end_ms)}] {speaker}:\n{text}"
-        )
-    return "\n\n".join(lines)
-
-
 def transcript_chunks(
     transcript_blocks: list[str],
     *,
@@ -2513,10 +2504,3 @@ def transcript_chunks(
             break
         start = max(start + 1, end - overlap)
     return chunks
-
-
-def _timestamp(milliseconds: int) -> str:
-    total_seconds, millis = divmod(milliseconds, 1_000)
-    minutes, seconds = divmod(total_seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d}.{millis:03d}"

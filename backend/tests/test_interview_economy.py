@@ -251,6 +251,7 @@ async def test_flex_rejects_unsafe_worker_timeout_before_request():
         await provider.close()
 
 
+@pytest.mark.schema_change
 async def test_economy_migration_keeps_existing_analyses_on_standard(completed_analysis):
     interview_id, _, _ = completed_analysis
     path = (

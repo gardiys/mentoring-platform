@@ -323,9 +323,7 @@ async def test_admin_records_obligation_then_starts_deadline_with_notice(
     assert repeated.status_code == 200
     assert repeated.json()["obligation"]["id"] == recorded_body["obligation"]["id"]
     async with TestSession() as session:
-        assert (
-            await session.scalar(select(func.count(CareerPackageObligation.id)))
-        ) == 1
+        assert (await session.scalar(select(func.count(CareerPackageObligation.id)))) == 1
         purposes = list(await session.scalars(select(CareerPackageDelivery.purpose)))
         assert CareerDeliveryPurpose.PAYMENT_OBLIGATION not in purposes
 

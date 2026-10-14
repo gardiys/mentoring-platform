@@ -62,9 +62,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["payout_id"], ["mentor_payouts.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["edited_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["edited_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(

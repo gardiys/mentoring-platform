@@ -35,11 +35,11 @@ from app.interviews.card_automation_schemas import (
     QuestionOccurrenceReprocessMutation,
 )
 from app.interviews.card_automation_service import (
+    calculate_interview_card_duplicates,
     correct_personal_review_item,
     create_question_cluster_card,
     get_card_automation_metrics,
     link_question_cluster_card,
-    list_interview_card_duplicates,
     list_managed_personal_review_items,
     list_personal_review_items,
     list_question_clusters,
@@ -1733,16 +1733,14 @@ async def test_card_duplicate_merge_preserves_learning_and_repoints_relations(
         await session.commit()
 
     async with TestSession() as session:
-        page = await list_interview_card_duplicates(
+        candidates = await calculate_interview_card_duplicates(
             session,
             direction_id=seeded.python_track_id,
             minimum_similarity=0.35,
-            limit=20,
-            offset=0,
         )
         candidate = next(
             item
-            for item in page.items
+            for item in candidates
             if {item.left.id, item.right.id} == {primary.id, duplicate.id}
         )
         admin = await session.get_one(User, seeded.admin_id)

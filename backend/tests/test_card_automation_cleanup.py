@@ -358,8 +358,7 @@ async def test_intelligence_delete_recalculates_automation_evidence(
             select(AutomationDecision).where(
                 AutomationDecision.entity_type == "personal_review_item",
                 AutomationDecision.entity_id == personal.id,
-                AutomationDecision.decision_type
-                == AutomationDecisionType.PERSONAL_REVIEW_ARCHIVED,
+                AutomationDecision.decision_type == AutomationDecisionType.PERSONAL_REVIEW_ARCHIVED,
             )
         )
         assert audit is not None
@@ -454,8 +453,7 @@ async def test_source_deletion_archives_mastered_personal_review_and_audits_tran
             select(AutomationDecision).where(
                 AutomationDecision.entity_type == "personal_review_item",
                 AutomationDecision.entity_id == personal.id,
-                AutomationDecision.decision_type
-                == AutomationDecisionType.PERSONAL_REVIEW_ARCHIVED,
+                AutomationDecision.decision_type == AutomationDecisionType.PERSONAL_REVIEW_ARCHIVED,
             )
         )
         assert audit is not None

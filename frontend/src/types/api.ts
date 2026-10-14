@@ -1,5 +1,4 @@
 import type { components } from "../api/generated/schema";
-import type { StorageUploadIntent } from "../api/client";
 
 type Schemas = components["schemas"];
 
@@ -25,8 +24,6 @@ export interface ProtectedContentMediaRead {
   created_at: string;
 }
 
-export type ContentMediaUploadIntent = StorageUploadIntent;
-
 export interface ContentMediaUploadMetadata {
   title: string | null;
   position: number;
@@ -46,7 +43,6 @@ export type TopicDetail = Schemas["TopicDetail"] & {
 export type ProgressStatus = Schemas["TopicProgressRead"]["status"];
 export type ProgressUpdateResponse = Schemas["ProgressUpdateResponse"];
 export type AdminRoadmapCreate = Schemas["AdminRoadmapCreate"];
-export type AdminSectionCreate = Schemas["AdminSectionCreate"];
 export type AdminTopicCreate = Schemas["AdminTopicCreate"];
 export type AdminRoadmapRead = Schemas["AdminRoadmapRead"];
 export type AdminRoadmapUpdate = Schemas["AdminRoadmapUpdate"];
@@ -64,9 +60,6 @@ export type AdminTopicRead = Schemas["AdminTopicRead"] & {
 export type AdminTrackMutation = Schemas["AdminTrackMutation"];
 export type AdminTrackRead = Schemas["AdminTrackRead"];
 export type AdminTrackOptions = Schemas["AdminTrackOptions"];
-export type AdminTrackRoadmapRead = Schemas["AdminTrackRoadmapRead"];
-export type AdminTrackStudentOption = Schemas["AdminTrackStudentOption"];
-export type TrackAccessRead = Schemas["TrackAccessRead"];
 
 export type AdminStudentMutation = Omit<
   Schemas["AdminStudentMutation"],
@@ -94,7 +87,6 @@ export type AdminStudentMutation = Omit<
   program_excluded: boolean;
   program_exclusion_reason: string | null;
 };
-export type AdminStudentTrackRead = Schemas["AdminStudentTrackRead"];
 export interface AdminStudentMentorRead {
   id: string;
   role: Schemas["UserRole"];
@@ -172,9 +164,6 @@ export interface AdminMentorProfileMutation {
 }
 export type AdminMentorListItem = Schemas["AdminMentorListItem"];
 export type AdminMentorCandidate = Schemas["AdminMentorCandidate"];
-export type AdminMentorDirectionsMutation =
-  Schemas["AdminMentorDirectionsMutation"];
-export type AdminStudentMentorMutation = Schemas["AdminStudentMentorMutation"];
 export type KnowledgeEntryKind = Schemas["KnowledgeEntryKind"];
 export type KnowledgeTopicListItem = Schemas["KnowledgeTopicListItem"];
 export type KnowledgeTopicDetail = Schemas["KnowledgeTopicDetail"];
@@ -242,8 +231,6 @@ export type AdminInterviewDeckSettingsMutation =
 export type InterviewProcessStatus = Schemas["InterviewProcessStatus"];
 export type InterviewStageType = Schemas["InterviewStageType"];
 export type InterviewAttachmentRead = Schemas["InterviewAttachmentRead"];
-export type InterviewStageAttachmentRead =
-  Schemas["InterviewStageAttachmentRead"];
 export type InterviewProcessMutation = Schemas["InterviewProcessMutation"];
 export type InterviewProcessOutcomeMutation =
   Schemas["InterviewProcessOutcomeMutation"];
@@ -253,8 +240,6 @@ export type InterviewProcessStageMutation =
   Schemas["InterviewProcessStageMutation"];
 export type InterviewProcessStageRead = Schemas["InterviewProcessStageRead"];
 export type InterviewProcessSummary = Schemas["InterviewProcessSummary"];
-export type AdminInterviewProcessSummary =
-  Schemas["AdminInterviewProcessSummary"];
 export type AdminInterviewProcessPage = Schemas["AdminInterviewProcessPage"];
 export type InterviewProcessDetail = Schemas["InterviewProcessDetail"];
 export type CompanyOption = Schemas["CompanyOption"];
@@ -266,7 +251,6 @@ export type AdminCompanyAliasProposalPage =
   Schemas["AdminCompanyAliasProposalPage"];
 export type AdminCompanyAliasProposalMutation =
   Schemas["AdminCompanyAliasProposalMutation"];
-export type InterviewUploadIntent = StorageUploadIntent;
 export type InterviewDownloadUrl = Schemas["InterviewDownloadUrl"];
 export type InterviewCatalogCompanyListItem =
   Schemas["InterviewCatalogCompanyListItem"];
@@ -292,8 +276,6 @@ export type InterviewCatalogCommentRead =
 export type InterviewCatalogCommentMutation =
   Schemas["InterviewCatalogCommentMutation"];
 export type InterviewCatalogMediaKind = Schemas["InterviewCatalogMediaKind"];
-export type InterviewCatalogHistoryItem =
-  Schemas["InterviewCatalogHistoryItem"];
 export type InterviewCatalogHistoryPage =
   Schemas["InterviewCatalogHistoryPage"];
 
@@ -331,11 +313,6 @@ export interface ScheduleTrackRead {
   id: string;
   slug: string;
   title: string;
-}
-
-export interface MentorTrackCalendarMutation {
-  track_id: string;
-  calendar_url: string;
 }
 
 export interface MentorTrackCalendarRead {
@@ -975,17 +952,6 @@ export type IntelligenceAssessment =
   | "mostly_incorrect"
   | "incorrect"
   | "unable_to_assess";
-
-export interface IntelligenceInterviewCreate {
-  company_name: string;
-  company_id?: string | null;
-  company_alias?: string | null;
-  company_alias_confirmed?: boolean;
-  track_id: string;
-  position_name?: string | null;
-  interview_type: IntelligenceInterviewType;
-  interviewed_at: string;
-}
 
 export interface IntelligenceInterviewSummary {
   id: string;

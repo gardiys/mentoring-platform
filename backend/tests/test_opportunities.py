@@ -366,7 +366,7 @@ async def test_python_alumnus_transition_requires_approval_acceptance_and_paymen
         json={"approved": True, "admin_note": "Подтверждено"},
     )
     assert decided.status_code == 200, decided.text
-    stale_acceptance = await client.post(
+    wrong_product_acceptance = await client.post(
         f"/api/v1/opportunities/python-repeat/applications/{application_id}/accept-terms",
         headers=auth(seeded.student_id),
         json={
@@ -377,7 +377,10 @@ async def test_python_alumnus_transition_requires_approval_acceptance_and_paymen
             "acceptance_statement": PUBLIC_OFFER_STATEMENT,
         },
     )
-    assert stale_acceptance.status_code == 409, stale_acceptance.text
+    assert wrong_product_acceptance.status_code == 404, wrong_product_acceptance.text
+    assert (
+        wrong_product_acceptance.json()["detail"]["code"] == "python_repeat_application_not_found"
+    )
 
     accepted = await client.post(
         f"/api/v1/opportunities/go-transition/{application_id}/accept",

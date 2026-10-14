@@ -621,7 +621,19 @@ async def test_other_mentor_cannot_manage_student_payments(
     assert response.json()["detail"]["code"] == "student_not_assigned_to_mentor"
 
 
-async def test_student_can_change_two_payment_days(client: AsyncClient, seeded: SeededData) -> None:
+@pytest.fixture
+def payment_schedule_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 9, 1)
+
+    monkeypatch.setattr(payment_service, "date", FixedDate)
+
+
+async def test_student_can_change_two_payment_days(
+    client: AsyncClient, seeded: SeededData, payment_schedule_clock: None
+) -> None:
     await client.put(
         f"/api/v1/mentor/students/{seeded.student_id}/employment",
         headers=auth(seeded.mentor_id),
@@ -873,7 +885,7 @@ async def test_admin_can_view_fully_paid_offers_and_revoke_missing_payment(
 
 
 async def test_admin_can_postpone_an_individual_payment_with_audit_history(
-    client: AsyncClient, seeded: SeededData
+    client: AsyncClient, seeded: SeededData, payment_schedule_clock: None
 ) -> None:
     dashboard = await client.put(
         f"/api/v1/mentor/students/{seeded.student_id}/employment",

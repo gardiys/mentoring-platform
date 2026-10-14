@@ -383,6 +383,14 @@ def test_every_api_route_has_authentication_or_an_explicit_public_contract() -> 
         ("GET", "/api/v1/auth/web/telegram/start"),
         ("GET", "/api/v1/auth/web/telegram/callback"),
         ("POST", "/api/v1/auth/web/logout"),
+        # Desktop handshake and server sync enforce their own credentials in
+        # the handlers; their security contracts have dedicated API tests.
+        ("POST", "/api/v1/auth/desktop/start"),
+        ("GET", "/api/v1/auth/desktop/authorize"),
+        ("POST", "/api/v1/auth/desktop/authorize"),
+        ("POST", "/api/v1/auth/desktop/token"),
+        ("POST", "/api/v1/auth/desktop/logout"),
+        ("POST", "/api/v1/copilot/internal/sessions"),
         ("POST", "/api/v1/payments/tochka/webhook"),
         ("GET", "/api/v1/interviews/catalog/stages/{stage_id}/media/stream"),
         ("GET", "/api/v1/knowledge/entries/{entry_slug}/media/{media_id}/stream"),

@@ -221,12 +221,6 @@ class MentorNoteRead(BaseModel):
     updated_at: datetime
 
 
-class MentorDocumentMutation(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    text_content: str | None = Field(default=None, max_length=100_000)
-
-
 class MentorDocumentRead(BaseModel):
     id: UUID
     kind: MentorDocumentKind

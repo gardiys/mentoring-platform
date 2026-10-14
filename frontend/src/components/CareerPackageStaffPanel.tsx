@@ -110,9 +110,11 @@ const sourceTemplate = (direction: string) => {
   };
 };
 
-const sourceFormValue = (packageItem: CareerPackage) => {
-  const source = packageItem.source_data;
-  if (!source) return sourceTemplate(packageItem.direction);
+const sourceFormValue = (
+  direction: string,
+  source: CareerPackage["source_data"],
+) => {
+  if (!source) return sourceTemplate(direction);
   return {
     target_positions: joinLines(source.target_positions),
     target_seniority: source.target_seniority,
@@ -145,10 +147,12 @@ function SourceEditor({
   pending: boolean;
 }) {
   const source = packageItem.source_data;
-  const [value, setValue] = useState(() => sourceFormValue(packageItem));
+  const [value, setValue] = useState(() =>
+    sourceFormValue(packageItem.direction, source),
+  );
 
   useEffect(() => {
-    setValue(sourceFormValue(packageItem));
+    setValue(sourceFormValue(packageItem.direction, source));
   }, [packageItem.id, packageItem.direction, source]);
 
   const invalid =

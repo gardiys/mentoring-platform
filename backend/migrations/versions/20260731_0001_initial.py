@@ -29,8 +29,12 @@ def upgrade() -> None:
         sa.Column("first_name", sa.String(120), nullable=False),
         sa.Column("last_name", sa.String(120), nullable=True),
         sa.Column("role", user_role, nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id", name="pk_users"),
     )
     op.create_index("ix_users_email", "users", ["email"], unique=True)
@@ -43,8 +47,12 @@ def upgrade() -> None:
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("position", sa.Integer(), nullable=False),
         sa.Column("is_published", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("position >= 0", name="ck_roadmaps_position_non_negative"),
         sa.PrimaryKeyConstraint("id", name="pk_roadmaps"),
         sa.UniqueConstraint("slug", name="uq_roadmaps_slug"),
@@ -53,10 +61,22 @@ def upgrade() -> None:
         "mentor_students",
         sa.Column("mentor_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("student_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("assigned_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "assigned_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("mentor_id <> student_id", name="ck_mentor_students_different_users"),
-        sa.ForeignKeyConstraint(["mentor_id"], ["users.id"], ondelete="CASCADE", name="fk_mentor_students_mentor_id_users"),
-        sa.ForeignKeyConstraint(["student_id"], ["users.id"], ondelete="CASCADE", name="fk_mentor_students_student_id_users"),
+        sa.ForeignKeyConstraint(
+            ["mentor_id"],
+            ["users.id"],
+            ondelete="CASCADE",
+            name="fk_mentor_students_mentor_id_users",
+        ),
+        sa.ForeignKeyConstraint(
+            ["student_id"],
+            ["users.id"],
+            ondelete="CASCADE",
+            name="fk_mentor_students_student_id_users",
+        ),
         sa.PrimaryKeyConstraint("mentor_id", "student_id", name="pk_mentor_students"),
     )
     op.create_index("ix_mentor_students_mentor", "mentor_students", ["mentor_id", "student_id"])
@@ -67,10 +87,19 @@ def upgrade() -> None:
         sa.Column("title", sa.String(240), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("position", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.CheckConstraint("position >= 0", name="ck_roadmap_sections_position_non_negative"),
-        sa.ForeignKeyConstraint(["roadmap_id"], ["roadmaps.id"], ondelete="CASCADE", name="fk_roadmap_sections_roadmap_id_roadmaps"),
+        sa.ForeignKeyConstraint(
+            ["roadmap_id"],
+            ["roadmaps.id"],
+            ondelete="CASCADE",
+            name="fk_roadmap_sections_roadmap_id_roadmaps",
+        ),
         sa.PrimaryKeyConstraint("id", name="pk_roadmap_sections"),
     )
     op.create_index("ix_roadmap_sections_position", "roadmap_sections", ["roadmap_id", "position"])
@@ -78,10 +107,22 @@ def upgrade() -> None:
         "roadmap_enrollments",
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("roadmap_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("started_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "started_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["roadmap_id"], ["roadmaps.id"], ondelete="CASCADE", name="fk_roadmap_enrollments_roadmap_id_roadmaps"),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE", name="fk_roadmap_enrollments_user_id_users"),
+        sa.ForeignKeyConstraint(
+            ["roadmap_id"],
+            ["roadmaps.id"],
+            ondelete="CASCADE",
+            name="fk_roadmap_enrollments_roadmap_id_roadmaps",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.id"],
+            ondelete="CASCADE",
+            name="fk_roadmap_enrollments_user_id_users",
+        ),
         sa.PrimaryKeyConstraint("user_id", "roadmap_id", name="pk_roadmap_enrollments"),
     )
     op.create_table(
@@ -95,11 +136,23 @@ def upgrade() -> None:
         sa.Column("position", sa.Integer(), nullable=False),
         sa.Column("estimated_minutes", sa.Integer(), nullable=True),
         sa.Column("is_published", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.CheckConstraint("estimated_minutes IS NULL OR estimated_minutes > 0", name="ck_topics_estimated_minutes_positive"),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.CheckConstraint(
+            "estimated_minutes IS NULL OR estimated_minutes > 0",
+            name="ck_topics_estimated_minutes_positive",
+        ),
         sa.CheckConstraint("position >= 0", name="ck_topics_position_non_negative"),
-        sa.ForeignKeyConstraint(["section_id"], ["roadmap_sections.id"], ondelete="CASCADE", name="fk_topics_section_id_roadmap_sections"),
+        sa.ForeignKeyConstraint(
+            ["section_id"],
+            ["roadmap_sections.id"],
+            ondelete="CASCADE",
+            name="fk_topics_section_id_roadmap_sections",
+        ),
         sa.PrimaryKeyConstraint("id", name="pk_topics"),
         sa.UniqueConstraint("slug", name="uq_topics_slug"),
     )
@@ -112,9 +165,18 @@ def upgrade() -> None:
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("first_completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.ForeignKeyConstraint(["topic_id"], ["topics.id"], ondelete="CASCADE", name="fk_topic_progress_topic_id_topics"),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE", name="fk_topic_progress_user_id_users"),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.ForeignKeyConstraint(
+            ["topic_id"],
+            ["topics.id"],
+            ondelete="CASCADE",
+            name="fk_topic_progress_topic_id_topics",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"], ["users.id"], ondelete="CASCADE", name="fk_topic_progress_user_id_users"
+        ),
         sa.PrimaryKeyConstraint("user_id", "topic_id", name="pk_topic_progress"),
     )
     op.create_index("ix_topic_progress_user_updated", "topic_progress", ["user_id", "updated_at"])

@@ -5,12 +5,63 @@ PROD_COMPOSE = docker compose -f infra/docker-compose.prod.yml --env-file $(PROD
 first_name ?= Администратор
 CARD_AUTOMATION_ARGS ?=
 CARD_TOPIC_REPROCESS_ARGS ?=
+GRAPHIFY_VERSION := 0.9.90
+GRAPHIFY := $(CURDIR)/.local/bin/graphify
+export PATH := $(CURDIR)/.local/bin:$(CURDIR)/.local/node/bin:$(PATH)
 
 .PHONY: install up down backend frontend worker worker-ai worker-maintenance worker-media migrate docker-migrate migration seed test test-backend test-frontend lint format typecheck api-generate check-nexara prod-check-nexara backfill-question-embeddings prod-backfill-question-embeddings card-automation-backfill prod-card-automation-backfill card-automation-reprocess-missing-topics prod-card-automation-reprocess-missing-topics card-automation-evaluate prod-card-automation-evaluate check-s3-multipart prod-check-s3-multipart tochka-webhook prod-tochka-webhook ensure-test-db prod-env-sync prod-preflight prod-init prod-volume-check prod-config prod-migrate prod-up prod-down prod-logs prod-ps prod-admin prod-backup
 
 install:
 	cd backend && poetry install
 	cd frontend && corepack enable && pnpm install
+	$(MAKE) pre-commit-install
+
+.PHONY: pre-commit-install pre-commit lint-python format-python-check graph-install graph graph-update
+.PHONY: lint-frontend lint-frontend-fix format-frontend format-frontend-check typecheck-frontend check-frontend
+.PHONY: test-hook-full
+
+pre-commit-install:
+	poetry --project backend run pre-commit install
+
+pre-commit:
+	poetry --project backend run pre-commit run --all-files
+
+lint-python:
+	poetry --project backend run ruff check .
+
+format-python-check:
+	poetry --project backend run ruff format --check .
+
+lint-frontend:
+	cd frontend && pnpm lint
+
+lint-frontend-fix:
+	cd frontend && pnpm lint:fix
+
+format-frontend:
+	cd frontend && pnpm format
+
+format-frontend-check:
+	cd frontend && pnpm format:check
+
+typecheck-frontend:
+	cd frontend && pnpm typecheck
+
+check-frontend:
+	cd frontend && pnpm check
+
+graph-install:
+	UV_TOOL_DIR="$(CURDIR)/.local/tools" UV_TOOL_BIN_DIR="$(CURDIR)/.local/bin" \
+		uv tool install 'graphifyy[sql]==$(GRAPHIFY_VERSION)'
+	$(GRAPHIFY) install --project --platform codex
+
+graph:
+	$(GRAPHIFY) extract . --code-only --no-dedup --force --allow-dedup-shrink
+	$(GRAPHIFY) cluster-only . --no-label --no-viz
+	$(GRAPHIFY) export html
+
+graph-update:
+	$(GRAPHIFY) update . --force
 
 up:
 	$(COMPOSE) up --build -d
@@ -109,9 +160,15 @@ seed:
 	cd backend && poetry run python -m app.seed
 
 ensure-test-db:
-	-$(COMPOSE) exec -T postgres createdb -U mentoring mentoring_test
+	@if [ -z "$$TEST_DATABASE_URL" ]; then \
+		$(COMPOSE) exec -T postgres sh -ec \
+		'existing=$$(PGCONNECT_TIMEOUT=5 psql -U mentoring -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '\''mentoring_test'\''"); [ "$$existing" = 1 ] || createdb -U mentoring mentoring_test'; \
+	fi
 
 test: test-backend test-frontend
+
+test-hook-full: ensure-test-db
+	poetry --project backend run python scripts/check_tests.py full
 
 test-backend: ensure-test-db
 	cd backend && poetry run pytest
@@ -120,16 +177,16 @@ test-frontend:
 	cd frontend && pnpm test
 
 lint:
-	cd backend && poetry run ruff check app tests
-	cd frontend && pnpm lint
+	$(MAKE) lint-python
+	$(MAKE) lint-frontend
 
 format:
-	cd backend && poetry run ruff format app tests
-	cd frontend && pnpm format
+	poetry --project backend run ruff format .
+	$(MAKE) format-frontend
 
 typecheck:
 	cd backend && poetry run mypy app
-	cd frontend && pnpm typecheck
+	$(MAKE) typecheck-frontend
 
 api-generate:
 	cd frontend && pnpm api:generate

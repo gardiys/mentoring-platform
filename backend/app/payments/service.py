@@ -3,7 +3,6 @@ from __future__ import annotations
 import calendar
 from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
-from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select
@@ -1931,11 +1930,7 @@ async def _payout_reads(
     if mentor_id is not None:
         statement = statement.where(MentorPayout.mentor_id == mentor_id)
     rows = (await session.execute(statement)).all()
-    payout_ids = [
-        payout.id
-        for payout, _ in rows
-        if payout.status is MentorPayoutStatus.REQUESTED
-    ]
+    payout_ids = [payout.id for payout, _ in rows if payout.status is MentorPayoutStatus.REQUESTED]
     allocations_by_payout: dict[UUID, list[MentorPayoutAllocationRead]] = {
         payout_id: [] for payout_id in payout_ids
     }
@@ -1971,9 +1966,7 @@ async def _payout_reads(
                 MentorPayoutAllocationRead(
                     reward_id=reward.id,
                     student_id=student.id,
-                    student_name=" ".join(
-                        filter(None, (student.first_name, student.last_name))
-                    ),
+                    student_name=" ".join(filter(None, (student.first_name, student.last_name))),
                     student_telegram_username=student.telegram_username,
                     kind=reward.kind,
                     company_name=employment.company_name if employment else None,
@@ -2372,21 +2365,6 @@ def _salary_percent(amount_kopecks: int, net_salary_kopecks: int) -> Decimal:
     return (Decimal(amount_kopecks) * Decimal(100) / Decimal(net_salary_kopecks)).quantize(
         Decimal("0.01"),
         rounding=ROUND_HALF_UP,
-    )
-
-
-def _is_absolute_https_url(value: str) -> bool:
-    try:
-        parsed = urlsplit(value)
-        _ = parsed.port
-    except ValueError:
-        return False
-    return (
-        parsed.scheme.lower() == "https"
-        and parsed.hostname is not None
-        and parsed.username is None
-        and parsed.password is None
-        and not parsed.fragment
     )
 
 

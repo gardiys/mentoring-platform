@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc -b --pretty false",
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck",
     "test": "vitest run",
     "api:generate": "openapi-typescript ${OPENAPI_URL:-http://localhost:8000/openapi.json} -o src/api/generated/schema.ts"
   },
@@ -36,6 +38,8 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.7.0",
     "eslint": "^9.32.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",

@@ -86,6 +86,7 @@ class ActiveSearchParameters(StrictModel):
     start_date: date
     additional_notes: str | None = Field(default=None, max_length=10_000)
 
+
 class CareerPackageAIOutput(StrictModel):
     self_presentation_card: SelfPresentationCard | None = None
     active_search_parameters: ActiveSearchParameters | None = None

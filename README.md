@@ -977,9 +977,83 @@ AI-разбор запускается из этапа дневника с уж�
 
 ## Тесты
 
+После `make install` Git запускает pre-commit перед каждым коммитом:
+`ruff check --fix`, `ruff format` для изменённых Python-файлов и быстрые тесты
+затронутой части проекта. Полный набор backend- и frontend-тестов запускается
+перед push. Для существующего окружения установите dev-зависимости
+через `cd backend && poetry install`, затем выполните `make pre-commit-install`.
+Node.js, pnpm, Poetry и PostgreSQL должны быть доступны при коммите.
+Проверить все файлы вручную можно через `make pre-commit`.
+
+При изменениях frontend запускаются все его тесты. При изменениях backend
+выполняются smoke-тесты авторизации, безопасности, схем и поиска вопросов,
+а также до трёх связанных тестовых модулей. Остальные модули проверяются перед
+push: быстрый хук не заменяет полный набор.
+
+Быстрые тесты ограничены пятью минутами, полные проверки — двадцатью;
+отдельный backend-тест, включая подготовку и завершение, — 60 секундами.
+SQL-запросы тестовой базы и ожидание блокировок также имеют таймауты.
+При превышении лимита проверка завершается ошибкой и блокирует Git-операцию.
+Общий лимит можно изменить через `CHECK_TEST_TIMEOUT_SECONDS`, лимит pytest —
+через `--timeout`. В терминале прогресс выводится во время запуска, в том числе
+внутри pre-commit. Если Git запущен без терминала, журнал можно смотреть отдельно:
+
+```bash
+tail -f .local/checks/quick-backend.log
+tail -f .local/checks/full-backend.log
+make test-hook-full
+```
+
+После обновления зависимостей выполните `make pre-commit-install`, чтобы установить
+оба Git-хука. Схема PostgreSQL создаётся один раз на тестовый запуск; данные
+очищаются перед каждым тестом. Тесты, меняющие схему, помечаются `schema_change`
+и восстанавливают её после выполнения. Одновременные запуски на одной тестовой
+базе отклоняются по таймауту блокировки вместо повреждения данных друг друга.
+
+При изменениях frontend pre-commit также выполняет `eslint --fix`, Prettier и
+проверку типов TypeScript. ESLint использует рекомендованные правила JavaScript,
+TypeScript, React/JSX и React Hooks; предупреждения считаются ошибками.
+`eslint-config-prettier` отключает правила, конфликтующие с форматтером.
+Настройки форматирования закреплены в `frontend/.prettierrc.json`; generated API,
+vendor-код, сборка и кэши исключены из проверок.
+
+```bash
+make check-frontend        # ESLint, Prettier --check и TypeScript
+make lint-frontend-fix     # исправления ESLint
+make format-frontend      # форматирование Prettier
+make test-frontend         # frontend-тесты
+```
+
+`make lint-python` и `make format-python-check` проверяют весь Python-код проекта,
+включая миграции и скрипты в `docs/research`. Настройки Ruff находятся в
+`backend/pyproject.toml` и наследуются корневым `ruff.toml`.
+
 Backend tests используют отдельную PostgreSQL database `mentoring_test`. Она создаётся init-скриптом нового Compose volume; `make test-backend` также безопасно пытается создать её для существующего volume. В production runtime `create_all()` не используется; оно разрешено только в изолированных тестах.
 
 Frontend tests покрывают loading/data/error, структуру roadmap, mutation темы с обновлением UI, базу знаний и поиск, карточки собеседований, mentor list, онбординг и browser/Telegram adapters. Backend отдельно проверяет валидную, поддельную и просроченную Telegram-подпись, видимость опубликованных материалов, обновление полнотекстового индекса, доступ к колодам по треку и интервальное планирование карточек.
+
+### Граф проекта для AI-агентов
+
+Используется официальный [Graphify](https://github.com/Graphify-Labs/graphify)
+(`graphifyy[sql]==0.9.90`). Для установки нужен `uv`:
+
+```bash
+make graph-install
+make graph
+.local/bin/graphify query "interview card automation" --budget 1500
+.local/bin/graphify explain "app/main.py"
+make graph-update
+```
+
+CLI устанавливается в `.local/bin`, окружение — в `.local/tools`, инструкции
+для Codex — в `AGENTS.md` и `.codex/skills/graphify`. `make graph` строит граф
+кода через локальный AST-разбор без LLM. `.graphifyignore` исключает секреты,
+импортированные данные, vendor-код и сгенерированные файлы.
+
+Результаты: `graphify-out/graph.json` для запросов агентов,
+`graphify-out/GRAPH_REPORT.md` для обзора архитектуры и `graphify-out/graph.html`
+для просмотра в браузере. Эти артефакты не коммитятся; после изменений кода
+обновляйте их через `make graph-update`.
 
 ## Повторное менторство по Python
 

@@ -1,7 +1,7 @@
 """Add mentor directions and knowledge topic directions."""
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "20260801_0022"
@@ -22,21 +22,15 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["mentor_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["track_id"], ["learning_tracks.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["track_id"], ["learning_tracks.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("mentor_id", "track_id"),
     )
     op.create_table(
         "knowledge_topic_tracks",
         sa.Column("topic_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("track_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["topic_id"], ["knowledge_topics.id"], ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(
-            ["track_id"], ["learning_tracks.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["topic_id"], ["knowledge_topics.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["track_id"], ["learning_tracks.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("topic_id", "track_id"),
     )
     op.execute(

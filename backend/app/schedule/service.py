@@ -72,10 +72,6 @@ def _override_affects_schedule(event: ScheduleEvent, *, now: datetime) -> bool:
     return event.rescheduled_from >= now or event.rescheduled_to > now
 
 
-def _rescheduled_occurrence_is_pending(event: ScheduleEvent, *, now: datetime) -> bool:
-    return event.rescheduled_to is not None and event.rescheduled_to > now
-
-
 def _reschedule_is_cancellable(event: ScheduleEvent, *, now: datetime) -> bool:
     if event.rescheduled_from is None or event.rescheduled_to is None:
         return False

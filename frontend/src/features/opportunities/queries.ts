@@ -81,10 +81,6 @@ export function useCheckoutPythonRepeatInstallment() {
   return useMutation({ mutationFn: api.checkoutPythonRepeatInstallment });
 }
 
-export function useCompleteDevelopmentPythonRepeatPayment() {
-  return usePythonRepeatMutation(api.completeDevelopmentPythonRepeatPayment);
-}
-
 export function useAdminPythonRepeat() {
   return useQuery({
     queryKey: opportunityKeys.adminPythonRepeat,

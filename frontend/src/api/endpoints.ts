@@ -95,7 +95,6 @@ import type {
   AdminMentorPayoutDashboard,
   EmploymentMutation,
   MentorRewardSummary,
-  PaymentInstallmentStatus,
   PaymentLinkRead,
   StudentPaymentDashboard,
   InterviewDownloadUrl,
@@ -473,20 +472,6 @@ export const api = {
       `/api/v1/mentor/payouts/${payoutId}/receipt`,
       { method: "DELETE" },
     ),
-  adminPayments: (options: {
-    status?: PaymentInstallmentStatus | null;
-    limit?: number;
-    offset?: number;
-  }) => {
-    const params = new URLSearchParams({
-      limit: String(options.limit ?? 50),
-      offset: String(options.offset ?? 0),
-    });
-    if (options.status) params.set("status", options.status);
-    return apiRequest<AdminPaymentPage>(
-      `/api/v1/admin/payments?${params.toString()}`,
-    );
-  },
   adminPaymentStudents: (
     options: {
       status?: AdminEmploymentPaymentStatus;
@@ -540,10 +525,6 @@ export const api = {
       `/api/v1/admin/payments/installments/${installmentId}/revoke`,
       { method: "POST", body: JSON.stringify({ reason }) },
     ),
-  markAdminMentorRewardPaid: (rewardId: string) =>
-    apiRequest<void>(`/api/v1/admin/payments/rewards/${rewardId}/mark-paid`, {
-      method: "POST",
-    }),
   voidAdminMentorReward: (rewardId: string, reason: string) =>
     apiRequest<AdminMentorPayoutDashboard>(
       `/api/v1/admin/payments/rewards/${rewardId}/void`,
@@ -1372,11 +1353,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ body }),
     }),
-  updateMentorNote: (studentId: string, noteId: string, body: string) =>
-    apiRequest<MentorNoteRead>(
-      `/api/v1/mentor/students/${studentId}/notes/${noteId}`,
-      { method: "PUT", body: JSON.stringify({ body }) },
-    ),
   deleteMentorNote: (studentId: string, noteId: string) =>
     apiRequest<void>(`/api/v1/mentor/students/${studentId}/notes/${noteId}`, {
       method: "DELETE",
@@ -1660,8 +1636,6 @@ export const api = {
       `/api/v1/admin/schedule/events?${params.toString()}`,
     );
   },
-  adminScheduleEvent: (eventId: string) =>
-    apiRequest<ScheduleEventRead>(`/api/v1/admin/schedule/events/${eventId}`),
   createAdminScheduleEvent: (payload: AdminScheduleEventMutation) =>
     apiRequest<ScheduleEventRead>("/api/v1/admin/schedule/events", {
       method: "POST",
@@ -1698,7 +1672,6 @@ export const api = {
     apiRequest<void>(`/api/v1/admin/useful-links/${linkId}`, {
       method: "DELETE",
     }),
-  adminRoadmaps: () => apiRequest<AdminRoadmapRead[]>("/api/v1/admin/roadmaps"),
   adminRoadmapSummaries: () =>
     apiRequest<AdminRoadmapSummary[]>("/api/v1/admin/roadmaps/summaries"),
   adminRoadmapOutline: (id: string) =>
@@ -1780,8 +1753,6 @@ export const api = {
       `/api/v1/admin/roadmaps/${roadmapId}/sections/${sectionId}/topics/${topicId}/media/${mediaId}`,
       { method: "DELETE" },
     ),
-  adminRoadmap: (id: string) =>
-    apiRequest<AdminRoadmapRead>(`/api/v1/admin/roadmaps/${id}`),
   createAdminRoadmap: (payload: AdminRoadmapCreate) =>
     apiRequest<AdminRoadmapRead>("/api/v1/admin/roadmaps", {
       method: "POST",
@@ -1831,8 +1802,6 @@ export const api = {
     apiRequest<KnowledgeSearchResult[]>(
       `/api/v1/knowledge/search?q=${encodeURIComponent(query)}`,
     ),
-  adminKnowledgeTopics: () =>
-    apiRequest<AdminKnowledgeTopicRead[]>("/api/v1/admin/knowledge/topics"),
   adminKnowledgeTopicSummaries: () =>
     apiRequest<AdminKnowledgeTopicSummary[]>(
       "/api/v1/admin/knowledge/topics/summaries",
@@ -1898,8 +1867,6 @@ export const api = {
       `/api/v1/admin/content-media/${mediaId}/normalization/retry`,
       { method: "POST" },
     ),
-  adminKnowledgeTopic: (id: string) =>
-    apiRequest<AdminKnowledgeTopicRead>(`/api/v1/admin/knowledge/topics/${id}`),
   createAdminKnowledgeTopic: (payload: AdminKnowledgeTopicMutation) =>
     apiRequest<AdminKnowledgeTopicRead>("/api/v1/admin/knowledge/topics", {
       method: "POST",
@@ -2290,8 +2257,6 @@ export const api = {
         body: JSON.stringify({ rating }),
       },
     ),
-  adminInterviewDecks: () =>
-    apiRequest<AdminInterviewDeckRead[]>("/api/v1/admin/interviews/decks"),
   adminInterviewProcesses: (
     status: InterviewProcessStatus | "all" = "all",
     options: { limit?: number; offset?: number } = {},
@@ -2364,8 +2329,6 @@ export const api = {
       `/api/v1/admin/interviews/decks/${deckId}/cards/${cardId}`,
       { method: "PUT", body: JSON.stringify(payload) },
     ),
-  adminInterviewDeck: (id: string) =>
-    apiRequest<AdminInterviewDeckRead>(`/api/v1/admin/interviews/decks/${id}`),
   createAdminInterviewDeck: (payload: AdminInterviewDeckMutation) =>
     apiRequest<AdminInterviewDeckRead>("/api/v1/admin/interviews/decks", {
       method: "POST",
@@ -2521,11 +2484,6 @@ export const api = {
   checkoutPythonRepeatInstallment: (id: string) =>
     apiRequest<OpportunityPaymentLink>(
       `/api/v1/opportunities/python-repeat/installments/${id}/checkout`,
-      { method: "POST" },
-    ),
-  completeDevelopmentPythonRepeatPayment: (paymentLinkId: string) =>
-    apiRequest<PythonRepeatDashboard>(
-      `/api/v1/opportunities/python-repeat/development/payments/${encodeURIComponent(paymentLinkId)}/succeed`,
       { method: "POST" },
     ),
   adminPythonRepeat: () =>

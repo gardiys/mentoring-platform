@@ -188,11 +188,6 @@ async def intelligence_redis_metrics() -> IntelligenceRedisMetrics:
     )
 
 
-async def intelligence_queue_metrics() -> IntelligenceOperationsQueueRead:
-    """Compatibility wrapper for callers interested only in queue depths."""
-    return (await intelligence_redis_metrics()).queues
-
-
 async def admin_intelligence_operations(
     session: AsyncSession,
     *,

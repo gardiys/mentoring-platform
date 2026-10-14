@@ -37,9 +37,7 @@ def upgrade() -> None:
         "mentor_rewards",
         sa.Column("paid_kopecks", sa.BigInteger(), server_default="0", nullable=False),
     )
-    op.execute(
-        "UPDATE mentor_rewards SET paid_kopecks = amount_kopecks WHERE paid_at IS NOT NULL"
-    )
+    op.execute("UPDATE mentor_rewards SET paid_kopecks = amount_kopecks WHERE paid_at IS NOT NULL")
     op.create_check_constraint(
         "paid_amount_range",
         "mentor_rewards",
@@ -79,15 +77,9 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("amount_kopecks > 0", name="amount_positive"),
         sa.ForeignKeyConstraint(["mentor_id"], ["users.id"], ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(
-            ["requested_by_user_id"], ["users.id"], ondelete="RESTRICT"
-        ),
-        sa.ForeignKeyConstraint(
-            ["paid_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["cancelled_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["requested_by_user_id"], ["users.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["paid_by_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["cancelled_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -127,12 +119,8 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint("amount_kopecks > 0", name="amount_positive"),
-        sa.ForeignKeyConstraint(
-            ["payout_id"], ["mentor_payouts.id"], ondelete="CASCADE"
-        ),
-        sa.ForeignKeyConstraint(
-            ["reward_id"], ["mentor_rewards.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["payout_id"], ["mentor_payouts.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["reward_id"], ["mentor_rewards.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "payout_id",

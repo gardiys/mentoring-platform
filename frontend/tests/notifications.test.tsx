@@ -32,7 +32,9 @@ it("показывает счётчик и помечает открытое у�
 
   renderPage(<NotificationBell />);
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: /1 непрочитанных/ }));
+  await user.click(
+    await screen.findByRole("button", { name: /1 непрочитанных/ }),
+  );
   await user.click(
     await screen.findByRole("menuitem", {
       name: /Новое собеседование в каталоге/,
@@ -59,8 +61,12 @@ it("позволяет прочитать все уведомления", async 
 
   renderPage(<NotificationBell />);
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: /2 непрочитанных/ }));
-  await user.click(await screen.findByRole("button", { name: "Прочитать все" }));
+  await user.click(
+    await screen.findByRole("button", { name: /2 непрочитанных/ }),
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Прочитать все" }),
+  );
 
   await waitFor(() => expect(markAll).toHaveBeenCalledOnce());
 });

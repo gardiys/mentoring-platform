@@ -68,9 +68,7 @@ def _recruiter_usernames(value: str) -> set[str]:
     return {
         username
         for part in re.split(r"[,\n]+", source)
-        if TELEGRAM_USERNAME_PATTERN.fullmatch(
-            username := part.strip().lstrip("@").casefold()
-        )
+        if TELEGRAM_USERNAME_PATTERN.fullmatch(username := part.strip().lstrip("@").casefold())
     }
 
 

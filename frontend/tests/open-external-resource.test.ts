@@ -46,7 +46,9 @@ describe("openExternalResource", () => {
     const popup = mockPopup();
 
     await openExternalResource(
-      Promise.resolve("http://localhost:9000/private/resume.pdf?signature=test"),
+      Promise.resolve(
+        "http://localhost:9000/private/resume.pdf?signature=test",
+      ),
     );
 
     expect(popup.location.replace).toHaveBeenCalledWith(
@@ -86,7 +88,9 @@ describe("openExternalResource", () => {
 
   it("opens the resolved URL through Telegram without exposing about:blank", async () => {
     const openLink = vi.fn();
-    (window as Window & { TelegramWebviewProxy?: unknown }).TelegramWebviewProxy = {
+    (
+      window as Window & { TelegramWebviewProxy?: unknown }
+    ).TelegramWebviewProxy = {
       postEvent: vi.fn(),
     };
     window.Telegram = { WebApp: { openLink } };
@@ -98,8 +102,6 @@ describe("openExternalResource", () => {
 
     expect(windowOpen).not.toHaveBeenCalled();
     expect(openLink).toHaveBeenCalledOnce();
-    expect(openLink).toHaveBeenCalledWith(
-      "https://secure.tochka.test/payment",
-    );
+    expect(openLink).toHaveBeenCalledWith("https://secure.tochka.test/payment");
   });
 });

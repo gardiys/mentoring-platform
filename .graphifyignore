@@ -1,0 +1,25 @@
+# Generated files, tools and assistant configuration.
+.local/
+.codex/
+.agents/
+.claude/
+**/node_modules/
+**/.pnpm-store/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+frontend/dist/
+graphify-out/
+frontend/src/api/generated/
+frontend/public/vendor/
+
+# Secrets, certificates, imported production data and research exports.
+.env*
+backend/certs/
+backend/migrations/data/
+docs/research/*.json
+docs/audits/*.json
+*.lock
+pnpm-lock.yaml

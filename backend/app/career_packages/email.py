@@ -46,12 +46,10 @@ class CareerPackageEmailService:
                 "name": self.settings.brevo_from_name,
             },
             "to": [{"email": recipient_email, "name": recipient_name}],
-            "subject": subject
-            or f"Карьерный пакет № {package_number}, версия {version_number}",
+            "subject": subject or f"Карьерный пакет № {package_number}, версия {version_number}",
             "textContent": f"{body}\n\nОткрыть на платформе: {action_url}",
             "htmlContent": (
-                f"<p>{safe_body}</p><p><a href=\"{safe_url}\">"
-                f"{escape(action_label)}</a></p>"
+                f'<p>{safe_body}</p><p><a href="{safe_url}">{escape(action_label)}</a></p>'
             ),
             "tags": ["career-package"],
             "attachment": [

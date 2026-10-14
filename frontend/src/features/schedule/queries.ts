@@ -182,14 +182,6 @@ export function useAdminSchedule(options: AdminScheduleListOptions) {
   });
 }
 
-export function useAdminScheduleEvent(eventId?: string) {
-  return useQuery({
-    queryKey: scheduleKeys.adminEvent(eventId ?? "new"),
-    queryFn: () => api.adminScheduleEvent(eventId!),
-    enabled: Boolean(eventId),
-  });
-}
-
 export function useSaveAdminScheduleEvent() {
   const queryClient = useQueryClient();
   return useMutation({

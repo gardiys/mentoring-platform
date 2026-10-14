@@ -135,6 +135,7 @@ async def test_sweeper_retries_failure_and_skips_unsaved_transcripts(
     assert len(calls) == (2 if should_clean else 0)
 
 
+@pytest.mark.schema_change
 async def test_migration_preserves_legacy_unknown_speech_and_blocks_silent_selection(
     client, seeded, monkeypatch
 ):

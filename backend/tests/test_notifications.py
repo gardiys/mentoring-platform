@@ -63,9 +63,7 @@ async def test_notification_inbox_is_private_and_can_be_marked_read(
         )
         await session.commit()
 
-    response = await client.get(
-        "/api/v1/notifications", headers=auth(seeded.student_id)
-    )
+    response = await client.get("/api/v1/notifications", headers=auth(seeded.student_id))
     assert response.status_code == 200
     assert response.json()["unread_count"] == 1
     assert [item["id"] for item in response.json()["items"]] == [str(own_id)]
@@ -81,9 +79,7 @@ async def test_notification_inbox_is_private_and_can_be_marked_read(
         headers=auth(seeded.student_id),
     )
     assert marked.status_code == 204
-    response = await client.get(
-        "/api/v1/notifications", headers=auth(seeded.student_id)
-    )
+    response = await client.get("/api/v1/notifications", headers=auth(seeded.student_id))
     assert response.json()["unread_count"] == 0
 
 
@@ -196,9 +192,7 @@ async def test_new_interview_targets_track_and_queues_one_telegram_message(
                 )
             )
         )
-        telegram_count = await session.scalar(
-            select(func.count()).select_from(TelegramOutbox)
-        )
+        telegram_count = await session.scalar(select(func.count()).select_from(TelegramOutbox))
         telegram_row = await session.scalar(select(TelegramOutbox))
 
     assert second_student_id in recipient_ids
@@ -370,15 +364,11 @@ async def test_group_call_reminders_follow_track_and_mentor_visibility(
     async with TestSession() as session:
         rows = list(
             await session.scalars(
-                select(TelegramOutbox).where(
-                    TelegramOutbox.event_key.like("telegram:group-call:%")
-                )
+                select(TelegramOutbox).where(TelegramOutbox.event_key.like("telegram:group-call:%"))
             )
         )
     assert len(rows) == 3
-    assert {row.chat_id for row in rows if str(mentor_event_id) in row.event_key} == {
-        "1001"
-    }
+    assert {row.chat_id for row in rows if str(mentor_event_id) in row.event_key} == {"1001"}
     assert {row.chat_id for row in rows if str(platform_event_id) in row.event_key} == {
         "1001",
         "1002",

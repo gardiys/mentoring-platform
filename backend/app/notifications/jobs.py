@@ -132,8 +132,7 @@ async def _deliver_one_career_package_email(ctx: dict[str, Any], delivery_id: ob
                     CareerPackageObligation.package_id == package.id
                 )
             )
-            if package is not None
-            and delivery.purpose is CareerDeliveryPurpose.PAYMENT_OBLIGATION
+            if package is not None and delivery.purpose is CareerDeliveryPurpose.PAYMENT_OBLIGATION
             else None
         )
         if (
@@ -165,9 +164,10 @@ async def _deliver_one_career_package_email(ctx: dict[str, Any], delivery_id: ob
             pdf = temp_path.read_bytes()
             if len(pdf) != version.pdf_size:
                 raise CareerPackageEmailError("Career package PDF size does not match metadata")
-            recipient_name = " ".join(
-                value for value in (student.first_name, student.last_name) if value
-            ) or delivery.recipient
+            recipient_name = (
+                " ".join(value for value in (student.first_name, student.last_name) if value)
+                or delivery.recipient
+            )
             action_url = (
                 f"{settings.web_frontend_url.rstrip('/')}/career-package?version={version.id}"
             )

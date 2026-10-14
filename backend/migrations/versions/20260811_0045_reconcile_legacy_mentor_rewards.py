@@ -104,9 +104,7 @@ def _cancel_unbacked_requests(
         return
 
     invalid_payout_ids = {
-        row["payout_id"]
-        for row in requested_rows
-        if row["reward_id"] in unbacked_reward_ids
+        row["payout_id"] for row in requested_rows if row["reward_id"] in unbacked_reward_ids
     }
     connection.execute(
         sa.text(
@@ -155,9 +153,7 @@ def _accrued_from_paid_installments(
     ).mappings()
     return sum(
         _round_kopecks(
-            Decimal(row["paid_kopecks"])
-            * reward_percent
-            / Decimal(row["repayment_percent"])
+            Decimal(row["paid_kopecks"]) * reward_percent / Decimal(row["repayment_percent"])
         )
         for row in rows
         if row["paid_kopecks"] > 0
@@ -262,9 +258,7 @@ def downgrade() -> None:
     )
     for reward in rewards:
         entitlement_kopecks = _round_kopecks(
-            Decimal(reward["basis_kopecks"])
-            * Decimal(reward["reward_percent"])
-            / Decimal(100)
+            Decimal(reward["basis_kopecks"]) * Decimal(reward["reward_percent"]) / Decimal(100)
         )
         connection.execute(
             sa.text(

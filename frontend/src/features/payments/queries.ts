@@ -117,18 +117,6 @@ export function useRescheduleAdminPayment(studentId: string) {
   });
 }
 
-export function useAdminPayments(
-  status: PaymentInstallmentStatus | null,
-  page: number,
-) {
-  return useQuery({
-    queryKey: paymentKeys.admin(status, page),
-    queryFn: () =>
-      api.adminPayments({ status, limit: 50, offset: (page - 1) * 50 }),
-    placeholderData: (previous) => previous,
-  });
-}
-
 export function useAdminPaymentStudents(
   status: AdminEmploymentPaymentStatus,
   page: number,
@@ -357,15 +345,6 @@ export function useEditAdminMentorPayout() {
       queryClient.setQueryData(paymentKeys.mentorPayouts, dashboard);
       void queryClient.invalidateQueries({ queryKey: paymentKeys.all });
     },
-  });
-}
-
-export function useMarkMentorRewardPaid() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: api.markAdminMentorRewardPaid,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: paymentKeys.all }),
   });
 }
 

@@ -347,13 +347,11 @@ it("повторяет только неуспешную multipart-часть", 
 
 it("скачивает приватный файл с авторизацией и прогрессом", async () => {
   setDevUserId("admin-id");
-  const fetchMock = vi
-    .spyOn(globalThis, "fetch")
-    .mockResolvedValue(
-      new Response(new Uint8Array([1, 2, 3]), {
-        headers: { "Content-Length": "3" },
-      }),
-    );
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(new Uint8Array([1, 2, 3]), {
+      headers: { "Content-Length": "3" },
+    }),
+  );
   const progress = vi.fn();
   const controller = new AbortController();
   const blob = await apiDownload(

@@ -301,6 +301,7 @@ async def test_restart_requires_saved_transcript(
     assert response.json()["detail"]["code"] == "analysis_restart_no_transcript"
 
 
+@pytest.mark.schema_change
 @pytest.mark.asyncio
 async def test_restart_migration_preserves_existing_interview(completed_analysis) -> None:
     interview_id, _, _ = completed_analysis

@@ -332,6 +332,7 @@ async def test_missing_sources_have_separate_actionable_queue(ready, seeded):
         assert page.items[0].processing_state == "waiting_for_sources"
 
 
+@pytest.mark.schema_change
 async def test_migration_marks_only_existing_rows_for_one_reconsideration(ready):
     path = Path(__file__).parents[1] / "migrations/versions/20260922_0092_card_review_policy.py"
     spec = importlib.util.spec_from_file_location("card_review_policy", path)

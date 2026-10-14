@@ -58,12 +58,8 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(
-            ["suggested_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["reviewed_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["suggested_by_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["reviewed_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "company_id",

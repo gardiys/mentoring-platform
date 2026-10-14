@@ -45,9 +45,7 @@ from app.interviews.intelligence_ai import (
 )
 from app.interviews.intelligence_jobs import (
     _ground_technical_assessment,
-    _join_unique,
     _retry_delay,
-    _summary_rollup_payload,
     _will_retry,
 )
 from app.interviews.intelligence_models import (
@@ -413,39 +411,6 @@ async def test_openai_answer_review_recovers_from_non_russian_response() -> None
     assert result.output is russian
     assert parse.await_count == 2
     assert parse.await_args_list[1].kwargs["max_output_tokens"] == 8_000
-
-
-def test_summary_rollup_is_complete_and_preserves_six_priorities() -> None:
-    actions = [
-        InterviewPriorityAction(
-            title=f"Приоритет {index}",
-            reason="Нужно закрыть технический пробел.",
-            steps=["Повторить материал."],
-            success_criterion="Дать полный ответ.",
-            related_topics=["Python"],
-        )
-        for index in range(1, 7)
-    ]
-    overview = InterviewSummaryOutput(
-        overall_summary="Краткий итог.",
-        technical_score=0.5,
-        technical_summary="Технический итог.",
-        technical_topics=[],
-        priority_actions=actions,
-        key_topics=["Python"],
-        communication_summary="Коммуникация оценена отдельно.",
-        communication_score=None,
-        communication_dimensions=[],
-        communication_strengths=[],
-        communication_growth_areas=[],
-        caveats=[],
-    )
-
-    payload = json.loads(_summary_rollup_payload(overview))
-
-    assert len(payload["partial_report"]["priority_actions"]) == 6
-    assert "только по-русски" in payload["instruction"]
-    assert not _join_unique(["Первое полное предложение. " * 10], max_length=80).endswith("…")
 
 
 def test_saved_english_and_truncated_feedback_is_not_exposed() -> None:

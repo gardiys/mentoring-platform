@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import select
@@ -12,6 +13,7 @@ from tests.conftest import TestSession, test_engine
 from tests.test_card_automation_pipeline import _create_card
 
 
+@pytest.mark.schema_change
 async def test_frequency_migration_is_repeatable_and_preserves_manual_settings(seeded, monkeypatch):
     spec = importlib.util.spec_from_file_location(
         "observed_card_frequency",

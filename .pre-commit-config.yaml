@@ -1,0 +1,56 @@
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff check
+        entry: poetry --project backend run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: Ruff format
+        entry: poetry --project backend run ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: frontend-eslint
+        name: Frontend ESLint
+        entry: make lint-frontend-fix
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+      - id: frontend-prettier
+        name: Frontend Prettier
+        entry: make format-frontend
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+      - id: frontend-typescript
+        name: Frontend TypeScript
+        entry: make typecheck-frontend
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+      - id: tests
+        name: Quick tests (logs in .local/checks)
+        entry: poetry --project backend run python scripts/check_tests.py quick
+        language: system
+        always_run: true
+        require_serial: true
+      - id: git-check-runner-tests
+        name: Git test runner unit tests
+        entry: poetry --project backend run python -m unittest discover -s scripts -p test_*.py
+        language: system
+        files: ^scripts/
+        pass_filenames: false
+      - id: full-tests
+        name: Full tests before push (logs in .local/checks)
+        entry: make test-hook-full
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+        require_serial: true
+
+exclude: ^(\.local/|\.codex/|\.agents/|graphify-out/)

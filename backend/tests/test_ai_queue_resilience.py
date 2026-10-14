@@ -28,7 +28,7 @@ from tests.conftest import TestSession
 from tests.test_ai_cost_optimizations import SmallOutput, _provider, _response
 from tests.test_card_auto_publish import ready as ready_fixture
 from tests.test_card_automation_jobs import RecordingRedis
-from tests.test_card_automation_service import _cluster
+from tests.test_card_automation_service import _attach_cluster_occurrence, _cluster
 
 ready = ready_fixture
 
@@ -65,8 +65,14 @@ async def test_source_blocked_backlog_cannot_starve_new_answers(ready, seeded):
             blocked.append(cluster)
         fresh = _cluster(seeded.python_track_id, 999, status=QuestionClusterStatus.NEEDS_REVIEW)
         fresh.membership_revision = fresh.stats_revision = 1
+        # New themes require an eligible candidate and an actual source interview.
+        fresh.manual_important = True
+        fresh.priority_score = 100
         session.add_all([*blocked, fresh])
         await session.commit()
+    await _attach_cluster_occurrence(
+        seeded, fresh.id, text=fresh.canonical_question, confidence=1.0, revision=1
+    )
     redis = RecordingRedis()
     await jobs.reconcile_card_automation_jobs({"redis": redis})
     queued_ids = {args[0] for _, args, _ in redis.calls}
@@ -366,6 +372,7 @@ async def test_quota_errors_do_not_pause_other_requests(cooldown):
         await provider.close()
 
 
+@pytest.mark.schema_change
 async def test_queue_pricing_migration_preserves_existing_clusters(ready):
     import importlib.util
     from pathlib import Path

@@ -46,7 +46,6 @@ from app.interviews.feedback_grounding import (
     ground_delivery,
     weighted_score,
 )
-from app.interviews.feedback_types import CommunicationDimension
 from app.interviews.intelligence_ai import (
     LIGHT_REVIEW_PROMPT_VERSION,
     SUMMARY_PROMPT_VERSION,
@@ -54,7 +53,6 @@ from app.interviews.intelligence_ai import (
     ExtractedQuestion,
     InterviewAIError,
     InterviewAIProvider,
-    InterviewPriorityAction,
     InterviewSummaryOutput,
     ReviewOutput,
     TechnicalTopicAssessment,
@@ -1465,39 +1463,6 @@ def _summary_evidence_blocks(
     return blocks
 
 
-def _join_unique(values: Any, *, max_length: int) -> str:
-    result = " ".join(_unique(values))
-    if len(result) <= max_length:
-        return result
-    shortened = result[:max_length].rstrip()
-    sentence_end = max(
-        shortened.rfind(". "),
-        shortened.rfind("! "),
-        shortened.rfind("? "),
-    )
-    if sentence_end >= max_length // 2:
-        return shortened[: sentence_end + 1].rstrip()
-    words = shortened.rsplit(maxsplit=1)
-    complete = (words[0] if len(words) > 1 else shortened).rstrip(" ,;:-.!?")
-    return f"{complete}."
-
-
-def _summary_rollup_payload(overview: InterviewSummaryOutput) -> str:
-    return json.dumps(
-        {
-            "input_kind": "partial_interview_reports_to_consolidate",
-            "instruction": (
-                "Соберите один окончательный краткий отчёт. Не склеивайте исходные резюме "
-                "последовательно, не повторяйтесь, пишите только по-русски и завершайте каждое "
-                "предложение полностью. Сохраните подтверждённые номера вопросов."
-            ),
-            "partial_report": overview.model_dump(mode="json"),
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-
-
 def _ground_technical_assessment(
     overview: InterviewSummaryOutput,
     rows: list[Any],
@@ -1604,131 +1569,6 @@ def _ground_technical_assessment(
             "technical_topics": grounded_topics,
         }
     )
-
-
-def _merge_interview_summaries(
-    summaries: list[InterviewSummaryOutput],
-) -> InterviewSummaryOutput:
-    if not summaries:
-        raise ValueError("At least one interview summary is required")
-
-    dimensions: dict[str, list[CommunicationDimension]] = {}
-    for summary in summaries:
-        for dimension in summary.communication_dimensions:
-            dimensions.setdefault(dimension.name.casefold(), []).append(dimension)
-
-    merged_dimensions: list[CommunicationDimension] = []
-    for dimension_group in dimensions.values():
-        scores = [row.score for row in dimension_group if row.score is not None]
-        merged_dimensions.append(
-            CommunicationDimension(
-                name=dimension_group[0].name,
-                score=sum(scores) / len(scores) if scores else None,
-                summary=" ".join(_unique(row.summary for row in dimension_group)),
-                evidence_utterance_ids=_unique(
-                    evidence for row in dimension_group for evidence in row.evidence_utterance_ids
-                ),
-                confidence=sum(row.confidence for row in dimension_group) / len(dimension_group),
-            )
-        )
-
-    topic_rows: dict[str, list[TechnicalTopicAssessment]] = {}
-    topic_order: list[str] = []
-    for summary in summaries:
-        for topic in summary.technical_topics:
-            key = topic.topic.casefold()
-            if key not in topic_rows:
-                topic_order.append(key)
-            topic_rows.setdefault(key, []).append(topic)
-
-    technical_topics: list[TechnicalTopicAssessment] = []
-    for key in topic_order:
-        rows = topic_rows[key]
-        scored_rows = [row for row in rows if row.score is not None]
-        scored_question_count = sum(row.questions_count for row in scored_rows)
-        score = (
-            sum(cast(float, row.score) * row.questions_count for row in scored_rows)
-            / scored_question_count
-            if scored_question_count
-            else None
-        )
-        technical_topics.append(
-            TechnicalTopicAssessment(
-                topic=rows[0].topic,
-                score=score,
-                summary=_join_unique((row.summary for row in rows), max_length=600),
-                strengths=_unique(value for row in rows for value in row.strengths)[:3],
-                gaps=_unique(value for row in rows for value in row.gaps)[:3],
-                next_step=_join_unique((row.next_step for row in rows), max_length=600),
-                evidence_question_numbers=sorted(
-                    {
-                        number
-                        for row in rows
-                        for number in row.evidence_question_numbers
-                        if number > 0
-                    }
-                )[:20],
-                questions_count=sum(row.questions_count for row in rows),
-                confidence=(
-                    sum(row.confidence * row.questions_count for row in rows)
-                    / sum(row.questions_count for row in rows)
-                ),
-            )
-        )
-
-    scored_topics = [topic for topic in technical_topics if topic.score is not None]
-    scored_questions = sum(topic.questions_count for topic in scored_topics)
-    technical_score = (
-        sum(cast(float, topic.score) * topic.questions_count for topic in scored_topics)
-        / scored_questions
-        if scored_questions
-        else None
-    )
-
-    priority_actions: list[InterviewPriorityAction] = []
-    seen_actions: set[str] = set()
-    for summary in summaries:
-        for action in summary.priority_actions:
-            key = action.title.casefold()
-            if key in seen_actions:
-                continue
-            seen_actions.add(key)
-            priority_actions.append(action)
-            if len(priority_actions) == 6:
-                break
-        if len(priority_actions) == 6:
-            break
-
-    return InterviewSummaryOutput(
-        overall_summary=_join_unique(
-            (item.overall_summary for item in summaries), max_length=1_200
-        ),
-        technical_score=technical_score,
-        technical_summary=_join_unique(
-            (item.technical_summary for item in summaries), max_length=1_000
-        ),
-        technical_topics=technical_topics[:20],
-        priority_actions=priority_actions,
-        key_topics=_unique(topic for item in summaries for topic in item.key_topics)[:20],
-        communication_summary=_join_unique(
-            (item.communication_summary for item in summaries), max_length=800
-        ),
-        communication_score=None,
-        communication_dimensions=merged_dimensions,
-        caveats=_unique(value for item in summaries for value in item.caveats),
-    )
-
-
-def _unique(values: Any) -> list[str]:
-    result: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        normalized = str(value).strip()
-        key = normalized.casefold()
-        if normalized and key not in seen:
-            seen.add(key)
-            result.append(normalized)
-    return result
 
 
 async def _record_failure(

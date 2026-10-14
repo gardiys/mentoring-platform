@@ -330,6 +330,7 @@ async def test_changed_sources_force_fresh_validation(ready):
         ).status is QuestionClusterStatus.CARD_CREATED
 
 
+@pytest.mark.schema_change
 async def test_migration_enables_active_directions_and_preserves_published_cards(ready, seeded):
     spec = importlib.util.spec_from_file_location(
         "auto_publish_migration",

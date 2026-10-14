@@ -136,9 +136,12 @@ async def test_admin_updates_state_for_student_without_assigning_a_mentor(
     assert admin_detail.json()["learning_status"] == "interviewing"
     assert [item["id"] for item in filtered.json()["items"]] == [str(student_id)]
     async with TestSession() as session:
-        assert await session.scalar(
-            select(MentorStudent).where(MentorStudent.student_id == student_id)
-        ) is None
+        assert (
+            await session.scalar(
+                select(MentorStudent).where(MentorStudent.student_id == student_id)
+            )
+            is None
+        )
         state = await session.get(StudentMentorshipState, student_id)
         assert state is not None
         assert state.learning_status is StudentLearningStatus.INTERVIEWING

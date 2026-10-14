@@ -56,9 +56,7 @@ def upgrade() -> None:
         sa.Column(
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
-        sa.ForeignKeyConstraint(
-            ["actor_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("event_key"),
@@ -77,9 +75,7 @@ def upgrade() -> None:
         sa.Column("text", sa.Text(), nullable=False),
         sa.Column("action_label", sa.String(length=80), nullable=True),
         sa.Column("action_url", sa.String(length=1000), nullable=True),
-        sa.Column(
-            "status", telegram_outbox_status, server_default="queued", nullable=False
-        ),
+        sa.Column("status", telegram_outbox_status, server_default="queued", nullable=False),
         sa.Column("attempts", sa.Integer(), server_default="0", nullable=False),
         sa.Column(
             "available_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False

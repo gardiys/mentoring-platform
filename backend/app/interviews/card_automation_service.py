@@ -2612,28 +2612,6 @@ async def calculate_interview_card_duplicates(
     )
 
 
-async def list_interview_card_duplicates(
-    session: AsyncSession,
-    *,
-    direction_id: UUID | None,
-    minimum_similarity: float,
-    limit: int,
-    offset: int,
-) -> InterviewCardDuplicatePage:
-    candidates = await calculate_interview_card_duplicates(
-        session,
-        direction_id=direction_id,
-        minimum_similarity=minimum_similarity,
-    )
-    total = len(candidates)
-    return InterviewCardDuplicatePage(
-        items=candidates[offset : offset + limit],
-        total=total,
-        limit=limit,
-        offset=offset,
-    )
-
-
 async def request_interview_card_duplicate_refresh(*, required: bool = True) -> bool:
     try:
         queued = await mark_duplicate_refresh_queued()

@@ -116,29 +116,21 @@ def upgrade() -> None:
             "payment_day_second >= 1 AND payment_day_second <= 28",
             name="payment_day_second_range",
         ),
-        sa.CheckConstraint(
-            "payment_day_first < payment_day_second", name="payment_days_ordered"
-        ),
+        sa.CheckConstraint("payment_day_first < payment_day_second", name="payment_days_ordered"),
         sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(
-            ["recorded_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["recorded_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["student_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("student_id", name="uq_student_employments_student"),
     )
-    op.create_index(
-        "ix_student_employments_start_date", "student_employments", ["start_date"]
-    )
+    op.create_index("ix_student_employments_start_date", "student_employments", ["start_date"])
     op.create_table(
         "payment_installments",
         sa.Column("employment_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("sequence_number", sa.Integer(), nullable=False),
         sa.Column("due_date", sa.Date(), nullable=False),
         sa.Column("amount_kopecks", sa.BigInteger(), nullable=False),
-        sa.Column(
-            "status", installment_status, server_default="scheduled", nullable=False
-        ),
+        sa.Column("status", installment_status, server_default="scheduled", nullable=False),
         sa.Column("paid_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("confirmed_by_user_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -156,12 +148,8 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("amount_kopecks > 0", name="amount_positive"),
         sa.CheckConstraint("sequence_number > 0", name="sequence_positive"),
-        sa.ForeignKeyConstraint(
-            ["confirmed_by_user_id"], ["users.id"], ondelete="SET NULL"
-        ),
-        sa.ForeignKeyConstraint(
-            ["employment_id"], ["student_employments.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["confirmed_by_user_id"], ["users.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["employment_id"], ["student_employments.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "employment_id", "sequence_number", name="uq_payment_installments_sequence"
@@ -209,9 +197,7 @@ def upgrade() -> None:
         "payment_attempts",
         ["installment_id", "created_at"],
     )
-    op.create_index(
-        "ix_payment_attempts_operation", "payment_attempts", ["provider_operation_id"]
-    )
+    op.create_index("ix_payment_attempts_operation", "payment_attempts", ["provider_operation_id"])
     op.create_table(
         "payment_webhook_events",
         sa.Column("attempt_id", postgresql.UUID(as_uuid=True), nullable=True),
@@ -229,13 +215,9 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["attempt_id"], ["payment_attempts.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "deduplication_key", name="uq_payment_webhook_events_dedupe"
-        ),
+        sa.UniqueConstraint("deduplication_key", name="uq_payment_webhook_events_dedupe"),
     )
-    op.create_index(
-        "ix_payment_webhook_events_attempt", "payment_webhook_events", ["attempt_id"]
-    )
+    op.create_index("ix_payment_webhook_events_attempt", "payment_webhook_events", ["attempt_id"])
     op.create_table(
         "mentor_rewards",
         sa.Column("installment_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -287,9 +269,7 @@ def downgrade() -> None:
         type_="check",
     )
     op.drop_column("mentor_students", "reward_percent")
-    op.drop_constraint(
-        "ck_users_repayment_percent_range", "users", type_="check"
-    )
+    op.drop_constraint("ck_users_repayment_percent_range", "users", type_="check")
     op.drop_column("users", "repayment_percent")
     postgresql.ENUM(name="payment_attempt_status").drop(op.get_bind(), checkfirst=True)
     postgresql.ENUM(name="payment_installment_status").drop(op.get_bind(), checkfirst=True)

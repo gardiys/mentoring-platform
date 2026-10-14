@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
@@ -10,6 +11,8 @@ from app.interviews.models import (
     InterviewProcessStage,
     InterviewProcessStatus,
 )
+from app.interviews.uploads import StoredUpload
+from app.mentors import router as mentor_router
 from app.mentors.models import MentorStudent, StudentMentorshipState
 from app.progress.models import TopicProgress
 from app.roadmaps.models import RoadmapEnrollment
@@ -188,8 +191,12 @@ async def test_mentor_manages_student_state_notes_documents_and_mocks(
 
 
 async def test_mentor_reads_student_interview_and_adds_highlighted_feedback(
-    client: AsyncClient, seeded: SeededData
+    client: AsyncClient, seeded: SeededData, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    playable = AsyncMock(
+        return_value=StoredUpload("recording", "imported-recording.mp4", "video/mp4", 0)
+    )
+    monkeypatch.setattr(mentor_router, "ensure_stage_media_browser_playable", playable)
     process = await client.post(
         "/api/v1/interviews/journal/tracks",
         headers=auth(seeded.student_id),
@@ -244,6 +251,7 @@ async def test_mentor_reads_student_interview_and_adds_highlighted_feedback(
     assert media.status_code == 200
     assert "recording" in media.json()["url"]
     assert forbidden.status_code == 403
+    playable.assert_awaited_once()
 
 
 async def test_admin_progress_contains_all_student_workspace_and_offer(
@@ -358,7 +366,7 @@ async def test_interview_attention_counts_entry_creation_without_counting_future
 ) -> None:
     from app.mentors import service as mentor_service
 
-    now = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    now = datetime.now(UTC)
 
     class FixedDateTime(datetime):
         @classmethod

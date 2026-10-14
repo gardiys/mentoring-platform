@@ -16,7 +16,7 @@ htmlcov/
 backend/.venv/
 backend/data/
 frontend/node_modules/
-frontend/.pnpm-store/
+.pnpm-store/
 frontend/dist/
 frontend/coverage/
 backups/
@@ -34,3 +34,11 @@ backend/migrations/data/mentorship_associations.csv
 
 # Copilot installers are served only by the authenticated API.
 .local/copilot-releases/
+
+# Repository-local developer tools and generated knowledge graph.
+.local/bin/
+.local/tools/
+.local/node/
+.local/pnpm-store/
+.local/checks/
+graphify-out/

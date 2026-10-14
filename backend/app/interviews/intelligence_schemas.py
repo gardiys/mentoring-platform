@@ -278,11 +278,6 @@ class IntelligenceQuestionModerationMutation(BaseModel):
         return self
 
 
-class IntelligenceWebhookPayload(BaseModel):
-    transcript_id: str = Field(min_length=1, max_length=500)
-    status: str = Field(pattern="^(completed|error)$")
-
-
 class IntelligenceMediaRead(BaseModel):
     url: str
     content_type: str

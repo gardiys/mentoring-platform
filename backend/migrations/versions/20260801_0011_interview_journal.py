@@ -83,9 +83,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["process_id"], ["interview_processes.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["process_id"], ["interview_processes.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(

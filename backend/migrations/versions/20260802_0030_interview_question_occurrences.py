@@ -48,9 +48,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["card_id"], ["interview_cards.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["card_id"], ["interview_cards.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(
             ["source_question_id"],
             ["intelligence_questions.id"],
@@ -59,9 +57,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["interview_id"], ["intelligence_interviews.id"], ondelete="SET NULL"
         ),
-        sa.ForeignKeyConstraint(
-            ["process_id"], ["interview_processes.id"], ondelete="SET NULL"
-        ),
+        sa.ForeignKeyConstraint(["process_id"], ["interview_processes.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["company_id"], ["companies.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(

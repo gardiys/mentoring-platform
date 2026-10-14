@@ -1615,34 +1615,6 @@ async def prepare_interview_overview_generation(
     return interview
 
 
-async def mark_upload_complete(
-    session: AsyncSession,
-    user: User,
-    interview_id: UUID,
-    *,
-    storage_key: str,
-    filename: str,
-    content_type: str,
-    size: int,
-) -> str | None:
-    interview = await get_intelligence_interview(
-        session, user, interview_id, owner_only=True, lock=True
-    )
-    stage = await session.get(InterviewProcessStage, interview.stage_id, with_for_update=True)
-    assert stage is not None
-    previous_key = stage.media_storage_key
-    stage.media_storage_key = storage_key
-    stage.media_filename = filename
-    stage.media_content_type = content_type
-    stage.media_size = size
-    interview.processing_status = IntelligenceProcessingStatus.UPLOADED
-    interview.failed_stage = None
-    interview.processing_error_code = None
-    interview.processing_error_message = None
-    await session.commit()
-    return previous_key
-
-
 async def prepare_analysis_restart(
     session: AsyncSession,
     admin: User,

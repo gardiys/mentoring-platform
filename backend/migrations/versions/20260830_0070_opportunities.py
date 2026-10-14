@@ -83,8 +83,18 @@ def upgrade() -> None:
         sa.Column("admin_note", sa.Text(), nullable=True),
         sa.Column("written_summary", sa.Text(), nullable=True),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint("mentor_reward_kopecks >= 0", name="mentor_reward_non_negative"),
         sa.CheckConstraint("price_kopecks > 0", name="price_positive"),
         sa.ForeignKeyConstraint(["mentor_id"], ["users.id"], ondelete="RESTRICT"),
@@ -119,8 +129,18 @@ def upgrade() -> None:
         sa.Column("paid_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("admin_note", sa.Text(), nullable=True),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint(
             "success_fee_percent > 0 AND success_fee_percent <= 1000",
             name="success_fee_percent_range",
@@ -145,9 +165,7 @@ def upgrade() -> None:
         "go_transition_applications",
         ["student_id"],
         unique=True,
-        postgresql_where=sa.text(
-            "status IN ('submitted', 'approved', 'payment_pending', 'paid')"
-        ),
+        postgresql_where=sa.text("status IN ('submitted', 'approved', 'payment_pending', 'paid')"),
     )
 
     op.create_table(
@@ -166,8 +184,18 @@ def upgrade() -> None:
         sa.Column("raw_create_response", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("approved_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.CheckConstraint(
             "(consultation_request_id IS NOT NULL)::int + "
             "(transition_application_id IS NOT NULL)::int = 1",

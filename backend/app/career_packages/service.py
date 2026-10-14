@@ -817,9 +817,7 @@ async def publish_and_provide(
         )
     if previous_version_id is not None:
         obligation = await session.scalar(
-            select(CareerPackageObligation).where(
-                CareerPackageObligation.package_id == package.id
-            )
+            select(CareerPackageObligation).where(CareerPackageObligation.package_id == package.id)
         )
         if obligation is not None and obligation.status in {
             CareerObligationStatus.AWAITING_NOTICE,
@@ -1196,10 +1194,7 @@ async def submit_objection(
         attachments=[],
         submitted_at=now,
         deadline_at=version.objection_deadline_at,
-        is_late=(
-            version.objection_deadline_at is not None
-            and now > version.objection_deadline_at
-        ),
+        is_late=(version.objection_deadline_at is not None and now > version.objection_deadline_at),
         status=CareerObjectionStatus.SUBMITTED,
     )
     session.add(objection)
@@ -1273,10 +1268,14 @@ async def resolve_objection(
     }:
         api_error(409, "career_objection_already_resolved", "Objection has already been resolved")
     status_value = CareerObjectionStatus(payload.status)
-    if status_value in {
-        CareerObjectionStatus.ACCEPTED,
-        CareerObjectionStatus.PARTIALLY_ACCEPTED,
-    } and not payload.create_revision:
+    if (
+        status_value
+        in {
+            CareerObjectionStatus.ACCEPTED,
+            CareerObjectionStatus.PARTIALLY_ACCEPTED,
+        }
+        and not payload.create_revision
+    ):
         api_error(
             422,
             "career_objection_revision_required",
@@ -1315,9 +1314,7 @@ async def resolve_objection(
     elif package.status is CareerPackageStatus.REVISION_REQUESTED:
         transition(package, CareerPackageStatus.PROVIDED)
         obligation = await session.scalar(
-            select(CareerPackageObligation).where(
-                CareerPackageObligation.package_id == package.id
-            )
+            select(CareerPackageObligation).where(CareerPackageObligation.package_id == package.id)
         )
         if obligation is not None and obligation.status is CareerObligationStatus.HOLD:
             if obligation.notice_sent_at is None:

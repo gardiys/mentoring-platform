@@ -487,6 +487,7 @@ async def test_personal_ignores_promotes_another_contact_only_in_future_batches(
         assert str(contacts[1]) in tomorrow and not tomorrow & selected
 
 
+@pytest.mark.schema_change
 async def test_migration_roundtrip_preserves_feedback(pool, seeded):
     path = (
         Path(__file__).parents[1] / "migrations/versions/20260921_0087_recruiter_daily_batches.py"

@@ -257,6 +257,7 @@ async def test_current_validation_rejects_missing_context_even_if_provider_says_
     assert await jobs.schedule_answer_repairs() == 0
 
 
+@pytest.mark.schema_change
 async def test_outage_migration_moves_only_latest_technical_failures(ready, seeded):
     import importlib.util
     from pathlib import Path
