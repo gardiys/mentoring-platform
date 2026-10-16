@@ -81,12 +81,13 @@ function RoadmapEditor({ roadmap }: { roadmap: AdminRoadmapOutline }) {
                 label="Название"
                 required
                 value={form.title}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
                   setForm((current) => ({
                     ...current,
-                    title: event.currentTarget.value,
-                  }))
-                }
+                    title: value,
+                  }));
+                }}
               />
               <TextInput
                 label="Slug"
@@ -97,23 +98,25 @@ function RoadmapEditor({ roadmap }: { roadmap: AdminRoadmapOutline }) {
                     ? "Некорректный slug"
                     : null
                 }
-                onChange={(event) =>
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
                   setForm((current) => ({
                     ...current,
-                    slug: event.currentTarget.value,
-                  }))
-                }
+                    slug: value,
+                  }));
+                }}
               />
             </Group>
             <Textarea
               label="Описание"
               value={form.description ?? ""}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  description: event.currentTarget.value || null,
-                }))
-              }
+                  description: value || null,
+                }));
+              }}
             />
             <Group grow>
               <NumberInput
@@ -130,12 +133,13 @@ function RoadmapEditor({ roadmap }: { roadmap: AdminRoadmapOutline }) {
               <Switch
                 label="Роадмап опубликован"
                 checked={form.is_published}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
                   setForm((current) => ({
                     ...current,
-                    is_published: event.currentTarget.checked,
-                  }))
-                }
+                    is_published: checked,
+                  }));
+                }}
               />
             </Group>
             <Button

@@ -161,34 +161,37 @@ function EntryForm({
                         ? "Некорректный slug"
                         : null
                     }
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
                       setForm((current) => ({
                         ...current,
-                        slug: event.currentTarget.value,
-                      }))
-                    }
+                        slug: value,
+                      }));
+                    }}
                   />
                 </Group>
                 <TextInput
                   label="Название"
                   required
                   value={form.title}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
                     setForm((current) => ({
                       ...current,
-                      title: event.currentTarget.value,
-                    }))
-                  }
+                      title: value,
+                    }));
+                  }}
                 />
                 <Textarea
                   label="Краткое описание"
                   value={form.summary ?? ""}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
                     setForm((current) => ({
                       ...current,
-                      summary: event.currentTarget.value || null,
-                    }))
-                  }
+                      summary: value || null,
+                    }));
+                  }}
                 />
                 <MarkdownImageEditor
                   minRows={16}
@@ -218,12 +221,13 @@ function EntryForm({
                   <Switch
                     label="Опубликован"
                     checked={form.is_published}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked;
                       setForm((current) => ({
                         ...current,
-                        is_published: event.currentTarget.checked,
-                      }))
-                    }
+                        is_published: checked,
+                      }));
+                    }}
                   />
                 </Group>
                 <Group justify="flex-end">

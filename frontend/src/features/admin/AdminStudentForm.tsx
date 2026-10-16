@@ -719,12 +719,13 @@ export function AdminStudentForm({ options, student }: Props) {
                 label="Вступительный платёж получен"
                 description="После сохранения ментору начислится 10 000 ₽"
                 checked={form.entry_payment_paid}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
                   setForm((current) => ({
                     ...current,
-                    entry_payment_paid: event.currentTarget.checked,
-                  }))
-                }
+                    entry_payment_paid: checked,
+                  }));
+                }}
               />
             </Group>
             {editing && (
@@ -735,27 +736,28 @@ export function AdminStudentForm({ options, student }: Props) {
                     label="Ученик исключён из программы"
                     description="Доступ будет закрыт, ментору единоразово начислится 10 000 ₽"
                     checked={form.program_excluded}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked;
                       setForm((current) => ({
                         ...current,
-                        program_excluded: event.currentTarget.checked,
-                        program_exclusion_reason: event.currentTarget.checked
+                        program_excluded: checked,
+                        program_exclusion_reason: checked
                           ? current.program_exclusion_reason
                           : null,
-                      }))
-                    }
+                      }));
+                    }}
                   />
                   {form.program_excluded && (
                     <TextInput
                       label="Причина исключения"
                       value={form.program_exclusion_reason ?? ""}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
                         setForm((current) => ({
                           ...current,
-                          program_exclusion_reason:
-                            event.currentTarget.value || null,
-                        }))
-                      }
+                          program_exclusion_reason: value || null,
+                        }));
+                      }}
                     />
                   )}
                 </Stack>

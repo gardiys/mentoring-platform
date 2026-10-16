@@ -234,12 +234,13 @@ export function AdminMentorPayoutsPanel() {
                 label="Номер акта / комментарий"
                 placeholder="Необязательно"
                 value={references[balance.mentor_id] ?? ""}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
                   setReferences((current) => ({
                     ...current,
-                    [balance.mentor_id]: event.currentTarget.value,
-                  }))
-                }
+                    [balance.mentor_id]: value,
+                  }));
+                }}
               />
               <Group>
                 <Button

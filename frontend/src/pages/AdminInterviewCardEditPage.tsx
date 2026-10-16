@@ -119,23 +119,25 @@ function CardForm({
                     ? "Некорректный slug"
                     : null
                 }
-                onChange={(event) =>
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
                   setForm((current) => ({
                     ...current,
-                    slug: event.currentTarget.value,
-                  }))
-                }
+                    slug: value,
+                  }));
+                }}
               />
               <TextInput
                 label="Тема"
                 required
                 value={form.category ?? ""}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
                   setForm((current) => ({
                     ...current,
-                    category: event.currentTarget.value,
-                  }))
-                }
+                    category: value,
+                  }));
+                }}
               />
             </Group>
             <TextInput
@@ -156,12 +158,13 @@ function CardForm({
               minRows={5}
               autosize
               value={form.question_markdown}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  question_markdown: event.currentTarget.value,
-                }))
-              }
+                  question_markdown: value,
+                }));
+              }}
             />
             <Textarea
               label="Ответ (Markdown)"
@@ -169,22 +172,24 @@ function CardForm({
               minRows={12}
               autosize
               value={form.answer_markdown}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  answer_markdown: event.currentTarget.value,
-                }))
-              }
+                  answer_markdown: value,
+                }));
+              }}
             />
             <TextInput
               label="Компании"
               value={form.companies ?? ""}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  companies: event.currentTarget.value || null,
-                }))
-              }
+                  companies: value || null,
+                }));
+              }}
             />
             <Stack gap="xs">
               <Text fw={500} size="sm">
@@ -250,12 +255,13 @@ function CardForm({
               <Switch
                 label="Опубликована"
                 checked={form.is_published}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
                   setForm((current) => ({
                     ...current,
-                    is_published: event.currentTarget.checked,
-                  }))
-                }
+                    is_published: checked,
+                  }));
+                }}
               />
             </Group>
             <Group justify="flex-end">

@@ -42,6 +42,15 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react/prop-types": "off",
       "react-hooks/exhaustive-deps": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.name=/^set[A-Z]/] > ArrowFunctionExpression MemberExpression[property.name='currentTarget']",
+          message:
+            "Считайте event.currentTarget до вызова setState: внутри апдейтера он уже null.",
+        },
+      ],
       "react-refresh/only-export-components": [
         "error",
         { allowConstantExport: true },

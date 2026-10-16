@@ -545,12 +545,13 @@ export function AdminMentorsPage() {
               required
               label="Имя"
               value={form.first_name}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  first_name: event.currentTarget.value,
-                }))
-              }
+                  first_name: value,
+                }));
+              }}
             />
             <MultiSelect
               required
@@ -568,23 +569,25 @@ export function AdminMentorsPage() {
             <TextInput
               label="Фамилия"
               value={form.last_name ?? ""}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  last_name: event.currentTarget.value || null,
-                }))
-              }
+                  last_name: value || null,
+                }));
+              }}
             />
             <TextInput
               type="email"
               label="Email"
               value={form.email ?? ""}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  email: event.currentTarget.value || null,
-                }))
-              }
+                  email: value || null,
+                }));
+              }}
             />
             <NumberInput
               required
@@ -608,12 +611,13 @@ export function AdminMentorsPage() {
                   ? undefined
                   : "От 5 до 32 латинских букв, цифр или _, первый символ — буква"
               }
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  telegram_username: event.currentTarget.value || null,
-                }))
-              }
+                  telegram_username: value || null,
+                }));
+              }}
             />
             <Group justify="flex-end">
               <Button variant="subtle" onClick={close} type="button">

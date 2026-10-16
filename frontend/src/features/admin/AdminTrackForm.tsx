@@ -151,12 +151,13 @@ export function AdminTrackForm({ options, track }: Props) {
               placeholder="Python"
               required
               value={form.title}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  title: event.currentTarget.value,
-                }))
-              }
+                  title: value,
+                }));
+              }}
             />
             <TextInput
               label="Slug трека"
@@ -169,22 +170,24 @@ export function AdminTrackForm({ options, track }: Props) {
                   ? "Некорректный slug"
                   : null
               }
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  slug: event.currentTarget.value,
-                }))
-              }
+                  slug: value,
+                }));
+              }}
             />
             <Textarea
               label="Описание"
               value={form.description ?? ""}
-              onChange={(event) =>
+              onChange={(event) => {
+                const value = event.currentTarget.value;
                 setForm((current) => ({
                   ...current,
-                  description: event.currentTarget.value || null,
-                }))
-              }
+                  description: value || null,
+                }));
+              }}
             />
             <NumberInput
               label="Позиция"
@@ -200,12 +203,13 @@ export function AdminTrackForm({ options, track }: Props) {
             <Switch
               label="Трек опубликован и доступен ученикам"
               checked={form.is_published}
-              onChange={(event) =>
+              onChange={(event) => {
+                const checked = event.currentTarget.checked;
                 setForm((current) => ({
                   ...current,
-                  is_published: event.currentTarget.checked,
-                }))
-              }
+                  is_published: checked,
+                }));
+              }}
             />
           </Stack>
         </Card>
