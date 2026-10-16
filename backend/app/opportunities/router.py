@@ -9,6 +9,7 @@ from app.db.session import get_db_session
 from app.legal.schemas import CheckoutConfirmation
 from app.legal.service import checkout_payment_link
 from app.opportunities.models import ConsultationType
+from app.opportunities.notifications import opportunity_summary
 from app.opportunities.schemas import (
     AdminConsultationMentorMutation,
     AdminConsultationMutation,
@@ -37,10 +38,16 @@ from app.opportunities.service import (
     development_complete_payment,
     opportunities_dashboard,
 )
+from app.opportunities.workspace_schemas import OpportunitySummary
 
 Session = Annotated[AsyncSession, Depends(get_db_session)]
 router = APIRouter(prefix="/opportunities", tags=["opportunities"])
 admin_router = APIRouter(prefix="/admin/opportunities", tags=["admin-opportunities"])
+
+
+@admin_router.get("/summary", response_model=OpportunitySummary)
+async def summary(session: Session, _admin: AdminUser) -> OpportunitySummary:
+    return await opportunity_summary(session)
 
 
 @router.get("/me", response_model=OpportunitiesDashboard)

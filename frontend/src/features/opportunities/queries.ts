@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../../api/endpoints";
+import { workspaceApi } from "./workspaceApi";
 import type {
   ConsultationStatus,
   ConsultationType,
@@ -14,6 +15,15 @@ export const opportunityKeys = {
   pythonRepeat: ["opportunities", "python-repeat"] as const,
   adminPythonRepeat: ["opportunities", "admin", "python-repeat"] as const,
 };
+
+export function useOpportunitySummary(enabled = true) {
+  return useQuery({
+    queryKey: [...opportunityKeys.all, "summary"],
+    queryFn: workspaceApi.summary,
+    enabled,
+    refetchInterval: 60_000,
+  });
+}
 
 function useMineMutation<T>(mutationFn: (payload: T) => Promise<unknown>) {
   const queryClient = useQueryClient();

@@ -33,6 +33,7 @@ from app.opportunities.models import (
     PythonRepeatProductOffer,
     PythonRepeatSuccessFeeObligation,
 )
+from app.opportunities.notifications import mark_payment_for_review, notify_admins
 from app.opportunities.python_repeat_schemas import (
     AdminPythonRepeatApplicationRead,
     AdminPythonRepeatDashboard,
@@ -62,7 +63,7 @@ from app.payments.models import (
 )
 from app.payments.tochka import TochkaError, TochkaPaymentService
 from app.tracks.models import LearningTrack
-from app.users.models import MENTOR_CAPABLE_ROLES, User, UserRole
+from app.users.models import MENTOR_CAPABLE_ROLES, User
 
 PRODUCT_CODE = "PYTHON_REPEAT_MENTORSHIP"
 DEFAULT_UPFRONT_KOPECKS = 3_000_000
@@ -364,21 +365,16 @@ async def _notify_admins(
     title: str,
     body: str,
     actor_id: UUID,
+    application_id: UUID,
 ) -> None:
-    admin_ids = await session.scalars(
-        select(User.id).where(User.role == UserRole.ADMIN, User.is_active.is_(True))
+    await notify_admins(
+        session,
+        event_key=event_key,
+        title=title,
+        body=body,
+        actor_id=actor_id,
+        link=f"/admin/opportunities/python-repeat?application={application_id}",
     )
-    for admin_id in admin_ids:
-        await create_notification(
-            session,
-            user_id=admin_id,
-            actor_user_id=actor_id,
-            event_key=event_key,
-            kind=NotificationKind.STATUS_CHANGED,
-            title=title,
-            body=body,
-            action_url="/admin/opportunities/python-repeat",
-        )
 
 
 async def _notify_student(
@@ -556,6 +552,7 @@ async def submit_application(
         title="Новая заявка на повторное Python-менторство",
         body=f"Выпускник {student.first_name} отправил заявку на рассмотрение.",
         actor_id=student.id,
+        application_id=item.id,
     )
     await session.commit()
     return await dashboard(session, student)
@@ -754,12 +751,12 @@ async def approve_python_repeat_payment(
             application is None
             or application.status is not PythonRepeatApplicationStatus.PAYMENT_PENDING
         ):
-            attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+            await mark_payment_for_review(session, attempt)
             return
         assert application.terms_snapshot is not None
         student = await session.get(User, application.student_id)
         if student is None:
-            attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+            await mark_payment_for_review(session, attempt)
             return
         eligibility = await python_repeat_eligibility(
             session, student, ignore_application_id=application.id
@@ -769,7 +766,7 @@ async def approve_python_repeat_payment(
             and eligibility.code != "FEATURE_DISABLED"
             and application.eligibility_override_by_user_id is None
         ):
-            attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+            await mark_payment_for_review(session, attempt)
             return
         application.paid_at = approved_at
         application.contract_accepted_at = approved_at
@@ -796,7 +793,7 @@ async def approve_python_repeat_payment(
             completed_tracks, _ = await _track_state(session, application.student_id)
             python_track = next((track for track in completed_tracks if _is_python(track)), None)
             if python_track is None:
-                attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+                await mark_payment_for_review(session, attempt)
                 return
             enrollment = PythonRepeatEnrollment(
                 application_id=application.id,
@@ -845,7 +842,7 @@ async def approve_python_repeat_payment(
             attempt.status = PaymentAttemptStatus.APPROVED
             attempt.approved_at = approved_at
         else:
-            attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+            await mark_payment_for_review(session, attempt)
         return
     installment.status = PythonRepeatInstallmentStatus.PAID
     installment.paid_at = approved_at
@@ -854,11 +851,11 @@ async def approve_python_repeat_payment(
     attempt.approved_at = approved_at
     obligation = await session.get(PythonRepeatSuccessFeeObligation, installment.obligation_id)
     if obligation is None:
-        attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+        await mark_payment_for_review(session, attempt)
         return
     enrollment = await session.get(PythonRepeatEnrollment, obligation.enrollment_id)
     if enrollment is None:
-        attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+        await mark_payment_for_review(session, attempt)
         return
     if enrollment.mentor_id is not None:
         existing = await session.scalar(
@@ -1017,12 +1014,15 @@ async def submit_offer(
     item.status = PythonRepeatOfferStatus.SUBMITTED
     item.submitted_at = _now()
     await _event(session, "python_repeat_offer_submitted", item.id, student.id)
+    enrollment = await session.get(PythonRepeatEnrollment, item.enrollment_id)
+    assert enrollment is not None
     await _notify_admins(
         session,
         event_key=f"python-repeat-offer-submitted:{item.id}",
         title="Новый оффер на проверку",
         body=f"{student.first_name} отправил оффер по повторному Python-менторству.",
         actor_id=student.id,
+        application_id=enrollment.application_id,
     )
     await session.commit()
     return await dashboard(session, student)

@@ -893,7 +893,12 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
             )
         else:
             if opportunity_attempt.status is not PaymentAttemptStatus.APPROVED:
-                opportunity_attempt.status = mapped
+                if mapped is PaymentAttemptStatus.MANUAL_REVIEW:
+                    from app.opportunities.notifications import mark_payment_for_review
+
+                    await mark_payment_for_review(session, opportunity_attempt)
+                else:
+                    opportunity_attempt.status = mapped
     try:
         await session.commit()
     except IntegrityError:

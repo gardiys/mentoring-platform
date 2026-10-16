@@ -3,6 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { api } from "../src/api/endpoints";
+import { AppLayout } from "../src/components/AppLayout";
+import { workspaceApi } from "../src/features/opportunities/workspaceApi";
+import { copilotApi } from "../src/features/copilot/api";
 import { AdminOpportunitiesPage } from "../src/pages/AdminOpportunitiesPage";
 import type {
   AdminConsultationRead,
@@ -11,6 +14,44 @@ import type {
 import { renderPage } from "./render";
 
 afterEach(() => vi.restoreAllMocks());
+
+it("показывает администратору счётчик возможностей в меню", async () => {
+  vi.spyOn(api, "me").mockResolvedValue({
+    id: "admin-1",
+    first_name: "Админ",
+    last_name: null,
+    telegram_id: 1,
+    email: null,
+    role: "admin",
+    is_active: true,
+    onboarding_completed_at: "2026-10-01T00:00:00Z",
+  });
+  vi.spyOn(api, "notifications").mockResolvedValue({
+    items: [],
+    unread_count: 0,
+    total: 0,
+    limit: 20,
+    offset: 0,
+  });
+  vi.spyOn(copilotApi, "access").mockResolvedValue({
+    allowed: true,
+    student_allowed: true,
+    students_enabled: true,
+    learning_status: "active",
+    reason: "",
+  });
+  vi.spyOn(workspaceApi, "summary").mockResolvedValue({
+    needs_action_total: 7,
+    overdue_total: 2,
+    consultations: {},
+    go_transition: {},
+    python_repeat: {},
+  });
+  renderPage(<AppLayout />, "/admin/opportunities", "/admin/opportunities");
+  expect(
+    await screen.findByLabelText("Возможности требуют действия"),
+  ).toHaveTextContent("7");
+});
 
 const student = {
   id: "student-1",

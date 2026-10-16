@@ -30,6 +30,7 @@ from app.opportunities.models import (
     PythonRepeatApplication,
     PythonRepeatApplicationStatus,
 )
+from app.opportunities.notifications import mark_payment_for_review
 from app.opportunities.schemas import OpportunityPaymentLinkRead
 from app.payments.models import PaymentAttemptStatus
 from app.payments.tochka import TochkaError, TochkaPaymentService
@@ -403,7 +404,7 @@ async def finalize_contract(
         or offer is None
         or offer.status == "revoked"
     ):
-        attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+        await mark_payment_for_review(session, attempt)
         audit(session, "alert.payment_checkout_invalid", checkout.id)
         return None
     # Paid contract persists even when access provisioning needs manual review.

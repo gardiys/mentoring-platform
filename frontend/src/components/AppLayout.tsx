@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   AppShell,
+  Badge,
   Burger,
   Group,
   NavLink,
@@ -24,6 +25,7 @@ import {
 
 import { clearDevUserId } from "../features/auth/devAuth";
 import { useLogout, useMe } from "../features/auth/queries";
+import { useOpportunitySummary } from "../features/opportunities/queries";
 import { usePlatform } from "../platform/usePlatform";
 import { HeaderIcon } from "./HeaderIcon";
 import { NavigationIcon } from "./NavigationIcon";
@@ -50,6 +52,7 @@ export function AppLayout() {
   const student = me.data?.role === "student";
   const mentor = me.data?.role === "mentor" || me.data?.role === "admin";
   const admin = me.data?.role === "admin";
+  const opportunitySummary = useOpportunitySummary(admin);
   const copilot = useQuery({
     queryKey: ["copilot-access"],
     queryFn: copilotApi.access,
@@ -385,6 +388,22 @@ export function AppLayout() {
                   component={Link}
                   to={item.to}
                   label={item.label}
+                  rightSection={
+                    admin &&
+                    item.to === "/admin/opportunities" &&
+                    (opportunitySummary.data?.needs_action_total ?? 0) > 0 ? (
+                      <Badge
+                        aria-label="Возможности требуют действия"
+                        color={
+                          opportunitySummary.data?.overdue_total
+                            ? "red"
+                            : "blue"
+                        }
+                      >
+                        {opportunitySummary.data?.needs_action_total}
+                      </Badge>
+                    ) : undefined
+                  }
                   leftSection={<NavigationIcon to={item.to} />}
                   description={
                     "description" in item ? item.description : undefined

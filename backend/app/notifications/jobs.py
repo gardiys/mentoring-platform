@@ -56,6 +56,7 @@ from app.notifications.service import (
     telegram_action_url,
     telegram_public_url,
 )
+from app.opportunities.notifications import opportunity_digest
 from app.payments.models import (
     PaymentInstallment,
     PaymentInstallmentStatus,
@@ -664,9 +665,23 @@ def _reminder_kind(due_date: date, today: date) -> str | None:
     return None
 
 
+async def schedule_opportunity_reminders(ctx: dict[str, Any]) -> None:
+    del ctx
+    async with async_session_factory() as session:
+        await opportunity_digest(session)
+        await session.commit()
+
+
 class NotificationWorkerSettings:
     functions: list[object] = []
     cron_jobs = [
+        cron(
+            schedule_opportunity_reminders,
+            minute=0,
+            run_at_startup=True,
+            max_tries=1,
+            keep_result=0,
+        ),
         cron(
             monitor_legal_health,
             minute={0, 15, 30, 45},

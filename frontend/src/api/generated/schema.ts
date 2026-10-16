@@ -5757,6 +5757,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/opportunities/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Summary */
+        get: operations["summary_api_v1_admin_opportunities_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/opportunities": {
         parameters: {
             query?: never;
@@ -13843,6 +13860,31 @@ export interface components {
          * @enum {string}
          */
         OpportunitySegment: "ACTIVE_STUDENT" | "PYTHON_ALUMNI" | "GO_ALUMNI" | "MULTI_ALUMNI" | "OTHER";
+        /** OpportunitySummary */
+        OpportunitySummary: {
+            /**
+             * Needs Action Total
+             * @default 0
+             */
+            needs_action_total: number;
+            /**
+             * Overdue Total
+             * @default 0
+             */
+            overdue_total: number;
+            /** Consultations */
+            consultations?: {
+                [key: string]: number;
+            };
+            /** Go Transition */
+            go_transition?: {
+                [key: string]: number;
+            };
+            /** Python Repeat */
+            python_repeat?: {
+                [key: string]: number;
+            };
+        };
         /**
          * PairwiseCardMatchDecision
          * @enum {string}
@@ -30341,6 +30383,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OpportunitiesDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summary_api_v1_admin_opportunities_summary_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunitySummary"];
                 };
             };
             /** @description Validation Error */

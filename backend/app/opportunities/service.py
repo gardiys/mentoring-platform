@@ -32,6 +32,7 @@ from app.opportunities.models import (
     ProgramCompletion,
     PythonRepeatProductOffer,
 )
+from app.opportunities.notifications import mark_payment_for_review, notify_admins
 from app.opportunities.schemas import (
     AdminConsultationMentorRead,
     AdminConsultationMutation,
@@ -545,17 +546,38 @@ async def create_consultation(
     consultation_type = next(
         item for item in dashboard.consultation_types if item.code == payload.consultation_type
     )
-    session.add(
-        ConsultationRequest(
-            student_id=student.id,
-            mentor_id=payload.mentor_id,
-            consultation_type=payload.consultation_type,
-            brief=payload.brief,
-            price_kopecks=consultation_type.price_kopecks,
-            mentor_reward_kopecks=consultation_type.mentor_reward_kopecks,
-            duration_minutes=consultation_type.duration_minutes,
-            status=ConsultationStatus.REQUESTED,
-        )
+    item = ConsultationRequest(
+        student_id=student.id,
+        mentor_id=payload.mentor_id,
+        consultation_type=payload.consultation_type,
+        brief=payload.brief,
+        price_kopecks=consultation_type.price_kopecks,
+        mentor_reward_kopecks=consultation_type.mentor_reward_kopecks,
+        duration_minutes=consultation_type.duration_minutes,
+        status=ConsultationStatus.REQUESTED,
+    )
+    session.add(item)
+    await session.flush()
+    identity = " ".join(
+        value
+        for value in [
+            student.first_name,
+            student.last_name,
+            f"@{student.telegram_username}" if student.telegram_username else None,
+        ]
+        if value
+    )
+    mentor = await session.get(User, item.mentor_id) if item.mentor_id else None
+    await notify_admins(
+        session,
+        event_key=f"consultation-requested:{item.id}",
+        title="Новая заявка на консультацию",
+        body=(
+            f"{identity} · {consultation_type.title} · "
+            f"ментор: {mentor.first_name if mentor else 'любой'}\n{item.brief[:300]}"
+        ),
+        link=f"/admin/opportunities?consultation={item.id}",
+        actor_id=student.id,
     )
     await session.commit()
     return await opportunities_dashboard(session, student)
@@ -571,18 +593,26 @@ async def create_go_transition(
     offer = next(item for item in dashboard.opportunities if item.code == "PYTHON_TO_GO_ALUMNI")
     if not offer.available:
         api_error(409, "go_transition_not_available", offer.unavailable_reason or "Unavailable")
-    session.add(
-        GoTransitionApplication(
-            student_id=student.id,
-            motivation=payload.motivation,
-            status=GoTransitionStatus.SUBMITTED,
-            upfront_price_kopecks=ALUMNI_GO_UPFRONT_PRICE_KOPECKS,
-            success_fee_percent=ALUMNI_GO_SUCCESS_FEE_PERCENT,
-            terms_version=GO_TRANSITION_TERMS_VERSION,
-            terms_snapshot=_go_transition_terms_snapshot(),
-        )
+    item = GoTransitionApplication(
+        student_id=student.id,
+        motivation=payload.motivation,
+        status=GoTransitionStatus.SUBMITTED,
+        upfront_price_kopecks=ALUMNI_GO_UPFRONT_PRICE_KOPECKS,
+        success_fee_percent=ALUMNI_GO_SUCCESS_FEE_PERCENT,
+        terms_version=GO_TRANSITION_TERMS_VERSION,
+        terms_snapshot=_go_transition_terms_snapshot(),
     )
+    session.add(item)
     try:
+        await session.flush()
+        await notify_admins(
+            session,
+            event_key=f"go-transition-submitted:{item.id}",
+            title="Новая заявка на переход в Go",
+            body=f"{student.first_name} {student.last_name or ''}\n{item.motivation[:300]}",
+            link=f"/admin/opportunities?go={item.id}",
+            actor_id=student.id,
+        )
         await session.commit()
     except IntegrityError:
         await session.rollback()
@@ -737,7 +767,7 @@ async def approve_opportunity_payment(
     if attempt.status is PaymentAttemptStatus.APPROVED:
         return
     if attempt.status is PaymentAttemptStatus.REVOKED:
-        attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+        await mark_payment_for_review(session, attempt)
         return
     if (
         attempt.python_repeat_application_id is not None
@@ -752,18 +782,25 @@ async def approve_opportunity_payment(
     if attempt.consultation_request_id is not None:
         consultation = await session.get(ConsultationRequest, attempt.consultation_request_id)
         if consultation is None or consultation.status is not ConsultationStatus.PAYMENT_PENDING:
-            attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+            await mark_payment_for_review(session, attempt)
             return
         if consultation.mentor_id is None:
-            attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+            await mark_payment_for_review(session, attempt)
             return
         consultation.status = ConsultationStatus.PAID
         consultation.paid_at = now
+        await notify_admins(
+            session,
+            event_key=f"consultation-paid:{consultation.id}",
+            title="Консультация оплачена — согласуйте время",
+            body=f"Заявка {consultation.id}",
+            link=f"/admin/opportunities?consultation={consultation.id}",
+        )
         return
     assert attempt.transition_application_id is not None
     transition = await session.get(GoTransitionApplication, attempt.transition_application_id)
     if transition is None or transition.status is not GoTransitionStatus.PAYMENT_PENDING:
-        attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+        await mark_payment_for_review(session, attempt)
         return
     go_track = await session.scalar(
         select(LearningTrack).where(
@@ -772,12 +809,12 @@ async def approve_opportunity_payment(
         )
     )
     if go_track is None:
-        attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+        await mark_payment_for_review(session, attempt)
         return
     completed_tracks, _active_tracks = await _track_state(session, transition.student_id)
     python_track = next((track for track in completed_tracks if _is_python(track)), None)
     if python_track is None or transition.accepted_terms_snapshot is None:
-        attempt.status = PaymentAttemptStatus.MANUAL_REVIEW
+        await mark_payment_for_review(session, attempt)
         return
     transition.status = GoTransitionStatus.PAID
     transition.paid_at = now
