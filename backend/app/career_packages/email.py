@@ -43,6 +43,9 @@ class CareerPackageEmailService:
         )
         if not api_key or not (sender_email or self.settings.brevo_from_email):
             raise CareerPackageEmailError("Email delivery is not configured")
+        recipient = {"email": recipient_email}
+        if recipient_name.strip():
+            recipient["name"] = recipient_name.strip()
         safe_body = "<br>".join(escape(body).splitlines())
         safe_url = escape(action_url, quote=True)
         payload: dict[str, Any] = {
@@ -50,7 +53,7 @@ class CareerPackageEmailService:
                 "email": sender_email or self.settings.brevo_from_email,
                 "name": self.settings.brevo_from_name,
             },
-            "to": [{"email": recipient_email, "name": recipient_name}],
+            "to": [recipient],
             "subject": subject or f"Карьерный пакет № {package_number}, версия {version_number}",
             "textContent": f"{body}\n\nОткрыть на платформе: {action_url}",
             "htmlContent": (

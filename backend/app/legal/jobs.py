@@ -74,7 +74,7 @@ async def deliver_legal_emails(ctx: dict[str, Any]) -> None:
                     action_label="Мои документы",
                     attachment_name=attachment_name,
                     tags=["legal-transactional"],
-                    idempotency_key=f"legal-{row.id}",
+                    idempotency_key=str(row.id),
                     sender_email=settings.legal_email_from,
                     reply_to_email=settings.legal_email_reply_to
                     or settings.brevo_reply_to_email

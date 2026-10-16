@@ -224,7 +224,9 @@ async def test_exact_document_attachment_and_email_snapshot(
     sent = []
 
     def send(request):
-        sent.append(json.loads(request.content))
+        email = json.loads(request.content)
+        UUID(email["headers"]["idempotencyKey"])
+        sent.append(email)
         return httpx.Response(201, json={"messageId": "brevo-message-1"})
 
     settings = Settings(
@@ -434,7 +436,7 @@ async def test_offer_and_contract_immutability_and_unique_active(
 
 
 async def test_email_verification_single_use_rate_limit_and_email_change(
-    client: AsyncClient, seeded: SeededData
+    client: AsyncClient, seeded: SeededData, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     await approved_application(client, seeded, PRODUCTS[1])
     async with TestSession() as session:
@@ -460,6 +462,37 @@ async def test_email_verification_single_use_rate_limit_and_email_change(
             )
         )
         code = re.search(r"\d{8}", delivery.body_snapshot).group()
+        delivery_id = delivery.id
+
+    def send(request: httpx.Request) -> httpx.Response:
+        email = json.loads(request.content)
+        recipient = email["to"][0]
+        if "name" in recipient and not recipient["name"].strip():
+            return httpx.Response(400, json={"code": "missing_parameter"})
+        try:
+            UUID(email["headers"]["idempotencyKey"])
+        except ValueError:
+            return httpx.Response(400, json={"code": "out_of_range"})
+        assert recipient["email"] == "graduate@example.com"
+        assert code in email["textContent"]
+        assert "attachment" not in email
+        return httpx.Response(201, json={"messageId": "verification-message"})
+
+    settings = Settings(
+        _env_file=None, brevo_api_key="test-key", brevo_from_email="sender@example.com"
+    )
+    monkeypatch.setattr(jobs, "get_settings", lambda: settings)
+    monkeypatch.setattr(jobs, "async_session_factory", TestSession)
+    async with httpx.AsyncClient(
+        base_url="https://email.test", transport=httpx.MockTransport(send)
+    ) as email_client:
+        await jobs.deliver_legal_emails({"brevo_client": email_client})
+    async with TestSession() as session:
+        delivery = await session.get(LegalEmailDelivery, delivery_id)
+        assert delivery.status == "sent"
+        assert delivery.provider_message_id == "verification-message"
+        assert delivery.retry_count == 0
+
     response = await client.post(
         "/api/v1/legal/email/confirm", headers=auth(seeded.student_id), json={"code": code}
     )
