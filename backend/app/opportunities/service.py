@@ -334,7 +334,9 @@ def _mentor_read(mentor: User) -> MentorOptionRead:
     )
 
 
-async def _consultation_read(session: AsyncSession, item: ConsultationRequest) -> ConsultationRead:
+async def _consultation_read(
+    session: AsyncSession, item: ConsultationRequest, *, include_draft_summary: bool = False
+) -> ConsultationRead:
     mentor = await session.get(User, item.mentor_id) if item.mentor_id is not None else None
     if item.mentor_id is not None and mentor is None:
         raise RuntimeError("Consultation mentor was not found")
@@ -350,7 +352,11 @@ async def _consultation_read(session: AsyncSession, item: ConsultationRequest) -
         paid_at=item.paid_at,
         completed_at=item.completed_at,
         admin_note=item.admin_note,
-        written_summary=item.written_summary,
+        written_summary=(
+            item.written_summary
+            if include_draft_summary or item.status is ConsultationStatus.COMPLETED
+            else None
+        ),
         created_at=item.created_at,
     )
 
@@ -922,7 +928,7 @@ async def admin_dashboard(session: AsyncSession) -> AdminOpportunitiesDashboard:
 
     consultations: list[AdminConsultationRead] = []
     for item, student in consultation_rows:
-        base = await _consultation_read(session, item)
+        base = await _consultation_read(session, item, include_draft_summary=True)
         consultations.append(
             AdminConsultationRead(
                 **base.model_dump(),

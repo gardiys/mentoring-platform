@@ -30,6 +30,7 @@ import {
   useUpdateAdminConsultation,
 } from "../features/opportunities/queries";
 import type {
+  AdminConsultationRead,
   ConsultationStatus,
   ConsultationType,
   GoTransitionStatus,
@@ -292,6 +293,8 @@ export function AdminOpportunitiesPage() {
     clearConsultationDraft(id);
     notifications.show({ color: "green", message });
   };
+  const summaryFor = (item: AdminConsultationRead) =>
+    consultationDrafts[item.id]?.summary ?? item.written_summary ?? "";
   const enabledMentorOptions = query.data.consultation_mentors
     .filter((mentor) => mentor.is_enabled)
     .map((mentor) => ({
@@ -470,6 +473,7 @@ export function AdminOpportunitiesPage() {
               )}
               <Textarea
                 label="Комментарий администратора"
+                maxLength={5000}
                 description={
                   (["requested", "paid", "scheduled"] as string[]).includes(
                     item.status,
@@ -485,7 +489,8 @@ export function AdminOpportunitiesPage() {
                 value={
                   consultationDrafts[item.id]?.note ?? item.admin_note ?? ""
                 }
-                onChange={(event) =>
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
                   setConsultationDrafts((current) => ({
                     ...current,
                     [item.id]: {
@@ -494,45 +499,57 @@ export function AdminOpportunitiesPage() {
                       scheduledAt:
                         current[item.id]?.scheduledAt ??
                         isoToLocalDateTimeInput(item.scheduled_at),
-                      note: event.currentTarget.value,
+                      note: value,
                       summary:
                         current[item.id]?.summary ?? item.written_summary ?? "",
                     },
-                  }))
-                }
+                  }));
+                }}
               />
               {(["paid", "scheduled", "completed"] as string[]).includes(
                 item.status,
               ) && (
-                <Textarea
-                  label="Краткий письменный итог"
-                  description={
-                    item.status === "completed"
-                      ? "Сохранённый итог консультации"
-                      : "Рекомендации и план дальнейших действий"
-                  }
-                  minRows={3}
-                  readOnly={item.status === "completed"}
-                  value={
-                    consultationDrafts[item.id]?.summary ??
-                    item.written_summary ??
-                    ""
-                  }
-                  onChange={(event) =>
-                    setConsultationDrafts((current) => ({
-                      ...current,
-                      [item.id]: {
-                        mentorId:
-                          current[item.id]?.mentorId ?? item.mentor?.id ?? null,
-                        scheduledAt:
-                          current[item.id]?.scheduledAt ??
-                          isoToLocalDateTimeInput(item.scheduled_at),
-                        note: current[item.id]?.note ?? item.admin_note ?? "",
-                        summary: event.currentTarget.value,
-                      },
-                    }))
-                  }
-                />
+                <Stack gap={4}>
+                  <Textarea
+                    label="Краткий письменный итог"
+                    description={
+                      item.status === "completed"
+                        ? "Сохранённый итог консультации"
+                        : "Рекомендации и план дальнейших действий"
+                    }
+                    minRows={3}
+                    maxLength={10000}
+                    readOnly={item.status === "completed"}
+                    value={summaryFor(item)}
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setConsultationDrafts((current) => ({
+                        ...current,
+                        [item.id]: {
+                          mentorId:
+                            current[item.id]?.mentorId ??
+                            item.mentor?.id ??
+                            null,
+                          scheduledAt:
+                            current[item.id]?.scheduledAt ??
+                            isoToLocalDateTimeInput(item.scheduled_at),
+                          note: current[item.id]?.note ?? item.admin_note ?? "",
+                          summary: value,
+                        },
+                      }));
+                    }}
+                  />
+                  <Text size="xs" c="dimmed">
+                    {summaryFor(item).length} / 10 000
+                  </Text>
+                  {item.status !== "completed" &&
+                    summaryFor(item).trim().length < 10 && (
+                      <Text size="xs" c="dimmed">
+                        Ещё {10 - summaryFor(item).trim().length} символов,
+                        чтобы завершить
+                      </Text>
+                    )}
+                </Stack>
               )}
               <Group justify="flex-end">
                 {item.status === "requested" && (
@@ -664,7 +681,8 @@ export function AdminOpportunitiesPage() {
                         consultationDrafts[item.id]?.scheduledAt ??
                         isoToLocalDateTimeInput(item.scheduled_at)
                       }
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
                         setConsultationDrafts((current) => ({
                           ...current,
                           [item.id]: {
@@ -672,7 +690,7 @@ export function AdminOpportunitiesPage() {
                               current[item.id]?.mentorId ??
                               item.mentor?.id ??
                               null,
-                            scheduledAt: event.currentTarget.value,
+                            scheduledAt: value,
                             note:
                               current[item.id]?.note ?? item.admin_note ?? "",
                             summary:
@@ -680,8 +698,8 @@ export function AdminOpportunitiesPage() {
                               item.written_summary ??
                               "",
                           },
-                        }))
-                      }
+                        }));
+                      }}
                     />
                     <Button
                       variant="light"
@@ -710,9 +728,7 @@ export function AdminOpportunitiesPage() {
                             admin_note:
                               consultationDrafts[item.id]?.note ??
                               item.admin_note,
-                            written_summary:
-                              consultationDrafts[item.id]?.summary ??
-                              item.written_summary,
+                            written_summary: item.written_summary,
                           },
                           {
                             onError: error,
@@ -732,13 +748,7 @@ export function AdminOpportunitiesPage() {
                         consultationMutation.isPending &&
                         consultationMutation.variables?.id === item.id
                       }
-                      disabled={
-                        (
-                          consultationDrafts[item.id]?.summary ??
-                          item.written_summary ??
-                          ""
-                        ).trim().length < 10
-                      }
+                      disabled={summaryFor(item).trim().length < 10}
                       onClick={() => {
                         const draftScheduledAt =
                           consultationDrafts[item.id]?.scheduledAt;
@@ -816,12 +826,13 @@ export function AdminOpportunitiesPage() {
                 <Textarea
                   label="Комментарий к решению"
                   value={transitionNotes[item.id] ?? ""}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
                     setTransitionNotes((current) => ({
                       ...current,
-                      [item.id]: event.currentTarget.value,
-                    }))
-                  }
+                      [item.id]: value,
+                    }));
+                  }}
                 />
               )}
               {item.status !== "submitted" && item.admin_note && (

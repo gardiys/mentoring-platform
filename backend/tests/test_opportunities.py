@@ -185,6 +185,25 @@ async def test_alumnus_consultation_accrues_reward_only_after_completion(
         )
         assert reward is None
 
+    draft_summary = "Черновик: рекомендации ещё не готовы к публикации."
+    scheduled = await client.patch(
+        f"/api/v1/admin/opportunities/consultations/{request_id}",
+        headers=auth(seeded.admin_id),
+        json={
+            "status": "scheduled",
+            "mentor_id": str(seeded.mentor_id),
+            "scheduled_at": datetime.now(UTC).isoformat(),
+            "written_summary": draft_summary,
+        },
+    )
+    assert scheduled.status_code == 200, scheduled.text
+    assert scheduled.json()["consultations"][0]["written_summary"] == draft_summary
+    student_view = await client.get("/api/v1/opportunities/me", headers=auth(seeded.student_id))
+    assert student_view.json()["consultations"][0]["written_summary"] is None
+    admin_view = await client.get("/api/v1/admin/opportunities", headers=auth(seeded.admin_id))
+    assert admin_view.status_code == 200, admin_view.text
+    assert admin_view.json()["consultations"][0]["written_summary"] == draft_summary
+
     completed = await client.patch(
         f"/api/v1/admin/opportunities/consultations/{request_id}",
         headers=auth(seeded.admin_id),
@@ -195,6 +214,10 @@ async def test_alumnus_consultation_accrues_reward_only_after_completion(
         },
     )
     assert completed.status_code == 200, completed.text
+    student_view = await client.get("/api/v1/opportunities/me", headers=auth(seeded.student_id))
+    assert student_view.json()["consultations"][0]["written_summary"] == (
+        "Разобрали задачу и зафиксировали следующие шаги."
+    )
     repeated = await client.patch(
         f"/api/v1/admin/opportunities/consultations/{request_id}",
         headers=auth(seeded.admin_id),
