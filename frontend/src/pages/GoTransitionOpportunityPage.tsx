@@ -10,7 +10,9 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { type FormEvent, useState } from "react";
+import { type FormEvent } from "react";
+import { useMe } from "../features/auth/queries";
+import { useApplicationDraft } from "../features/opportunities/useApplicationDraft";
 import { GoTransitionProgramDescription as ProgramDescription } from "../components/GoTransitionProgramDescription";
 import { Link } from "react-router-dom";
 
@@ -44,44 +46,102 @@ const statusColors: Record<GoTransitionStatus, string> = {
   cancelled: "gray",
 };
 
+function GoTransitionApplicationForm({ userId }: { userId: string }) {
+  const create = useCreateGoTransition();
+  const draft = useApplicationDraft(
+    `mentoring.go-motivation-draft.v1:${userId}`,
+    { motivation: "" },
+    { motivation: 5000 },
+  );
+  const motivation = draft.values.motivation ?? "";
+  const motivationLength = motivation.trim().length;
+  const notifyError = (error: Error) =>
+    notifications.show({ color: "red", message: error.message });
+  const submitApplication = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (motivationLength < 10) return;
+    void create
+      .mutateAsync({ motivation: motivation.trim() })
+      .then(() => {
+        draft.reset();
+        notifications.show({
+          color: "green",
+          message: "Заявка отправлена и появилась в разделе ниже",
+        });
+      })
+      .catch(notifyError);
+  };
+
+  return (
+    <Card withBorder component="form" onSubmit={submitApplication}>
+      <Stack>
+        <Title order={2}>Подать заявку</Title>
+        <Text>
+          Сначала команда рассмотрит вашу цель и текущую ситуацию. Оплата станет
+          доступна только после одобрения и принятия зафиксированных условий.
+        </Text>
+        {draft.available ? (
+          <Text size="sm" c="dimmed">
+            Черновик сохраняется автоматически на этом устройстве.
+          </Text>
+        ) : (
+          <Alert color="yellow" title="Не удалось сохранить черновик">
+            Хранилище браузера недоступно. При закрытии страницы введённые
+            данные могут потеряться.
+          </Alert>
+        )}
+        <Textarea
+          label="Зачем тебе Go-направление"
+          description="Расскажи о цели перехода и ожидаемом результате"
+          minRows={5}
+          minLength={10}
+          maxLength={5000}
+          required
+          value={motivation}
+          onChange={(event) =>
+            draft.setField("motivation", event.currentTarget.value)
+          }
+          error={
+            motivation.length > 0 && motivationLength < 10
+              ? "Расскажи чуть подробнее — минимум 10 символов"
+              : undefined
+          }
+        />
+        <Text size="xs" c="dimmed" ta="right">
+          {motivationLength} / 5000
+        </Text>
+        <Button
+          type="submit"
+          color="yellow"
+          disabled={motivationLength < 10}
+          loading={create.isPending}
+        >
+          Подать заявку
+        </Button>
+      </Stack>
+    </Card>
+  );
+}
+
 export function GoTransitionOpportunityPage() {
   const query = useMyOpportunities();
-  const create = useCreateGoTransition();
-  const [motivation, setMotivation] = useState("");
+  const me = useMe();
 
-  if (query.isPending)
+  if (query.isPending || me.isPending)
     return <LoadingState label="Загружаем программу перехода…" />;
   if (query.isError)
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />
     );
+  if (me.isError)
+    return <ErrorState error={me.error} retry={() => void me.refetch()} />;
 
   const offer = query.data.opportunities.find(
     (item) => item.code === "PYTHON_TO_GO_ALUMNI",
   );
-  const motivationLength = motivation.trim().length;
   const activeApplications = query.data.go_transition_applications.filter(
     (item) => !["paid", "rejected", "cancelled"].includes(item.status),
   );
-  const notifyError = (error: Error) =>
-    notifications.show({ color: "red", message: error.message });
-  const submitApplication = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!offer?.available || motivationLength < 10) return;
-    create.mutate(
-      { motivation: motivation.trim() },
-      {
-        onSuccess: () => {
-          setMotivation("");
-          notifications.show({
-            color: "green",
-            message: "Заявка отправлена и появилась в разделе ниже",
-          });
-        },
-        onError: notifyError,
-      },
-    );
-  };
 
   return (
     <Stack gap="xl">
@@ -169,42 +229,7 @@ export function GoTransitionOpportunityPage() {
       )}
 
       {offer?.available ? (
-        <Card withBorder component="form" onSubmit={submitApplication}>
-          <Stack>
-            <Title order={2}>Подать заявку</Title>
-            <Text>
-              Сначала команда рассмотрит вашу цель и текущую ситуацию. Оплата
-              станет доступна только после одобрения и принятия зафиксированных
-              условий.
-            </Text>
-            <Textarea
-              label="Зачем тебе Go-направление"
-              description="Расскажи о цели перехода и ожидаемом результате"
-              minRows={5}
-              minLength={10}
-              maxLength={5000}
-              required
-              value={motivation}
-              onChange={(event) => setMotivation(event.currentTarget.value)}
-              error={
-                motivation.length > 0 && motivationLength < 10
-                  ? "Расскажи чуть подробнее — минимум 10 символов"
-                  : undefined
-              }
-            />
-            <Text size="xs" c="dimmed" ta="right">
-              {motivationLength} / 5000
-            </Text>
-            <Button
-              type="submit"
-              color="yellow"
-              disabled={motivationLength < 10}
-              loading={create.isPending}
-            >
-              Подать заявку
-            </Button>
-          </Stack>
-        </Card>
+        <GoTransitionApplicationForm key={me.data.id} userId={me.data.id} />
       ) : (
         <Alert color="gray" title="Подача заявки сейчас недоступна">
           {offer?.unavailable_reason ??

@@ -15,7 +15,10 @@ import type {
 import { renderPage } from "./render";
 import { mockLegalCheckout } from "./legalFixtures";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  localStorage.clear();
+});
 
 const student = {
   id: "10000000-0000-4000-8000-000000000001",
@@ -296,6 +299,73 @@ it("отправляет заявку на переход с введенной 
       { motivation: "Хочу развиваться в Go backend" },
       expect.anything(),
     ),
+  );
+});
+
+it("восстанавливает мотивацию Go после ухода и очищает только после успешной отправки", async () => {
+  vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "myOpportunities").mockResolvedValue(dashboard);
+  const create = vi
+    .spyOn(api, "createGoTransition")
+    .mockRejectedValue(new Error("Нет сети"));
+  const form = <GoTransitionOpportunityPage />;
+  const path = "/opportunities/alumni/go-transition";
+  const first = renderPage(form, path, path);
+  const motivation = "Хочу изучать Go для следующего оффера";
+  await userEvent.type(
+    await screen.findByLabelText(/Зачем тебе Go-направление/),
+    motivation,
+  );
+  await first.router.navigate("/opportunities/alumni");
+  await first.router.navigate(path);
+  expect(await screen.findByLabelText(/Зачем тебе Go-направление/)).toHaveValue(
+    motivation,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Подать заявку" }));
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+  first.unmount();
+  renderPage(form, path, path);
+  expect(await screen.findByLabelText(/Зачем тебе Go-направление/)).toHaveValue(
+    motivation,
+  );
+  const submitted = {
+    ...dashboard,
+    opportunities: dashboard.opportunities.map((offer) =>
+      offer.code === "PYTHON_TO_GO_ALUMNI"
+        ? { ...offer, available: false }
+        : offer,
+    ),
+  };
+  create.mockResolvedValue(submitted);
+  vi.mocked(api.myOpportunities).mockResolvedValue(submitted);
+  await userEvent.click(screen.getByRole("button", { name: "Подать заявку" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByLabelText(/Зачем тебе Go-направление/),
+    ).not.toBeInTheDocument(),
+  );
+  expect(
+    localStorage.getItem(`mentoring.go-motivation-draft.v1:${student.id}`),
+  ).toBeNull();
+});
+
+it("не показывает черновик мотивации Go другому ученику", async () => {
+  const me = vi.spyOn(api, "me").mockResolvedValue(student);
+  vi.spyOn(api, "myOpportunities").mockResolvedValue(dashboard);
+  const path = "/opportunities/alumni/go-transition";
+  const first = renderPage(<GoTransitionOpportunityPage />, path, path);
+  await userEvent.type(
+    await screen.findByLabelText(/Зачем тебе Go-направление/),
+    "Личная цель перехода",
+  );
+  first.unmount();
+  me.mockResolvedValue({
+    ...student,
+    id: "10000000-0000-4000-8000-000000000002",
+  });
+  renderPage(<GoTransitionOpportunityPage />, path, path);
+  expect(await screen.findByLabelText(/Зачем тебе Go-направление/)).toHaveValue(
+    "",
   );
 });
 

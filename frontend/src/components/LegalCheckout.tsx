@@ -16,6 +16,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { questionnaireLabels } from "../features/opportunities/legalQuestionnaire";
+import { useApplicationDraft } from "../features/opportunities/useApplicationDraft";
 import { apiRequest, downloadAuthenticated } from "../api/client";
 import { formatRubles } from "../utils/money";
 import { openExternalResource } from "../utils/openExternalResource";
@@ -53,6 +54,15 @@ const textNames = [
   "technologies",
   "previous_contract",
 ];
+const draftLimits = {
+  employment_status: 100,
+  position: 500,
+  work_format: 500,
+  technologies: 1000,
+  previous_contract: 500,
+  ...Object.fromEntries(boolNames.map((name) => [name, 3])),
+  ...Object.fromEntries(boolNames.map((name) => [`${name}_details`, 2000])),
+};
 
 export function PaymentTerms({
   terms,
@@ -119,9 +129,13 @@ export function LegalCheckout({
     return (
       <ErrorState error={query.error} retry={() => void query.refetch()} />
     );
+  if (draft.isError)
+    return (
+      <ErrorState error={draft.error} retry={() => void draft.refetch()} />
+    );
   return (
     <CheckoutForm
-      key={query.data.offer_version_id}
+      key={`${applicationId}:${query.data.offer_version_id}`}
       details={query.data}
       initialAnswers={draft.data?.answers ?? {}}
       product={product}
@@ -144,14 +158,17 @@ function CheckoutForm({
   applicationId: string;
   refresh: () => void;
 }) {
-  const [answers, setAnswers] = useState<Record<string, string>>(() =>
+  const storedDraft = useApplicationDraft(
+    `mentoring.questionnaire-draft.v1:${product}:${applicationId}`,
     Object.fromEntries(
       Object.entries(initialAnswers).map(([key, value]) => [
         key,
         typeof value === "boolean" ? (value ? "yes" : "no") : value,
       ]),
     ),
+    draftLimits,
   );
+  const answers = storedDraft.values;
   const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
   const [code, setCode] = useState("");
   const [message, setMessage] = useState("");
@@ -177,7 +194,7 @@ function CheckoutForm({
       .every((name) => (answers[name]?.trim().length ?? 0) >= 2) &&
     boolFields.every(
       (name) =>
-        !!answers[name] &&
+        ["yes", "no"].includes(answers[name] ?? "") &&
         (answers[name] !== "yes" || !!answers[`${name}_details`]?.trim()),
     );
   const mutation = useMutation({
@@ -278,6 +295,16 @@ function CheckoutForm({
         </Alert>
       )}
       <Title order={3}>Предварительные сведения</Title>
+      {storedDraft.available ? (
+        <Text size="sm" c="dimmed">
+          Черновик анкеты сохраняется автоматически на этом устройстве.
+        </Text>
+      ) : (
+        <Alert color="yellow" title="Не удалось сохранить черновик">
+          Хранилище браузера недоступно. При закрытии страницы введённые данные
+          могут потеряться.
+        </Alert>
+      )}
       {textNames.map((name) => (
         <TextInput
           key={name}
@@ -292,7 +319,7 @@ function CheckoutForm({
           }
           value={answers[name] ?? ""}
           onChange={(event) =>
-            setAnswers({ ...answers, [name]: event.currentTarget.value })
+            storedDraft.setField(name, event.currentTarget.value)
           }
         />
       ))}
@@ -306,9 +333,7 @@ function CheckoutForm({
               { value: "yes", label: "Да" },
             ]}
             value={answers[name] ?? null}
-            onChange={(value) =>
-              setAnswers({ ...answers, [name]: value ?? "" })
-            }
+            onChange={(value) => storedDraft.setField(name, value ?? "")}
           />
           {answers[name] === "yes" && (
             <Textarea
@@ -317,10 +342,10 @@ function CheckoutForm({
               maxLength={2000}
               value={answers[`${name}_details`] ?? ""}
               onChange={(event) =>
-                setAnswers({
-                  ...answers,
-                  [`${name}_details`]: event.currentTarget.value,
-                })
+                storedDraft.setField(
+                  `${name}_details`,
+                  event.currentTarget.value,
+                )
               }
             />
           )}
