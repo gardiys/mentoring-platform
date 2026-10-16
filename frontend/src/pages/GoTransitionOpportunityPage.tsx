@@ -3,7 +3,6 @@ import {
   Badge,
   Button,
   Card,
-  Checkbox,
   Group,
   Paper,
   Stack,
@@ -19,17 +18,14 @@ import { Link } from "react-router-dom";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
-import { useMe } from "../features/auth/queries";
+import { LegalCheckout } from "../components/LegalCheckout";
 import {
-  useAcceptGoTransition,
   useCreateGoTransition,
-  useCreateGoTransitionPaymentLink,
   useMyOpportunities,
 } from "../features/opportunities/queries";
 import { OpportunityFlow } from "../features/opportunities/OpportunityFlow";
 import type { GoTransitionStatus } from "../types/api";
 import { formatRubles } from "../utils/money";
-import { openExternalResource } from "../utils/openExternalResource";
 
 const statusLabels: Record<GoTransitionStatus, string> = {
   submitted: "На рассмотрении",
@@ -51,14 +47,8 @@ const statusColors: Record<GoTransitionStatus, string> = {
 
 export function GoTransitionOpportunityPage() {
   const query = useMyOpportunities();
-  const me = useMe();
   const create = useCreateGoTransition();
-  const accept = useAcceptGoTransition();
-  const payment = useCreateGoTransitionPaymentLink();
   const [motivation, setMotivation] = useState("");
-  const [acceptedApplicationId, setAcceptedApplicationId] = useState<
-    string | null
-  >(null);
 
   if (query.isPending)
     return <LoadingState label="Загружаем программу перехода…" />;
@@ -227,18 +217,6 @@ export function GoTransitionOpportunityPage() {
         <Stack id="go-applications" className="anchor-target">
           <Title order={2}>Мои заявки</Title>
           {query.data.go_transition_applications.map((item) => {
-            const snapshotPrice = Number(
-              item.terms_snapshot?.upfront_price_kopecks ??
-                item.upfront_price_kopecks,
-            );
-            const snapshotPercent = Number(
-              item.terms_snapshot?.success_fee_percent ??
-                item.success_fee_percent,
-            );
-            const termsExpired = Boolean(
-              item.terms_expires_at &&
-              new Date(item.terms_expires_at).getTime() <= Date.now(),
-            );
             return (
               <Card
                 withBorder
@@ -274,85 +252,11 @@ export function GoTransitionOpportunityPage() {
                     <Badge color={statusColors[item.status]}>
                       {statusLabels[item.status]}
                     </Badge>
-                    {item.status === "approved" && (
-                      <Stack align="flex-end">
-                        <Alert
-                          color={termsExpired ? "red" : "yellow"}
-                          title={`Зафиксированные условия · версия ${item.terms_version}`}
-                        >
-                          <Stack gap={4}>
-                            <Text size="sm" fw={700}>
-                              {formatRubles(snapshotPrice)} + {snapshotPercent}%
-                              после Go-оффера
-                            </Text>
-                            {item.terms_expires_at && (
-                              <Text size="xs">
-                                {termsExpired
-                                  ? "Срок принятия условий истёк. Свяжись с командой."
-                                  : `Принять до ${new Date(item.terms_expires_at).toLocaleString("ru-RU")}`}
-                              </Text>
-                            )}
-                          </Stack>
-                        </Alert>
-                        <Checkbox
-                          disabled={termsExpired}
-                          checked={acceptedApplicationId === item.id}
-                          onChange={(event) =>
-                            setAcceptedApplicationId(
-                              event.currentTarget.checked ? item.id : null,
-                            )
-                          }
-                          label="Я ознакомился и принимаю условия"
-                        />
-                        <Button
-                          disabled={
-                            termsExpired || acceptedApplicationId !== item.id
-                          }
-                          loading={accept.isPending}
-                          onClick={() =>
-                            accept.mutate(item.id, { onError: notifyError })
-                          }
-                        >
-                          Принять условия
-                        </Button>
-                      </Stack>
-                    )}
-                    {item.status === "payment_pending" && (
-                      <>
-                        {!me.data?.email && (
-                          <Alert color="orange" title="Нужен email для чека">
-                            <Stack gap="xs">
-                              <Text size="sm">
-                                Сохрани email, после этого станет доступна
-                                оплата.
-                              </Text>
-                              <Button
-                                component={Link}
-                                to="/payments"
-                                variant="light"
-                                size="xs"
-                              >
-                                Указать email
-                              </Button>
-                            </Stack>
-                          </Alert>
-                        )}
-                        <Button
-                          disabled={!me.data?.email}
-                          loading={
-                            payment.isPending && payment.variables === item.id
-                          }
-                          onClick={() =>
-                            void openExternalResource(
-                              payment
-                                .mutateAsync(item.id)
-                                .then((result) => result.payment_url),
-                            ).catch(notifyError)
-                          }
-                        >
-                          Оплатить {formatRubles(item.upfront_price_kopecks)}
-                        </Button>
-                      </>
+                    {["approved", "payment_pending"].includes(item.status) && (
+                      <LegalCheckout
+                        product="python_to_go_transition"
+                        applicationId={item.id}
+                      />
                     )}
                   </Stack>
                 </Group>

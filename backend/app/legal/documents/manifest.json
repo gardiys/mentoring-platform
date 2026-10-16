@@ -1,0 +1,22 @@
+[
+  {
+    "product_code": "repeat_python_mentorship",
+    "version_code": "2026-09-02",
+    "publication_date": "2026-09-02",
+    "pdf_storage_key": "legal/offers/repeat-python-mentorship/2026-09-02/2f7a2c4e01609f37a9ebb04b7c93943d4f616cb2f55691ec409d41e9270bbd3f.pdf",
+    "markdown_storage_key": "legal/offers/repeat-python-mentorship/2026-09-02/c79a137a98c497543d5b52e053cffef963768c514a25b51f224d4db80274ffa9.md",
+    "pdf_sha256": "2f7a2c4e01609f37a9ebb04b7c93943d4f616cb2f55691ec409d41e9270bbd3f",
+    "markdown_sha256": "c79a137a98c497543d5b52e053cffef963768c514a25b51f224d4db80274ffa9",
+    "pdf_size": 383479
+  },
+  {
+    "product_code": "python_to_go_transition",
+    "version_code": "2026-09-03",
+    "publication_date": "2026-09-03",
+    "pdf_storage_key": "legal/offers/python-to-go-transition/2026-09-03/d5482491d8cc7c5497885000b618f94cf1b38922f529fa129bb1fd9e2c42811b.pdf",
+    "markdown_storage_key": "legal/offers/python-to-go-transition/2026-09-03/568a536665d42f56c7014fa19c51522be5fe54000ec4d0bd70a113abc959fd39.md",
+    "pdf_sha256": "d5482491d8cc7c5497885000b618f94cf1b38922f529fa129bb1fd9e2c42811b",
+    "markdown_sha256": "568a536665d42f56c7014fa19c51522be5fe54000ec4d0bd70a113abc959fd39",
+    "pdf_size": 386750
+  }
+]

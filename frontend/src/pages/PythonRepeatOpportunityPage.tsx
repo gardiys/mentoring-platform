@@ -3,7 +3,6 @@ import {
   Badge,
   Button,
   Card,
-  Checkbox,
   Group,
   List,
   NumberInput,
@@ -21,12 +20,11 @@ import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
+import { LegalCheckout } from "../components/LegalCheckout";
 import { PageHeader } from "../components/PageHeader";
 import { useMe } from "../features/auth/queries";
 import { OpportunityFlow } from "../features/opportunities/OpportunityFlow";
 import {
-  useAcceptPythonRepeatTerms,
-  useCheckoutPythonRepeat,
   useCheckoutPythonRepeatInstallment,
   useCreatePythonRepeatApplication,
   useCreatePythonRepeatOffer,
@@ -221,12 +219,9 @@ export function PythonRepeatOpportunityPage() {
   const createApplication = useCreatePythonRepeatApplication();
   const updateApplication = useUpdatePythonRepeatApplication();
   const submitApplication = useSubmitPythonRepeatApplication();
-  const acceptTerms = useAcceptPythonRepeatTerms();
-  const checkout = useCheckoutPythonRepeat();
   const createOffer = useCreatePythonRepeatOffer();
   const submitOffer = useSubmitPythonRepeatOffer();
   const checkoutInstallment = useCheckoutPythonRepeatInstallment();
-  const [accepted, setAccepted] = useState(false);
   const [application, setApplication] = useState({
     employment_status: "employed",
     reason: "wants_higher_salary",
@@ -307,28 +302,6 @@ export function PythonRepeatOpportunityPage() {
       (item) => !["rejected", "cancelled"].includes(item.status),
     );
   const hasPaymentEmail = Boolean(me.data?.email);
-  const termsExpired = Boolean(
-    current?.offer_expires_at &&
-    new Date(current.offer_expires_at).getTime() <= Date.now(),
-  );
-  const acceptanceStatement = snapshotString(
-    current?.terms_snapshot ?? null,
-    "acceptance_statement",
-  );
-  const publicOfferRevision = snapshotString(
-    current?.terms_snapshot ?? null,
-    "public_offer_revision",
-  );
-  const publicOfferSha256 = snapshotString(
-    current?.terms_snapshot ?? null,
-    "public_offer_sha256",
-  );
-  const canAcceptPublicOffer = Boolean(
-    current?.terms_version &&
-    acceptanceStatement &&
-    publicOfferRevision &&
-    publicOfferSha256,
-  );
 
   const saveApplication = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -731,84 +704,21 @@ export function PythonRepeatOpportunityPage() {
                 отправьте заявку повторно.
               </Text>
             )}
-            {current.status === "approved" && (
-              <Stack>
-                <PythonRepeatOfferSummary terms={current.terms_snapshot} />
-                {current.offer_expires_at && (
-                  <Alert color={termsExpired ? "red" : "yellow"}>
-                    {termsExpired
-                      ? "Срок принятия условий истёк. Свяжись с командой, чтобы получить актуальное предложение."
-                      : `Подтвердить ознакомление до ${new Date(current.offer_expires_at).toLocaleString("ru-RU")}`}
-                  </Alert>
-                )}
-                {!canAcceptPublicOffer && (
-                  <Alert color="red">
-                    Для заявки не опубликована версия оферты. Обратись к
-                    администратору, чтобы получить актуальные условия.
-                  </Alert>
-                )}
-                <Checkbox
-                  disabled={termsExpired || !canAcceptPublicOffer}
-                  checked={accepted}
-                  onChange={(event) => setAccepted(event.currentTarget.checked)}
-                  label={acceptanceStatement ?? "Публичная оферта не настроена"}
-                />
-                <Button
-                  disabled={termsExpired || !accepted || !canAcceptPublicOffer}
-                  loading={acceptTerms.isPending}
-                  onClick={() =>
-                    acceptTerms.mutate(
-                      {
-                        id: current.id,
-                        accepted: true,
-                        terms_version: current.terms_version as number,
-                        public_offer_revision: publicOfferRevision as string,
-                        public_offer_sha256: publicOfferSha256 as string,
-                        acceptance_statement: acceptanceStatement as string,
-                      },
-                      { onError: mutationError },
-                    )
-                  }
-                >
-                  Подтвердить ознакомление с офертой
-                </Button>
-                <Text size="xs" c="dimmed">
-                  В соответствии с офертой полный и безоговорочный акцепт
-                  совершается в момент зачисления предоплаты.
-                </Text>
-              </Stack>
-            )}
-            {(current.status === "terms_accepted" ||
-              current.status === "payment_pending") && (
-              <Stack align="flex-start">
-                <PythonRepeatOfferSummary terms={current.terms_snapshot} />
-                {!hasPaymentEmail && <PaymentEmailAlert />}
-                <Button
-                  disabled={!hasPaymentEmail}
-                  loading={checkout.isPending}
-                  onClick={() =>
-                    void openExternalResource(
-                      checkout
-                        .mutateAsync(current.id)
-                        .then((value) => value.payment_url),
-                    ).catch(mutationError)
-                  }
-                >
-                  Перейти к оплате{" "}
-                  {formatRubles(
-                    Number(current.terms_snapshot?.upfront_price_kopecks ?? 0),
-                  )}
-                </Button>
-                <Text size="xs" c="dimmed">
-                  Зачисление предоплаты означает полный и безоговорочный акцепт
-                  указанной редакции Публичной оферты.
-                </Text>
-              </Stack>
+            {["approved", "terms_accepted", "payment_pending"].includes(
+              current.status,
+            ) && (
+              <LegalCheckout
+                product="repeat_python_mentorship"
+                applicationId={current.id}
+              />
             )}
           </Stack>
         </Card>
       )}
 
+      {data.enrollment && current && (
+        <PythonRepeatOfferSummary terms={current.terms_snapshot} />
+      )}
       {data.enrollment && (
         <Card withBorder>
           <Stack>

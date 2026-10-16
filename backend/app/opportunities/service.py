@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 
 from app.core.config import get_settings
 from app.core.errors import api_error
+from app.legal.catalog import financial_terms
 from app.mentors.models import (
     MentorStudent,
     MentorTrackAssignment,
@@ -69,9 +70,9 @@ REGULAR_CONSULTATION_MENTOR_REWARD_KOPECKS = 250_000
 PREMIUM_ALUMNI_CONSULTATION_PRICE_KOPECKS = 600_000
 PREMIUM_STANDARD_CONSULTATION_PRICE_KOPECKS = 700_000
 PREMIUM_CONSULTATION_MENTOR_REWARD_KOPECKS = 300_000
-ALUMNI_GO_UPFRONT_PRICE_KOPECKS = 3_000_000
+ALUMNI_GO_UPFRONT_PRICE_KOPECKS = financial_terms()["upfront_amount_minor"]
 STANDARD_GO_UPFRONT_PRICE_KOPECKS = 4_500_000
-ALUMNI_GO_SUCCESS_FEE_PERCENT = 100
+ALUMNI_GO_SUCCESS_FEE_PERCENT = financial_terms()["success_fee_percent"]
 STANDARD_GO_SUCCESS_FEE_PERCENT = 150
 ACTIVE_TRANSITION_STATUSES = (
     GoTransitionStatus.SUBMITTED,
@@ -619,15 +620,18 @@ async def _new_payment_link(
     consultation: ConsultationRequest | None = None,
     transition: GoTransitionApplication | None = None,
 ) -> OpportunityPaymentLinkRead:
-    resource_id = consultation.id if consultation is not None else transition.id  # type: ignore[union-attr]
-    amount = (
-        consultation.price_kopecks if consultation is not None else transition.upfront_price_kopecks  # type: ignore[union-attr]
-    )
+    if transition is not None:
+        api_error(
+            409,
+            "legal_checkout_required",
+            "Пройдите анкету и подтверждения на странице программы перед оплатой",
+        )
+    assert consultation is not None
+    resource_id = consultation.id
+    amount = consultation.price_kopecks
     statement = select(OpportunityPaymentAttempt).where(
-        OpportunityPaymentAttempt.consultation_request_id
-        == (consultation.id if consultation else None),
-        OpportunityPaymentAttempt.transition_application_id
-        == (transition.id if transition else None),
+        OpportunityPaymentAttempt.consultation_request_id == consultation.id,
+        OpportunityPaymentAttempt.transition_application_id.is_(None),
     )
     attempts = list(await session.scalars(statement.order_by(OpportunityPaymentAttempt.created_at)))
     if any(item.status is PaymentAttemptStatus.MANUAL_REVIEW for item in attempts):
@@ -699,31 +703,31 @@ async def consultation_payment_link(
     return await _new_payment_link(session, student, consultation=item)
 
 
-async def transition_payment_link(
-    session: AsyncSession, student: User, application_id: UUID
-) -> OpportunityPaymentLinkRead:
-    item = await session.scalar(
-        select(GoTransitionApplication)
-        .where(
-            GoTransitionApplication.id == application_id,
-            GoTransitionApplication.student_id == student.id,
-        )
-        .with_for_update()
-    )
-    if item is None:
-        api_error(404, "go_transition_not_found", "Application was not found")
-    if item.status is not GoTransitionStatus.PAYMENT_PENDING:
-        api_error(409, "go_transition_not_payable", "Application is not ready for payment")
-    return await _new_payment_link(session, student, transition=item)
-
-
 async def approve_opportunity_payment(
     session: AsyncSession,
     attempt: OpportunityPaymentAttempt,
     *,
     approved_at: datetime | None = None,
+    verified_legal_payment: bool = False,
+    provider_paid_at: datetime | None = None,
 ) -> None:
     now = approved_at or datetime.now(UTC)
+    from app.legal.models import LegalCheckout
+    from app.legal.service import finalize_contract
+
+    legal_checkout = await session.scalar(
+        select(LegalCheckout).where(LegalCheckout.payment_id == attempt.id)
+    )
+    if legal_checkout is not None:
+        if not verified_legal_payment:
+            api_error(
+                409, "legal_payment_verification_required", "Требуется подтверждение платежа банком"
+            )
+        contract = await finalize_contract(
+            session, attempt, provider_paid_at or now, now, provider_paid_at=provider_paid_at
+        )
+        if contract is None:
+            return
     if attempt.status is PaymentAttemptStatus.APPROVED:
         return
     if attempt.status is PaymentAttemptStatus.REVOKED:
@@ -872,7 +876,7 @@ async def development_complete_payment(
         owner_id = await _attempt_owner(session, attempt)
     if owner_id != student.id:
         api_error(404, "payment_attempt_not_found", "Payment attempt was not found")
-    await approve_opportunity_payment(session, attempt)
+    await approve_opportunity_payment(session, attempt, verified_legal_payment=True)
     await session.commit()
     return await opportunities_dashboard(session, student)
 

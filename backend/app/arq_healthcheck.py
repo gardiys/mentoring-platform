@@ -13,7 +13,7 @@ SOCKET_TIMEOUT_SECONDS = 2
 
 def arq_worker_is_healthy(redis_url: str, health_check_key: str) -> bool:
     """Read an ARQ heartbeat without importing the worker application."""
-    client: Redis[bytes] | None = None
+    client: Redis | None = None
     try:
         client = Redis.from_url(
             redis_url,

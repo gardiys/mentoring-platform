@@ -25,6 +25,7 @@ from app.db.models import (
     User,
 )
 from app.db.session import get_db_session
+from app.legal import service as legal_service
 from app.main import app
 from app.opportunities import python_repeat_service
 from app.opportunities import service as opportunity_service
@@ -65,6 +66,7 @@ def isolate_payment_provider_from_local_secrets(monkeypatch: pytest.MonkeyPatch)
         }
     )
     monkeypatch.setattr(payment_service, "get_settings", lambda: local_settings)
+    monkeypatch.setattr(legal_service, "get_settings", lambda: local_settings)
     monkeypatch.setattr(opportunity_service, "get_settings", lambda: local_settings)
     monkeypatch.setattr(python_repeat_service, "get_settings", lambda: local_settings)
     monkeypatch.setattr(payment_router, "settings", local_settings)

@@ -36,6 +36,7 @@ from app.payments.models import (
 from app.tracks.models import LearningTrackEnrollment
 from app.users.models import User
 from tests.conftest import SeededData, TestSession, auth
+from tests.legal_helpers import legal_checkout
 
 PUBLIC_OFFER_REVISION = "02.09.2026"
 PUBLIC_OFFER_URL = "/legal/python-repeat-mentorship-offer-2026-09-02.pdf"
@@ -389,9 +390,8 @@ async def test_python_alumnus_transition_requires_approval_acceptance_and_paymen
     )
     assert accepted.status_code == 200, accepted.text
     assert accepted.json()["go_transition_applications"][0]["status"] == "payment_pending"
-    link = await client.post(
-        f"/api/v1/opportunities/go-transition/{application_id}/payment-link",
-        headers=auth(seeded.student_id),
+    link = await legal_checkout(
+        client, seeded.student_id, "python_to_go_transition", application_id
     )
     assert link.status_code == 200, link.text
     payment_link_id = parse_qs(urlparse(link.json()["payment_url"]).query)["local_payment"][0]
@@ -694,9 +694,8 @@ async def test_python_repeat_full_payment_and_mentor_reward_flow(
         assert accepted_model.acceptance_evidence["user"]["email"] == "graduate@example.com"
         assert accepted_model.acceptance_evidence["offer"]["revision"] == PUBLIC_OFFER_REVISION
         assert accepted_model.acceptance_evidence["explicit_acceptance"]["accepted"] is True
-    payment_link = await client.post(
-        f"/api/v1/opportunities/python-repeat/applications/{application_id}/checkout",
-        headers=auth(seeded.student_id),
+    payment_link = await legal_checkout(
+        client, seeded.student_id, "repeat_python_mentorship", application_id
     )
     assert payment_link.status_code == 200, payment_link.text
     failed_link = await client.post(
@@ -705,9 +704,8 @@ async def test_python_repeat_full_payment_and_mentor_reward_flow(
         headers=auth(seeded.student_id),
     )
     assert failed_link.status_code == 200, failed_link.text
-    refreshed_link = await client.post(
-        f"/api/v1/opportunities/python-repeat/applications/{application_id}/checkout",
-        headers=auth(seeded.student_id),
+    refreshed_link = await legal_checkout(
+        client, seeded.student_id, "repeat_python_mentorship", application_id
     )
     assert refreshed_link.status_code == 200, refreshed_link.text
     assert refreshed_link.json()["payment_link_id"] != payment_link.json()["payment_link_id"]

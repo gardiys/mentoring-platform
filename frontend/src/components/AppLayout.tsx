@@ -318,6 +318,14 @@ export function AppLayout() {
               label: "Деньги",
               items: [
                 ...(student ? [{ to: "/payments", label: "Мои платежи" }] : []),
+                ...(student || admin
+                  ? [
+                      {
+                        to: "/documents",
+                        label: admin ? "Договоры и оферты" : "Мои документы",
+                      },
+                    ]
+                  : []),
                 ...(mentor
                   ? [{ to: "/mentor/rewards", label: "Вознаграждения" }]
                   : []),

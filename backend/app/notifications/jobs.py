@@ -39,6 +39,7 @@ from app.employment_qualification.models import (
     EmploymentFollowUpType,
 )
 from app.interviews.uploads import InterviewStorageReadError, InterviewUploadStore
+from app.legal.jobs import deliver_legal_emails, monitor_legal_health
 from app.mentors.models import (
     MentorStudent,
     StudentLearningStatus,
@@ -666,6 +667,14 @@ def _reminder_kind(due_date: date, today: date) -> str | None:
 class NotificationWorkerSettings:
     functions: list[object] = []
     cron_jobs = [
+        cron(
+            monitor_legal_health,
+            minute={0, 15, 30, 45},
+            run_at_startup=True,
+            max_tries=1,
+            keep_result=0,
+        ),
+        cron(deliver_legal_emails, second=20, run_at_startup=True, max_tries=1, keep_result=0),
         cron(
             deliver_career_package_emails,
             minute=None,

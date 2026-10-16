@@ -30,6 +30,8 @@ from app.interviews.uploads import (
     InterviewUploadStore,
     StoredUpload,
 )
+from app.legal.models import LegalCheckout
+from app.legal.service import audit as legal_audit
 from app.opportunities.models import OpportunityPaymentAttempt
 from app.opportunities.service import (
     approve_opportunity_payment,
@@ -607,6 +609,8 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
         )
     )
     if existing is not None:
+        legal_audit(session, "payment.webhook_duplicate")
+        await session.commit()
         return WebhookResult(status="duplicate")
 
     attempt = None
@@ -654,6 +658,15 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
                 .with_for_update()
             )
 
+    if (
+        attempt is None
+        and test_payment is None
+        and opportunity_attempt is None
+        and event.payment_link_id
+        and event.payment_link_id.startswith("legal_")
+    ):
+        legal_audit(session, "alert.payment_without_checkout", provider_event_id=event.event_id)
+        await session.commit()
     if (
         (attempt is None and test_payment is None and opportunity_attempt is None)
         or event.payment_link_id is None
@@ -732,11 +745,66 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
             return WebhookResult(status="unverified")
         consumer_id, amount_kopecks = context
 
-    verified_status = await _verified_status(
-        event,
-        payment_link_id=payment_record.payment_link_id,
-        consumer_id=consumer_id,
-        amount_kopecks=amount_kopecks,
+    legal_checkout = None
+    provider_paid_at = None
+    if opportunity_attempt is not None:
+        legal_checkout = await session.scalar(
+            select(LegalCheckout).where(LegalCheckout.payment_id == opportunity_attempt.id)
+        )
+    if legal_checkout is not None:
+        # This purchase is bound to the checkout ID, not the application's mutable terms.
+        consumer_id = legal_checkout.id
+        amount_kopecks = legal_checkout.snapshot["financial_terms"]["upfront_amount_minor"]
+        if settings.app_env == "production" and not is_signed:
+            return WebhookResult(status="unverified")
+        try:
+            if settings.app_env == "production":
+                raw = await TochkaPaymentService(settings).get_payment_operation_info(
+                    event.operation_id
+                )
+            else:
+                raw = event.raw_payload
+            legal_operation = parse_payment_operation(
+                raw,
+                default_currency=settings.tochka_acquiring_currency
+                if settings.app_env == "production"
+                else None,
+            )
+        except Exception:
+            legal_audit(session, "alert.payment_verification_unavailable", legal_checkout.id)
+            await session.commit()
+            return WebhookResult(status="unverified")
+        if (
+            legal_operation.operation_id != event.operation_id
+            or (
+                legal_operation.payment_link_id is not None
+                and legal_operation.payment_link_id != payment_record.payment_link_id
+            )
+            or legal_operation.amount_kopecks != amount_kopecks
+            or legal_operation.currency != legal_checkout.snapshot["financial_terms"]["currency"]
+            or (
+                settings.app_env == "production"
+                and legal_operation.consumer_id != str(legal_checkout.id)
+            )
+        ):
+            legal_audit(session, "alert.payment_amount_currency_mismatch", legal_checkout.id)
+            await session.commit()
+            return WebhookResult(status="unverified")
+        provider_paid_at = legal_operation.paid_at
+        # Production obtains final status and time from the authenticated bank response.
+        legal_verified_status = legal_operation.status
+    else:
+        legal_verified_status = None
+
+    verified_status = (
+        legal_verified_status
+        if legal_checkout is not None
+        else await _verified_status(
+            event,
+            payment_link_id=payment_record.payment_link_id,
+            consumer_id=consumer_id,
+            amount_kopecks=amount_kopecks,
+        )
     )
     if verified_status is None:
         return WebhookResult(status="unverified")
@@ -751,10 +819,44 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
         status=verified_status,
         raw_payload=event.raw_payload,
     )
-    session.add(webhook_event)
+    try:
+        async with session.begin_nested():
+            session.add(webhook_event)
+            await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        return WebhookResult(status="duplicate")
 
     if payment_record.provider_operation_id is None:
         payment_record.provider_operation_id = event.operation_id
+    if legal_checkout is not None and verified_status in {
+        "REFUNDED",
+        "REFUNDED_PARTIALLY",
+        "CHARGEBACK",
+        "DISPUTED",
+    }:
+        from app.legal.models import ContractAcceptance
+
+        contract = await session.scalar(
+            select(ContractAcceptance)
+            .where(ContractAcceptance.checkout_session_id == legal_checkout.id)
+            .with_for_update()
+        )
+        if contract is not None:
+            if verified_status != "REFUNDED_PARTIALLY":
+                contract.status = "refunded" if verified_status == "REFUNDED" else "disputed"
+            legal_audit(
+                session,
+                "contract.payment_reversal",
+                contract.id,
+                provider_event_id=event.event_id,
+                payment_status=verified_status,
+                amount_minor=legal_operation.amount_kopecks,
+                reversals=list(legal_operation.reversals),
+                received_at=datetime.now(UTC).isoformat(),
+            )
+        await session.commit()
+        return WebhookResult(status="ok")
     mapped = PaymentAttemptStatus(map_payment_status(verified_status))
     if attempt is not None:
         assert installment is not None
@@ -783,10 +885,15 @@ async def tochka_webhook(request: Request, session: Session) -> WebhookResult:
         assert opportunity_attempt is not None
         if mapped is PaymentAttemptStatus.APPROVED:
             await approve_opportunity_payment(
-                session, opportunity_attempt, approved_at=datetime.now(UTC)
+                session,
+                opportunity_attempt,
+                approved_at=datetime.now(UTC),
+                verified_legal_payment=legal_checkout is not None,
+                provider_paid_at=provider_paid_at,
             )
         else:
-            opportunity_attempt.status = mapped
+            if opportunity_attempt.status is not PaymentAttemptStatus.APPROVED:
+                opportunity_attempt.status = mapped
     try:
         await session.commit()
     except IntegrityError:

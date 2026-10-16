@@ -13,6 +13,7 @@ import type {
   PythonRepeatDashboard,
 } from "../src/types/api";
 import { renderPage } from "./render";
+import { mockLegalCheckout } from "./legalFixtures";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -386,7 +387,8 @@ it("явно объясняет, почему оплата консультац�
   expect(screen.getByRole("button", { name: /Оплатить/ })).toBeDisabled();
 });
 
-it("показывает зафиксированные условия Go-заявки, а не текущий тариф", async () => {
+it("получает версию оферты Go из backend checkout", async () => {
+  mockLegalCheckout();
   vi.spyOn(api, "me").mockResolvedValue(student);
   vi.spyOn(api, "myOpportunities").mockResolvedValue({
     ...dashboard,
@@ -420,11 +422,15 @@ it("показывает зафиксированные условия Go-зая
   );
 
   expect(
-    await screen.findByText("Зафиксированные условия · версия 7"),
+    await screen.findByText(/Оферта: редакция 2026-09-03/),
   ).toBeInTheDocument();
   expect(
-    screen.getByText("25 000 ₽ + 75% после Go-оффера"),
+    screen.getByRole("button", { name: "Открыть точную PDF-оферту" }),
   ).toBeInTheDocument();
+  expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+  expect(
+    screen.getByRole("button", { name: /Перейти к оплате/ }),
+  ).toBeDisabled();
 });
 
 it("выделяет выбранный формат консультации целиком", async () => {
@@ -507,9 +513,10 @@ it("показывает оферту и передает ее неизменя�
   };
   vi.spyOn(api, "me").mockResolvedValue(student);
   vi.spyOn(api, "myPythonRepeat").mockResolvedValue(approvedDashboard);
-  const accept = vi
-    .spyOn(api, "acceptPythonRepeatTerms")
-    .mockResolvedValue(approvedDashboard);
+  mockLegalCheckout({
+    version_code: "2026-09-02",
+    publication_date: "2026-09-02",
+  });
   renderPage(
     <PythonRepeatOpportunityPage />,
     "/opportunities/alumni/python-repeat",
@@ -517,31 +524,14 @@ it("показывает оферту и передает ее неизменя�
   );
 
   expect(
-    await screen.findByRole("link", { name: "Открыть Публичную оферту (PDF)" }),
-  ).toHaveAttribute(
-    "href",
-    "/legal/python-repeat-mentorship-offer-2026-09-02.pdf",
-  );
-  expect(screen.getByText(/Формула общей стоимости/)).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("checkbox", { name: statement }));
-  await userEvent.click(
-    screen.getByRole("button", {
-      name: "Подтвердить ознакомление с офертой",
-    }),
-  );
-
-  await waitFor(() =>
-    expect(accept).toHaveBeenCalledWith(
-      {
-        id: approvedDashboard.application?.id,
-        accepted: true,
-        terms_version: 3,
-        public_offer_revision: "02.09.2026",
-        public_offer_sha256:
-          "2f7a2c4e01609f37a9ebb04b7c93943d4f616cb2f55691ec409d41e9270bbd3f",
-        acceptance_statement: statement,
-      },
-      expect.anything(),
-    ),
-  );
+    await screen.findByText(/Оферта: редакция 2026-09-02/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Открыть точную PDF-оферту" }),
+  ).toBeInTheDocument();
+  for (const checkbox of screen.getAllByRole("checkbox"))
+    expect(checkbox).not.toBeChecked();
+  expect(
+    screen.getByRole("button", { name: /Перейти к оплате/ }),
+  ).toBeDisabled();
 });

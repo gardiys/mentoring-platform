@@ -661,3 +661,21 @@ export async function apiDownload(
     );
   }
 }
+
+export async function downloadAuthenticated(
+  path: string,
+  filename: string,
+): Promise<void> {
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: authenticatedHeaders(),
+    credentials: "include",
+  });
+  if (!response.ok)
+    throw new Error("Не удалось скачать документ. Попробуйте позже.");
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}

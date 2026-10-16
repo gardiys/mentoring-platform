@@ -595,6 +595,13 @@ export const router = createBrowserRouter([
               { path: "/", element: <Navigate to="/roadmaps" replace /> },
               ...studentRoutes,
               {
+                path: "/documents",
+                lazy: lazyPage(
+                  () => import("../pages/LegalDocumentsPage"),
+                  "LegalDocumentsPage",
+                ),
+              },
+              {
                 element: <RoleGuard roles={["student"]} />,
                 children: [
                   {

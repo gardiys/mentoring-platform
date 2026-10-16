@@ -14,6 +14,8 @@ from app.core.errors import api_error
 from app.interviews.companies import get_or_create_company
 from app.interviews.models import Company
 from app.interviews.uploads import StoredUpload
+from app.legal.catalog import calendar_due
+from app.legal.service import go_financial_terms_for_employment
 from app.mentors.models import MentorStudent
 from app.mentors.service import assigned_student
 from app.notifications.models import NotificationKind
@@ -2025,6 +2027,27 @@ async def _regenerate_unpaid_installments(
     await session.execute(
         delete(PaymentInstallment).where(PaymentInstallment.employment_id == employment.id)
     )
+    legal_terms = await go_financial_terms_for_employment(session, employment)
+    if legal_terms is not None:
+        total = _percent_of(
+            employment.net_salary_kopecks, Decimal(legal_terms["success_fee_percent"])
+        )
+        base, remainder = divmod(total, legal_terms["success_fee_installments"])
+        due = billing_start
+        for sequence, offset in enumerate(legal_terms["success_fee_due_month_offsets"], 1):
+            due = calendar_due(billing_start, offset)
+            session.add(
+                PaymentInstallment(
+                    employment_id=employment.id,
+                    sequence_number=sequence,
+                    due_date=due,
+                    amount_kopecks=base
+                    + (remainder if sequence == legal_terms["success_fee_installments"] else 0),
+                    salary_percent=Decimal(legal_terms["success_fee_percent"])
+                    / Decimal(legal_terms["success_fee_installments"]),
+                )
+            )
+        return
     amounts = calculate_installment_amounts(
         employment.net_salary_kopecks, employment.repayment_percent
     )
@@ -2126,7 +2149,14 @@ async def _recalculate_installments_after_salary_correction(
             attempt.payment_url = None
 
     remaining_amount = total_owed - already_paid
-    regular_amount = _percent_of(employment.net_salary_kopecks, INSTALLMENT_PERCENT)
+    legal_terms = await go_financial_terms_for_employment(session, employment)
+    installment_percent = (
+        Decimal(legal_terms["success_fee_percent"])
+        / Decimal(legal_terms["success_fee_installments"])
+        if legal_terms
+        else INSTALLMENT_PERCENT
+    )
+    regular_amount = _percent_of(employment.net_salary_kopecks, installment_percent)
     desired_amounts: list[int] = []
     while remaining_amount > 0:
         amount = min(regular_amount, remaining_amount)
@@ -2141,7 +2171,7 @@ async def _recalculate_installments_after_salary_correction(
             installment_percent = remaining_percent - allocated_remaining_percent
         else:
             installment_percent = min(
-                INSTALLMENT_PERCENT,
+                installment_percent,
                 remaining_percent - allocated_remaining_percent,
             )
         desired_percents.append(installment_percent)
@@ -2199,6 +2229,19 @@ async def _reschedule_unpaid_installments(
     session: AsyncSession, employment: StudentEmployment
 ) -> None:
     installments = await _installments(session, employment.id)
+    legal_terms = await go_financial_terms_for_employment(session, employment)
+    if legal_terms is not None:
+        start = employment.billing_started_at or employment.start_date
+        if start is None:
+            api_error(409, "employment_start_missing", "Employment start date is required")
+        for installment in installments:
+            if installment.status not in {
+                PaymentInstallmentStatus.PAID,
+                PaymentInstallmentStatus.CANCELLED,
+            }:
+                due = calendar_due(start, installment.sequence_number)
+                installment.due_date = due
+        return
     today = date.today()
     fixed = [
         item

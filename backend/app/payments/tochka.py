@@ -7,6 +7,7 @@ import re
 import ssl
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -65,6 +66,9 @@ class TochkaPaymentOperation:
     consumer_id: str | None
     amount_kopecks: int | None
     status: str | None
+    currency: str | None = None
+    paid_at: datetime | None = None
+    reversals: tuple[dict[str, Any], ...] = ()
 
 
 class TochkaPaymentService:
@@ -172,9 +176,8 @@ class TochkaPaymentService:
             if response.is_error:
                 detail = _provider_error_detail(response)
                 logger.warning(
-                    "Tochka Bank rejected payment link creation status=%s detail=%s",
+                    "Tochka Bank rejected payment link creation status=%s",
                     response.status_code,
-                    detail or "not provided",
                 )
                 suffix = f": {detail}" if detail else ""
                 raise TochkaError(
@@ -414,7 +417,9 @@ def extract_payment_status(payload: dict[str, Any]) -> str | None:
     return _normalize_provider_status(value) if value else None
 
 
-def parse_payment_operation(payload: dict[str, Any]) -> TochkaPaymentOperation:
+def parse_payment_operation(
+    payload: dict[str, Any], *, default_currency: str | None = None
+) -> TochkaPaymentOperation:
     """Parse identity fields returned by Get Payment Operation Info.
 
     Unlike a webhook signature, this response is fetched with this merchant's
@@ -422,12 +427,35 @@ def parse_payment_operation(payload: dict[str, Any]) -> TochkaPaymentOperation:
     """
     data = payload.get("Data") if isinstance(payload.get("Data"), dict) else payload
     assert isinstance(data, dict)
+    operations = data.get("Operation")
+    if isinstance(operations, list):
+        if len(operations) != 1 or not isinstance(operations[0], dict):
+            raise ValueError("Expected a single payment operation")
+        data = operations[0]
+    approvals = data.get("Order")
+    paid_time = None
+    reversals: list[dict[str, Any]] = []
+    if isinstance(approvals, list):
+        for order in approvals:
+            if isinstance(order, dict) and order.get("type") == "approval":
+                paid_time = _optional_paid_at(order.get("time"))
+            elif isinstance(order, dict) and order.get("type") == "refund":
+                refunded_at = _optional_paid_at(order.get("time"))
+                reversals.append(
+                    {
+                        "provider_refund_id": _optional_provider_identifier(
+                            order.get("orderId"), name="refundOrderId"
+                        ),
+                        "amount_minor": _optional_amount_kopecks(order.get("amount")),
+                        "refunded_at": refunded_at.isoformat() if refunded_at else None,
+                    }
+                )
     raw_amount = _find_first(data, ("amount", "Amount"))
     if isinstance(raw_amount, dict):
         raw_amount = _find_first(raw_amount, ("value", "amount", "sum"))
     return TochkaPaymentOperation(
         payment_link_id=_optional_provider_identifier(
-            _find_first(data, ("paymentLinkId", "payment_link_id", "orderId")),
+            data.get("paymentLinkId") or data.get("payment_link_id") or data.get("orderId"),
             name="paymentLinkId",
             max_length=_MAX_PAYMENT_LINK_IDENTIFIER_LENGTH,
         ),
@@ -441,6 +469,11 @@ def parse_payment_operation(payload: dict[str, Any]) -> TochkaPaymentOperation:
         ),
         amount_kopecks=_optional_amount_kopecks(raw_amount),
         status=extract_payment_status(data),
+        currency=_string_or_none(_find_first(data, ("currency", "currencyCode")))
+        or default_currency,
+        paid_at=paid_time
+        or _optional_paid_at(_find_first(data, ("paidAt", "executedAt", "paymentDate"))),
+        reversals=tuple(reversals),
     )
 
 
@@ -714,3 +747,13 @@ def _validate_payment_url(value: str) -> str:
     ):
         raise TochkaError("Tochka Bank returned an invalid payment URL")
     return value
+
+
+def _optional_paid_at(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.astimezone(UTC) if parsed.tzinfo is not None else None

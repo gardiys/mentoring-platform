@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import AdminUser, StudentUser
 from app.db.session import get_db_session
+from app.legal.schemas import CheckoutConfirmation
+from app.legal.service import checkout_payment_link
 from app.opportunities.python_repeat_schemas import (
     AdminPythonRepeatDashboard,
     AdminPythonRepeatMentorAssignment,
@@ -23,7 +25,6 @@ from app.opportunities.python_repeat_service import (
     admin_dashboard,
     admin_transition_application,
     assign_mentor,
-    checkout,
     create_application,
     create_offer,
     dashboard,
@@ -103,9 +104,21 @@ async def accept_python_repeat_terms(
 
 @router.post("/applications/{application_id}/checkout", response_model=OpportunityPaymentLinkRead)
 async def checkout_python_repeat(
-    application_id: UUID, session: Session, student: StudentUser
+    application_id: UUID,
+    payload: CheckoutConfirmation,
+    request: Request,
+    session: Session,
+    student: StudentUser,
 ) -> OpportunityPaymentLinkRead:
-    return await checkout(session, student, application_id)
+    return await checkout_payment_link(
+        session,
+        student,
+        "repeat_python_mentorship",
+        application_id,
+        payload,
+        request.client.host if request.client else None,
+        request.headers.get("user-agent"),
+    )
 
 
 @router.post("/offers", response_model=PythonRepeatDashboard)

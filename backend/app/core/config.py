@@ -3,7 +3,7 @@ import re
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     brevo_from_name: str = "Потрачено"
     brevo_reply_to_email: str | None = None
     brevo_reply_to_name: str = "Потрачено"
+    tochka_acquiring_currency: Literal["RUB"] = "RUB"
+    legal_email_from: str | None = None
+    legal_email_reply_to: str | None = None
+    legal_official_email: ClassVar[str] = "shcherbak.antony@yandex.ru"
+    contract_email_max_retries: int = Field(default=5, ge=1, le=5)
+    contract_email_resend_cooldown_seconds: int = Field(default=300, ge=60, le=86400)
+    brevo_delivery_webhook_token: SecretStr | None = None
     brevo_timeout_seconds: float = Field(default=15, ge=5, le=60)
     employment_qualification_ai_enabled: bool = False
     api_max_request_body_bytes: int = Field(
@@ -276,6 +283,22 @@ class Settings(BaseSettings):
     tochka_supplier_phone: str = ""
     tochka_supplier_tax_code: str = ""
     tochka_request_timeout_seconds: float = Field(default=20, ge=5, le=120)
+
+    @field_validator("legal_email_from", "legal_email_reply_to", mode="before")
+    @classmethod
+    def validate_legal_email(cls, value: object) -> object:
+        if value in (None, ""):
+            return None
+        if not isinstance(value, str) or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("A valid legal email address is required")
+        return value
+
+    @field_validator("brevo_delivery_webhook_token", mode="before")
+    @classmethod
+    def validate_delivery_webhook_token(cls, value: object) -> object:
+        if value in (None, ""):
+            return None
+        return value
 
     @field_validator("cors_origins", "allowed_hosts", mode="before")
     @classmethod

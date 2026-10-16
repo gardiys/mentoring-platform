@@ -1,11 +1,13 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import AdminUser, CurrentUser, StudentUser
 from app.db.session import get_db_session
+from app.legal.schemas import CheckoutConfirmation
+from app.legal.service import checkout_payment_link
 from app.opportunities.models import ConsultationType
 from app.opportunities.schemas import (
     AdminConsultationMentorMutation,
@@ -34,7 +36,6 @@ from app.opportunities.service import (
     create_go_transition,
     development_complete_payment,
     opportunities_dashboard,
-    transition_payment_link,
 )
 
 Session = Annotated[AsyncSession, Depends(get_db_session)]
@@ -89,9 +90,21 @@ async def accept_transition(
     response_model=OpportunityPaymentLinkRead,
 )
 async def transition_link(
-    application_id: UUID, session: Session, student: StudentUser
+    application_id: UUID,
+    payload: CheckoutConfirmation,
+    request: Request,
+    session: Session,
+    student: StudentUser,
 ) -> OpportunityPaymentLinkRead:
-    return await transition_payment_link(session, student, application_id)
+    return await checkout_payment_link(
+        session,
+        student,
+        "python_to_go_transition",
+        application_id,
+        payload,
+        request.client.host if request.client else None,
+        request.headers.get("user-agent"),
+    )
 
 
 @router.post(

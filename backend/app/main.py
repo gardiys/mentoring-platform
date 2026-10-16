@@ -52,6 +52,8 @@ from app.interviews.router import router as interviews_router
 from app.interviews.upload_router import router as private_uploads_router
 from app.knowledge.admin_router import router as admin_knowledge_router
 from app.knowledge.router import router as knowledge_router
+from app.legal.router import admin_router as legal_admin_router
+from app.legal.router import router as legal_router
 from app.media.router import (
     admin_content_media_router,
     admin_knowledge_media_router,
@@ -170,6 +172,8 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     application.include_router(admin_tracks_router, prefix="/api/v1")
     application.include_router(admin_students_router, prefix="/api/v1")
     application.include_router(onboarding_applications_router, prefix="/api/v1")
+    application.include_router(legal_router, prefix="/api/v1")
+    application.include_router(legal_admin_router, prefix="/api/v1")
     application.include_router(opportunities_router, prefix="/api/v1")
     application.include_router(admin_opportunities_router, prefix="/api/v1")
     application.include_router(python_repeat_router, prefix="/api/v1")

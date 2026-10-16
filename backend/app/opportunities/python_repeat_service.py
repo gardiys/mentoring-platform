@@ -655,42 +655,6 @@ async def accept_terms(
     return await dashboard(session, student)
 
 
-async def checkout(
-    session: AsyncSession, student: User, application_id: UUID
-) -> OpportunityPaymentLinkRead:
-    item = await _owned_application(session, student.id, application_id, lock=True)
-    eligibility = await python_repeat_eligibility(session, student, ignore_application_id=item.id)
-    if (
-        not eligibility.eligible
-        and eligibility.code != "FEATURE_DISABLED"
-        and item.eligibility_override_by_user_id is None
-    ):
-        api_error(409, eligibility.code.casefold(), eligibility.message)
-    if item.status is PythonRepeatApplicationStatus.TERMS_ACCEPTED:
-        await _transition(session, item, PythonRepeatApplicationStatus.PAYMENT_PENDING, student.id)
-    if item.status is not PythonRepeatApplicationStatus.PAYMENT_PENDING:
-        api_error(409, "python_repeat_not_payable", "Application is not ready for payment")
-    assert item.terms_snapshot is not None
-    amount = _snapshot_int(item.terms_snapshot, "upfront_price_kopecks")
-    result = await _payment_link(
-        session,
-        student,
-        resource_id=item.id,
-        amount=amount,
-        repeat_application=item,
-        return_path="/opportunities/alumni/python-repeat",
-    )
-    await _event(
-        session,
-        "python_repeat_checkout_started",
-        item.id,
-        student.id,
-        suffix=result.payment_link_id,
-    )
-    await session.commit()
-    return result
-
-
 async def _payment_link(
     session: AsyncSession,
     student: User,
@@ -1220,7 +1184,11 @@ async def development_complete(
     if owner_id != student.id:
         api_error(404, "payment_attempt_not_found", "Payment attempt was not found")
     if attempt.status is not PaymentAttemptStatus.APPROVED:
-        await approve_python_repeat_payment(session, attempt, approved_at=_now())
+        from app.opportunities.service import approve_opportunity_payment
+
+        await approve_opportunity_payment(
+            session, attempt, approved_at=_now(), verified_legal_payment=True
+        )
     await session.commit()
     return await dashboard(session, student)
 

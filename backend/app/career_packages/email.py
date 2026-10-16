@@ -27,8 +27,13 @@ class CareerPackageEmailService:
         version_number: int,
         body: str,
         action_url: str,
-        pdf: bytes,
+        pdf: bytes | None,
         subject: str | None = None,
+        attachment_name: str | None = None,
+        tags: list[str] | None = None,
+        idempotency_key: str | None = None,
+        sender_email: str | None = None,
+        reply_to_email: str | None = None,
         action_label: str = "Открыть Карьерный пакет на платформе",
     ) -> str | None:
         api_key = (
@@ -36,13 +41,13 @@ class CareerPackageEmailService:
             if self.settings.brevo_api_key is not None
             else ""
         )
-        if not api_key or not self.settings.brevo_from_email:
+        if not api_key or not (sender_email or self.settings.brevo_from_email):
             raise CareerPackageEmailError("Email delivery is not configured")
         safe_body = "<br>".join(escape(body).splitlines())
         safe_url = escape(action_url, quote=True)
         payload: dict[str, Any] = {
             "sender": {
-                "email": self.settings.brevo_from_email,
+                "email": sender_email or self.settings.brevo_from_email,
                 "name": self.settings.brevo_from_name,
             },
             "to": [{"email": recipient_email, "name": recipient_name}],
@@ -51,17 +56,21 @@ class CareerPackageEmailService:
             "htmlContent": (
                 f'<p>{safe_body}</p><p><a href="{safe_url}">{escape(action_label)}</a></p>'
             ),
-            "tags": ["career-package"],
+            "tags": tags or ["career-package"],
             "attachment": [
                 {
-                    "name": f"career-package-v{version_number}.pdf",
-                    "content": base64.b64encode(pdf).decode("ascii"),
+                    "name": attachment_name or f"career-package-v{version_number}.pdf",
+                    "content": base64.b64encode(pdf or b"").decode("ascii"),
                 }
             ],
         }
-        if self.settings.brevo_reply_to_email:
+        if pdf is None:
+            payload.pop("attachment")
+        if idempotency_key:
+            payload["headers"] = {"idempotencyKey": idempotency_key}
+        if reply_to_email or self.settings.brevo_reply_to_email:
             payload["replyTo"] = {
-                "email": self.settings.brevo_reply_to_email,
+                "email": reply_to_email or self.settings.brevo_reply_to_email,
                 "name": self.settings.brevo_reply_to_name,
             }
         try:
@@ -81,6 +90,14 @@ class CareerPackageEmailService:
                 payload = error.response.json()
                 if isinstance(payload, dict) and payload.get("code") is not None:
                     provider_code = str(payload["code"])
+                    if (
+                        idempotency_key
+                        and provider_code == "duplicate_parameter"
+                        and "idempotency" in str(payload.get("message", "")).lower()
+                    ):
+                        # Provider confirms the prior request was processed. Its Message-ID
+                        # was lost with the response, so delivery remains unknown.
+                        return None
             except ValueError:
                 pass
             suffix = f" ({provider_code})" if provider_code else ""

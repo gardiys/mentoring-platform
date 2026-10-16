@@ -316,3 +316,12 @@ __all__ = [
     "UserRole",
 ]
 from app.copilot.models import CopilotSession  # noqa: F401
+from app.legal.models import (  # noqa: F401
+    ContractAcceptance,
+    LegalAuditEvent,
+    LegalCheckout,
+    LegalEmailDelivery,
+    LegalEmailVerification,
+    LegalOfferVersion,
+    LegalQuestionnaireDraft,
+)

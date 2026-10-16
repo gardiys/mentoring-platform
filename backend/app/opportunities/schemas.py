@@ -124,6 +124,7 @@ class OpportunitiesDashboard(BaseModel):
 
 
 class OpportunityPaymentLinkRead(BaseModel):
+    checkout_session_id: UUID | None = None
     payment_url: str
     payment_link_id: str
 
