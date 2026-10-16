@@ -21,6 +21,10 @@
 2. Задать случайный серверный секрет: `COPILOT_INTEGRATION_TOKEN` в env платформы и **то же значение** `PLATFORM_INTEGRATION_TOKEN` в env Copilot. Генерация: `openssl rand -hex 32`. Секрет не передаётся в Electron или браузер и не является ключом OpenAI.
 3. Обновить Copilot API; миграция `20260908_platform_interviews` применяется обычным процессом запуска. Production использует `AUTH_MODE=platform`.
 4. Для запуска на учениках установить `COPILOT_STUDENTS_ENABLED=true` в env платформы и пересоздать backend. По умолчанию `false`: ученики по-прежнему не допущены. Даже с `true` доступ есть только у активного ученика со статусом `interviewing` — «Ходит на собеседования».
+   Для персонального тестирования оставьте `COPILOT_STUDENTS_ENABLED=false` и задайте
+   `COPILOT_PILOT_STUDENT_IDS=["UUID_УЧЕНИКА"]`. Платформа разрешит доступ только перечисленным
+   активным ученикам со статусом `interviewing`. Их UUID также нужно добавить в списки пилота
+   Copilot: `ASSISTANT_PILOT_STUDENT_IDS` и `ASSISTANT_AUTOMATION_PILOT_IDS`.
 5. Установить новую сборку Copilot. Старые API платформы без `/api/v1/copilot/access` потребуют обновления вместо обхода проверки.
 
 Проверка статуса применяется к скачиванию сборок, выдаче desktop-токена, запросам с уже выданным токеном и Copilot API. Активный WebSocket перепроверяет доступ раз в минуту; при отзыве ставится на паузу и закрывается.

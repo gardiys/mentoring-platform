@@ -1,13 +1,17 @@
 import hashlib
 import json
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
 from pytest import MonkeyPatch
+from sqlalchemy import update
 
 from app.core.config import get_settings
-from tests.conftest import SeededData, auth
+from app.mentors.models import MentorStudent, StudentLearningStatus
+from app.users.models import User, UserRole
+from tests.conftest import SeededData, TestSession, auth
 
 
 @pytest.fixture
@@ -41,6 +45,46 @@ async def test_students_mentors_and_anonymous_cannot_list_or_download(
             assert response.status_code == 403
             assert "synthetic installer" not in response.text
             assert "sha256" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("listed", "role", "active", "status", "allowed"),
+    [
+        (True, UserRole.STUDENT, True, StudentLearningStatus.INTERVIEWING, True),
+        (False, UserRole.STUDENT, True, StudentLearningStatus.INTERVIEWING, False),
+        (True, UserRole.STUDENT, False, StudentLearningStatus.INTERVIEWING, False),
+        (True, UserRole.STUDENT, True, StudentLearningStatus.LEARNING, False),
+        (True, UserRole.MENTOR, True, StudentLearningStatus.INTERVIEWING, False),
+    ],
+)
+async def test_pilot_access_is_limited_to_listed_active_interviewing_students(
+    client, seeded, releases, monkeypatch, listed, role, active, status, allowed
+):
+    monkeypatch.setattr(get_settings(), "copilot_students_enabled", False)
+    monkeypatch.setattr(
+        get_settings(), "copilot_pilot_student_ids", [seeded.student_id if listed else uuid4()]
+    )
+    async with TestSession() as session:
+        await session.execute(
+            update(User).where(User.id == seeded.student_id).values(role=role, is_active=active)
+        )
+        await session.execute(
+            update(MentorStudent)
+            .where(MentorStudent.student_id == seeded.student_id)
+            .values(learning_status=status)
+        )
+        await session.commit()
+
+    headers = auth(seeded.student_id)
+    expected_status = 200 if allowed else 403
+    for path in ["/api/v1/copilot/releases", "/api/v1/copilot/releases/win-x64/download"]:
+        response = await client.get(path, headers=headers)
+        assert response.status_code == expected_status, response.text
+    if active:
+        access = (await client.get("/api/v1/copilot/access", headers=headers)).json()
+        assert access["allowed"] is allowed
+        assert access["student_allowed"] is allowed
+        assert access["students_enabled"] is False
 
 
 async def test_admin_downloads_actual_bytes_and_range(

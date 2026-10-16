@@ -21,11 +21,12 @@ async def eligibility(session: AsyncSession, user: User) -> dict[str, object]:
             .limit(1)
         )
     )
-    enabled = get_settings().copilot_students_enabled
+    settings = get_settings()
+    enabled = settings.copilot_students_enabled
     student_allowed = (
         user.role is UserRole.STUDENT
         and user.is_active
-        and enabled
+        and (enabled or user.id in settings.copilot_pilot_student_ids)
         and status is StudentLearningStatus.INTERVIEWING
     )
     admin_allowed = user.role is UserRole.ADMIN and user.is_active

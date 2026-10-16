@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, ValidationInfo, field_validator, model_validator
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
     python_to_go_enabled: bool = True
     copilot_releases_dir: Path = Path("../.local/copilot-releases")
     copilot_students_enabled: bool = False
+    copilot_pilot_student_ids: list[UUID] = Field(default_factory=list)
     copilot_integration_token: SecretStr | None = None
     career_package_enabled: bool = False
     career_package_ai_enabled: bool = False
