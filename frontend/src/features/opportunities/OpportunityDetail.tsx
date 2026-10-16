@@ -18,6 +18,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import type { ConsultationDetail, GoDetail } from "./workspaceApi";
+import { GoTransitionQuestionnaire } from "./GoTransitionQuestionnaire";
 import {
   useConsultationCommands,
   useGoCommands,
@@ -683,6 +684,7 @@ export function GoPanel({ item }: { item: GoDetail }) {
         Создана {opportunityDate(item.created_at)}
       </Text>
       <Text style={{ whiteSpace: "pre-wrap" }}>{item.motivation}</Text>
+      <GoTransitionQuestionnaire questionnaire={item.questionnaire} />
       <Text>
         {formatRubles(item.upfront_price_kopecks)} + {item.success_fee_percent}%
         после оффера

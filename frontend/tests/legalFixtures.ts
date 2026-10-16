@@ -1,5 +1,26 @@
 import { vi } from "vitest";
 import * as client from "../src/api/client";
+import type { components } from "../src/api/generated/schema";
+
+export const adminGoQuestionnaire: components["schemas"]["AdminQuestionnaireRead"] =
+  {
+    application_id: "30000000-0000-4000-8000-000000000001",
+    source: "payment",
+    recorded_at: "2026-10-17T10:30:00Z",
+    answers: {
+      employment_status: "Работаю",
+      position: "Python backend developer",
+      work_format: "Удалённо",
+      technologies: "Python, PostgreSQL, Go",
+      existing_offers: true,
+      existing_offers_details: "Оффер на Go-позицию на рассмотрении",
+      selection_processes: false,
+      previous_obligations: true,
+      previous_obligations_details: "Остался один платёж по Python",
+      go_in_current_work: false,
+      previous_contract: "Договор Python от 2025 года",
+    },
+  };
 
 export const legalDetails = {
   title: "Программа менторства",

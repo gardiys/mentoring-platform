@@ -19,6 +19,7 @@ import { type FormEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../../components/PageHeader";
+import { GoTransitionQuestionnaire } from "../opportunities/GoTransitionQuestionnaire";
 import { useUnsavedChanges } from "../../hooks/useUnsavedChanges";
 import type {
   AdminStudentDetail,
@@ -325,6 +326,11 @@ export function AdminStudentForm({ options, student }: Props) {
             {error.message}
           </Alert>
         )}
+
+        <GoTransitionQuestionnaire
+          questionnaire={student?.go_transition_questionnaire}
+          showApplicationLink
+        />
 
         {student?.personal_data_erased_at && (
           <Alert color="red" title="Прямые идентификаторы удалены">

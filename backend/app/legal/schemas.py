@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+
+
+class AdminQuestionnaireRead(BaseModel):
+    application_id: UUID
+    source: Literal["payment", "checkout"]
+    recorded_at: datetime
+    answers: dict[str, str | bool]
 
 
 class Questionnaire(BaseModel):

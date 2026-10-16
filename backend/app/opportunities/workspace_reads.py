@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.core.errors import api_error
+from app.legal.questionnaires import admin_go_questionnaire
 from app.opportunities.models import (
     ConsultationMentorSetting,
     ConsultationRequest,
@@ -380,6 +381,11 @@ async def go_detail(session: AsyncSession, resource_id: UUID) -> AdminGoTransiti
         last_payment=await payment_read(session, item),
         payment_block_reason=await go_payment_block_reason(session, item.id),
         history=await history_read(session, item),
+        questionnaire=(
+            await admin_go_questionnaire(session, student.id, application_id=item.id)
+            if student.personal_data_erased_at is None
+            else None
+        ),
     )
 
 

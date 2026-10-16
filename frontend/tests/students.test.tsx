@@ -12,6 +12,7 @@ import type {
 } from "../src/types/api";
 import { ADMIN_STUDENTS_FILTERS_STORAGE_KEY } from "../src/utils/studentListFilters";
 import { renderPage } from "./render";
+import { adminGoQuestionnaire } from "./legalFixtures";
 
 const mentor = {
   id: "10000000-0000-4000-8000-000000000001",
@@ -314,6 +315,48 @@ it("показывает 45% при назначении ментора суще
   );
 
   expect(screen.getByLabelText(/^Доля ментора, %/)).toHaveValue("45%");
+});
+
+it("показывает анкету Go и сохраняет нового ментора без изменения ставки ученика", async () => {
+  const update = vi
+    .spyOn(api, "updateAdminStudent")
+    .mockReturnValue(new Promise(() => undefined));
+  renderPage(
+    <AdminStudentForm
+      options={options}
+      student={{
+        ...student,
+        repayment_percent: 100,
+        go_transition_questionnaire: adminGoQuestionnaire,
+      }}
+    />,
+  );
+  expect(screen.getByText("Анкета перехода Python → Go")).toBeInTheDocument();
+  expect(
+    screen.getByText(/Сведения зафиксированы при оплате/),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Python backend developer")).toBeInTheDocument();
+  expect(screen.getByText("Остался один платёж по Python")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Открыть заявку перехода в Go" }),
+  ).toHaveAttribute(
+    "href",
+    `/admin/opportunities/go-transition?go=${adminGoQuestionnaire.application_id}`,
+  );
+  await userEvent.click(screen.getByRole("textbox", { name: /^Ментор/ }));
+  await userEvent.click(screen.getByText("Администратор · администратор"));
+  await userEvent.click(screen.getByRole("checkbox", { name: /Go/ }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Сохранить изменения" }),
+  );
+  expect(update).toHaveBeenCalledWith(
+    student.id,
+    expect.objectContaining({
+      mentor_id: adminMentor.id,
+      repayment_percent: 100,
+      track_ids: [student.tracks[0]!.id, options.tracks[1]!.id],
+    }),
+  );
 });
 
 it("редактирует данные и закрывает доступ без удаления ученика", async () => {

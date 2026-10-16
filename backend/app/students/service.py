@@ -14,6 +14,7 @@ from app.interviews.models import (
     InterviewProcess,
     InterviewProcessStage,
 )
+from app.legal.questionnaires import admin_go_questionnaire
 from app.media.interview_anonymization_queue import enqueue_interview_media_anonymization
 from app.mentors.models import (
     MentorStudent,
@@ -362,6 +363,11 @@ async def student_detail(session: AsyncSession, student_id: UUID) -> AdminStuden
         public_identity_hidden_reason=student.public_identity_hidden_reason,
         personal_data_erased_at=student.personal_data_erased_at,
         personal_data_erasure_reason=student.personal_data_erasure_reason,
+        go_transition_questionnaire=(
+            await admin_go_questionnaire(session, student.id)
+            if student.personal_data_erased_at is None
+            else None
+        ),
     )
 
 
@@ -577,8 +583,9 @@ async def update_student(
     student.first_name = payload.first_name
     student.last_name = payload.last_name or None
     student.email = payload.email or None
-    await change_student_repayment_percent(session, student.id, payload.repayment_percent)
-    student.repayment_percent = payload.repayment_percent
+    if student.repayment_percent != payload.repayment_percent:
+        await change_student_repayment_percent(session, student.id, payload.repayment_percent)
+        student.repayment_percent = payload.repayment_percent
     student.entry_payment_kopecks = _rubles_to_kopecks(payload.entry_payment_rubles)
     student.entry_payment_paid_at = (
         student.entry_payment_paid_at or datetime.now(UTC) if payload.entry_payment_paid else None

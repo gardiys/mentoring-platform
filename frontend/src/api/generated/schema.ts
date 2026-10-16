@@ -6955,6 +6955,7 @@ export interface components {
              */
             created_at: string;
             student: components["schemas"]["AdminOpportunityStudentRead"];
+            questionnaire?: components["schemas"]["AdminQuestionnaireRead"] | null;
             /** Internal Note */
             internal_note: string | null;
             /**
@@ -8247,6 +8248,28 @@ export interface components {
              */
             interviewed_at: string;
         };
+        /** AdminQuestionnaireRead */
+        AdminQuestionnaireRead: {
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "payment" | "checkout";
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /** Answers */
+            answers: {
+                [key: string]: string | boolean;
+            };
+        };
         /** AdminRoadmapCreate */
         AdminRoadmapCreate: {
             /** Slug */
@@ -8567,6 +8590,7 @@ export interface components {
             updated_at: string;
             /** Onboarding Completed At */
             onboarding_completed_at: string | null;
+            go_transition_questionnaire?: components["schemas"]["AdminQuestionnaireRead"] | null;
         };
         /** AdminStudentListItem */
         AdminStudentListItem: {

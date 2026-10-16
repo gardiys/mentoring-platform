@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.interviews.models import InterviewMediaAnonymizationStatus
+from app.legal.schemas import AdminQuestionnaireRead
 from app.mentors.models import StudentLearningStatus
 from app.users.models import UserRole
 from app.users.telegram import normalize_telegram_username
@@ -88,6 +89,7 @@ class AdminStudentListItem(BaseModel):
 class AdminStudentDetail(AdminStudentListItem):
     updated_at: datetime
     onboarding_completed_at: datetime | None
+    go_transition_questionnaire: AdminQuestionnaireRead | None = None
 
 
 class AdminStudentTrackOption(BaseModel):

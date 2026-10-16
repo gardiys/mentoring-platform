@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from app.legal.schemas import AdminQuestionnaireRead
 from app.opportunities.python_repeat_schemas import AdminPythonRepeatApplicationRead
 from app.opportunities.schemas import (
     AdminConsultationMentorRead,
@@ -78,6 +79,7 @@ class AdminConsultationDetail(AdminConsultationRead, WorkspaceStageRead):
 
 
 class AdminGoTransitionDetail(AdminGoTransitionRead, WorkspaceStageRead):
+    questionnaire: AdminQuestionnaireRead | None = None
     internal_note: str | None
     updated_at: datetime
     last_payment: WorkspacePaymentRead | None

@@ -19,6 +19,7 @@ import {
 import { copilotApi } from "../src/features/copilot/api";
 import { AdminOpportunitiesPage } from "../src/pages/AdminOpportunitiesPage";
 import { renderPage } from "./render";
+import { adminGoQuestionnaire } from "./legalFixtures";
 
 afterEach(() => {
   delete window.Telegram;
@@ -97,6 +98,7 @@ function openPage(
   item = consultation,
   path = `/admin/opportunities?consultation=${item.id}`,
   empty = false,
+  goItem: GoDetail = go,
 ) {
   const page: WorkspacePage = {
     items: [
@@ -136,7 +138,7 @@ function openPage(
     go_transition_description_markdown: "Описание программы Go",
   });
   vi.spyOn(workspaceApi, "consultation").mockResolvedValue(item);
-  vi.spyOn(workspaceApi, "go").mockResolvedValue(go);
+  vi.spyOn(workspaceApi, "go").mockResolvedValue(goItem);
   return renderPage(<AdminOpportunitiesPage />, path, "/admin/opportunities/*");
 }
 
@@ -231,6 +233,33 @@ it.each(["paid", "scheduled"] as const)(
       await screen.findByRole("button", { name: "Исправить итог" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Внутренняя заметка")).toHaveValue(note);
+  },
+);
+
+it.each(["payment", "checkout"] as const)(
+  "показывает заполненную анкету Go из %s",
+  async (source) => {
+    openPage(consultation, "/admin/opportunities?go=go-1", false, {
+      ...go,
+      questionnaire: { ...adminGoQuestionnaire, source, application_id: go.id },
+    });
+    expect(
+      await screen.findByText("Анкета перехода Python → Go"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        source === "payment"
+          ? /Сведения зафиксированы при оплате/
+          : /Сведения заполнены перед оплатой/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Python backend developer")).toBeInTheDocument();
+    expect(screen.getByText("Python, PostgreSQL, Go")).toBeInTheDocument();
+    expect(
+      screen.getByText("Оффер на Go-позицию на рассмотрении"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Нет")).toHaveLength(2);
+    expect(screen.queryByText("existing_offers")).not.toBeInTheDocument();
   },
 );
 
