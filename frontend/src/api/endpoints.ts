@@ -169,8 +169,7 @@ import type {
   QuestionClusterBulkResult,
   QuestionClusterVersionMutation,
   OpportunitiesDashboard,
-  AdminOpportunitiesDashboard,
-  ConsultationStatus,
+  AdminOpportunitiesSettings,
   ConsultationType,
   OpportunityPaymentLink,
   PythonRepeatDashboard,
@@ -2375,32 +2374,8 @@ export const api = {
       `/api/v1/opportunities/payments/${encodeURIComponent(paymentLinkId)}/development/complete`,
       { method: "POST" },
     ),
-  adminOpportunities: () =>
-    apiRequest<AdminOpportunitiesDashboard>("/api/v1/admin/opportunities"),
-  updateAdminConsultation: (
-    id: string,
-    payload: {
-      status: ConsultationStatus;
-      mentor_id: string | null;
-      scheduled_at: string | null;
-      admin_note: string | null;
-      written_summary: string | null;
-    },
-  ) =>
-    apiRequest<AdminOpportunitiesDashboard>(
-      `/api/v1/admin/opportunities/consultations/${id}`,
-      { method: "PATCH", body: JSON.stringify(payload) },
-    ),
-  decideAdminGoTransition: (
-    id: string,
-    payload: { approved: boolean; admin_note: string | null },
-  ) =>
-    apiRequest<AdminOpportunitiesDashboard>(
-      `/api/v1/admin/opportunities/go-transition/${id}`,
-      { method: "PATCH", body: JSON.stringify(payload) },
-    ),
   setAdminConsultationMentor: (mentorId: string, isEnabled: boolean) =>
-    apiRequest<AdminOpportunitiesDashboard>(
+    apiRequest<AdminOpportunitiesSettings>(
       `/api/v1/admin/opportunities/consultation-mentors/${mentorId}`,
       {
         method: "PATCH",
@@ -2416,12 +2391,12 @@ export const api = {
       duration_minutes: number;
     },
   ) =>
-    apiRequest<AdminOpportunitiesDashboard>(
+    apiRequest<AdminOpportunitiesSettings>(
       `/api/v1/admin/opportunities/consultation-types/${consultationType}`,
       { method: "PATCH", body: JSON.stringify(payload) },
     ),
   updateAdminGoTransitionProgram: (descriptionMarkdown: string) =>
-    apiRequest<AdminOpportunitiesDashboard>(
+    apiRequest<AdminOpportunitiesSettings>(
       "/api/v1/admin/opportunities/go-transition-program",
       {
         method: "PATCH",
@@ -2485,10 +2460,6 @@ export const api = {
     apiRequest<OpportunityPaymentLink>(
       `/api/v1/opportunities/python-repeat/installments/${id}/checkout`,
       { method: "POST" },
-    ),
-  adminPythonRepeat: () =>
-    apiRequest<AdminPythonRepeatDashboard>(
-      "/api/v1/admin/opportunities/python-repeat",
     ),
   careerPackagesForStudent: (studentId: string) =>
     apiRequest<CareerPackage[]>(

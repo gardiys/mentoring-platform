@@ -245,11 +245,18 @@ const mentorRoutes = [
 ];
 
 const adminRoutes = [
+  ...["consultations", "go-transition", "settings"].map((section) => ({
+    path: `/admin/opportunities/${section}`,
+    lazy: lazyPage(
+      () => import("../pages/AdminOpportunitiesPage"),
+      "AdminOpportunitiesPage",
+    ),
+  })),
   {
     path: "/admin/opportunities/python-repeat",
     lazy: lazyPage(
-      () => import("../pages/AdminPythonRepeatPage"),
-      "AdminPythonRepeatPage",
+      () => import("../pages/AdminOpportunitiesPage"),
+      "AdminOpportunitiesPage",
     ),
   },
   {

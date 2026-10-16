@@ -222,6 +222,8 @@ class ConsultationRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint("mentor_reward_kopecks >= 0", name="mentor_reward_non_negative"),
         Index("ix_consultation_requests_student_created", "student_id", "created_at"),
         Index("ix_consultation_requests_status_created", "status", "created_at"),
+        Index("ix_consultation_requests_mentor", "mentor_id"),
+        Index("ix_consultation_requests_status_scheduled", "status", "scheduled_at"),
     )
 
     student_id: Mapped[UUID] = mapped_column(
@@ -257,6 +259,7 @@ class ConsultationRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     written_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class GoTransitionApplication(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -295,6 +298,7 @@ class GoTransitionApplication(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    internal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     terms_version: Mapped[int] = mapped_column(nullable=False, default=1)
     terms_snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     terms_expires_at: Mapped[datetime | None] = mapped_column(

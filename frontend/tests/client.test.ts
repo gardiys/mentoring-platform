@@ -20,6 +20,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it("показывает первое сообщение валидации FastAPI без технического префикса", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue({
+    ok: false,
+    status: 422,
+    json: async () => ({
+      detail: [
+        { msg: "Value error, Укажите дату с часовым поясом" },
+        { msg: "Другая ошибка" },
+      ],
+    }),
+  } as Response);
+  await expect(
+    apiRequest("/api/v1/admin/opportunities/consultations/test/schedule"),
+  ).rejects.toMatchObject({
+    status: 422,
+    code: "validation_error",
+    message: "Укажите дату с часовым поясом",
+  });
+});
+
 it("игнорирует initData из URL вне доверенного Telegram-контекста", async () => {
   const fetchMock = successfulFetch();
   window.history.replaceState(

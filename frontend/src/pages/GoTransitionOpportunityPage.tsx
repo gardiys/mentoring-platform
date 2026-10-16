@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   Group,
-  Paper,
   Stack,
   Text,
   Textarea,
@@ -12,7 +11,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { type FormEvent, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { GoTransitionProgramDescription as ProgramDescription } from "../components/GoTransitionProgramDescription";
 import { Link } from "react-router-dom";
 
 import { ErrorState } from "../components/ErrorState";
@@ -266,23 +265,5 @@ export function GoTransitionOpportunityPage() {
         </Stack>
       )}
     </Stack>
-  );
-}
-
-function ProgramDescription({ description }: { description: string }) {
-  return (
-    <Paper withBorder p={{ base: "md", sm: "xl" }} className="markdown-content">
-      <ReactMarkdown
-        components={{
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer">
-              {children}
-            </a>
-          ),
-        }}
-      >
-        {description}
-      </ReactMarkdown>
-    </Paper>
   );
 }

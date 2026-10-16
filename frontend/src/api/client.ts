@@ -165,6 +165,24 @@ function authenticatedHeaders(init?: RequestInit): Headers {
   return headers;
 }
 
+function validationMessage(value: unknown): string | null {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("detail" in value) ||
+    !Array.isArray(value.detail)
+  )
+    return null;
+  const first = value.detail.find(
+    (item: unknown) =>
+      typeof item === "object" &&
+      item !== null &&
+      "msg" in item &&
+      typeof item.msg === "string",
+  );
+  return first ? String(first.msg).replace(/^Value error, /, "") : null;
+}
+
 export async function apiRequest<T>(
   path: string,
   init?: RequestInit,
@@ -196,10 +214,11 @@ export async function apiRequest<T>(
         payload.detail.message,
       );
     }
+    const message = validationMessage(payload);
     throw new ApiError(
       response.status,
-      "unexpected_error",
-      "Не удалось выполнить запрос",
+      message ? "validation_error" : "unexpected_error",
+      message ?? "Не удалось выполнить запрос",
     );
   }
   return payload as T;
@@ -628,10 +647,11 @@ export async function apiDownload(
         payload.detail.code,
         payload.detail.message,
       );
+    const message = validationMessage(payload);
     throw new ApiError(
       response.status,
-      "download_failed",
-      "Не удалось скачать файл. Повторите попытку.",
+      message ? "validation_error" : "download_failed",
+      message ?? "Не удалось скачать файл. Повторите попытку.",
     );
   }
   try {

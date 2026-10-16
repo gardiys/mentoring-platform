@@ -36,20 +36,20 @@ async def notify_user(
     body: str,
     link: str | None,
     actor_id: UUID | None = None,
+    kind: NotificationKind = NotificationKind.STATUS_CHANGED,
 ) -> None:
     if not user.is_active:
         return
-    if link:
-        await create_notification(
-            session,
-            user_id=user.id,
-            event_key=event_key,
-            kind=NotificationKind.STATUS_CHANGED,
-            title=title,
-            body=body,
-            action_url=link,
-            actor_user_id=actor_id,
-        )
+    await create_notification(
+        session,
+        user_id=user.id,
+        event_key=event_key,
+        kind=kind,
+        title=title,
+        body=body,
+        action_url=link,
+        actor_user_id=actor_id,
+    )
     if user.telegram_id:
         await queue_telegram_message(
             session,

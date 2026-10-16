@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from app.core.config import get_settings
 from app.core.errors import api_error
@@ -34,14 +33,8 @@ from app.opportunities.models import (
 )
 from app.opportunities.notifications import mark_payment_for_review, notify_admins
 from app.opportunities.schemas import (
-    AdminConsultationMentorRead,
-    AdminConsultationMutation,
-    AdminConsultationRead,
     AdminConsultationTypeMutation,
     AdminGoTransitionProgramMutation,
-    AdminGoTransitionRead,
-    AdminOpportunitiesDashboard,
-    AdminOpportunityStudentRead,
     ConsultationCreate,
     ConsultationRead,
     ConsultationTypeRead,
@@ -54,9 +47,9 @@ from app.opportunities.schemas import (
     OpportunityRead,
     OpportunitySegment,
 )
+from app.opportunities.workspace_history import record_history
+from app.opportunities.workspace_schemas import WorkspaceSettings
 from app.payments.models import (
-    MentorReward,
-    MentorRewardKind,
     PaymentAttemptStatus,
     PaymentInstallment,
     PaymentInstallmentStatus,
@@ -558,6 +551,16 @@ async def create_consultation(
     )
     session.add(item)
     await session.flush()
+    record_history(
+        session,
+        item,
+        None,
+        actor_id=student.id,
+        snapshot={
+            "requested_mentor_id": item.mentor_id,
+            "consultation_type": str(item.consultation_type),
+        },
+    )
     identity = " ".join(
         value
         for value in [
@@ -605,6 +608,7 @@ async def create_go_transition(
     session.add(item)
     try:
         await session.flush()
+        record_history(session, item, None, actor_id=student.id)
         await notify_admins(
             session,
             event_key=f"go-transition-submitted:{item.id}",
@@ -780,7 +784,11 @@ async def approve_opportunity_payment(
     attempt.status = PaymentAttemptStatus.APPROVED
     attempt.approved_at = now
     if attempt.consultation_request_id is not None:
-        consultation = await session.get(ConsultationRequest, attempt.consultation_request_id)
+        consultation = await session.scalar(
+            select(ConsultationRequest)
+            .where(ConsultationRequest.id == attempt.consultation_request_id)
+            .with_for_update()
+        )
         if consultation is None or consultation.status is not ConsultationStatus.PAYMENT_PENDING:
             await mark_payment_for_review(session, attempt)
             return
@@ -789,6 +797,12 @@ async def approve_opportunity_payment(
             return
         consultation.status = ConsultationStatus.PAID
         consultation.paid_at = now
+        record_history(
+            session,
+            consultation,
+            "payment_pending",
+            snapshot={"action": "payment", "payment_attempt_id": attempt.id, "paid_at": now},
+        )
         await notify_admins(
             session,
             event_key=f"consultation-paid:{consultation.id}",
@@ -798,7 +812,11 @@ async def approve_opportunity_payment(
         )
         return
     assert attempt.transition_application_id is not None
-    transition = await session.get(GoTransitionApplication, attempt.transition_application_id)
+    transition = await session.scalar(
+        select(GoTransitionApplication)
+        .where(GoTransitionApplication.id == attempt.transition_application_id)
+        .with_for_update()
+    )
     if transition is None or transition.status is not GoTransitionStatus.PAYMENT_PENDING:
         await mark_payment_for_review(session, attempt)
         return
@@ -818,6 +836,12 @@ async def approve_opportunity_payment(
         return
     transition.status = GoTransitionStatus.PAID
     transition.paid_at = now
+    record_history(
+        session,
+        transition,
+        "payment_pending",
+        snapshot={"action": "payment", "payment_attempt_id": attempt.id, "paid_at": now},
+    )
     enrollment = await session.get(
         LearningTrackEnrollment,
         {"user_id": transition.student_id, "track_id": go_track.id},
@@ -861,10 +885,18 @@ async def opportunity_payment_context(
     session: AsyncSession, attempt: OpportunityPaymentAttempt
 ) -> tuple[UUID, int] | None:
     if attempt.consultation_request_id is not None:
-        consultation = await session.get(ConsultationRequest, attempt.consultation_request_id)
+        consultation = await session.scalar(
+            select(ConsultationRequest)
+            .where(ConsultationRequest.id == attempt.consultation_request_id)
+            .with_for_update()
+        )
         return (consultation.id, consultation.price_kopecks) if consultation is not None else None
     if attempt.transition_application_id is not None:
-        transition = await session.get(GoTransitionApplication, attempt.transition_application_id)
+        transition = await session.scalar(
+            select(GoTransitionApplication)
+            .where(GoTransitionApplication.id == attempt.transition_application_id)
+            .with_for_update()
+        )
         return (transition.id, transition.upfront_price_kopecks) if transition is not None else None
     if attempt.python_repeat_application_id is not None:
         from app.opportunities.models import PythonRepeatApplication
@@ -924,81 +956,12 @@ async def development_complete_payment(
     return await opportunities_dashboard(session, student)
 
 
-async def admin_dashboard(session: AsyncSession) -> AdminOpportunitiesDashboard:
-    mentor_rows = (
-        await session.execute(
-            select(User, ConsultationMentorSetting)
-            .outerjoin(
-                ConsultationMentorSetting,
-                ConsultationMentorSetting.mentor_id == User.id,
-            )
-            .where(User.role.in_(MENTOR_CAPABLE_ROLES), User.is_active.is_(True))
-            .order_by(User.first_name, User.last_name, User.id)
-        )
-    ).all()
-    students = aliased(User)
-    consultation_rows = (
-        await session.execute(
-            select(ConsultationRequest, students)
-            .join(students, students.id == ConsultationRequest.student_id)
-            .order_by(ConsultationRequest.created_at.desc())
-            .limit(200)
-        )
-    ).all()
-    transition_rows = (
-        await session.execute(
-            select(GoTransitionApplication, students)
-            .join(students, students.id == GoTransitionApplication.student_id)
-            .order_by(GoTransitionApplication.created_at.desc())
-            .limit(200)
-        )
-    ).all()
-
-    def student_read(student: User) -> AdminOpportunityStudentRead:
-        return AdminOpportunityStudentRead(
-            id=student.id,
-            first_name=student.first_name,
-            last_name=student.last_name,
-            telegram_username=student.telegram_username,
-            email=student.email,
-        )
-
-    consultations: list[AdminConsultationRead] = []
-    for item, student in consultation_rows:
-        base = await _consultation_read(session, item, include_draft_summary=True)
-        consultations.append(
-            AdminConsultationRead(
-                **base.model_dump(),
-                student=student_read(student),
-                mentor_reward_kopecks=item.mentor_reward_kopecks,
-            )
-        )
-    return AdminOpportunitiesDashboard(
-        consultation_types=await _consultation_types(session),
-        go_transition_description_markdown=await _go_transition_description(session),
-        consultation_mentors=[
-            AdminConsultationMentorRead(
-                **_mentor_read(mentor).model_dump(),
-                is_enabled=setting.is_enabled if setting is not None else False,
-            )
-            for mentor, setting in mentor_rows
-        ],
-        consultations=consultations,
-        go_transition_applications=[
-            AdminGoTransitionRead(
-                **_transition_read(item).model_dump(), student=student_read(student)
-            )
-            for item, student in transition_rows
-        ],
-    )
-
-
 async def admin_update_consultation_type(
     session: AsyncSession,
     admin: User,
     consultation_type: ConsultationType,
     payload: AdminConsultationTypeMutation,
-) -> AdminOpportunitiesDashboard:
+) -> WorkspaceSettings:
     setting = await session.get(ConsultationTypeSetting, consultation_type)
     if setting is None:
         setting = ConsultationTypeSetting(
@@ -1017,14 +980,16 @@ async def admin_update_consultation_type(
         setting.duration_minutes = payload.duration_minutes
         setting.updated_by_user_id = admin.id
     await session.commit()
-    return await admin_dashboard(session)
+    from app.opportunities.workspace_reads import settings_read
+
+    return await settings_read(session)
 
 
 async def admin_update_go_transition_program(
     session: AsyncSession,
     admin: User,
     payload: AdminGoTransitionProgramMutation,
-) -> AdminOpportunitiesDashboard:
+) -> WorkspaceSettings:
     setting = await session.get(GoTransitionProgramSetting, 1)
     if setting is None:
         setting = GoTransitionProgramSetting(
@@ -1037,7 +1002,9 @@ async def admin_update_go_transition_program(
         setting.description_markdown = payload.description_markdown
         setting.updated_by_user_id = admin.id
     await session.commit()
-    return await admin_dashboard(session)
+    from app.opportunities.workspace_reads import settings_read
+
+    return await settings_read(session)
 
 
 async def admin_set_consultation_mentor(
@@ -1046,7 +1013,7 @@ async def admin_set_consultation_mentor(
     mentor_id: UUID,
     *,
     is_enabled: bool,
-) -> AdminOpportunitiesDashboard:
+) -> WorkspaceSettings:
     mentor = await session.get(User, mentor_id)
     if mentor is None or mentor.role not in MENTOR_CAPABLE_ROLES:
         api_error(404, "mentor_not_found", "Mentor was not found")
@@ -1064,120 +1031,14 @@ async def admin_set_consultation_mentor(
         setting.is_enabled = is_enabled
         setting.updated_by_user_id = admin.id
     await session.commit()
-    return await admin_dashboard(session)
+    from app.opportunities.workspace_reads import settings_read
 
-
-async def admin_update_consultation(
-    session: AsyncSession,
-    request_id: UUID,
-    payload: AdminConsultationMutation,
-) -> AdminOpportunitiesDashboard:
-    item = await session.scalar(
-        select(ConsultationRequest).where(ConsultationRequest.id == request_id).with_for_update()
-    )
-    if item is None:
-        api_error(404, "consultation_not_found", "Consultation was not found")
-    allowed = {
-        ConsultationStatus.REQUESTED: {
-            ConsultationStatus.PAYMENT_PENDING,
-            ConsultationStatus.CANCELLED,
-        },
-        ConsultationStatus.PAYMENT_PENDING: {ConsultationStatus.CANCELLED},
-        ConsultationStatus.PAID: {
-            ConsultationStatus.SCHEDULED,
-            ConsultationStatus.COMPLETED,
-        },
-        ConsultationStatus.SCHEDULED: {
-            ConsultationStatus.SCHEDULED,
-            ConsultationStatus.COMPLETED,
-        },
-        ConsultationStatus.COMPLETED: {ConsultationStatus.COMPLETED},
-        ConsultationStatus.CANCELLED: {ConsultationStatus.CANCELLED},
-    }
-    if payload.status is not item.status and payload.status not in allowed[item.status]:
-        api_error(409, "invalid_consultation_transition", "Status transition is not allowed")
-    if item.status is ConsultationStatus.REQUESTED:
-        item.mentor_id = payload.mentor_id
-    elif payload.mentor_id != item.mentor_id:
-        api_error(409, "consultation_mentor_locked", "Mentor is locked after approval")
-    if payload.status is ConsultationStatus.PAYMENT_PENDING:
-        if item.mentor_id is None:
-            api_error(422, "consultation_mentor_required", "Assign a mentor before approval")
-        completed_tracks, _active_tracks = await _track_state(session, item.student_id)
-        available_mentor_ids = {
-            mentor.id for mentor in await _mentor_options(session, completed_tracks)
-        }
-        if item.mentor_id not in available_mentor_ids:
-            api_error(
-                422,
-                "consultation_mentor_not_available",
-                "Selected mentor is not available for this consultation",
-            )
-    item.status = payload.status
-    item.scheduled_at = payload.scheduled_at
-    item.admin_note = payload.admin_note
-    item.written_summary = payload.written_summary
-    if payload.status is ConsultationStatus.COMPLETED:
-        item.completed_at = item.completed_at or datetime.now(UTC)
-        if item.paid_at is None or item.mentor_id is None:
-            api_error(
-                409,
-                "consultation_not_paid",
-                "Only a paid consultation with an assigned mentor can be completed",
-            )
-        existing_reward = await session.scalar(
-            select(MentorReward.id).where(MentorReward.consultation_request_id == item.id)
-        )
-        if existing_reward is None:
-            session.add(
-                MentorReward(
-                    consultation_request_id=item.id,
-                    student_id=item.student_id,
-                    mentor_id=item.mentor_id,
-                    kind=MentorRewardKind.CONSULTATION,
-                    basis_kopecks=item.price_kopecks,
-                    amount_kopecks=item.mentor_reward_kopecks,
-                    paid_kopecks=0,
-                )
-            )
-    await session.commit()
-    return await admin_dashboard(session)
-
-
-async def admin_decide_transition(
-    session: AsyncSession,
-    admin: User,
-    application_id: UUID,
-    *,
-    approved: bool,
-    admin_note: str | None,
-) -> AdminOpportunitiesDashboard:
-    item = await session.scalar(
-        select(GoTransitionApplication)
-        .where(GoTransitionApplication.id == application_id)
-        .with_for_update()
-    )
-    if item is None:
-        api_error(404, "go_transition_not_found", "Application was not found")
-    if item.status is not GoTransitionStatus.SUBMITTED:
-        api_error(409, "go_transition_already_decided", "Application was already processed")
-    item.status = GoTransitionStatus.APPROVED if approved else GoTransitionStatus.REJECTED
-    item.admin_note = admin_note
-    if approved:
-        item.approved_at = datetime.now(UTC)
-        item.approved_by_user_id = admin.id
-        item.upfront_price_kopecks = ALUMNI_GO_UPFRONT_PRICE_KOPECKS
-        item.success_fee_percent = ALUMNI_GO_SUCCESS_FEE_PERCENT
-        item.terms_version = GO_TRANSITION_TERMS_VERSION
-        item.terms_snapshot = _go_transition_terms_snapshot()
-        item.terms_expires_at = item.approved_at + timedelta(days=GO_TRANSITION_OFFER_VALID_DAYS)
-    await session.commit()
-    return await admin_dashboard(session)
+    return await settings_read(session)
 
 
 async def admin_confirm_opportunity_payment(
     session: AsyncSession, attempt_id: UUID
-) -> AdminOpportunitiesDashboard:
+) -> OpportunityPaymentAttempt:
     attempt = await session.scalar(
         select(OpportunityPaymentAttempt)
         .where(OpportunityPaymentAttempt.id == attempt_id)
@@ -1185,6 +1046,25 @@ async def admin_confirm_opportunity_payment(
     )
     if attempt is None:
         api_error(404, "payment_attempt_not_found", "Payment attempt was not found")
+    if attempt.status is not PaymentAttemptStatus.MANUAL_REVIEW:
+        api_error(409, "payment_not_in_review", "Платёж не ожидает ручной проверки")
     await approve_opportunity_payment(session, attempt)
+    if str(attempt.status) != PaymentAttemptStatus.APPROVED.value:
+        api_error(
+            409,
+            "payment_review_unresolved",
+            "Не удалось подтвердить оплату: проверьте состояние заявки и назначение ментора",
+        )
+    if attempt.consultation_request_id:
+        await session.execute(
+            update(OpportunityPaymentAttempt)
+            .where(
+                OpportunityPaymentAttempt.consultation_request_id
+                == attempt.consultation_request_id,
+                OpportunityPaymentAttempt.id != attempt.id,
+                OpportunityPaymentAttempt.status == PaymentAttemptStatus.PENDING,
+            )
+            .values(status=PaymentAttemptStatus.REVOKED)
+        )
     await session.commit()
-    return await admin_dashboard(session)
+    return attempt

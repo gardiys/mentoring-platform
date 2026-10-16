@@ -137,6 +137,10 @@ from app.opportunities.models import (
     PythonRepeatProductOffer,
     PythonRepeatSuccessFeeObligation,
 )
+from app.opportunities.workspace_models import (  # noqa: F401
+    ConsultationRequestHistory,
+    GoTransitionApplicationHistory,
+)
 from app.payments.models import (
     MentorPayout,
     MentorPayoutAllocation,

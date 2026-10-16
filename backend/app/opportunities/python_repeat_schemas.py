@@ -216,7 +216,7 @@ class AdminPythonRepeatTransition(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     status: PythonRepeatApplicationStatus
-    comment: str = Field(min_length=3, max_length=5000)
+    comment: str = Field(default="", max_length=5000)
     responsible_user_id: UUID | None = None
 
 

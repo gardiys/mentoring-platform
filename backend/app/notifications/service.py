@@ -112,10 +112,10 @@ async def create_notification(
     kind: NotificationKind,
     title: str,
     body: str,
-    action_url: str,
+    action_url: str | None,
     actor_user_id: UUID | None = None,
 ) -> None:
-    if not action_url.startswith("/") or action_url.startswith("//"):
+    if action_url is not None and (not action_url.startswith("/") or action_url.startswith("//")):
         raise ValueError("Notification action_url must be a local absolute path")
     await session.execute(
         insert(PlatformNotification)
@@ -126,7 +126,7 @@ async def create_notification(
             kind=kind,
             title=title[:240],
             body=body,
-            action_url=action_url,
+            action_url=action_url or "",
         )
         .on_conflict_do_nothing(index_elements=[PlatformNotification.event_key])
     )

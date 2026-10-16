@@ -78,6 +78,11 @@ export function AppLayout() {
 
   useEffect(() => {
     if (!platform.isTelegram) return;
+    const opportunityCard =
+      location.pathname.startsWith("/admin/opportunities") &&
+      ["consultation", "go", "application"].some((key) =>
+        new URLSearchParams(location.search).has(key),
+      );
     const rootRoute =
       location.pathname === "/roadmaps" ||
       location.pathname === "/knowledge" ||
@@ -95,7 +100,13 @@ export function AppLayout() {
       location.pathname === "/my-mentor" ||
       location.pathname === "/payments" ||
       location.pathname.startsWith("/opportunities") ||
-      location.pathname === "/admin/opportunities" ||
+      [
+        "/admin/opportunities",
+        "/admin/opportunities/consultations",
+        "/admin/opportunities/go-transition",
+        "/admin/opportunities/python-repeat",
+        "/admin/opportunities/settings",
+      ].includes(location.pathname) ||
       location.pathname === "/mentor/profile" ||
       location.pathname === "/mentor/rewards" ||
       location.pathname === "/mentor/card-automation/clusters" ||
@@ -107,17 +118,28 @@ export function AppLayout() {
       location.pathname === "/admin/card-automation/decisions" ||
       location.pathname === "/admin/card-automation/metrics" ||
       location.pathname === "/admin/card-automation/settings";
-    if (rootRoute) {
+    if (rootRoute && !opportunityCard) {
       platform.hideBackButton();
       return;
     }
     platform.showBackButton();
-    const unsubscribe = platform.onBackButton(() => navigate(-1));
+    const unsubscribe = platform.onBackButton(() => {
+      if (opportunityCard) {
+        const params = new URLSearchParams(location.search);
+        ["consultation", "go", "application"].forEach((key) =>
+          params.delete(key),
+        );
+        navigate(
+          { pathname: location.pathname, search: params.toString() },
+          { replace: true },
+        );
+      } else navigate(-1);
+    });
     return () => {
       unsubscribe();
       platform.hideBackButton();
     };
-  }, [location.pathname, navigate, platform]);
+  }, [location.pathname, location.search, navigate, platform]);
 
   return (
     <AppShell

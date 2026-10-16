@@ -150,10 +150,10 @@ async def test_alumnus_consultation_accrues_reward_only_after_completion(
         assert request.duration_minutes == 60
         assert request.consultation_type is ConsultationType.TECHNICAL_MOCK
 
-    approved = await client.patch(
-        f"/api/v1/admin/opportunities/consultations/{request_id}",
+    approved = await client.post(
+        f"/api/v1/admin/opportunities/consultations/{request_id}/approve",
         headers=auth(seeded.admin_id),
-        json={"status": "payment_pending", "mentor_id": str(seeded.mentor_id)},
+        json={"mentor_id": str(seeded.mentor_id)},
     )
     assert approved.status_code == 200, approved.text
     link = await client.post(
@@ -186,30 +186,31 @@ async def test_alumnus_consultation_accrues_reward_only_after_completion(
         assert reward is None
 
     draft_summary = "Черновик: рекомендации ещё не готовы к публикации."
-    scheduled = await client.patch(
-        f"/api/v1/admin/opportunities/consultations/{request_id}",
+    async with TestSession() as session:
+        request = await session.get(ConsultationRequest, UUID(request_id))
+        request.written_summary = draft_summary
+        await session.commit()
+    scheduled = await client.post(
+        f"/api/v1/admin/opportunities/consultations/{request_id}/schedule",
         headers=auth(seeded.admin_id),
         json={
-            "status": "scheduled",
-            "mentor_id": str(seeded.mentor_id),
             "scheduled_at": datetime.now(UTC).isoformat(),
-            "written_summary": draft_summary,
         },
     )
     assert scheduled.status_code == 200, scheduled.text
-    assert scheduled.json()["consultations"][0]["written_summary"] == draft_summary
+    assert scheduled.json()["written_summary"] == draft_summary
     student_view = await client.get("/api/v1/opportunities/me", headers=auth(seeded.student_id))
     assert student_view.json()["consultations"][0]["written_summary"] is None
-    admin_view = await client.get("/api/v1/admin/opportunities", headers=auth(seeded.admin_id))
+    admin_view = await client.get(
+        f"/api/v1/admin/opportunities/consultations/{request_id}", headers=auth(seeded.admin_id)
+    )
     assert admin_view.status_code == 200, admin_view.text
-    assert admin_view.json()["consultations"][0]["written_summary"] == draft_summary
+    assert admin_view.json()["written_summary"] == draft_summary
 
-    completed = await client.patch(
-        f"/api/v1/admin/opportunities/consultations/{request_id}",
+    completed = await client.post(
+        f"/api/v1/admin/opportunities/consultations/{request_id}/complete",
         headers=auth(seeded.admin_id),
         json={
-            "status": "completed",
-            "mentor_id": str(seeded.mentor_id),
             "written_summary": "Разобрали задачу и зафиксировали следующие шаги.",
         },
     )
@@ -219,11 +220,9 @@ async def test_alumnus_consultation_accrues_reward_only_after_completion(
         "Разобрали задачу и зафиксировали следующие шаги."
     )
     repeated = await client.patch(
-        f"/api/v1/admin/opportunities/consultations/{request_id}",
+        f"/api/v1/admin/opportunities/consultations/{request_id}/summary",
         headers=auth(seeded.admin_id),
         json={
-            "status": "completed",
-            "mentor_id": str(seeded.mentor_id),
             "written_summary": "Разобрали задачу и зафиксировали следующие шаги.",
         },
     )
@@ -259,20 +258,20 @@ async def test_any_mentor_request_requires_admin_assignment_before_payment(
     assert request["price_kopecks"] == 400_000
     assert "mentor_reward_kopecks" not in request
 
-    without_mentor = await client.patch(
-        f"/api/v1/admin/opportunities/consultations/{request['id']}",
+    without_mentor = await client.post(
+        f"/api/v1/admin/opportunities/consultations/{request['id']}/approve",
         headers=auth(seeded.admin_id),
-        json={"status": "payment_pending", "mentor_id": None},
+        json={"mentor_id": None},
     )
     assert without_mentor.status_code == 422, without_mentor.text
 
-    assigned = await client.patch(
-        f"/api/v1/admin/opportunities/consultations/{request['id']}",
+    assigned = await client.post(
+        f"/api/v1/admin/opportunities/consultations/{request['id']}/approve",
         headers=auth(seeded.admin_id),
-        json={"status": "payment_pending", "mentor_id": str(seeded.mentor_id)},
+        json={"mentor_id": str(seeded.mentor_id)},
     )
     assert assigned.status_code == 200, assigned.text
-    assert assigned.json()["consultations"][0]["mentor"]["id"] == str(seeded.mentor_id)
+    assert assigned.json()["mentor"]["id"] == str(seeded.mentor_id)
 
 
 async def test_admin_controls_which_mentors_offer_consultations(
@@ -384,10 +383,10 @@ async def test_python_alumnus_transition_requires_approval_acceptance_and_paymen
     assert application["success_fee_percent"] == 100
     application_id = application["id"]
 
-    decided = await client.patch(
-        f"/api/v1/admin/opportunities/go-transition/{application_id}",
+    decided = await client.post(
+        f"/api/v1/admin/opportunities/go-transition/{application_id}/approve",
         headers=auth(seeded.admin_id),
-        json={"approved": True, "admin_note": "Подтверждено"},
+        json={"message_to_student": "Подтверждено"},
     )
     assert decided.status_code == 200, decided.text
     wrong_product_acceptance = await client.post(
@@ -585,7 +584,9 @@ async def test_go_application_cannot_be_duplicated(client: AsyncClient, seeded: 
 async def test_non_admin_cannot_process_opportunity(
     client: AsyncClient, seeded: SeededData
 ) -> None:
-    response = await client.get("/api/v1/admin/opportunities", headers=auth(seeded.student_id))
+    response = await client.get(
+        "/api/v1/admin/opportunities/settings", headers=auth(seeded.student_id)
+    )
     assert response.status_code == 403
 
 
@@ -826,10 +827,10 @@ async def test_python_repeat_full_payment_and_mentor_reward_flow(
     assert repeated_installment.status_code == 200, repeated_installment.text
 
     finance = await client.get(
-        "/api/v1/admin/opportunities/python-repeat", headers=auth(seeded.admin_id)
+        f"/api/v1/admin/opportunities/python-repeat/{application_id}", headers=auth(seeded.admin_id)
     )
     assert finance.status_code == 200, finance.text
-    finance_item = finance.json()["applications"][0]
+    finance_item = finance.json()
     assert finance_item["revenue_received_kopecks"] == 15_500_000
     assert finance_item["mentor_accrued_kopecks"] == 4_750_000
     assert finance_item["mentor_paid_kopecks"] == 0
@@ -849,10 +850,10 @@ async def test_python_repeat_full_payment_and_mentor_reward_flow(
         assert next_paid.status_code == 200, next_paid.text
 
     final_finance = await client.get(
-        "/api/v1/admin/opportunities/python-repeat", headers=auth(seeded.admin_id)
+        f"/api/v1/admin/opportunities/python-repeat/{application_id}", headers=auth(seeded.admin_id)
     )
     assert final_finance.status_code == 200, final_finance.text
-    final_item = final_finance.json()["applications"][0]
+    final_item = final_finance.json()
     assert final_item["revenue_received_kopecks"] == 28_000_000
     assert final_item["mentor_accrued_kopecks"] == 8_500_000
     assert final_item["mentor_paid_kopecks"] == 0

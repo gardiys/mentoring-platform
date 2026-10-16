@@ -22,7 +22,6 @@ from app.opportunities.python_repeat_schemas import (
 )
 from app.opportunities.python_repeat_service import (
     accept_terms,
-    admin_dashboard,
     admin_transition_application,
     assign_mentor,
     create_application,
@@ -165,13 +164,6 @@ async def development_refund_python_repeat_payment(
     installment_id: UUID, session: Session, student: StudentUser
 ) -> PythonRepeatDashboard:
     return await development_refund(session, student, installment_id)
-
-
-@admin_router.get("", response_model=AdminPythonRepeatDashboard)
-async def list_python_repeat_applications(
-    session: Session, _admin: AdminUser
-) -> AdminPythonRepeatDashboard:
-    return await admin_dashboard(session)
 
 
 @admin_router.post(

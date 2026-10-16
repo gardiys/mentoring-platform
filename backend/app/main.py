@@ -69,6 +69,7 @@ from app.opportunities.python_repeat_router import admin_router as admin_python_
 from app.opportunities.python_repeat_router import router as python_repeat_router
 from app.opportunities.router import admin_router as admin_opportunities_router
 from app.opportunities.router import router as opportunities_router
+from app.opportunities.workspace_router import router as opportunity_workspace_router
 from app.payments.router import (
     admin_router as admin_payments_router,
 )
@@ -176,6 +177,7 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     application.include_router(legal_admin_router, prefix="/api/v1")
     application.include_router(opportunities_router, prefix="/api/v1")
     application.include_router(admin_opportunities_router, prefix="/api/v1")
+    application.include_router(opportunity_workspace_router, prefix="/api/v1")
     application.include_router(python_repeat_router, prefix="/api/v1")
     application.include_router(admin_python_repeat_router, prefix="/api/v1")
     application.include_router(mentor_profile_router, prefix="/api/v1")

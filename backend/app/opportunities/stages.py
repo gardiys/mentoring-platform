@@ -148,14 +148,24 @@ def stage_rows(at: datetime) -> Subquery:
     last_status = (
         select(P.status)
         .where(P.consultation_request_id == C.id)
-        .order_by(P.created_at.desc(), P.id.desc())
+        .order_by(
+            (P.status == "manual_review").desc(),
+            (P.status == "approved").desc(),
+            P.created_at.desc(),
+            P.id.desc(),
+        )
         .limit(1)
         .scalar_subquery()
     )
     last_date = (
         select(P.created_at)
         .where(P.consultation_request_id == C.id)
-        .order_by(P.created_at.desc(), P.id.desc())
+        .order_by(
+            (P.status == "manual_review").desc(),
+            (P.status == "approved").desc(),
+            P.created_at.desc(),
+            P.id.desc(),
+        )
         .limit(1)
         .scalar_subquery()
     )

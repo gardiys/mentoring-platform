@@ -2239,13 +2239,8 @@ export interface AdminConsultationMentor extends OpportunityMentor {
 export interface AdminGoTransitionRead extends GoTransitionApplicationRead {
   student: AdminOpportunityStudent;
 }
-export interface AdminOpportunitiesDashboard {
-  consultation_types: OpportunitiesDashboard["consultation_types"];
-  go_transition_description_markdown: string;
-  consultation_mentors: AdminConsultationMentor[];
-  consultations: AdminConsultationRead[];
-  go_transition_applications: AdminGoTransitionRead[];
-}
+export type AdminOpportunitiesSettings = Schemas["WorkspaceSettings"];
+
 export interface OpportunityPaymentLink {
   payment_url: string;
   payment_link_id: string;

@@ -5774,23 +5774,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/opportunities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Admin Opportunities */
-        get: operations["list_admin_opportunities_api_v1_admin_opportunities_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/opportunities/consultation-types/{consultation_type}": {
         parameters: {
             query?: never;
@@ -5842,40 +5825,6 @@ export interface paths {
         patch: operations["update_go_transition_program_api_v1_admin_opportunities_go_transition_program_patch"];
         trace?: never;
     };
-    "/api/v1/admin/opportunities/consultations/{request_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update Consultation */
-        patch: operations["update_consultation_api_v1_admin_opportunities_consultations__request_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/admin/opportunities/go-transition/{application_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Decide Transition */
-        patch: operations["decide_transition_api_v1_admin_opportunities_go_transition__application_id__patch"];
-        trace?: never;
-    };
     "/api/v1/admin/opportunities/payments/{attempt_id}/confirm": {
         parameters: {
             query?: never;
@@ -5891,6 +5840,363 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inbox */
+        get: operations["inbox_api_v1_admin_opportunities_inbox_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Settings */
+        get: operations["settings_api_v1_admin_opportunities_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/consultations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultations */
+        get: operations["consultations_api_v1_admin_opportunities_consultations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/go-transition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Go Applications */
+        get: operations["go_applications_api_v1_admin_opportunities_go_transition_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/python-repeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Repeat Applications */
+        get: operations["repeat_applications_api_v1_admin_opportunities_python_repeat_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/consultations/{resource_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultation */
+        get: operations["consultation_api_v1_admin_opportunities_consultations__resource_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/go-transition/{resource_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Go Application */
+        get: operations["go_application_api_v1_admin_opportunities_go_transition__resource_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/python-repeat/{resource_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Repeat Application */
+        get: operations["repeat_application_api_v1_admin_opportunities_python_repeat__resource_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/consultations/{resource_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Consultation */
+        post: operations["approve_consultation_api_v1_admin_opportunities_consultations__resource_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/consultations/{resource_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Consultation */
+        post: operations["reject_consultation_api_v1_admin_opportunities_consultations__resource_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/consultations/{resource_id}/mentor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change Consultation Mentor */
+        post: operations["change_consultation_mentor_api_v1_admin_opportunities_consultations__resource_id__mentor_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/consultations/{resource_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Schedule Consultation */
+        post: operations["schedule_consultation_api_v1_admin_opportunities_consultations__resource_id__schedule_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/consultations/{resource_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Consultation */
+        post: operations["complete_consultation_api_v1_admin_opportunities_consultations__resource_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/consultations/{resource_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit Consultation Summary */
+        patch: operations["edit_consultation_summary_api_v1_admin_opportunities_consultations__resource_id__summary_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/consultations/{resource_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Consultation */
+        post: operations["cancel_consultation_api_v1_admin_opportunities_consultations__resource_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/consultations/{resource_id}/internal-note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Consultation Internal Note */
+        patch: operations["consultation_internal_note_api_v1_admin_opportunities_consultations__resource_id__internal_note_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/go-transition/{resource_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Go */
+        post: operations["approve_go_api_v1_admin_opportunities_go_transition__resource_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/go-transition/{resource_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Go */
+        post: operations["reject_go_api_v1_admin_opportunities_go_transition__resource_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/go-transition/{resource_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Go */
+        post: operations["cancel_go_api_v1_admin_opportunities_go_transition__resource_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/go-transition/{resource_id}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Extend Go */
+        post: operations["extend_go_api_v1_admin_opportunities_go_transition__resource_id__extend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/opportunities/go-transition/{resource_id}/internal-note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Go Internal Note */
+        patch: operations["go_internal_note_api_v1_admin_opportunities_go_transition__resource_id__internal_note_patch"];
         trace?: never;
     };
     "/api/v1/opportunities/python-repeat": {
@@ -6108,23 +6414,6 @@ export interface paths {
         put?: never;
         /** Development Refund Python Repeat Payment */
         post: operations["development_refund_python_repeat_payment_api_v1_opportunities_python_repeat_development_installments__installment_id__refund_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/opportunities/python-repeat": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Python Repeat Applications */
-        get: operations["list_python_repeat_applications_api_v1_admin_opportunities_python_repeat_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6518,41 +6807,16 @@ export interface components {
              */
             created_at: string;
         };
-        /** AdminConsultationMentorMutation */
-        AdminConsultationMentorMutation: {
-            /** Is Enabled */
-            is_enabled: boolean;
-        };
-        /** AdminConsultationMentorRead */
-        AdminConsultationMentorRead: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** First Name */
-            first_name: string;
-            /** Last Name */
-            last_name: string | null;
-            /** Telegram Username */
-            telegram_username: string | null;
-            /** Is Enabled */
-            is_enabled: boolean;
-        };
-        /** AdminConsultationMutation */
-        AdminConsultationMutation: {
-            status: components["schemas"]["ConsultationStatus"];
-            /** Mentor Id */
-            mentor_id?: string | null;
-            /** Scheduled At */
-            scheduled_at?: string | null;
-            /** Admin Note */
-            admin_note?: string | null;
-            /** Written Summary */
-            written_summary?: string | null;
-        };
-        /** AdminConsultationRead */
-        AdminConsultationRead: {
+        /** AdminConsultationDetail */
+        AdminConsultationDetail: {
+            /** Stage */
+            stage: string;
+            /** Next Action */
+            next_action: string;
+            /** Waiting Since */
+            waiting_since: string | null;
+            /** Overdue */
+            overdue: boolean;
             /**
              * Id
              * Format: uuid
@@ -6585,6 +6849,47 @@ export interface components {
             student: components["schemas"]["AdminOpportunityStudentRead"];
             /** Mentor Reward Kopecks */
             mentor_reward_kopecks: number;
+            /** Available Mentors */
+            available_mentors?: components["schemas"]["MentorOptionRead"][];
+            requested_mentor?: components["schemas"]["MentorOptionRead"] | null;
+            /**
+             * Requested Mentor Known
+             * @default false
+             */
+            requested_mentor_known: boolean;
+            /** Internal Note */
+            internal_note: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            last_payment: components["schemas"]["WorkspacePaymentRead"] | null;
+            /** History */
+            history: components["schemas"]["WorkspaceHistoryRead"][];
+            /** Refund Required */
+            refund_required?: boolean | null;
+        };
+        /** AdminConsultationMentorMutation */
+        AdminConsultationMentorMutation: {
+            /** Is Enabled */
+            is_enabled: boolean;
+        };
+        /** AdminConsultationMentorRead */
+        AdminConsultationMentorRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string | null;
+            /** Telegram Username */
+            telegram_username: string | null;
+            /** Is Enabled */
+            is_enabled: boolean;
         };
         /** AdminConsultationTypeMutation */
         AdminConsultationTypeMutation: {
@@ -6602,13 +6907,16 @@ export interface components {
          * @enum {string}
          */
         AdminEmploymentPaymentStatus: "outstanding" | "paid" | "all";
-        /** AdminGoTransitionProgramMutation */
-        AdminGoTransitionProgramMutation: {
-            /** Description Markdown */
-            description_markdown: string;
-        };
-        /** AdminGoTransitionRead */
-        AdminGoTransitionRead: {
+        /** AdminGoTransitionDetail */
+        AdminGoTransitionDetail: {
+            /** Stage */
+            stage: string;
+            /** Next Action */
+            next_action: string;
+            /** Waiting Since */
+            waiting_since: string | null;
+            /** Overdue */
+            overdue: boolean;
             /**
              * Id
              * Format: uuid
@@ -6647,6 +6955,23 @@ export interface components {
              */
             created_at: string;
             student: components["schemas"]["AdminOpportunityStudentRead"];
+            /** Internal Note */
+            internal_note: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            last_payment: components["schemas"]["WorkspacePaymentRead"] | null;
+            /** Payment Block Reason */
+            payment_block_reason: string | null;
+            /** History */
+            history: components["schemas"]["WorkspaceHistoryRead"][];
+        };
+        /** AdminGoTransitionProgramMutation */
+        AdminGoTransitionProgramMutation: {
+            /** Description Markdown */
+            description_markdown: string;
         };
         /** AdminIntelligenceOperationsRead */
         AdminIntelligenceOperationsRead: {
@@ -7341,19 +7666,6 @@ export interface components {
             /** Title */
             title: string;
         };
-        /** AdminOpportunitiesDashboard */
-        AdminOpportunitiesDashboard: {
-            /** Consultation Types */
-            consultation_types: components["schemas"]["ConsultationTypeRead"][];
-            /** Go Transition Description Markdown */
-            go_transition_description_markdown: string;
-            /** Consultation Mentors */
-            consultation_mentors: components["schemas"]["AdminConsultationMentorRead"][];
-            /** Consultations */
-            consultations: components["schemas"]["AdminConsultationRead"][];
-            /** Go Transition Applications */
-            go_transition_applications: components["schemas"]["AdminGoTransitionRead"][];
-        };
         /** AdminOpportunityStudentRead */
         AdminOpportunityStudentRead: {
             /**
@@ -7615,6 +7927,120 @@ export interface components {
             /** Mentors */
             mentors: components["schemas"]["AdminPythonRepeatStudentRead"][];
         };
+        /** AdminPythonRepeatDetail */
+        AdminPythonRepeatDetail: {
+            /** Stage */
+            stage: string;
+            /** Next Action */
+            next_action: string;
+            /** Waiting Since */
+            waiting_since: string | null;
+            /** Overdue */
+            overdue: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Student Id
+             * Format: uuid
+             */
+            student_id: string;
+            employment_status: components["schemas"]["PythonRepeatEmploymentStatus"];
+            reason: components["schemas"]["PythonRepeatReason"];
+            /** Current Position */
+            current_position: string | null;
+            /** Current Company */
+            current_company: string | null;
+            /** Current Stack */
+            current_stack: string | null;
+            /** Last Interview At */
+            last_interview_at: string | null;
+            /** Target Position */
+            target_position: string;
+            /** Target Salary Kopecks */
+            target_salary_kopecks: number | null;
+            /** Technical Gaps */
+            technical_gaps: string;
+            /** Hours Per Week */
+            hours_per_week: number;
+            /** Desired Start Date */
+            desired_start_date: string | null;
+            search_mode: components["schemas"]["PythonRepeatSearchMode"];
+            /** Additional Comment */
+            additional_comment: string | null;
+            status: components["schemas"]["PythonRepeatApplicationStatus"];
+            /** Responsible User Id */
+            responsible_user_id: string | null;
+            /** Eligibility Override Reason */
+            eligibility_override_reason: string | null;
+            /** Admin Comment */
+            admin_comment: string | null;
+            /** Terms Version */
+            terms_version: number | null;
+            /** Terms Snapshot */
+            terms_snapshot: {
+                [key: string]: unknown;
+            } | null;
+            /** Approved At */
+            approved_at: string | null;
+            /** Offer Expires At */
+            offer_expires_at: string | null;
+            /** Accepted At */
+            accepted_at: string | null;
+            /** Acceptance Evidence */
+            acceptance_evidence: {
+                [key: string]: unknown;
+            } | null;
+            /** Contract Accepted At */
+            contract_accepted_at: string | null;
+            /** Acceptance Payment Link Id */
+            acceptance_payment_link_id: string | null;
+            /** Acceptance Provider Operation Id */
+            acceptance_provider_operation_id: string | null;
+            /** Paid At */
+            paid_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * History
+             * @default []
+             */
+            history: components["schemas"]["PythonRepeatStatusHistoryRead"][];
+            student: components["schemas"]["AdminPythonRepeatStudentRead"];
+            eligibility: components["schemas"]["PythonRepeatEligibilityRead"];
+            enrollment?: components["schemas"]["PythonRepeatEnrollmentRead"] | null;
+            /**
+             * Offers
+             * @default []
+             */
+            offers: components["schemas"]["PythonRepeatOfferRead"][];
+            obligation?: components["schemas"]["PythonRepeatObligationRead"] | null;
+            /**
+             * Revenue Received Kopecks
+             * @default 0
+             */
+            revenue_received_kopecks: number;
+            /**
+             * Mentor Accrued Kopecks
+             * @default 0
+             */
+            mentor_accrued_kopecks: number;
+            /**
+             * Mentor Paid Kopecks
+             * @default 0
+             */
+            mentor_paid_kopecks: number;
+            /**
+             * Gross Remainder Kopecks
+             * @default 0
+             */
+            gross_remainder_kopecks: number;
+        };
         /** AdminPythonRepeatMentorAssignment */
         AdminPythonRepeatMentorAssignment: {
             /**
@@ -7656,7 +8082,10 @@ export interface components {
         /** AdminPythonRepeatTransition */
         AdminPythonRepeatTransition: {
             status: components["schemas"]["PythonRepeatApplicationStatus"];
-            /** Comment */
+            /**
+             * Comment
+             * @default
+             */
             comment: string;
             /** Responsible User Id */
             responsible_user_id?: string | null;
@@ -8570,13 +8999,6 @@ export interface components {
             email: string | null;
             /** Telegram Id */
             telegram_id: number | null;
-        };
-        /** AdminTransitionMutation */
-        AdminTransitionMutation: {
-            /** Approved */
-            approved: boolean;
-            /** Admin Note */
-            admin_note?: string | null;
         };
         /** AnswerContract */
         AnswerContract: {
@@ -9735,6 +10157,30 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** ConsultationApproveCommand */
+        ConsultationApproveCommand: {
+            /**
+             * Mentor Id
+             * Format: uuid
+             */
+            mentor_id: string;
+            /** Message To Student */
+            message_to_student?: string | null;
+        };
+        /** ConsultationCancelCommand */
+        ConsultationCancelCommand: {
+            /** Reason */
+            reason: string;
+            /** Refund Required */
+            refund_required?: boolean | null;
+        };
+        /** ConsultationCompleteCommand */
+        ConsultationCompleteCommand: {
+            /** Written Summary */
+            written_summary: string;
+            /** Held At */
+            held_at?: string | null;
+        };
         /** ConsultationCreate */
         ConsultationCreate: {
             /** Mentor Id */
@@ -9775,11 +10221,24 @@ export interface components {
              */
             created_at: string;
         };
+        /** ConsultationScheduleCommand */
+        ConsultationScheduleCommand: {
+            /**
+             * Scheduled At
+             * Format: date-time
+             */
+            scheduled_at: string;
+        };
         /**
          * ConsultationStatus
          * @enum {string}
          */
         ConsultationStatus: "requested" | "payment_pending" | "paid" | "scheduled" | "completed" | "cancelled";
+        /** ConsultationSummaryCommand */
+        ConsultationSummaryCommand: {
+            /** Written Summary */
+            written_summary: string;
+        };
         /**
          * ConsultationType
          * @enum {string}
@@ -10775,6 +11234,11 @@ export interface components {
             /** Idempotency Key */
             idempotency_key: string;
         };
+        /** GoApproveCommand */
+        GoApproveCommand: {
+            /** Message To Student */
+            message_to_student?: string | null;
+        };
         /** GoTransitionCreate */
         GoTransitionCreate: {
             /** Motivation */
@@ -11575,6 +12039,11 @@ export interface components {
             end_ms: number;
             /** Text */
             text: string;
+        };
+        /** InternalNoteCommand */
+        InternalNoteCommand: {
+            /** Internal Note */
+            internal_note?: string | null;
         };
         /** InterviewAIOptions */
         InterviewAIOptions: {
@@ -12713,6 +13182,14 @@ export interface components {
          * @enum {string}
          */
         MentorAnalyticsPeriod: "week" | "month" | "all";
+        /** MentorCommand */
+        MentorCommand: {
+            /**
+             * Mentor Id
+             * Format: uuid
+             */
+            mentor_id: string;
+        };
         /** MentorCurrentTopic */
         MentorCurrentTopic: {
             /**
@@ -15354,6 +15831,11 @@ export interface components {
              */
             previous_contract: string;
         };
+        /** ReasonCommand */
+        ReasonCommand: {
+            /** Reason */
+            reason: string;
+        };
         /** RecruiterCompanyGroupRead */
         RecruiterCompanyGroupRead: {
             company: components["schemas"]["RecruiterContactCompanyRead"];
@@ -16122,6 +16604,100 @@ export interface components {
         WebhookResult: {
             /** Status */
             status: string;
+        };
+        /** WorkspaceHistoryRead */
+        WorkspaceHistoryRead: {
+            /** Id */
+            id?: string | null;
+            /** Old Status */
+            old_status?: string | null;
+            /** New Status */
+            new_status: string;
+            /** Actor User Id */
+            actor_user_id?: string | null;
+            /** Actor Name */
+            actor_name?: string | null;
+            /** Comment */
+            comment?: string | null;
+            /** Snapshot */
+            snapshot?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** WorkspaceItem */
+        WorkspaceItem: {
+            /** Stage */
+            stage: string;
+            /** Next Action */
+            next_action: string;
+            /** Waiting Since */
+            waiting_since: string | null;
+            /** Overdue */
+            overdue: boolean;
+            /**
+             * Product
+             * @enum {string}
+             */
+            product: "consultations" | "go_transition" | "python_repeat";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            student: components["schemas"]["AdminOpportunityStudentRead"];
+            /** Title */
+            title: string;
+            /** Status */
+            status: string;
+            /** Key Date */
+            key_date: string | null;
+            /** Amount Kopecks */
+            amount_kopecks?: number | null;
+            mentor?: components["schemas"]["MentorOptionRead"] | null;
+        };
+        /** WorkspacePage */
+        WorkspacePage: {
+            /** Items */
+            items: components["schemas"]["WorkspaceItem"][];
+            /** Total */
+            total: number;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
+        /** WorkspacePaymentRead */
+        WorkspacePaymentRead: {
+            /**
+             * Attempt Id
+             * Format: uuid
+             */
+            attempt_id: string;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** WorkspaceSettings */
+        WorkspaceSettings: {
+            /** Consultation Types */
+            consultation_types: components["schemas"]["ConsultationTypeRead"][];
+            /** Consultation Mentors */
+            consultation_mentors: components["schemas"]["AdminConsultationMentorRead"][];
+            /** Go Transition Description Markdown */
+            go_transition_description_markdown: string;
         };
     };
     responses: never;
@@ -30430,40 +31006,6 @@ export interface operations {
             };
         };
     };
-    list_admin_opportunities_api_v1_admin_opportunities_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                mentoring_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminOpportunitiesDashboard"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     update_consultation_type_api_v1_admin_opportunities_consultation_types__consultation_type__patch: {
         parameters: {
             query?: never;
@@ -30490,7 +31032,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdminOpportunitiesDashboard"];
+                    "application/json": components["schemas"]["WorkspaceSettings"];
                 };
             };
             /** @description Validation Error */
@@ -30530,7 +31072,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdminOpportunitiesDashboard"];
+                    "application/json": components["schemas"]["WorkspaceSettings"];
                 };
             };
             /** @description Validation Error */
@@ -30568,87 +31110,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdminOpportunitiesDashboard"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_consultation_api_v1_admin_opportunities_consultations__request_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path: {
-                request_id: string;
-            };
-            cookie?: {
-                mentoring_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AdminConsultationMutation"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminOpportunitiesDashboard"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    decide_transition_api_v1_admin_opportunities_go_transition__application_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path: {
-                application_id: string;
-            };
-            cookie?: {
-                mentoring_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AdminTransitionMutation"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminOpportunitiesDashboard"];
+                    "application/json": components["schemas"]["WorkspaceSettings"];
                 };
             };
             /** @description Validation Error */
@@ -30684,7 +31146,827 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdminOpportunitiesDashboard"];
+                    "application/json": components["schemas"]["AdminConsultationDetail"] | components["schemas"]["AdminGoTransitionDetail"] | components["schemas"]["AdminPythonRepeatDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inbox_api_v1_admin_opportunities_inbox_get: {
+        parameters: {
+            query?: {
+                product?: ("consultations" | "go_transition" | "python_repeat") | null;
+                q?: string;
+                stage?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspacePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_api_v1_admin_opportunities_settings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    consultations_api_v1_admin_opportunities_consultations_get: {
+        parameters: {
+            query?: {
+                group?: "active" | "needs_action" | "waiting" | "completed" | "cancelled" | "all";
+                q?: string;
+                mentor_id?: string | null;
+                consultation_type?: components["schemas"]["ConsultationType"] | null;
+                stage?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspacePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    go_applications_api_v1_admin_opportunities_go_transition_get: {
+        parameters: {
+            query?: {
+                group?: "active" | "needs_action" | "waiting" | "completed" | "cancelled" | "all";
+                q?: string;
+                stage?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspacePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    repeat_applications_api_v1_admin_opportunities_python_repeat_get: {
+        parameters: {
+            query?: {
+                group?: "active" | "needs_action" | "waiting" | "completed" | "cancelled" | "all";
+                q?: string;
+                stage?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspacePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    consultation_api_v1_admin_opportunities_consultations__resource_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminConsultationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    go_application_api_v1_admin_opportunities_go_transition__resource_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGoTransitionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    repeat_application_api_v1_admin_opportunities_python_repeat__resource_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPythonRepeatDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_consultation_api_v1_admin_opportunities_consultations__resource_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsultationApproveCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminConsultationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_consultation_api_v1_admin_opportunities_consultations__resource_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminConsultationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_consultation_mentor_api_v1_admin_opportunities_consultations__resource_id__mentor_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MentorCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminConsultationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    schedule_consultation_api_v1_admin_opportunities_consultations__resource_id__schedule_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsultationScheduleCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminConsultationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_consultation_api_v1_admin_opportunities_consultations__resource_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsultationCompleteCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminConsultationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_consultation_summary_api_v1_admin_opportunities_consultations__resource_id__summary_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsultationSummaryCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminConsultationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_consultation_api_v1_admin_opportunities_consultations__resource_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsultationCancelCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminConsultationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    consultation_internal_note_api_v1_admin_opportunities_consultations__resource_id__internal_note_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InternalNoteCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminConsultationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_go_api_v1_admin_opportunities_go_transition__resource_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoApproveCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGoTransitionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_go_api_v1_admin_opportunities_go_transition__resource_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGoTransitionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_go_api_v1_admin_opportunities_go_transition__resource_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGoTransitionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extend_go_api_v1_admin_opportunities_go_transition__resource_id__extend_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGoTransitionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    go_internal_note_api_v1_admin_opportunities_go_transition__resource_id__internal_note_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                resource_id: string;
+            };
+            cookie?: {
+                mentoring_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InternalNoteCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGoTransitionDetail"];
                 };
             };
             /** @description Validation Error */
@@ -31165,40 +32447,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PythonRepeatDashboard"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_python_repeat_applications_api_v1_admin_opportunities_python_repeat_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                mentoring_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminPythonRepeatDashboard"];
                 };
             };
             /** @description Validation Error */

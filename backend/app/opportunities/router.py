@@ -2,21 +2,25 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import AdminUser, CurrentUser, StudentUser
+from app.core.errors import api_error
 from app.db.session import get_db_session
 from app.legal.schemas import CheckoutConfirmation
 from app.legal.service import checkout_payment_link
-from app.opportunities.models import ConsultationType
+from app.opportunities.models import (
+    ConsultationType,
+    PythonRepeatEnrollment,
+    PythonRepeatInstallment,
+    PythonRepeatSuccessFeeObligation,
+)
 from app.opportunities.notifications import opportunity_summary
 from app.opportunities.schemas import (
     AdminConsultationMentorMutation,
-    AdminConsultationMutation,
     AdminConsultationTypeMutation,
     AdminGoTransitionProgramMutation,
-    AdminOpportunitiesDashboard,
-    AdminTransitionMutation,
     ConsultationCreate,
     GoTransitionCreate,
     GoTransitionTermsAcceptance,
@@ -26,10 +30,7 @@ from app.opportunities.schemas import (
 from app.opportunities.service import (
     accept_go_transition,
     admin_confirm_opportunity_payment,
-    admin_dashboard,
-    admin_decide_transition,
     admin_set_consultation_mentor,
-    admin_update_consultation,
     admin_update_consultation_type,
     admin_update_go_transition_program,
     consultation_payment_link,
@@ -38,7 +39,14 @@ from app.opportunities.service import (
     development_complete_payment,
     opportunities_dashboard,
 )
-from app.opportunities.workspace_schemas import OpportunitySummary
+from app.opportunities.workspace_reads import consultation_detail, go_detail, repeat_detail
+from app.opportunities.workspace_schemas import (
+    AdminConsultationDetail,
+    AdminGoTransitionDetail,
+    AdminPythonRepeatDetail,
+    OpportunitySummary,
+    WorkspaceSettings,
+)
 
 Session = Annotated[AsyncSession, Depends(get_db_session)]
 router = APIRouter(prefix="/opportunities", tags=["opportunities"])
@@ -124,23 +132,16 @@ async def complete_development_payment(
     return await development_complete_payment(session, student, payment_link_id)
 
 
-@admin_router.get("", response_model=AdminOpportunitiesDashboard)
-async def list_admin_opportunities(
-    session: Session, _admin: AdminUser
-) -> AdminOpportunitiesDashboard:
-    return await admin_dashboard(session)
-
-
 @admin_router.patch(
     "/consultation-types/{consultation_type}",
-    response_model=AdminOpportunitiesDashboard,
+    response_model=WorkspaceSettings,
 )
 async def update_consultation_type(
     consultation_type: ConsultationType,
     payload: AdminConsultationTypeMutation,
     session: Session,
     admin: AdminUser,
-) -> AdminOpportunitiesDashboard:
+) -> WorkspaceSettings:
     return await admin_update_consultation_type(
         session,
         admin,
@@ -151,14 +152,14 @@ async def update_consultation_type(
 
 @admin_router.patch(
     "/consultation-mentors/{mentor_id}",
-    response_model=AdminOpportunitiesDashboard,
+    response_model=WorkspaceSettings,
 )
 async def set_consultation_mentor(
     mentor_id: UUID,
     payload: AdminConsultationMentorMutation,
     session: Session,
     admin: AdminUser,
-) -> AdminOpportunitiesDashboard:
+) -> WorkspaceSettings:
     return await admin_set_consultation_mentor(
         session,
         admin,
@@ -169,44 +170,42 @@ async def set_consultation_mentor(
 
 @admin_router.patch(
     "/go-transition-program",
-    response_model=AdminOpportunitiesDashboard,
+    response_model=WorkspaceSettings,
 )
 async def update_go_transition_program(
     payload: AdminGoTransitionProgramMutation,
     session: Session,
     admin: AdminUser,
-) -> AdminOpportunitiesDashboard:
+) -> WorkspaceSettings:
     return await admin_update_go_transition_program(session, admin, payload)
 
 
-@admin_router.patch("/consultations/{request_id}", response_model=AdminOpportunitiesDashboard)
-async def update_consultation(
-    request_id: UUID,
-    payload: AdminConsultationMutation,
-    session: Session,
-    _admin: AdminUser,
-) -> AdminOpportunitiesDashboard:
-    return await admin_update_consultation(session, request_id, payload)
-
-
-@admin_router.patch("/go-transition/{application_id}", response_model=AdminOpportunitiesDashboard)
-async def decide_transition(
-    application_id: UUID,
-    payload: AdminTransitionMutation,
-    session: Session,
-    admin: AdminUser,
-) -> AdminOpportunitiesDashboard:
-    return await admin_decide_transition(
-        session,
-        admin,
-        application_id,
-        approved=payload.approved,
-        admin_note=payload.admin_note,
-    )
-
-
-@admin_router.post("/payments/{attempt_id}/confirm", response_model=AdminOpportunitiesDashboard)
+@admin_router.post(
+    "/payments/{attempt_id}/confirm",
+    response_model=AdminConsultationDetail | AdminGoTransitionDetail | AdminPythonRepeatDetail,
+)
 async def confirm_opportunity_payment(
     attempt_id: UUID, session: Session, _admin: AdminUser
-) -> AdminOpportunitiesDashboard:
-    return await admin_confirm_opportunity_payment(session, attempt_id)
+) -> AdminConsultationDetail | AdminGoTransitionDetail | AdminPythonRepeatDetail:
+    attempt = await admin_confirm_opportunity_payment(session, attempt_id)
+    if attempt.consultation_request_id:
+        return await consultation_detail(session, attempt.consultation_request_id)
+    if attempt.transition_application_id:
+        return await go_detail(session, attempt.transition_application_id)
+    application_id = attempt.python_repeat_application_id
+    if application_id is None:
+        application_id = await session.scalar(
+            select(PythonRepeatEnrollment.application_id)
+            .join(
+                PythonRepeatSuccessFeeObligation,
+                PythonRepeatSuccessFeeObligation.enrollment_id == PythonRepeatEnrollment.id,
+            )
+            .join(
+                PythonRepeatInstallment,
+                PythonRepeatInstallment.obligation_id == PythonRepeatSuccessFeeObligation.id,
+            )
+            .where(PythonRepeatInstallment.id == attempt.python_repeat_installment_id)
+        )
+    if application_id is None:
+        api_error(404, "application_not_found", "Заявка не найдена")
+    return await repeat_detail(session, application_id)

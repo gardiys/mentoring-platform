@@ -129,31 +129,6 @@ class OpportunityPaymentLinkRead(BaseModel):
     payment_link_id: str
 
 
-class AdminConsultationMutation(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-    status: ConsultationStatus
-    mentor_id: UUID | None = None
-    scheduled_at: datetime | None = None
-    admin_note: str | None = Field(default=None, max_length=5000)
-    written_summary: str | None = Field(default=None, max_length=10000)
-
-    @model_validator(mode="after")
-    def scheduled_requires_date(self) -> AdminConsultationMutation:
-        if self.status is ConsultationStatus.SCHEDULED and self.scheduled_at is None:
-            raise ValueError("Scheduled consultation requires a date")
-        if self.status is ConsultationStatus.COMPLETED and (
-            not self.written_summary or len(self.written_summary) < 10
-        ):
-            raise ValueError("Completed consultation requires a written summary")
-        return self
-
-
-class AdminTransitionMutation(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-    approved: bool
-    admin_note: str | None = Field(default=None, max_length=5000)
-
-
 class AdminOpportunityStudentRead(BaseModel):
     id: UUID
     first_name: str
@@ -197,11 +172,3 @@ class AdminConsultationRead(ConsultationRead):
 
 class AdminGoTransitionRead(GoTransitionRead):
     student: AdminOpportunityStudentRead
-
-
-class AdminOpportunitiesDashboard(BaseModel):
-    consultation_types: list[ConsultationTypeRead]
-    go_transition_description_markdown: str
-    consultation_mentors: list[AdminConsultationMentorRead]
-    consultations: list[AdminConsultationRead]
-    go_transition_applications: list[AdminGoTransitionRead]

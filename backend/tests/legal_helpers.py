@@ -89,10 +89,10 @@ async def approved_application(client: AsyncClient, seeded, product: str) -> str
         )
         assert response.status_code == 200, response.text
         application_id = response.json()["go_transition_applications"][0]["id"]
-        response = await client.patch(
-            f"/api/v1/admin/opportunities/go-transition/{application_id}",
+        response = await client.post(
+            f"/api/v1/admin/opportunities/go-transition/{application_id}/approve",
             headers=auth(seeded.admin_id),
-            json={"approved": True},
+            json={},
         )
     else:
         await _seed_python_repeat_product()

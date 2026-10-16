@@ -6,7 +6,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, true
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +14,6 @@ from app.core.config import get_settings
 from app.core.errors import api_error
 from app.mentors.models import MentorStudent, StudentLearningStatus
 from app.notifications.models import NotificationKind
-from app.notifications.service import create_notification
 from app.opportunities.models import (
     GoTransitionApplication,
     GoTransitionStatus,
@@ -33,7 +32,7 @@ from app.opportunities.models import (
     PythonRepeatProductOffer,
     PythonRepeatSuccessFeeObligation,
 )
-from app.opportunities.notifications import mark_payment_for_review, notify_admins
+from app.opportunities.notifications import mark_payment_for_review, notify_admins, notify_user
 from app.opportunities.python_repeat_schemas import (
     AdminPythonRepeatApplicationRead,
     AdminPythonRepeatDashboard,
@@ -387,16 +386,18 @@ async def _notify_student(
     actor_id: UUID | None = None,
     kind: NotificationKind = NotificationKind.STATUS_CHANGED,
 ) -> None:
-    await create_notification(
-        session,
-        user_id=student_id,
-        actor_user_id=actor_id,
-        event_key=event_key,
-        kind=kind,
-        title=title,
-        body=body,
-        action_url="/opportunities/alumni/python-repeat",
-    )
+    student = await session.get(User, student_id)
+    if student:
+        await notify_user(
+            session,
+            student,
+            event_key=event_key,
+            title=title,
+            body=body,
+            link="/opportunities/alumni/python-repeat",
+            actor_id=actor_id,
+            kind=kind,
+        )
 
 
 async def _transition(
@@ -1307,7 +1308,7 @@ async def admin_transition_application(
         item.terms_snapshot = _product_snapshot(product)
         item.approved_at = _now()
         item.offer_expires_at = item.approved_at + timedelta(days=product.offer_valid_days)
-    item.admin_comment = payload.comment
+    item.admin_comment = payload.comment or None
     item.responsible_user_id = payload.responsible_user_id or item.responsible_user_id or admin.id
     await _transition(session, item, payload.status, admin.id, comment=payload.comment)
     status_titles = {
@@ -1324,7 +1325,7 @@ async def admin_transition_application(
             student_id=item.student_id,
             event_key=f"python-repeat-application-status:{item.id}:{payload.status.value}",
             title=status_titles[payload.status],
-            body=payload.comment or "Статус заявки обновлён администратором.",
+            body=payload.comment or status_titles[payload.status],
             actor_id=admin.id,
         )
     await session.commit()
@@ -1484,10 +1485,18 @@ async def _obligation_read(
     )
 
 
-async def admin_dashboard(session: AsyncSession) -> AdminPythonRepeatDashboard:
+async def admin_dashboard(
+    session: AsyncSession, *, application_ids: list[UUID] | None = None
+) -> AdminPythonRepeatDashboard:
     applications = list(
         await session.scalars(
             select(PythonRepeatApplication)
+            .where(
+                PythonRepeatApplication.status != PythonRepeatApplicationStatus.DRAFT,
+                PythonRepeatApplication.id.in_(application_ids)
+                if application_ids is not None
+                else true(),
+            )
             .order_by(PythonRepeatApplication.created_at.desc())
             .limit(200)
         )
