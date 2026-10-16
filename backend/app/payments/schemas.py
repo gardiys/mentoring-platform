@@ -52,6 +52,7 @@ class EmploymentMutation(BaseModel):
     company_id: UUID | None = None
     start_date: date
     net_salary_rubles: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    contract_billing_confirmed: bool = False
 
 
 class EmploymentTerminationMutation(BaseModel):
@@ -134,6 +135,17 @@ class PaymentSummaryRead(BaseModel):
     remaining_salary_percent: Decimal
 
 
+class PaymentObligationRead(BaseModel):
+    id: UUID
+    contract_id: UUID | None
+    contract_number: str | None
+    contract_status: str | None = None
+    title: str
+    repayment_percent: Decimal
+    employment_ids: list[UUID]
+    summary: PaymentSummaryRead
+
+
 class StudentPaymentDashboard(BaseModel):
     student_id: UUID
     student_name: str
@@ -145,6 +157,8 @@ class StudentPaymentDashboard(BaseModel):
     summary: PaymentSummaryRead
     can_manage_employment: bool = False
     can_manage_payment_days: bool = False
+    obligation: PaymentObligationRead | None = None
+    obligations: list[PaymentObligationRead] = Field(default_factory=list)
 
 
 class PaymentLinkRead(BaseModel):

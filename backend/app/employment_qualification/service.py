@@ -244,6 +244,14 @@ async def _latest_policy(
 async def report_offer(
     session: AsyncSession, student: User, payload: EmploymentOfferReport
 ) -> EmploymentCaseRead:
+    from app.payments.obligations import (
+        complete_paid_previous_employment,
+        go_obligation,
+        legacy_obligation,
+        remaining_percent,
+    )
+
+    await session.scalar(select(User).where(User.id == student.id).with_for_update())
     await _student_has_track(session, student.id, payload.track_id)
     await _direction_for_track(session, payload.track_id)
     existing_event = await session.scalar(
@@ -252,6 +260,10 @@ async def report_offer(
     if existing_event is not None:
         existing_case = await _case_for_actor(session, student, existing_event.employment_id)
         return await case_read(session, existing_case)
+    obligation = await go_obligation(session, student.id, track_id=payload.track_id)
+    if obligation is None:
+        obligation = await legacy_obligation(session, student)
+    await complete_paid_previous_employment(session, obligation)
     active = await session.scalar(
         select(StudentEmployment).where(
             StudentEmployment.student_id == student.id,
@@ -272,8 +284,14 @@ async def report_offer(
     if company is None:
         api_error(422, "employment_company_not_found", "Employer was not found")
     policy = await _latest_policy(session, student.id, payload.track_id)
+    remaining = await remaining_percent(session, obligation)
+    if remaining <= 0:
+        api_error(
+            409, "repayment_obligation_fulfilled", "Обязательство по этому договору уже погашено"
+        )
     case = StudentEmployment(
         student_id=student.id,
+        obligation_id=obligation.id,
         company_id=company.id,
         company_name=company.name,
         track_id=payload.track_id,
@@ -285,7 +303,7 @@ async def report_offer(
             if payload.net_salary_rubles is not None
             else None
         ),
-        repayment_percent=student.repayment_percent,
+        repayment_percent=remaining,
         status=StudentEmploymentStatus.ACTIVE,
         vacancy_title=payload.vacancy_title,
         official_job_title=payload.official_job_title,
@@ -679,6 +697,28 @@ async def create_assessment(
         else None
     )
     evidence = await _valid_evidence_ids(session, case.id, payload.evidence_ids)
+    from app.payments.obligations import employment_obligation, require_billable_go_contract
+
+    obligation = await employment_obligation(session, case)
+    criteria = [
+        item
+        for item in payload.qualifying_criteria
+        if item.get("criterion") != "go_contract_billing_confirmed"
+    ]
+    if (
+        obligation.contract_id is not None
+        and payload.classification in PROFILE_CLASSIFICATIONS
+        and payload.contract_billing_confirmed
+    ):
+        await require_billable_go_contract(
+            session, obligation, payload.effective_profile_started_at, True
+        )
+        criteria.append(
+            {
+                "criterion": "go_contract_billing_confirmed",
+                "contract_id": str(obligation.contract_id),
+            }
+        )
     if ai_suggestion is None:
         latest_ai = await session.scalar(
             select(EmploymentAISuggestion)
@@ -700,7 +740,7 @@ async def create_assessment(
         effective_profile_started_at=payload.effective_profile_started_at,
         effective_profile_ended_at=payload.effective_profile_ended_at,
         rationale=payload.rationale,
-        qualifying_criteria=payload.qualifying_criteria,
+        qualifying_criteria=criteria,
         non_qualifying_reasons=payload.non_qualifying_reasons,
         evidence_ids=[str(item) for item in evidence],
         ai_suggestion=ai_suggestion,
@@ -780,6 +820,35 @@ async def _evaluate_window(
         else None
     )
     started = assessment.effective_profile_started_at
+    from app.payments.obligations import employment_obligation
+
+    obligation = await employment_obligation(session, case)
+    if obligation.contract_id is not None:
+        # The accepted offer does not contain a fixed, machine-readable control-period end.
+        # Use the staff's explicit contract decision rather than inventing contract dates.
+        confirmed = any(
+            item.get("criterion") == "go_contract_billing_confirmed"
+            and item.get("contract_id") == str(obligation.contract_id)
+            for item in assessment.qualifying_criteria
+        )
+        allowed = confirmed and assessment.classification in PROFILE_CLASSIFICATIONS
+        return EmploymentQualificationWindow(
+            assessment_id=assessment.id,
+            policy_snapshot_id=policy.id if policy else None,
+            classification=(
+                QualificationWindowClassification.WITHIN_CONTROL_PERIOD
+                if allowed
+                else QualificationWindowClassification.INSUFFICIENT_DATA
+            ),
+            evaluation_reason=(
+                "Сотрудник подтвердил, что новая профильная работа подпадает под договор Go."
+                if allowed
+                else "Для начисления требуется подтверждение условий договора Go сотрудником."
+            ),
+            billing_trigger_allowed=allowed,
+            evaluated_at=now,
+            policy_version=f"accepted-contract:{obligation.contract_id}",
+        )
     if policy is None or policy.is_legacy or not policy.rules.get("profile_qualification_enabled"):
         return EmploymentQualificationWindow(
             assessment_id=assessment.id,
@@ -1549,7 +1618,22 @@ async def case_read(session: AsyncSession, case: StudentEmployment) -> Employmen
         expected.append("actual_duties")
     if not case.actual_stack:
         expected.append("actual_stack")
+    from app.legal.models import ContractAcceptance
+    from app.payments.models import StudentPaymentObligation
+
+    obligation = (
+        await session.get(StudentPaymentObligation, case.obligation_id)
+        if case.obligation_id
+        else None
+    )
+    contract = (
+        await session.get(ContractAcceptance, obligation.contract_id)
+        if obligation and obligation.contract_id
+        else None
+    )
     return EmploymentCaseRead(
+        contract_id=contract.id if contract else None,
+        contract_number=contract.public_number if contract else None,
         id=case.id,
         student_id=case.student_id,
         track_id=case.track_id,
@@ -1578,8 +1662,14 @@ async def case_read(session: AsyncSession, case: StudentEmployment) -> Employmen
         profile_activity_ended_at=case.profile_activity_ended_at,
         billing_on_hold=case.billing_on_hold,
         lock_version=case.lock_version,
-        policy_version=f"{policy.policy_code}:v{policy.version}" if policy else None,
-        policy_is_legacy=policy.is_legacy if policy else True,
+        policy_version=(
+            contract.public_number
+            if contract
+            else f"{policy.policy_code}:v{policy.version}"
+            if policy
+            else None
+        ),
+        policy_is_legacy=False if contract else policy.is_legacy if policy else True,
         policy_control_period_started_at=(policy.control_period_started_at if policy else None),
         policy_control_period_ended_at=(policy.control_period_ended_at if policy else None),
         policy_extension_ended_at=(policy.extension_ended_at if policy else None),

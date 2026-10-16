@@ -12,6 +12,62 @@ import { renderPage } from "./render";
 
 afterEach(() => vi.restoreAllMocks());
 
+it("связывает решение о новой Go-работе с принятой офертой без ручной настройки политики", async () => {
+  const go = {
+    ...employmentCase,
+    direction: "go" as const,
+    contract_id: "go-contract",
+    contract_number: "GO-42",
+    policy_version: "GO-42",
+    policy_is_legacy: false,
+  };
+  vi.spyOn(api, "employmentCasesForStudent").mockResolvedValue({
+    items: [go],
+    total: 1,
+  });
+  const assess = vi.spyOn(api, "assessEmploymentCase").mockResolvedValue(go);
+  renderPage(<EmploymentQualificationStaffPanel studentId={go.student_id} />);
+  await userEvent.click(
+    await screen.findByText("Квалифицировать фактическую работу"),
+  );
+  await userEvent.click(
+    await screen.findByRole("textbox", { name: "Решение" }),
+  );
+  await userEvent.click(screen.getByRole("option", { name: "Профильная" }));
+  await userEvent.type(
+    screen.getByLabelText(/^Дата начала профильной деятельности/),
+    "2027-01-31",
+  );
+  await userEvent.click(
+    screen.getByRole("textbox", {
+      name: /^Критерий существенного использования/,
+    }),
+  );
+  await userEvent.click(
+    screen.getByRole("option", { name: "Регулярная разработка" }),
+  );
+  await userEvent.type(
+    screen.getByLabelText(/^Мотивированное решение/),
+    "Подтверждена новая работа на Go по условиям оферты",
+  );
+  await userEvent.click(
+    screen.getByRole("checkbox", { name: /Подтверждаю.*GO-42/ }),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Подтвердить решение" }),
+  );
+  await waitFor(() =>
+    expect(assess).toHaveBeenCalledWith(
+      go.student_id,
+      go.id,
+      expect.objectContaining({ contract_billing_confirmed: true }),
+    ),
+  );
+  expect(
+    screen.queryByText(/не связан с принятой версией договорной политики/),
+  ).not.toBeInTheDocument();
+});
+
 const employmentCase: EmploymentCase = {
   id: "10000000-0000-4000-8000-000000000010",
   student_id: "10000000-0000-4000-8000-000000000011",

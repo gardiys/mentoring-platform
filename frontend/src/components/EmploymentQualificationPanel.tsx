@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   FileInput,
   Group,
   NumberInput,
@@ -860,6 +861,9 @@ export function EmploymentQualificationStaffPanel({
   const [criterion, setCriterion] = useState<string | null>(null);
   const [rationale, setRationale] = useState("");
   const [disputeResolution, setDisputeResolution] = useState("");
+  const [billingConfirmations, setBillingConfirmations] = useState<
+    Record<string, boolean>
+  >({});
   const dueAt = useMemo(
     () => new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10),
     [],
@@ -1069,6 +1073,22 @@ export function EmploymentQualificationStaffPanel({
                         />
                       </>
                     )}
+                    {item.contract_id &&
+                      (classification === "profile" ||
+                        classification === "mixed_profile") && (
+                        <Checkbox
+                          label={`Подтверждаю, что новая работа подпадает под договор Go № ${item.contract_number}: проверены дата, условия трудоустройства и договорный период`}
+                          description="При подтверждении будет создан график платежей по этой оферте. Без подтверждения сохраняется только решение о профильности работы."
+                          checked={billingConfirmations[item.id] ?? false}
+                          onChange={(event) => {
+                            const checked = event.currentTarget.checked;
+                            setBillingConfirmations((previous) => ({
+                              ...previous,
+                              [item.id]: checked,
+                            }));
+                          }}
+                        />
+                      )}
                     <Textarea
                       label="Мотивированное решение"
                       minRows={4}
@@ -1093,6 +1113,8 @@ export function EmploymentQualificationStaffPanel({
                             rationale: rationale.trim(),
                             criterion,
                             lockVersion: item.lock_version,
+                            contractBillingConfirmed:
+                              billingConfirmations[item.id] ?? false,
                           },
                           {
                             onSuccess: () =>

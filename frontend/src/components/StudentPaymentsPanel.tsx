@@ -2,6 +2,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Group,
   NumberInput,
   Stack,
@@ -38,6 +39,12 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
   const [salary, setSalary] = useState<number | "">("");
   const [endedAt, setEndedAt] = useState(new Date().toISOString().slice(0, 10));
   const [endReason, setEndReason] = useState("");
+  const [contractBillingConfirmed, setContractBillingConfirmed] =
+    useState(false);
+  useEffect(
+    () => setContractBillingConfirmed(false),
+    [query.data?.obligation?.id],
+  );
 
   useEffect(() => {
     if (!query.data?.employment) {
@@ -79,6 +86,9 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
     Boolean(startDate) &&
     typeof salary === "number" &&
     salary > 0;
+  const needsContractConfirmation = Boolean(
+    dashboard.obligation?.contract_id && !dashboard.employment,
+  );
 
   return (
     <Stack gap="xl">
@@ -148,9 +158,25 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
               )}
             </Text>
           )}
+          {needsContractConfirmation && (
+            <Checkbox
+              label={`Подтверждаю, что новая работа подпадает под договор Go № ${dashboard.obligation?.contract_number}: проверены дата, условия трудоустройства и договорный период`}
+              checked={contractBillingConfirmed}
+              onChange={(event) =>
+                setContractBillingConfirmed(event.currentTarget.checked)
+              }
+            />
+          )}
           <Button
             loading={employmentMutation.isPending}
-            disabled={!validEmployment}
+            disabled={
+              !validEmployment ||
+              Boolean(
+                dashboard.obligation?.contract_status &&
+                dashboard.obligation.contract_status !== "active",
+              ) ||
+              (needsContractConfirmation && !contractBillingConfirmed)
+            }
             onClick={() => {
               if (!validEmployment || typeof salary !== "number") return;
               if (
@@ -167,6 +193,7 @@ export function StudentPaymentsPanel({ studentId }: { studentId: string }) {
                   company_id: dashboard.employment?.company_id ?? null,
                   start_date: startDate,
                   net_salary_rubles: salary,
+                  contract_billing_confirmed: contractBillingConfirmed,
                 },
                 {
                   onSuccess: () =>

@@ -427,7 +427,7 @@ export type PaymentInstallmentStatus =
 export type PaymentAttemptStatus =
   "pending" | "approved" | "failed" | "cancelled" | "manual_review" | "revoked";
 export type AdminEmploymentPaymentStatus = "outstanding" | "paid" | "all";
-export type StudentEmploymentStatus = "active" | "terminated";
+export type StudentEmploymentStatus = "active" | "terminated" | "completed";
 export type MentorRewardKind =
   | "employment_payment"
   | "entry_payment"
@@ -444,6 +444,7 @@ export interface EmploymentMutation {
   company_id: string | null;
   start_date: string;
   net_salary_rubles: number;
+  contract_billing_confirmed?: boolean;
 }
 
 export interface EmploymentRead {
@@ -492,6 +493,17 @@ export interface PaymentSummaryRead {
   remaining_salary_percent: number;
 }
 
+export interface PaymentObligationRead {
+  id: string;
+  contract_id: string | null;
+  contract_number: string | null;
+  contract_status?: string | null;
+  title: string;
+  repayment_percent: number;
+  employment_ids: string[];
+  summary: PaymentSummaryRead;
+}
+
 export interface StudentPaymentDashboard {
   student_id: string;
   student_name: string;
@@ -503,6 +515,8 @@ export interface StudentPaymentDashboard {
   summary: PaymentSummaryRead;
   can_manage_employment: boolean;
   can_manage_payment_days: boolean;
+  obligation?: PaymentObligationRead | null;
+  obligations?: PaymentObligationRead[];
 }
 
 export interface PaymentLinkRead {
@@ -2679,6 +2693,8 @@ export interface EmploymentAISuggestion {
 }
 
 export interface EmploymentCase {
+  contract_id?: string | null;
+  contract_number?: string | null;
   id: string;
   student_id: string;
   track_id: string | null;

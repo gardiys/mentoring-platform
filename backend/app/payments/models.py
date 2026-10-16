@@ -50,6 +50,7 @@ class PaymentAttemptStatus(StrEnum):
 class StudentEmploymentStatus(StrEnum):
     ACTIVE = "active"
     TERMINATED = "terminated"
+    COMPLETED = "completed"
 
 
 class EmploymentCaseStatus(StrEnum):
@@ -98,6 +99,35 @@ class MentorPayoutOrigin(StrEnum):
     ADMIN_DIRECT = "admin_direct"
 
 
+class StudentPaymentObligation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "student_payment_obligations"
+    __table_args__ = (
+        CheckConstraint(
+            "repayment_percent > 0 AND repayment_percent <= 1000", name="percent_range"
+        ),
+        Index(
+            "uq_student_payment_obligation_legacy",
+            "student_id",
+            unique=True,
+            postgresql_where=text("contract_id IS NULL"),
+        ),
+    )
+    student_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    contract_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("contract_acceptances.id", ondelete="RESTRICT"),
+        nullable=True,
+        unique=True,
+    )
+    track_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("learning_tracks.id", ondelete="RESTRICT"), nullable=True
+    )
+    repayment_percent: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+    terms_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+
 class StudentEmployment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "student_employments"
     __table_args__ = (
@@ -136,6 +166,16 @@ class StudentEmployment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     student_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    obligation_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "student_payment_obligations.id",
+            ondelete="RESTRICT",
+            name="fk_student_employments_obligation",
+        ),
+        nullable=True,
+        index=True,
     )
     company_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("companies.id", ondelete="SET NULL"), nullable=True

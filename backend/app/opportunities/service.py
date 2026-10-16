@@ -880,6 +880,14 @@ async def approve_opportunity_payment(
         relation.learning_status = StudentLearningStatus.LEARNING
         relation.status_updated_at = now
 
+    if legal_checkout is not None:
+        from app.payments.obligations import complete_paid_previous_employment, go_obligation
+
+        await session.flush()
+        obligation = await go_obligation(session, transition.student_id, contract=contract)
+        if obligation is not None:
+            await complete_paid_previous_employment(session, obligation)
+
 
 async def opportunity_payment_context(
     session: AsyncSession, attempt: OpportunityPaymentAttempt

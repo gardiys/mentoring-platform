@@ -15,6 +15,7 @@ from app.interviews.companies import get_or_create_company
 from app.interviews.models import Company
 from app.interviews.uploads import StoredUpload
 from app.legal.catalog import calendar_due
+from app.legal.models import ContractAcceptance
 from app.legal.service import go_financial_terms_for_employment
 from app.mentors.models import MentorStudent
 from app.mentors.service import assigned_student
@@ -36,7 +37,15 @@ from app.payments.models import (
     StudentEmployment,
     StudentEmploymentSalaryRevision,
     StudentEmploymentStatus,
+    StudentPaymentObligation,
     TochkaTestPayment,
+)
+from app.payments.obligations import (
+    complete_paid_previous_employment,
+    current_obligation,
+    employment_obligation,
+    remaining_percent,
+    require_billable_go_contract,
 )
 from app.payments.schemas import (
     AdminEmploymentPaymentStatus,
@@ -58,6 +67,7 @@ from app.payments.schemas import (
     PaymentDueDateMutation,
     PaymentInstallmentRead,
     PaymentLinkRead,
+    PaymentObligationRead,
     PaymentRevocationMutation,
     PaymentSummaryRead,
     StudentPaymentDashboard,
@@ -121,6 +131,11 @@ def _payment_dates_on_or_after(
 async def change_student_repayment_percent(
     session: AsyncSession, student_id: UUID, repayment_percent: Decimal
 ) -> None:
+    student = await session.get(User, student_id)
+    assert student is not None
+    obligation = await current_obligation(session, student)
+    if obligation.contract_id is not None:
+        api_error(409, "repayment_percent_locked", "Процент зафиксирован принятой офертой Go")
     employment = await session.scalar(
         select(StudentEmployment)
         .where(
@@ -144,7 +159,9 @@ async def change_student_repayment_percent(
             "Repayment percentage cannot be changed after the first payment",
         )
     if employment is None or employment.repayment_percent == repayment_percent:
+        obligation.repayment_percent = repayment_percent
         return
+    obligation.repayment_percent = repayment_percent
     employment.repayment_percent = repayment_percent
     await _regenerate_unpaid_installments(session, employment)
 
@@ -156,6 +173,8 @@ async def set_employment(
     payload: EmploymentMutation,
 ) -> StudentPaymentDashboard:
     student, _relation = await assigned_student(session, actor, student_id, lock=True)
+    obligation = await current_obligation(session, student)
+    await complete_paid_previous_employment(session, obligation)
     employment = await session.scalar(
         select(StudentEmployment)
         .where(
@@ -168,21 +187,26 @@ async def set_employment(
     company = await _resolve_company(session, payload.company_id, payload.company_name)
     created_employment = employment is None
     if employment is None:
-        remaining_percent = await remaining_repayment_percent(session, student)
-        if remaining_percent <= 0:
+        remaining = await remaining_percent(session, obligation)
+        if remaining <= 0:
             api_error(
                 409,
                 "repayment_obligation_fulfilled",
                 "The student's repayment obligation has already been fulfilled",
             )
+        contract = await require_billable_go_contract(
+            session, obligation, payload.start_date, payload.contract_billing_confirmed
+        )
         employment = StudentEmployment(
             student_id=student.id,
+            obligation_id=obligation.id,
+            track_id=obligation.track_id,
             company_id=company.id,
             company_name=company.name,
             start_date=payload.start_date,
             billing_started_at=payload.start_date,
             net_salary_kopecks=salary_kopecks,
-            repayment_percent=remaining_percent,
+            repayment_percent=remaining,
             status=StudentEmploymentStatus.ACTIVE,
             payment_day_first=10,
             payment_day_second=25,
@@ -191,7 +215,38 @@ async def set_employment(
         session.add(employment)
         await session.flush()
         await _regenerate_unpaid_installments(session, employment)
+        if contract is not None:
+            from app.legal.service import audit
+
+            audit(
+                session,
+                "go_employment.billing_confirmed",
+                employment.id,
+                actor.id,
+                contract_id=str(contract.id),
+                source="staff_employment_form",
+                started_at=payload.start_date.isoformat(),
+            )
     else:
+        obligation = await employment_obligation(session, employment)
+        await require_billable_go_contract(
+            session, obligation, employment.billing_started_at or employment.start_date, True
+        )
+        if obligation.contract_id is not None and employment.case_status is not None:
+            from app.employment_qualification.models import EmploymentQualificationWindow
+
+            qualified = await session.scalar(
+                select(EmploymentQualificationWindow.id).where(
+                    EmploymentQualificationWindow.assessment_id == employment.current_assessment_id,
+                    EmploymentQualificationWindow.billing_trigger_allowed.is_(True),
+                )
+            )
+            if qualified is None:
+                api_error(
+                    409,
+                    "go_employment_review_required",
+                    "Подтвердите работу в разделе квалификации фактической работы",
+                )
         paid_count = int(
             await session.scalar(
                 select(func.count(PaymentInstallment.id)).where(
@@ -467,7 +522,16 @@ async def payment_dashboard(
     latest_due_date_revisions = await _latest_due_date_revisions(
         session, [item.id for item in installments]
     )
-    today = date.today()
+    inactive_obligations = set(
+        await session.scalars(
+            select(StudentPaymentObligation.id)
+            .join(ContractAcceptance, ContractAcceptance.id == StudentPaymentObligation.contract_id)
+            .where(
+                StudentPaymentObligation.student_id == student_id,
+                ContractAcceptance.status != "active",
+            )
+        )
+    )
     reads = [
         PaymentInstallmentRead(
             id=item.id,
@@ -505,73 +569,100 @@ async def payment_dashboard(
             ),
             can_pay=(
                 actor.id == student_id
+                and employment_by_id[item.employment_id].obligation_id not in inactive_obligations
                 and not employment_by_id[item.employment_id].billing_on_hold
                 and item.status
                 in {
                     PaymentInstallmentStatus.SCHEDULED,
                     PaymentInstallmentStatus.PENDING,
                 }
-                and employment_by_id[item.employment_id].status is StudentEmploymentStatus.ACTIVE
+                and employment_by_id[item.employment_id].status
+                in {StudentEmploymentStatus.ACTIVE, StudentEmploymentStatus.COMPLETED}
             ),
         )
         for item in installments
     ]
-    paid = sum(
-        item.amount_kopecks for item in installments if item.status is PaymentInstallmentStatus.PAID
+    current = (
+        await employment_obligation(session, active_employment)
+        if active_employment
+        else await current_obligation(session, student)
     )
-    remaining = sum(
-        item.amount_kopecks
-        for item in installments
-        if item.status
-        in {
-            PaymentInstallmentStatus.SCHEDULED,
-            PaymentInstallmentStatus.PENDING,
-        }
+    obligations = list(
+        await session.scalars(
+            select(StudentPaymentObligation)
+            .where(StudentPaymentObligation.student_id == student_id)
+            .order_by(StudentPaymentObligation.created_at, StudentPaymentObligation.id)
+        )
     )
-    overdue = sum(
-        item.amount_kopecks
-        for item in installments
-        if item.status
-        in {
-            PaymentInstallmentStatus.SCHEDULED,
-            PaymentInstallmentStatus.PENDING,
-        }
-        and item.due_date < today
-    )
-    paid_percent = sum(
-        (
-            item.salary_percent
-            for item in installments
-            if item.status is PaymentInstallmentStatus.PAID
-        ),
-        Decimal("0"),
-    )
-    active_installments = [
-        item for item in installments if item.status is not PaymentInstallmentStatus.CANCELLED
-    ]
+    obligation_reads = []
+    for obligation in obligations:
+        ids = [
+            item.id
+            for item in employments
+            if item.obligation_id == obligation.id
+            or (item.obligation_id is None and obligation.contract_id is None)
+        ]
+        scoped = [item for item in installments if item.employment_id in ids]
+        contract = (
+            await session.get(ContractAcceptance, obligation.contract_id)
+            if obligation.contract_id
+            else None
+        )
+        obligation_reads.append(
+            PaymentObligationRead(
+                id=obligation.id,
+                contract_id=obligation.contract_id,
+                contract_number=contract.public_number if contract else None,
+                contract_status=contract.status if contract else None,
+                title="Переход Python → Go" if contract else "Первоначальное менторство",
+                repayment_percent=obligation.repayment_percent,
+                employment_ids=ids,
+                summary=_payment_summary(scoped, obligation.repayment_percent),
+            )
+        )
+    current_read = next(item for item in obligation_reads if item.id == current.id)
     name = " ".join(filter(None, (student.first_name, student.last_name)))
-    return StudentPaymentDashboard(
+    result = StudentPaymentDashboard(
         student_id=student.id,
         student_name=name,
-        repayment_percent=student.repayment_percent,
+        repayment_percent=current.repayment_percent,
         mentor_reward_percent=relation.reward_percent if relation else None,
         employment=_employment_read(active_employment) if active_employment else None,
         employment_history=[_employment_read(item) for item in reversed(employments)],
         installments=reads,
-        summary=PaymentSummaryRead(
-            total_owed_kopecks=paid + remaining,
-            paid_kopecks=paid,
-            remaining_kopecks=remaining,
-            overdue_kopecks=overdue,
-            paid_installments=sum(
-                item.status is PaymentInstallmentStatus.PAID for item in active_installments
-            ),
-            total_installments=len(active_installments),
-            paid_salary_percent=paid_percent,
-            remaining_salary_percent=max(student.repayment_percent - paid_percent, Decimal("0")),
-        ),
+        summary=current_read.summary,
         can_manage_employment=actor.role in {UserRole.MENTOR, UserRole.ADMIN},
         can_manage_payment_days=actor.role is UserRole.ADMIN or actor.id == student.id,
+        obligation=current_read,
+        obligations=obligation_reads,
+    )
+    await session.commit()
+    return result
+
+
+def _payment_summary(
+    installments: list[PaymentInstallment], repayment_percent: Decimal
+) -> PaymentSummaryRead:
+    paid = [item for item in installments if item.status is PaymentInstallmentStatus.PAID]
+    outstanding = [
+        item
+        for item in installments
+        if item.status in {PaymentInstallmentStatus.SCHEDULED, PaymentInstallmentStatus.PENDING}
+    ]
+    paid_percent = sum((item.salary_percent for item in paid), Decimal(0))
+    paid_amount = sum(item.amount_kopecks for item in paid)
+    remaining = sum(item.amount_kopecks for item in outstanding)
+    return PaymentSummaryRead(
+        total_owed_kopecks=paid_amount + remaining,
+        paid_kopecks=paid_amount,
+        remaining_kopecks=remaining,
+        overdue_kopecks=sum(
+            item.amount_kopecks for item in outstanding if item.due_date < date.today()
+        ),
+        paid_installments=len(paid),
+        total_installments=len(paid) + len(outstanding),
+        paid_salary_percent=paid_percent,
+        remaining_salary_percent=max(repayment_percent - paid_percent, Decimal(0)),
     )
 
 
@@ -595,8 +686,15 @@ async def create_payment_link(
     installment, employment = row
     if installment.status is PaymentInstallmentStatus.PAID:
         api_error(409, "payment_already_paid", "This payment has already been confirmed")
+    obligation = await employment_obligation(session, employment)
+    if obligation.contract_id is not None:
+        contract = await session.get(ContractAcceptance, obligation.contract_id)
+        if contract is None or contract.status != "active":
+            api_error(
+                409, "go_contract_inactive", "Новая оплата по неактивному договору Go недоступна"
+            )
     if (
-        employment.status is not StudentEmploymentStatus.ACTIVE
+        employment.status not in {StudentEmploymentStatus.ACTIVE, StudentEmploymentStatus.COMPLETED}
         or installment.status is PaymentInstallmentStatus.CANCELLED
     ):
         api_error(409, "payment_cancelled", "This payment was cancelled after employment ended")
@@ -867,22 +965,14 @@ async def mark_installment_paid(
                 amount_kopecks=_proportional_mentor_reward(
                     installment.amount_kopecks,
                     relation.reward_percent,
-                    student.repayment_percent,
+                    (await employment_obligation(session, employment)).repayment_percent,
                 ),
             )
         )
 
 
 async def remaining_repayment_percent(session: AsyncSession, student: User) -> Decimal:
-    paid_percent = await session.scalar(
-        select(func.coalesce(func.sum(PaymentInstallment.salary_percent), 0))
-        .join(StudentEmployment, StudentEmployment.id == PaymentInstallment.employment_id)
-        .where(
-            StudentEmployment.student_id == student.id,
-            PaymentInstallment.status == PaymentInstallmentStatus.PAID,
-        )
-    )
-    return max(student.repayment_percent - Decimal(paid_percent or 0), Decimal("0"))
+    return await remaining_percent(session, await current_obligation(session, student))
 
 
 async def sync_one_time_mentor_rewards(session: AsyncSession, student_id: UUID) -> None:
@@ -2029,22 +2119,30 @@ async def _regenerate_unpaid_installments(
     )
     legal_terms = await go_financial_terms_for_employment(session, employment)
     if legal_terms is not None:
-        total = _percent_of(
-            employment.net_salary_kopecks, Decimal(legal_terms["success_fee_percent"])
+        total = _percent_of(employment.net_salary_kopecks, employment.repayment_percent)
+        part = Decimal(legal_terms["success_fee_percent"]) / Decimal(
+            legal_terms["success_fee_installments"]
         )
-        base, remainder = divmod(total, legal_terms["success_fee_installments"])
-        due = billing_start
+        remaining = employment.repayment_percent
+        allocated = 0
         for sequence, offset in enumerate(legal_terms["success_fee_due_month_offsets"], 1):
-            due = calendar_due(billing_start, offset)
+            if remaining <= 0:
+                break
+            percent = min(part, remaining)
+            amount = (
+                int(Decimal(total) * percent / employment.repayment_percent)
+                if percent < remaining
+                else total - allocated
+            )
+            allocated += amount
+            remaining -= percent
             session.add(
                 PaymentInstallment(
                     employment_id=employment.id,
                     sequence_number=sequence,
-                    due_date=due,
-                    amount_kopecks=base
-                    + (remainder if sequence == legal_terms["success_fee_installments"] else 0),
-                    salary_percent=Decimal(legal_terms["success_fee_percent"])
-                    / Decimal(legal_terms["success_fee_installments"]),
+                    due_date=calendar_due(billing_start, offset),
+                    amount_kopecks=amount,
+                    salary_percent=percent,
                 )
             )
         return

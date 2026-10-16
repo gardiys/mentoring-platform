@@ -547,6 +547,13 @@ async def go_financial_terms_for_employment(
     """
     from app.opportunities.models import GoTransitionEnrollment
 
+    if employment.obligation_id is not None:
+        from app.payments.models import StudentPaymentObligation
+
+        obligation = await session.get(StudentPaymentObligation, employment.obligation_id)
+        if obligation is not None and obligation.contract_id is not None:
+            return dict(obligation.terms_snapshot)
+        return None
     if employment.track_id is None or employment.created_at is None:
         return None
     contract = await session.scalar(

@@ -86,6 +86,7 @@ export function useAssessEmploymentCase(studentId: string) {
       rationale,
       criterion,
       lockVersion,
+      contractBillingConfirmed,
     }: {
       caseId: string;
       classification: EmploymentProfileClassification;
@@ -93,6 +94,7 @@ export function useAssessEmploymentCase(studentId: string) {
       rationale: string;
       criterion: string | null;
       lockVersion: number;
+      contractBillingConfirmed?: boolean;
     }) =>
       api.assessEmploymentCase(studentId, caseId, {
         classification,
@@ -103,6 +105,7 @@ export function useAssessEmploymentCase(studentId: string) {
           classification === "non_profile" ? [rationale] : [],
         evidence_ids: [],
         expected_lock_version: lockVersion,
+        contract_billing_confirmed: contractBillingConfirmed ?? false,
         idempotency_key: crypto.randomUUID(),
       }),
     onSuccess: () =>

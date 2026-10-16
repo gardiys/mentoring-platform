@@ -10607,6 +10607,11 @@ export interface components {
             expected_lock_version: number;
             /** Idempotency Key */
             idempotency_key: string;
+            /**
+             * Contract Billing Confirmed
+             * @default false
+             */
+            contract_billing_confirmed: boolean;
         };
         /** EmploymentAssessmentRead */
         EmploymentAssessmentRead: {
@@ -10664,6 +10669,10 @@ export interface components {
         };
         /** EmploymentCaseRead */
         EmploymentCaseRead: {
+            /** Contract Id */
+            contract_id?: string | null;
+            /** Contract Number */
+            contract_number?: string | null;
             /**
              * Id
              * Format: uuid
@@ -11005,6 +11014,11 @@ export interface components {
             start_date: string;
             /** Net Salary Rubles */
             net_salary_rubles: number | string;
+            /**
+             * Contract Billing Confirmed
+             * @default false
+             */
+            contract_billing_confirmed: boolean;
         };
         /** EmploymentOfferReport */
         EmploymentOfferReport: {
@@ -14474,6 +14488,27 @@ export interface components {
             /** Expires In */
             expires_in?: number | null;
         };
+        /** PaymentObligationRead */
+        PaymentObligationRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Contract Id */
+            contract_id: string | null;
+            /** Contract Number */
+            contract_number: string | null;
+            /** Contract Status */
+            contract_status?: string | null;
+            /** Title */
+            title: string;
+            /** Repayment Percent */
+            repayment_percent: string;
+            /** Employment Ids */
+            employment_ids: string[];
+            summary: components["schemas"]["PaymentSummaryRead"];
+        };
         /** PaymentRevocationMutation */
         PaymentRevocationMutation: {
             /** Reason */
@@ -16280,7 +16315,7 @@ export interface components {
          * StudentEmploymentStatus
          * @enum {string}
          */
-        StudentEmploymentStatus: "active" | "terminated";
+        StudentEmploymentStatus: "active" | "terminated" | "completed";
         /**
          * StudentLearningStatus
          * @enum {string}
@@ -16315,6 +16350,9 @@ export interface components {
              * @default false
              */
             can_manage_payment_days: boolean;
+            obligation?: components["schemas"]["PaymentObligationRead"] | null;
+            /** Obligations */
+            obligations?: components["schemas"]["PaymentObligationRead"][];
         };
         /** StudentRoadmapSummary */
         StudentRoadmapSummary: {

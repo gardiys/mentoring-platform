@@ -6,6 +6,7 @@ import { api } from "../src/api/endpoints";
 import { AdminMentorPayoutsPanel } from "../src/components/AdminMentorPayoutsPanel";
 import { MentorPayoutBreakdown } from "../src/components/MentorPayoutBreakdown";
 import { PaymentSchedule } from "../src/components/PaymentSchedule";
+import { StudentPaymentsPanel } from "../src/components/StudentPaymentsPanel";
 import { AdminMentorPaymentDetailPage } from "../src/pages/AdminMentorPaymentDetailPage";
 import { AdminOverduePaymentsPage } from "../src/pages/AdminOverduePaymentsPage";
 import { AdminPaymentsPage } from "../src/pages/AdminPaymentsPage";
@@ -91,6 +92,128 @@ function mockAdminPaymentCheck() {
   vi.spyOn(api, "me").mockResolvedValue(admin);
   vi.spyOn(api, "adminTochkaTestPayment").mockResolvedValue(null);
 }
+
+function separateContracts(): StudentPaymentDashboard {
+  const original = dashboard.employment!;
+  const installment = dashboard.installments[0]!;
+  const go = {
+    ...original,
+    id: "go-job",
+    company_name: "Go employer",
+    repayment_percent: 100,
+    total_owed_kopecks: 25_000_000,
+  };
+  const goSummary = {
+    ...dashboard.summary,
+    total_owed_kopecks: 25_000_000,
+    remaining_kopecks: 25_000_000,
+    total_installments: 2,
+    remaining_salary_percent: 100,
+  };
+  const pythonSummary = {
+    ...dashboard.summary,
+    paid_kopecks: 40_000_000,
+    remaining_kopecks: 0,
+    paid_salary_percent: 200,
+    remaining_salary_percent: 0,
+    paid_installments: 8,
+  };
+  const obligations = [
+    {
+      id: "python-obligation",
+      contract_id: null,
+      contract_number: null,
+      title: "Первоначальное менторство",
+      repayment_percent: 200,
+      employment_ids: [original.id],
+      summary: pythonSummary,
+    },
+    {
+      id: "go-obligation",
+      contract_id: "go-contract",
+      contract_number: "GO-2026-42",
+      title: "Переход Python → Go",
+      repayment_percent: 100,
+      employment_ids: [go.id],
+      summary: goSummary,
+    },
+  ];
+  return {
+    ...dashboard,
+    repayment_percent: 100,
+    employment: go,
+    employment_history: [{ ...original, status: "completed" }, go],
+    installments: [
+      { ...installment, status: "paid", can_pay: false },
+      {
+        ...installment,
+        id: "go-payment",
+        employment_id: go.id,
+        company_name: go.company_name,
+        amount_kopecks: 12_500_000,
+        salary_percent: 50,
+      },
+    ],
+    summary: goSummary,
+    obligation: obligations[1],
+    obligations,
+  };
+}
+
+it("разделяет погашенный Python и новый Go в графике платежей", async () => {
+  renderPage(
+    <PaymentSchedule dashboard={separateContracts()} onSaveDays={vi.fn()} />,
+  );
+  expect(screen.queryByLabelText("Первый день")).not.toBeInTheDocument();
+  expect(screen.getAllByText("Go employer")).toHaveLength(2);
+  expect(screen.queryByText("Яндекс")).not.toBeInTheDocument();
+  expect(screen.getByText("Выплачено 0% из 100%")).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("textbox", { name: "Договор и платежи" }),
+  );
+  await userEvent.click(
+    screen.getByRole("option", { name: "Первоначальное менторство" }),
+  );
+  expect(screen.queryByText("Go employer")).not.toBeInTheDocument();
+  expect(screen.getByText("Выплачено 200% из 200%")).toBeInTheDocument();
+  expect(screen.getAllByText("Обязательство погашено").length).toBeGreaterThan(
+    0,
+  );
+  expect(screen.queryByText("График отменён")).not.toBeInTheDocument();
+});
+
+it("сотрудник подтверждает условия Go перед созданием начислений", async () => {
+  const data = separateContracts();
+  vi.spyOn(api, "me").mockResolvedValue(admin);
+  vi.spyOn(api, "mentorStudentPayments").mockResolvedValue({
+    ...data,
+    employment: null,
+  });
+  const save = vi
+    .spyOn(api, "setMentorStudentEmployment")
+    .mockResolvedValue(data);
+  renderPage(<StudentPaymentsPanel studentId={data.student_id} />);
+  await userEvent.type(
+    await screen.findByLabelText(/^Компания/),
+    "Go employer",
+  );
+  await userEvent.type(screen.getByLabelText(/^Дата выхода/), "2027-01-31");
+  await userEvent.type(screen.getByLabelText(/^Зарплата на руки/), "250000");
+  const button = screen.getByRole("button", {
+    name: "Создать график платежей",
+  });
+  expect(button).toBeDisabled();
+  await userEvent.click(
+    screen.getByRole("checkbox", { name: /Подтверждаю.*GO-2026-42/ }),
+  );
+  await userEvent.click(button);
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledWith(
+      data.student_id,
+      expect.objectContaining({ contract_billing_confirmed: true }),
+    ),
+  );
+});
 
 it("показывает график и сохраняет ровно две выбранные даты", async () => {
   const save = vi.fn().mockResolvedValue(undefined);

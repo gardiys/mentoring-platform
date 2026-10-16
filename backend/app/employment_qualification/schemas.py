@@ -137,6 +137,7 @@ class EmploymentAssessmentCreate(BaseModel):
     evidence_ids: list[UUID] = Field(default_factory=list, max_length=50)
     expected_lock_version: int = Field(ge=1)
     idempotency_key: str = Field(min_length=8, max_length=180)
+    contract_billing_confirmed: bool = False
 
     @model_validator(mode="after")
     def validate_profile_decision(self) -> EmploymentAssessmentCreate:
@@ -352,6 +353,8 @@ class EmploymentDisputeRead(BaseModel):
 
 
 class EmploymentCaseRead(BaseModel):
+    contract_id: UUID | None = None
+    contract_number: str | None = None
     id: UUID
     student_id: UUID
     track_id: UUID | None

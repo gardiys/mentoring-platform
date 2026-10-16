@@ -2664,6 +2664,7 @@ export const api = {
       evidence_ids: string[];
       expected_lock_version: number;
       idempotency_key: string;
+      contract_billing_confirmed?: boolean;
     },
   ) =>
     apiRequest<EmploymentCase>(

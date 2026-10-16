@@ -1,4 +1,5 @@
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -6,6 +7,7 @@ import {
   NumberInput,
   Progress,
   ScrollArea,
+  Select,
   SimpleGrid,
   Stack,
   Table,
@@ -50,7 +52,64 @@ interface Props {
   reschedulingInstallmentId?: string | null;
 }
 
-export function PaymentSchedule({
+export function PaymentSchedule(props: Props) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const obligations = props.dashboard.obligations ?? [];
+  const selected =
+    obligations.find(
+      (item) => item.id === (selectedId ?? props.dashboard.obligation?.id),
+    ) ?? obligations.at(-1);
+  if (!selected) return <PaymentScheduleBody {...props} />;
+  const employments = props.dashboard.employment_history.filter((item) =>
+    selected.employment_ids.includes(item.id),
+  );
+  const dashboard = {
+    ...props.dashboard,
+    repayment_percent: selected.repayment_percent,
+    summary: selected.summary,
+    employment: employments.find((item) => item.status === "active") ?? null,
+    employment_history: employments,
+    installments: props.dashboard.installments.filter((item) =>
+      selected.employment_ids.includes(item.employment_id),
+    ),
+  };
+  return (
+    <Stack gap="md">
+      {obligations.length > 1 ? (
+        <Select
+          label="Договор и платежи"
+          value={selected.id}
+          onChange={setSelectedId}
+          data={obligations.map((item) => ({
+            value: item.id,
+            label: item.contract_number
+              ? `${item.title} · ${item.contract_number}`
+              : item.title,
+          }))}
+          allowDeselect={false}
+        />
+      ) : (
+        <Text fw={600}>
+          {selected.title}
+          {selected.contract_number ? ` · ${selected.contract_number}` : ""}
+        </Text>
+      )}
+      {selected.contract_status && selected.contract_status !== "active" && (
+        <Alert color="orange">
+          Договор неактивен. Новые оплаты по нему приостановлены. Свяжитесь с
+          администратором.
+        </Alert>
+      )}
+      <PaymentScheduleBody
+        {...props}
+        dashboard={dashboard}
+        onSaveDays={selected.contract_id ? undefined : props.onSaveDays}
+      />
+    </Stack>
+  );
+}
+
+function PaymentScheduleBody({
   dashboard,
   onSaveDays,
   savingDays,
@@ -177,17 +236,29 @@ export function PaymentSchedule({
         </Card>
       ) : (
         <Card withBorder>
-          <Title order={3}>Текущее трудоустройство закрыто</Title>
+          <Title order={3}>
+            {Number(dashboard.summary.remaining_salary_percent) === 0
+              ? "Обязательство погашено"
+              : dashboard.employment_history.some(
+                    (item) => item.status === "completed",
+                  )
+                ? "Платежи по предыдущему договору"
+                : "Текущее трудоустройство закрыто"}
+          </Title>
           <Text c="dimmed" mt="xs">
-            Оставшиеся платежи отменены. После нового трудоустройства график
-            будет рассчитан на оставшиеся{" "}
-            {Number(dashboard.summary.remaining_salary_percent)}%.
+            {Number(dashboard.summary.remaining_salary_percent) === 0
+              ? "Платежи по этому договору полностью учтены. История сохранена."
+              : dashboard.employment_history.some(
+                    (item) => item.status === "completed",
+                  )
+                ? "По этому договору есть непогашенные платежи. Их можно оплатить по графику ниже."
+                : `Оставшиеся платежи отменены. После нового трудоустройства график будет рассчитан на оставшиеся ${Number(dashboard.summary.remaining_salary_percent)}%.`}
           </Text>
         </Card>
       )}
 
       {dashboard.employment_history.some(
-        (item) => item.status === "terminated",
+        (item) => item.status !== "active",
       ) && (
         <Card withBorder>
           <Title order={3} mb="sm">
@@ -195,7 +266,7 @@ export function PaymentSchedule({
           </Title>
           <Stack gap="xs">
             {dashboard.employment_history
-              .filter((item) => item.status === "terminated")
+              .filter((item) => item.status !== "active")
               .map((item) => (
                 <Group key={item.id} justify="space-between" align="flex-start">
                   <div>
@@ -207,7 +278,11 @@ export function PaymentSchedule({
                     </Text>
                   </div>
                   <Badge color="gray" variant="light">
-                    График отменён
+                    {item.status === "completed"
+                      ? Number(dashboard.summary.remaining_salary_percent) === 0
+                        ? "Обязательство погашено"
+                        : "Архивная запись"
+                      : "График отменён"}
                   </Badge>
                 </Group>
               ))}
