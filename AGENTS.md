@@ -26,3 +26,16 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 - A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+
+Используй параллельных субагентов, когда задача содержит независимые
+части и делегирование может сократить общее время разработки.
+
+- Сам определяй подходящие подзадачи, без отдельного напоминания.
+- Начинай с 2–3 субагентов.
+- Каждому назначай конкретную задачу, ожидаемый результат
+  и отдельные файлы для изменения.
+- Параллельно выполняй полезную работу в основном потоке.
+- Избегай одновременного изменения одних файлов разными агентами.
+- Сам интегрируй результаты, проверяй изменения и запускай
+  необходимые проверки.
+- Простые задачи и последовательные шаги выполняй самостоятельно.

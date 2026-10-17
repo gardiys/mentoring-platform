@@ -2511,6 +2511,16 @@ def safe_processing_message(code: str) -> str:
         ),
         "TRANSCRIPTION_INVALID_RESPONSE": "Сервис транскрибации вернул некорректный результат.",
         "STAGING_CAPACITY_EXCEEDED": "Недостаточно временного места для обработки записи.",
+        "INTERVIEW_VIDEO_TOO_LARGE": "Запись слишком большая для подготовки видео.",
+        "INTERVIEW_VIDEO_PREPARATION_BUSY": "Подготовка видео занята. Повторите позднее.",
+        "INTERVIEW_VIDEO_PREPARATION_FAILED": "Не удалось подготовить видео для обработки.",
+        "INTERVIEW_VIDEO_PREPARATION_UNAVAILABLE": "Подготовка видео временно недоступна.",
+        "INTERVIEW_AUDIO_TRANSCODING_BUSY": "Подготовка аудио занята. Повторите позднее.",
+        "INTERVIEW_AUDIO_TRANSCODING_CAPACITY_UNAVAILABLE": (
+            "Недостаточно временного места для подготовки аудио."
+        ),
+        "INTERVIEW_AUDIO_TRANSCODING_FAILED": "Не удалось подготовить аудио для обработки.",
+        "INTERVIEW_STORAGE_UNAVAILABLE": "Хранилище записей временно недоступно.",
         "MEDIA_PROBE_UNAVAILABLE": "Проверка формата записи временно недоступна.",
         "MEDIA_PROBE_TIMEOUT": "Проверка формата записи не завершилась вовремя.",
         "MEDIA_AUDIO_MISSING": "В записи отсутствует аудиодорожка.",

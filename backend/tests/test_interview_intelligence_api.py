@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from arq import Retry
+from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy import event, func, select
 
@@ -1839,6 +1840,97 @@ async def test_file_transcription_records_storage_metadata_failure_without_value
     assert interview.processing_error_code == "STORAGE_ERROR"
     assert upload_store.download_called is False
     assert provider.submitted_path is None
+
+
+@pytest.mark.parametrize(
+    ("code", "status_code", "job_try", "expect_retry"),
+    [
+        ("interview_video_preparation_busy", 503, 1, True),
+        ("interview_video_preparation_busy", 503, intelligence_jobs.MAX_JOB_TRIES, False),
+        ("interview_video_preparation_unavailable", 503, 1, True),
+        ("interview_video_preparation_failed", 503, 1, True),
+        ("interview_video_preparation_failed", 422, 1, False),
+        ("interview_video_too_large", 413, 1, False),
+        ("interview_audio_transcoding_busy", 503, 1, True),
+        ("interview_audio_transcoding_capacity_unavailable", 503, 1, True),
+        ("interview_audio_transcoding_failed", 503, 1, True),
+        ("interview_storage_unavailable", 503, 1, True),
+    ],
+)
+async def test_file_transcription_records_browser_preparation_failure(
+    client: AsyncClient,
+    seeded: SeededData,
+    monkeypatch: pytest.MonkeyPatch,
+    code: str,
+    status_code: int,
+    job_try: int,
+    expect_retry: bool,
+) -> None:
+    created, _, stage_id = await create_analysis_from_journal(client, seeded, monkeypatch)
+    interview_id = UUID(created.json()["id"])
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        stage = await session.get(InterviewProcessStage, stage_id)
+        assert interview is not None and stage is not None
+        interview.processing_error_code = "STORAGE_ERROR"
+        interview.processing_error_message = intelligence_service.safe_processing_message(
+            "STORAGE_ERROR"
+        )
+        stage.media_filename = "recording.mp4"
+        stage.media_content_type = "video/mp4"
+        await session.commit()
+
+    class FailingPreparationStore(StagedUploadStore):
+        async def ensure_browser_playable(self, upload: StoredUpload) -> StoredUpload:
+            raise HTTPException(
+                status_code=status_code,
+                detail={"code": code, "message": "private storage diagnostic"},
+            )
+
+    provider = FileUploadTranscriptionProvider()
+    store = FailingPreparationStore()
+    queue = RecordingRedis()
+    monkeypatch.setattr(intelligence_jobs, "async_session_factory", TestSession)
+    context: dict[str, Any] = {
+        "redis": queue,
+        "transcription_provider": provider,
+        "upload_store": store,
+        "job_try": job_try,
+    }
+    if expect_retry:
+        with pytest.raises(Retry):
+            await intelligence_jobs.submit_transcription(context, str(interview_id))
+    else:
+        await intelligence_jobs.submit_transcription(context, str(interview_id))
+
+    async with TestSession() as session:
+        interview = await session.get(IntelligenceInterview, interview_id)
+        attempts = (
+            await session.scalars(
+                select(IntelligenceProcessingAttempt).where(
+                    IntelligenceProcessingAttempt.interview_id == interview_id
+                )
+            )
+        ).all()
+    assert interview is not None
+    assert interview.processing_status is (
+        IntelligenceProcessingStatus.UPLOADED
+        if expect_retry
+        else IntelligenceProcessingStatus.FAILED
+    )
+    assert interview.processing_error_code == code.upper()
+    assert interview.processing_error_message == intelligence_service.safe_processing_message(
+        code.upper()
+    )
+    assert "private" not in interview.processing_error_message
+    assert interview.failed_stage is IntelligenceAttemptStage.TRANSCRIPTION_SUBMIT
+    assert len(attempts) == 1
+    assert attempts[0].status is IntelligenceAttemptStatus.FAILED
+    assert attempts[0].error_code == code.upper()
+    assert attempts[0].finished_at is not None
+    assert store.download_called is False
+    assert provider.submitted_path is None
+    assert queue.jobs == []
 
 
 @pytest.mark.parametrize(

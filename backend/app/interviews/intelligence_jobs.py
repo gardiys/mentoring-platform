@@ -12,6 +12,7 @@ from uuid import UUID
 from arq import Retry, cron
 from arq import func as arq_func
 from arq.connections import RedisSettings
+from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -288,7 +289,7 @@ async def submit_transcription(ctx: dict[str, Any], interview_id: str) -> None:
                 # Legacy migrated recordings can be filed as .mp3 while actually
                 # being an m4a/ALAC container; correct the declared type before
                 # probing so it isn't rejected as a MEDIA_CONTENT_TYPE_MISMATCH.
-                playable = await _store(ctx).ensure_browser_playable(upload)
+                playable = await _prepare_transcription_upload(_store(ctx), upload)
                 if playable != upload:
                     stage.media_storage_key = playable.storage_key
                     stage.media_filename = playable.filename
@@ -1569,6 +1570,35 @@ def _ground_technical_assessment(
             "technical_topics": grounded_topics,
         }
     )
+
+
+async def _prepare_transcription_upload(
+    store: InterviewUploadStore, upload: StoredUpload
+) -> StoredUpload:
+    """Translate the playback API's known failures into worker retry semantics."""
+    try:
+        return await store.ensure_browser_playable(upload)
+    except HTTPException as error:
+        detail = error.detail
+        if not isinstance(detail, dict):
+            raise
+        code = detail.get("code")
+        if code not in {
+            "interview_video_too_large",
+            "interview_video_preparation_busy",
+            "interview_video_preparation_failed",
+            "interview_video_preparation_unavailable",
+            "interview_audio_transcoding_busy",
+            "interview_audio_transcoding_capacity_unavailable",
+            "interview_audio_transcoding_failed",
+            "interview_storage_unavailable",
+        }:
+            raise
+        raise TranscriptionProviderError(
+            code.upper(),
+            safe_processing_message(code.upper()),
+            retryable=error.status_code >= 500,
+        ) from error
 
 
 async def _record_failure(
